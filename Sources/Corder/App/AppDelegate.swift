@@ -1,10 +1,12 @@
 import AppKit
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         startServer()
+        _ = RecordingController.shared    // bootstrap delegate wiring
         menuBar = MenuBarController { [weak self] in
             self?.openLibrary()
         }
