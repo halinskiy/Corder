@@ -24,13 +24,14 @@ enum AvailableSources {
 }
 
 extension CaptureSource {
-    /// Human-readable label for menus / pickers.
+    /// Human-readable label for menus / pickers. Truncated so popover stays narrow.
     var displayLabel: String {
         switch self {
         case .fullDisplay:
             return "Full screen"
         case .window(_, let title, let owner, _, _):
-            return "\(owner) — \(title)"
+            let combined = "\(owner) · \(title)"
+            return combined.count > 38 ? String(combined.prefix(36)) + "…" : combined
         }
     }
 }

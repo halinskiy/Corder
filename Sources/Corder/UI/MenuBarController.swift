@@ -29,7 +29,8 @@ final class MenuBarController {
         if popover.isShown {
             popover.performClose(sender)
         } else {
-            NSApp.activate(ignoringOtherApps: true)
+            // Show first so the popover anchors at the correct position
+            // (calling NSApp.activate before show was bouncing it across Spaces on macOS 26).
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
