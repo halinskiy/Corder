@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 import PackageDescription
 
 let package = Package(
@@ -20,11 +20,17 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/web")
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v5)
             ]
         ),
         .testTarget(
             name: "CorderTests",
-            dependencies: ["Corder"]
+            dependencies: ["Corder"],
+            swiftSettings: [
+                .swiftLanguageMode(.v5)
+            ]
         )
     ]
 )
