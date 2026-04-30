@@ -7,6 +7,7 @@ struct PopoverContentView: View {
     @State private var availableWindows: [CaptureSource] = []
     @State private var selectedWindow: CaptureSource?
     @State private var loadingSources = false
+    @State private var permissionDenied = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -52,6 +53,19 @@ struct PopoverContentView: View {
         if ctx.sourceMode == .window {
             if loadingSources {
                 ProgressView().scaleEffect(0.7)
+            } else if permissionDenied {
+                VStack(spacing: 6) {
+                    Text("Screen Recording permission required")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Open Privacy Settings") {
+                        PermissionsChecker.openScreenRecordingSettings()
+                    }
+                    .font(.caption)
+                    Text("After granting access, quit Corder and reopen.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
             } else if availableWindows.isEmpty {
                 Text("No windows found")
                     .font(.caption).foregroundStyle(.secondary)
@@ -102,11 +116,15 @@ struct PopoverContentView: View {
         defer { loadingSources = false }
         do {
             availableWindows = try await AvailableSources.windows()
+            permissionDenied = false
             if selectedWindow == nil {
                 selectedWindow = availableWindows.first
             }
         } catch {
             availableWindows = []
+            // SCShareableContent throws when Screen Recording permission is missing.
+            // Treat any error here as a permission problem — user-actionable.
+            permissionDenied = true
         }
     }
 }
