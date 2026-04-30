@@ -65,15 +65,26 @@ final class RecordingController {
             if var meeting = try AppContext.shared.repo.meeting(id: id) {
                 meeting.endedAt = endedAtMs
                 meeting.durationMs = durationMs
-                meeting.status = .ready  // Plan 3 will flip to .transcribing → .ready
+                meeting.status = .transcribing
                 try AppContext.shared.repo.updateMeeting(meeting)
             }
-            postNotification(title: "Recording saved", body: "Meeting \(durationMs / 1000)s")
+            postNotification(title: "Recording saved", body: "Transcribing \(durationMs / 1000)s…")
         } catch {
             present(error: "Failed to save meeting: \(error.localizedDescription)")
         }
 
         AppContext.shared.recordingState = .idle
+
+        // Kick off transcription in the background.
+        Task.detached(priority: .userInitiated) {
+            await TranscriptionPipeline.shared.transcribe(meetingId: id)
+            await MainActor.run {
+                let n = NSUserNotification()
+                n.title = "Transcription ready"
+                n.informativeText = "Open the Library to view it."
+                NSUserNotificationCenter.default.deliver(n)
+            }
+        }
     }
 
     private func present(error: String) {

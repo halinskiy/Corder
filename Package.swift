@@ -9,14 +9,16 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0"),
-        .package(url: "https://github.com/httpswift/swifter.git", from: "1.5.0")
+        .package(url: "https://github.com/httpswift/swifter.git", from: "1.5.0"),
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0")
     ],
     targets: [
         .executableTarget(
             name: "Corder",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
-                .product(name: "Swifter", package: "swifter")
+                .product(name: "Swifter", package: "swifter"),
+                .product(name: "WhisperKit", package: "WhisperKit")
             ],
             resources: [
                 .copy("Resources/web")
