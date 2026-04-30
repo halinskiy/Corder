@@ -19,7 +19,7 @@ function App() {
       {error ? (
         <pre style={{ color: "#f88" }}>error: {error}</pre>
       ) : (
-        <pre style={{ background: "#111", padding: 16, borderRadius: 8 }}>
+        <pre style={{ background: "#fff", color: "#0a0a0a", padding: 16, borderRadius: 8 }}>
           {JSON.stringify(meetings, null, 2)}
         </pre>
       )}

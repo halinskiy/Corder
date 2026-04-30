@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Corder logo: a vertical waveform that fades into a solid black circle on the right.
+       Monochrome. The waveform "reduces" / collapses into the disc, signalling capture + storage. -->
+  <defs>
+    <clipPath id="discClip">
+      <circle cx="512" cy="512" r="448"/>
+    </clipPath>
+  </defs>
+
+  <!-- Solid black disc — base of the icon -->
+  <circle cx="512" cy="512" r="448" fill="#0a0a0a"/>
+
+  <!-- Waveform bars: tallest on the left, shrinking towards the right (where they merge into the disc).
+       White on black for high contrast. -->
+  <g clip-path="url(#discClip)" fill="#ffffff">
+    <!-- bar widths: 30, gaps: 22 — 8 bars total visible across the disc -->
+    <rect x="156" y="356"  width="30" height="312" rx="15"/>
+    <rect x="208" y="296"  width="30" height="432" rx="15"/>
+    <rect x="260" y="396"  width="30" height="232" rx="15"/>
+    <rect x="312" y="246"  width="30" height="532" rx="15"/>
+    <rect x="364" y="376"  width="30" height="272" rx="15"/>
+    <rect x="416" y="436"  width="30" height="152" rx="15"/>
+    <rect x="468" y="466"  width="30" height="92"  rx="15"/>
+    <rect x="520" y="486"  width="30" height="52"  rx="15"/>
+  </g>
+</svg>

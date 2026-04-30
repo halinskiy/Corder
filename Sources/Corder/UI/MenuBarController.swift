@@ -17,8 +17,8 @@ final class MenuBarController {
         }
 
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 240, height: 160)
-        popover.contentViewController = NSHostingController(rootView: PopoverContentView { [weak self] in
+        popover.contentSize = NSSize(width: 240, height: 200)
+        popover.contentViewController = NSHostingController(rootView: PopoverContentView(ctx: AppContext.shared) { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenLibrary()
         })
@@ -29,7 +29,9 @@ final class MenuBarController {
         if popover.isShown {
             popover.performClose(sender)
         } else {
+            NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 }

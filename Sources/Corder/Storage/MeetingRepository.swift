@@ -12,6 +12,12 @@ struct MeetingRepository {
         try dbq.write { try m.update($0) }
     }
 
+    func deleteMeeting(id: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: "DELETE FROM meetings WHERE id = ?", arguments: [id])
+        }
+    }
+
     func meeting(id: String) throws -> Meeting? {
         try dbq.read { try Meeting.fetchOne($0, key: id) }
     }
