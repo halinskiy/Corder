@@ -1,5 +1,7 @@
 .DS_Store
-Resources/web/
+.build/
+.swiftpm/
+Package.resolved
 Web/node_modules/
 Web/dist/
 build/
