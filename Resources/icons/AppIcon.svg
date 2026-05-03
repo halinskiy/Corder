@@ -17,16 +17,22 @@
     </clipPath>
   </defs>
 
-  <g clip-path="url(#squircle)">
-    <rect x="0"   width="512" height="1024" fill="url(#dark)"/>
-    <rect x="512" width="512" height="1024" fill="url(#light)"/>
-    <rect width="1024" height="1024" fill="url(#gloss)"/>
-    <line x1="512" y1="0" x2="512" y2="1024" stroke="rgba(255,255,255,0.14)" stroke-width="2"/>
-    <circle cx="256" cy="512" r="144" fill="#dd3340"/>
-    <rect x="686" y="382" width="68" height="260" rx="18" fill="#0e0e0d"/>
-    <rect x="782" y="382" width="68" height="260" rx="18" fill="#0e0e0d"/>
+  <!-- Squircle ~824×824 inside 1024×1024 — Apple's macOS app-icon convention.
+       The surrounding 100-px gap lets the system-drawn glass tile (Tahoe's
+       Liquid-Glass frame) and the drop shadow have room around the artwork
+       so the result reads as a regular Mac app rather than a clipped sticker. -->
+  <g transform="translate(100 100) scale(0.805)">
+    <g clip-path="url(#squircle)">
+      <rect x="0"   width="512" height="1024" fill="url(#dark)"/>
+      <rect x="512" width="512" height="1024" fill="url(#light)"/>
+      <rect width="1024" height="1024" fill="url(#gloss)"/>
+      <line x1="512" y1="0" x2="512" y2="1024"
+            stroke="rgba(255,255,255,0.14)" stroke-width="2"/>
+      <circle cx="256" cy="512" r="144" fill="#dd3340"/>
+      <rect x="686" y="382" width="68" height="260" rx="18" fill="#0e0e0d"/>
+      <rect x="782" y="382" width="68" height="260" rx="18" fill="#0e0e0d"/>
+    </g>
+    <path d="M512 1024c-424 0-512-88-512-512S88 0 512 0s512 88 512 512-88 512-512 512Z"
+          fill="none" stroke="rgba(0,0,0,0.06)" stroke-width="2"/>
   </g>
-
-  <path d="M512 1024c-424 0-512-88-512-512S88 0 512 0s512 88 512 512-88 512-512 512Z"
-        fill="none" stroke="rgba(0,0,0,0.06)" stroke-width="2"/>
 </svg>
