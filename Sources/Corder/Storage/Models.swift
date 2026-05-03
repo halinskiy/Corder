@@ -15,6 +15,11 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     var audioPath: String
     var transcribedAt: Int64?
     var status: MeetingStatus
+    var boostedText: String?
+    var boostedAt: Int64?
+    var dropboxVideoPath: String?
+    var dropboxAudioPath: String?
+    var dropboxUploadedAt: Int64?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -25,6 +30,11 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case audioPath = "audio_path"
         case transcribedAt = "transcribed_at"
         case status
+        case boostedText = "boosted_text"
+        case boostedAt = "boosted_at"
+        case dropboxVideoPath = "dropbox_video_path"
+        case dropboxAudioPath = "dropbox_audio_path"
+        case dropboxUploadedAt = "dropbox_uploaded_at"
     }
 }
 
@@ -54,6 +64,7 @@ struct Segment: Codable, FetchableRecord, PersistableRecord {
     var endMs: Int64
     var text: String
     var wordsJson: String?
+    var textBoost: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -63,5 +74,6 @@ struct Segment: Codable, FetchableRecord, PersistableRecord {
         case endMs = "end_ms"
         case text
         case wordsJson = "words_json"
+        case textBoost = "text_boost"
     }
 }
