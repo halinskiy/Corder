@@ -5,7 +5,7 @@ import Sparkle
 /// rest of the app doesn't have to import Sparkle.
 ///
 /// Configuration lives in `Info.plist`:
-///   • `SUFeedURL`   — appcast URL (publicly hosted on GitHub Pages).
+///   • `SUFeedURL`   — `https://halinskiy.github.io/corder-updates/appcast.xml`
 ///   • `SUPublicEDKey` — EdDSA public key, paired with the Keychain-stored
 ///                       private half used by `sign_update` at release time.
 ///   • `SUEnableInstallerLauncherService` — required on hardened runtime.

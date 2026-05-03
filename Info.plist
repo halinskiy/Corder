@@ -32,7 +32,7 @@
          after `generate_keys` writes the matching private half into the
          macOS Keychain. SUFeedURL is the publicly-hosted appcast. -->
     <key>SUFeedURL</key>
-    <string>https://halinskiy.github.io/Corder/appcast.xml</string>
+    <string>https://halinskiy.github.io/corder-updates/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>2Ne7z6Ps8wOBB0xFredP5la4nQbr61Gpn0vh8f3YOyo=</string>
     <key>SUEnableInstallerLauncherService</key>
