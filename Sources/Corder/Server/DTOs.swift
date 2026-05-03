@@ -8,6 +8,7 @@ enum DTO {
         let duration_ms: Int64?
         let status: String
         let preview: String?
+        let speaker_count: Int
     }
 
     struct MeetingDetail: Codable {
@@ -17,6 +18,17 @@ enum DTO {
         let status: String
         let speakers: [SpeakerDTO]
         let segments: [SegmentDTO]
+        let boosted_text: String?
+        let boosted_at: Int64?
+    }
+
+    struct BoostResponse: Codable {
+        let ok: Bool
+        let error: String?
+    }
+
+    struct Settings: Codable {
+        let boost_mode: Bool
     }
 
     struct SpeakerDTO: Codable {
@@ -32,6 +44,7 @@ enum DTO {
         let start_ms: Int64
         let end_ms: Int64
         let text: String
+        let text_boost: String?
     }
 
     struct RenameRequest: Codable {

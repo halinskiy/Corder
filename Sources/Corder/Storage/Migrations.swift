@@ -65,6 +65,43 @@ enum Migrations {
                 END;
             """)
         }
+
+        m.registerMigration("v2_boost") { db in
+            try db.execute(sql: """
+                ALTER TABLE meetings ADD COLUMN boosted_text TEXT;
+            """)
+            try db.execute(sql: """
+                ALTER TABLE meetings ADD COLUMN boosted_at INTEGER;
+            """)
+        }
+
+        // Per-segment Boost: replaces the meeting-level "boosted_text" approach
+        // with one cleaned-up string per Whisper segment. This way the structure
+        // (timestamps, speaker grouping) stays the same and we can flip
+        // raw↔boosted in the existing TranscriptPane without a separate view.
+        m.registerMigration("v3_segment_boost") { db in
+            try db.execute(sql: """
+                ALTER TABLE segments ADD COLUMN text_boost TEXT;
+            """)
+        }
+
+        // Dropbox archival: when a meeting's video has been uploaded to
+        // Dropbox we store its remote path (e.g. /Corder/<id>/video.mov) and
+        // an upload timestamp. Local files are deleted right after, so the
+        // server falls back to a short-lived Dropbox temporary link when
+        // the user opens an archived meeting.
+        m.registerMigration("v4_dropbox") { db in
+            try db.execute(sql: """
+                ALTER TABLE meetings ADD COLUMN dropbox_video_path TEXT;
+            """)
+            try db.execute(sql: """
+                ALTER TABLE meetings ADD COLUMN dropbox_audio_path TEXT;
+            """)
+            try db.execute(sql: """
+                ALTER TABLE meetings ADD COLUMN dropbox_uploaded_at INTEGER;
+            """)
+        }
+
         return m
     }
 }

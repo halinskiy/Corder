@@ -1,0 +1,7 @@
+{
+  "_comment": "Replace placeholders below. See docs/SECURITY.md → 'If you need to rotate keys' for how to obtain a refresh token.",
+  "app_key": "<your-dropbox-app-key>",
+  "app_secret": "<your-dropbox-app-secret>",
+  "refresh_token": "<your-long-lived-refresh-token>",
+  "remote_root": "/Corder"
+}

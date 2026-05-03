@@ -16,7 +16,9 @@ final class AppContext: ObservableObject {
     let server = LocalServer()
     let capture = CaptureEngine()
 
-    @Published var recordingState: RecordingState = .idle
+    @Published var recordingState: RecordingState = .idle {
+        didSet { RecordingStateSnapshot.update(recordingState) }
+    }
 
     // Persisted source preference (Full screen vs last picked window stays remembered).
     @Published var sourceMode: SourceMode = SourceMode(
@@ -24,6 +26,21 @@ final class AppContext: ObservableObject {
     ) ?? .full {
         didSet { UserDefaults.standard.set(sourceMode.rawValue, forKey: "Corder.sourceMode") }
     }
+
+    /// Global "Boost" mode. When ON, every subsequent transcription is
+    /// automatically polished via Gemini Flash after Whisper finishes — there's
+    /// no per-meeting "Boost now" action. Persisted across launches.
+    @Published var boostMode: Bool = UserDefaults.standard.bool(forKey: BoostMode.key) {
+        didSet { UserDefaults.standard.set(boostMode, forKey: BoostMode.key) }
+    }
+}
+
+/// Thread-safe accessor for the persisted boost flag, so non-MainActor code
+/// (transcription pipeline detached tasks, request handlers) can read the
+/// setting without hopping to MainActor. UserDefaults itself is thread-safe.
+enum BoostMode {
+    static let key = "Corder.boostMode"
+    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: key) }
 }
 
 enum SourceMode: String {
@@ -35,4 +52,22 @@ enum RecordingState: Equatable {
     case idle
     case recording(meetingId: String, startedAt: Date)
     case stopping
+}
+
+/// Lock-protected mirror of `AppContext.shared.recordingState` so that
+/// non-isolated code (e.g. Swifter request handlers running on background
+/// threads) can read the current state without needing main-actor hops.
+enum RecordingStateSnapshot {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var current: RecordingState = .idle
+
+    static func update(_ state: RecordingState) {
+        lock.lock(); defer { lock.unlock() }
+        current = state
+    }
+
+    static func read() -> RecordingState {
+        lock.lock(); defer { lock.unlock() }
+        return current
+    }
 }

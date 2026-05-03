@@ -19,7 +19,7 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
@@ -28,5 +28,18 @@
     <string>Corder records your microphone so meetings can be transcribed.</string>
     <key>NSCameraUsageDescription</key>
     <string>Corder does not use the camera.</string>
+    <!-- Sparkle autoupdate. SUPublicEDKey is filled in by scripts/release.sh
+         after `generate_keys` writes the matching private half into the
+         macOS Keychain. SUFeedURL is the publicly-hosted appcast. -->
+    <key>SUFeedURL</key>
+    <string>https://halinskiy.github.io/Corder/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>2Ne7z6Ps8wOBB0xFredP5la4nQbr61Gpn0vh8f3YOyo=</string>
+    <key>SUEnableInstallerLauncherService</key>
+    <true/>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <false/>
+    <!-- Required for Sparkle on a self-signed (non-notarized) app: hardened
+         runtime would otherwise refuse to load Sparkle's signed XPC services
+         because they're not from the same Developer-ID team. Removable once
+         we move to notarized Developer ID builds. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
