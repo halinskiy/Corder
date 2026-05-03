@@ -13,23 +13,33 @@ enum AudioMixerError: Error, LocalizedError {
     }
 }
 
-/// Produces a 16 kHz mono PCM WAV file by mixing system audio (extracted from a .mov)
-/// with microphone audio (recorded separately). Output is what Whisper expects.
+/// Produces a 16 kHz mono PCM WAV file by mixing the standalone system audio
+/// (system.wav captured live from SCStream) with the microphone audio (mic.wav).
+/// The .mov is no longer required for transcription, so a corrupt video file
+/// does not block the transcript.
 enum AudioMixer {
-    static func produceWhisperInput(videoURL: URL, micURL: URL, outputURL: URL) async throws {
+    static func produceWhisperInput(systemURL: URL?, micURL: URL, outputURL: URL) async throws {
         let target = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                    sampleRate: 16_000,
                                    channels: 1,
                                    interleaved: false)!
 
-        // 1. Pull system audio out of the .mov as 16 kHz mono Float32 buffers.
-        let systemBuffers = try await readSystemAudioFromVideo(videoURL: videoURL, targetFormat: target)
+        // 1. Read system audio if it exists. If the file is missing or empty
+        //    (very short recordings, no system sound), fall back to silence.
+        let systemBuffer: AVAudioPCMBuffer
+        if let url = systemURL,
+           FileManager.default.fileExists(atPath: url.path),
+           ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0) > 1024 {
+            systemBuffer = try readAndConvert(fileURL: url, targetFormat: target)
+        } else {
+            systemBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: 1)!
+        }
 
         // 2. Read mic.wav and convert to the same format.
-        let micBuffers = try readAndConvert(fileURL: micURL, targetFormat: target)
+        let micBuffer = try readAndConvert(fileURL: micURL, targetFormat: target)
 
         // 3. Mix sample-wise into a single buffer the length of whichever stream is longer.
-        let mixed = mix(buffers: [systemBuffers, micBuffers], format: target)
+        let mixed = mix(buffers: [systemBuffer, micBuffer], format: target)
 
         // 4. Write to outputURL as 16 kHz mono Float32 WAV.
         let outFile = try AVAudioFile(forWriting: outputURL,
@@ -39,63 +49,7 @@ enum AudioMixer {
         try outFile.write(from: mixed)
     }
 
-    // MARK: - System audio (.mov → AVAudioPCMBuffer in target format)
-
-    private static func readSystemAudioFromVideo(videoURL: URL, targetFormat: AVAudioFormat) async throws -> AVAudioPCMBuffer {
-        let asset = AVURLAsset(url: videoURL)
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
-        guard let track = tracks.first else {
-            // Some recordings might genuinely have no system audio. Return silence.
-            return AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: 1)!
-        }
-
-        let reader = try AVAssetReader(asset: asset)
-        let outputSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true,
-            AVLinearPCMIsNonInterleaved: true,
-            AVSampleRateKey: 16_000,
-            AVNumberOfChannelsKey: 1
-        ]
-        let trackOutput = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
-        guard reader.canAdd(trackOutput) else {
-            throw AudioMixerError.readerFailed("cannot add track output")
-        }
-        reader.add(trackOutput)
-        guard reader.startReading() else {
-            throw AudioMixerError.readerFailed(reader.error?.localizedDescription ?? "startReading failed")
-        }
-
-        var samples: [Float] = []
-        while reader.status == .reading, let buf = trackOutput.copyNextSampleBuffer() {
-            guard let block = CMSampleBufferGetDataBuffer(buf) else { continue }
-            var length = 0
-            var dataPointer: UnsafeMutablePointer<Int8>?
-            CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: nil,
-                                        totalLengthOut: &length, dataPointerOut: &dataPointer)
-            if let p = dataPointer, length > 0 {
-                let count = length / MemoryLayout<Float>.size
-                samples.append(contentsOf: UnsafeBufferPointer(
-                    start: p.withMemoryRebound(to: Float.self, capacity: count) { $0 },
-                    count: count))
-            }
-        }
-        if reader.status == .failed {
-            throw AudioMixerError.readerFailed(reader.error?.localizedDescription ?? "unknown")
-        }
-
-        let buffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: AVAudioFrameCount(samples.count))!
-        buffer.frameLength = AVAudioFrameCount(samples.count)
-        if let dst = buffer.floatChannelData?[0] {
-            samples.withUnsafeBufferPointer { src in
-                dst.update(from: src.baseAddress!, count: samples.count)
-            }
-        }
-        return buffer
-    }
-
-    // MARK: - mic.wav → target format
+    // MARK: - audio file → target format
 
     private static func readAndConvert(fileURL: URL, targetFormat: AVAudioFormat) throws -> AVAudioPCMBuffer {
         let file = try AVAudioFile(forReading: fileURL)

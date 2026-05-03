@@ -13,19 +13,20 @@ final class RecordingController {
         switch await PermissionsChecker.checkScreenRecording() {
         case .granted: break
         case .denied:
-            present(error: "Screen Recording permission denied. Open System Settings → Privacy → Screen Recording.")
+            present(error: "Нет разрешения Screen Recording. Открой System Settings → Privacy → Screen Recording.")
             PermissionsChecker.openScreenRecordingSettings()
             return
         case .notDetermined:
-            // First call to SCShareableContent triggers the prompt; surface error and bail.
-            present(error: "Screen Recording permission required. Approve in System Settings, then try again.")
+            present(error: "Нужно разрешение Screen Recording. Подтверди в System Settings и попробуй снова.")
             PermissionsChecker.openScreenRecordingSettings()
             return
         }
-        switch await PermissionsChecker.checkMicrophone() {
-        case .granted: break
-        case .denied, .notDetermined:
-            present(error: "Microphone permission required.")
+        // Microphone permission: only block on explicit .denied. For .notDetermined
+        // we let AVAudioEngine.start() in CaptureEngine trigger the real TCC prompt —
+        // that path reliably registers the app in System Settings → Microphone,
+        // whereas AVCaptureDevice.requestAccess can silently fail to surface a prompt.
+        if PermissionsChecker.checkMicrophone() == .denied {
+            present(error: "Нет доступа к микрофону. Открой System Settings → Privacy → Microphone и включи Corder.")
             PermissionsChecker.openMicrophoneSettings()
             return
         }
@@ -39,15 +40,18 @@ final class RecordingController {
         let meeting = Meeting(
             id: id, startedAt: now, endedAt: nil, durationMs: nil,
             videoPath: videoPath, audioPath: audioPath,
-            transcribedAt: nil, status: .recording
+            transcribedAt: nil, status: .recording,
+            boostedText: nil, boostedAt: nil
         )
 
         do {
             try AppContext.shared.repo.insertMeeting(meeting)
             try await AppContext.shared.capture.start(meetingId: id, source: source)
             AppContext.shared.recordingState = .recording(meetingId: id, startedAt: Date())
+            FileLogger.log("RecordingController: started \(id)")
         } catch {
-            present(error: "Failed to start recording: \(error.localizedDescription)")
+            FileLogger.log("RecordingController: start failed for \(id): \(error)")
+            present(error: "Не удалось начать запись: \(error.localizedDescription)")
             try? AppContext.shared.repo.deleteMeeting(id: id)
             AppContext.shared.recordingState = .idle
         }
@@ -68,22 +72,26 @@ final class RecordingController {
                 meeting.status = .transcribing
                 try AppContext.shared.repo.updateMeeting(meeting)
             }
-            postNotification(title: "Recording saved", body: "Transcribing \(durationMs / 1000)s…")
+            postNotification(title: "Запись сохранена", body: "Расшифровка \(durationMs / 1000)с…")
         } catch {
-            present(error: "Failed to save meeting: \(error.localizedDescription)")
+            present(error: "Не удалось сохранить запись: \(error.localizedDescription)")
         }
 
         AppContext.shared.recordingState = .idle
 
-        // Kick off transcription in the background.
-        Task.detached(priority: .userInitiated) {
+        // Kick off transcription. TranscriptionPipeline is @MainActor — running it
+        // on the main actor (instead of a detached Task) keeps NSLog/FileLogger
+        // emission consistent and prevents the in-flight task from being silently
+        // dropped if the dispatch queue gets cleaned up under memory pressure.
+        FileLogger.log("stopRecording: scheduling transcription for \(id)")
+        Task { @MainActor in
             await TranscriptionPipeline.shared.transcribe(meetingId: id)
-            await MainActor.run {
-                let n = NSUserNotification()
-                n.title = "Transcription ready"
-                n.informativeText = "Open the Library to view it."
-                NSUserNotificationCenter.default.deliver(n)
-            }
+            let n = NSUserNotification()
+            n.title = "Расшифровка готова"
+            n.informativeText = "Открой библиотеку чтобы посмотреть."
+            n.hasActionButton = true
+            n.actionButtonTitle = "Открыть"
+            NSUserNotificationCenter.default.deliver(n)
         }
     }
 

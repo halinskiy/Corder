@@ -1,10 +1,48 @@
-.DS_Store
+# Swift / SwiftPM
 .build/
 .swiftpm/
 Package.resolved
-Web/node_modules/
-Web/dist/
 build/
 DerivedData/
-*.xcuserstate
+*.xcodeproj/
+*.xcworkspace/
 xcuserdata/
+*.xcuserstate
+
+# Web / Node
+Web/node_modules/
+Web/dist/
+Web/.vite/
+Web/tsconfig.tsbuildinfo
+
+# Built bundle (rebuild via Scripts/build-app.sh)
+Corder.app/
+# Generated web bundle, copied from Web/dist by Scripts/build-web.sh
+Sources/Corder/Resources/web/
+
+# Sparkle release artifacts
+*.dmg
+*.zip
+appcast-private/
+sparkle_eddsa_priv*
+
+# OS detritus
+.DS_Store
+*.swp
+
+# Secrets — none of these should ever exist in the repo, listed defensively
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.cer
+*.mobileprovision
+*.key
+secrets/
+dropbox.json
+gemini_key
+
+# Local editor overlays the user might keep next to the repo
+NOTES.local.md
+.notes/local/
