@@ -10,6 +10,10 @@ behaviour, not internal refactors.
 
 ## [Unreleased]
 
+(none yet)
+
+## [0.7.0] — 2026-05-09
+
 ### Added
 - **Dual-track transcription** — `mic.wav` and `system.wav` are sent to
   Gemini as **two parallel File API calls** (`async let micPart` /
