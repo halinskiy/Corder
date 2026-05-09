@@ -3,9 +3,10 @@ import SwiftUI
 
 /// Floating panel that hovers over every other window while Corder is
 /// recording. The visual is a Liquid Blob — an organic shape that
-/// deforms with the user's voice / system audio level. Clicking the
-/// blob stops the recording; dragging it (>3 pt) repositions the
-/// panel without triggering stop.
+/// morphs through several geometric templates (blob → star →
+/// hexagon → squircle) on a slow cycle, while reacting in real time
+/// to mic + system audio level. Click stops the recording; drag
+/// repositions the panel.
 @MainActor
 final class RecordingHUDPanel {
     static let shared = RecordingHUDPanel()
@@ -13,20 +14,16 @@ final class RecordingHUDPanel {
 
     private var window: NSPanel?
 
-    /// Total window size. The blob itself is inset by `glowPadding` on
-    /// each edge so the soft drop-shadow / glow has room to breathe
-    /// without clipping at the panel boundary.
-    private static let windowSize: CGFloat = 92
-    private static let glowPadding: CGFloat = 6
+    /// Total panel size. The blob itself only occupies ~60 % of this;
+    /// the rest is breathing room for the radial glow + the hover
+    /// scale-up so neither ever clips at the panel boundary.
+    private static let windowSize: CGFloat = 120
 
     func show() {
         if window?.isVisible == true { return }
-        // The view needs a non-owning ref to the window so DragGesture
-        // can move the panel directly. We assign it after creating the
-        // panel below.
         let panelHolder = WindowHolder()
         let host = NSHostingController(rootView:
-            RecordingHUDView(holder: panelHolder, glowPadding: Self.glowPadding)
+            RecordingHUDView(holder: panelHolder)
         )
         host.view.frame = NSRect(x: 0, y: 0, width: Self.windowSize, height: Self.windowSize)
 
@@ -47,14 +44,12 @@ final class RecordingHUDPanel {
         panel.hasShadow = false                       // we draw our own glow
         panel.isMovableByWindowBackground = false     // drag via DragGesture below
         panel.level = .floating
-        // Float over every Space + persist when the user switches Spaces;
-        // staying visible across Spaces is the entire point of the HUD.
+        // Float over every Space + persist when the user switches Spaces.
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panelHolder.panel = panel
 
-        // Initial position: centered horizontally, ~12 px below the menu bar
-        // on the screen the cursor is currently on.
+        // Initial position: centered horizontally, ~12 px below the menu bar.
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
             let w = panel.frame.width
@@ -84,70 +79,89 @@ private final class WindowHolder {
 }
 
 /// Liquid Blob HUD body. Pulls the live level from RecordingLevelMeter,
-/// renders a Canvas-based organic shape, exposes a click-anywhere
+/// renders a Canvas-based morphing shape, exposes a click-anywhere
 /// stop and a >3 pt drag.
 private struct RecordingHUDView: View {
+
     let holder: WindowHolder
-    let glowPadding: CGFloat
 
     @ObservedObject private var meter = RecordingLevelMeter.shared
     /// Cumulative drag-translation since gesture start. Used to (a)
     /// distinguish tap-from-drag and (b) repeatedly nudge the NSPanel
     /// origin in `onChanged`.
     @State private var dragAccumulated: CGSize = .zero
+    /// Drives the entry "leak from a single point" animation.
+    @State private var appeared = false
+    /// Mouse hover for the gentle scale-up affordance.
+    @State private var hovering = false
 
     var body: some View {
         let level = max(meter.micLevel, meter.systemLevel)
 
-        // TimelineView gives us a steady 60 Hz tick so the blob phase
-        // animates smoothly even when no audio is coming in. Without
-        // it the blob would be perfectly still during silence.
+        // TimelineView gives us a steady 60 Hz tick so the shape
+        // morph + breathing wobble keep moving even during silence.
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            ZStack {
-                BlobShape(time: t, level: CGFloat(level))
-                    .fill(
-                        // Diagonal gradient from deep red (top-left) to
-                        // warm orange (bottom-right). The shape feels
-                        // like molten metal more than a recording icon.
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.74, green: 0.18, blue: 0.18),
-                                Color(red: 0.93, green: 0.45, blue: 0.16)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            BlobShape(time: t, level: CGFloat(level))
+                .fill(
+                    // Three-stop radial gradient: hot cherry core →
+                    // rose-red mid → deep crimson rim. All in the red
+                    // family, no orange.
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.30, blue: 0.36),
+                            Color(red: 0.78, green: 0.16, blue: 0.24),
+                            Color(red: 0.52, green: 0.08, blue: 0.14)
+                        ],
+                        center: UnitPoint(x: 0.38, y: 0.32),
+                        startRadius: 6,
+                        endRadius: 60
+                    )
+                )
+                .overlay(
+                    // Faint top-rim highlight so the blob reads
+                    // volumetric instead of as a flat sticker.
+                    BlobShape(time: t, level: CGFloat(level))
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.32),
+                                    Color.white.opacity(0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
                         )
-                    )
-                    .overlay(
-                        // Subtle inner highlight along the top to give
-                        // the blob a sense of volume rather than reading
-                        // as a flat sticker.
-                        BlobShape(time: t, level: CGFloat(level))
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.35),
-                                        Color.white.opacity(0)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-                    .shadow(color: Color(red: 0.74, green: 0.18, blue: 0.18).opacity(0.55),
-                            radius: 14 + 8 * CGFloat(level), x: 0, y: 4)
-                    .padding(glowPadding)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                )
+                // Glow + drop shadow live on the wrapping frame so the
+                // shape itself stays crisp at any scale.
+                .frame(width: 64, height: 64)
+                .shadow(color: Color(red: 0.85, green: 0.20, blue: 0.28).opacity(0.55),
+                        radius: 18 + 10 * CGFloat(level), x: 0, y: 6)
+                .shadow(color: Color(red: 0.55, green: 0.10, blue: 0.18).opacity(0.35),
+                        radius: 6, x: 0, y: 2)
         }
-        .contentShape(Rectangle())  // make the entire panel hit-test
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Entry animation: blob "leaks out" from a tiny dot in the
+        // centre. Spring keeps it organic — no hard endpoint snap.
+        .scaleEffect((appeared ? 1.0 : 0.05) * (hovering ? 1.12 : 1.0))
+        .opacity(appeared ? 1.0 : 0.0)
+        .animation(.spring(response: 0.55, dampingFraction: 0.72), value: appeared)
+        .animation(.easeOut(duration: 0.22), value: hovering)
+        .onAppear { appeared = true }
+        .onHover { isOver in
+            hovering = isOver
+            if isOver {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    // Move the NSPanel by the delta since last tick so
-                    // the blob follows the cursor 1:1.
                     let dx = value.translation.width - dragAccumulated.width
                     let dy = value.translation.height - dragAccumulated.height
                     dragAccumulated = value.translation
@@ -184,50 +198,105 @@ private struct RecordingHUDView: View {
     }
 }
 
-/// The blob path itself: a closed curve through 8 control points
-/// distributed around a circle, with each point's distance from the
-/// centre wobbling on its own phase. Audio level pushes a few of the
-/// points further out, deforming the shape in step with the voice.
-///
-/// Implementation note: we draw quadratic Béziers between successive
-/// midpoints, using each control point as the curve's control. This
-/// is the textbook "smooth closed curve through points" trick — gives
-/// continuous tangents at every joint without doing full Catmull-Rom.
+// MARK: - Shape morphing
+
+/// 12 control points distributed evenly around a circle. Each shape
+/// in the morph cycle is a 12-element array of radius multipliers
+/// (1.0 = sit on the base radius, <1.0 = pull toward the centre,
+/// >1.0 = push away). The shape itself is drawn as a closed loop
+/// of quadratic Béziers between successive midpoints, with each
+/// control point as the curve's control — gives continuous tangents
+/// at every joint.
+private enum ShapeTemplate {
+    /// Lazy organic — varying radius, no symmetry.
+    static let blob: [CGFloat] = [
+        1.05, 0.92, 1.02, 0.95, 1.08, 0.94,
+        0.98, 1.06, 0.92, 1.04, 0.96, 1.00
+    ]
+    /// 6-pointed star: alternating peak / valley.
+    static let star: [CGFloat] = [
+        1.18, 0.62, 1.18, 0.62, 1.18, 0.62,
+        1.18, 0.62, 1.18, 0.62, 1.18, 0.62
+    ]
+    /// Hexagon: every other point sits slightly inset so the shape
+    /// reads as 6 corners with mid-edges between them.
+    static let hexagon: [CGFloat] = [
+        1.05, 0.93, 1.05, 0.93, 1.05, 0.93,
+        1.05, 0.93, 1.05, 0.93, 1.05, 0.93
+    ]
+    /// Squircle / soft square: 4 broad corners with flatter sides.
+    static let squircle: [CGFloat] = [
+        1.10, 0.92, 0.85, 0.92, 1.10, 0.92,
+        0.85, 0.92, 1.10, 0.92, 0.85, 0.92
+    ]
+
+    /// The wobble amplitude scales down on near-rigid shapes so they
+    /// stay legible as a star / hexagon instead of mushing back into
+    /// a generic blob.
+    static let cycle: [(points: [CGFloat], wobbleScale: CGFloat)] = [
+        (blob,     1.00),
+        (star,     0.30),
+        (hexagon,  0.45),
+        (squircle, 0.45)
+    ]
+
+    /// One full pass through all four templates.
+    static let cycleDurationSec: Double = 8.0
+}
+
 private struct BlobShape: Shape {
     var time: TimeInterval
     var level: CGFloat
 
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
-        let baseRadius = min(rect.width, rect.height) / 2
-        let pointCount = 8
+        let baseRadius = min(rect.width, rect.height) / 2 * 0.78
+        let pointCount = 12
+
+        // Pick the two templates we're currently morphing between
+        // and our 0…1 progress through that morph.
+        let cycle = ShapeTemplate.cycle
+        let phase = time.truncatingRemainder(dividingBy: ShapeTemplate.cycleDurationSec)
+                  / ShapeTemplate.cycleDurationSec
+        let scaled = phase * Double(cycle.count)
+        let idx = Int(scaled) % cycle.count
+        let nextIdx = (idx + 1) % cycle.count
+        var local = scaled - Double(idx)
+        // Smoothstep keeps the curve soft at the joins so the shape
+        // doesn't visibly accelerate at integer boundaries.
+        local = local * local * (3 - 2 * local)
+
+        let from = cycle[idx]
+        let to   = cycle[nextIdx]
+        let wobbleScale = lerp(from.wobbleScale, to.wobbleScale, CGFloat(local))
 
         var points: [CGPoint] = []
         points.reserveCapacity(pointCount)
 
         for i in 0..<pointCount {
             let angle = (Double(i) / Double(pointCount)) * 2 * .pi - .pi / 2
-            // Each point gets its own phase, so neighbours don't bulge
-            // in lock-step. The frequencies are picked to be close but
-            // not commensurate — the blob never quite repeats itself.
-            let phase = time * 1.4 + Double(i) * 0.71
-            let wobble = sin(phase) * 0.06 + sin(phase * 2.3 + 1.1) * 0.03
-            // Audio level pushes the radius outward a touch. We rotate
-            // the level-impact phase per-point so loud audio doesn't
-            // just inflate the blob uniformly — different sides bulge
-            // at different times for a "speaking" feel.
+            let baseR = lerp(from.points[i], to.points[i], CGFloat(local))
+
+            // Per-point breathing wobble. Frequencies are deliberately
+            // close-but-not-commensurate so the blob never settles
+            // into a repeating loop.
+            let phase1 = time * 1.6 + Double(i) * 0.71
+            let phase2 = time * 2.7 + Double(i) * 1.23
+            let wobble = (sin(phase1) * 0.05 + sin(phase2) * 0.03) * Double(wobbleScale)
+
+            // Audio level pushes the radius outward. Phase rotates
+            // per-point so loud audio bulges different sides at
+            // different times rather than uniformly inflating.
             let levelPhase = sin(time * 2.1 + Double(i) * 1.2)
-            let levelBoost = Double(level) * 0.18 * (0.5 + 0.5 * levelPhase)
-            let r = baseRadius * (1.0 + wobble + levelBoost)
-            points.append(.init(
-                x: center.x + cos(angle) * r,
-                y: center.y + sin(angle) * r
-            ))
+            let levelBoost = Double(level) * 0.32 * (0.5 + 0.5 * levelPhase)
+
+            let r = baseRadius * (baseR + CGFloat(wobble) + CGFloat(levelBoost))
+            let px = center.x + CGFloat(cos(angle)) * r
+            let py = center.y + CGFloat(sin(angle)) * r
+            points.append(CGPoint(x: px, y: py))
         }
 
         var path = Path()
-        // Start at the midpoint between the last and first control
-        // points so the curve closes seamlessly.
         let startMid = midpoint(points.last!, points.first!)
         path.move(to: startMid)
         for i in 0..<pointCount {
@@ -241,6 +310,10 @@ private struct BlobShape: Shape {
 
     private func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
         CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+    }
+
+    private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+        a + (b - a) * t
     }
 
     var animatableData: CGFloat {
