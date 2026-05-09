@@ -76,12 +76,25 @@ enum GeminiTranscriber {
     /// the worst dense-talk case, leaving headroom.
     private static let maxSecondsPerChunk: Double = 9 * 60
 
-    /// Whole-file transcription. For audio shorter than `maxSecondsPerChunk`
-    /// runs a single upload+generate. For longer recordings, slices into
-    /// chunks, transcribes each, and stitches the resulting turns back
-    /// together with the right time offsets. Throws `GError.quotaOrBilling`
-    /// for 402 / 429 / RESOURCE_EXHAUSTED, `GError.network` for
-    /// connectivity drops.
+    /// Below this savings ratio (compressed/original) the VAD pre-pass
+    /// is a wash — extra disk I/O without meaningful API savings — and
+    /// we just send the original. Tuned so that talk-heavy meetings
+    /// fall through unchanged while idle mic tracks (lots of "I'm
+    /// listening to my friend") get squeezed.
+    private static let vadMinSavings: Double = 0.10
+    /// If a file's total speech duration is below this, we don't even
+    /// upload — just return zero turns. Catches "I forgot to talk into
+    /// the mic" and "the system stream had no audible app".
+    private static let vadEmptyFloorMs: Int64 = 500
+
+    /// Whole-file transcription. Runs a VAD pre-pass to drop long silent
+    /// stretches before upload (saves Gemini tokens), then delegates to
+    /// the legacy single/chunked path on the speech-only audio. Returned
+    /// turns are projected back onto the original timeline so callers
+    /// see timestamps in their input file's frame, not the compressed one.
+    ///
+    /// Throws `GError.quotaOrBilling` for 402 / 429 / RESOURCE_EXHAUSTED,
+    /// `GError.network` for connectivity drops.
     static func transcribe(audioURL: URL, mode: TranscribeMode = .diarize) async throws -> [Turn] {
         guard let key = apiKey else { throw GError.missingAPIKey }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -89,15 +102,88 @@ enum GeminiTranscriber {
         }
 
         let durationSec = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
+        let durationMs = Int64(durationSec * 1000)
         FileLogger.log("GeminiTranscriber: \(audioURL.lastPathComponent) duration ≈ \(Int(durationSec))s, mode=\(mode)")
 
-        do {
-            if durationSec <= maxSecondsPerChunk {
-                return try await transcribeSingle(audioURL: audioURL, apiKey: key, offsetMs: 0, mode: mode)
+        // VAD pre-pass. On read failure we fall through to "transcribe the
+        // original" rather than failing the meeting — VAD is an
+        // optimisation, not a correctness requirement.
+        let segments = VoiceActivityDetector.detect(audioURL: audioURL)
+        let speechMs = segments.map { VoiceActivityDetector.totalSpeechMs($0) } ?? durationMs
+
+        if let segs = segments, segs.isEmpty || speechMs < vadEmptyFloorMs {
+            FileLogger.log("GeminiTranscriber: VAD found <\(vadEmptyFloorMs)ms of speech in \(audioURL.lastPathComponent), skipping upload")
+            return []
+        }
+
+        // Decide whether to actually use VAD output. If the savings are
+        // tiny (talk-heavy meeting), we'd be paying disk I/O for ~0% API
+        // benefit — pass the original through.
+        let savingsRatio = durationMs > 0 ? 1.0 - Double(speechMs) / Double(durationMs) : 0.0
+        let useVad = (segments != nil) && savingsRatio >= vadMinSavings
+
+        let workURL: URL
+        let projection: VoiceActivityDetector.Projection?
+        let tmpDir: URL?
+
+        if useVad, let segs = segments {
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("corder-vad-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let concat = dir.appendingPathComponent("speech.wav")
+            do {
+                let proj = try VoiceActivityDetector.concatenateSpeech(audioURL: audioURL, segments: segs, outURL: concat)
+                workURL = concat
+                projection = proj
+                tmpDir = dir
+                FileLogger.log(String(format: "GeminiTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments)",
+                                      Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count))
+            } catch {
+                // Concatenation failed — bail out of VAD, transcribe the
+                // original. Disk full / quota race / corrupt frame read.
+                try? FileManager.default.removeItem(at: dir)
+                FileLogger.log("GeminiTranscriber: VAD concat failed (\(error)) — falling back to original")
+                workURL = audioURL
+                projection = nil
+                tmpDir = nil
             }
-            return try await transcribeChunked(audioURL: audioURL, durationSec: durationSec, apiKey: key, mode: mode)
+        } else {
+            if segments != nil {
+                FileLogger.log(String(format: "GeminiTranscriber: VAD savings %.0f%% < threshold, sending original",
+                                      savingsRatio * 100))
+            } else {
+                FileLogger.log("GeminiTranscriber: VAD read failed, sending original")
+            }
+            workURL = audioURL
+            projection = nil
+            tmpDir = nil
+        }
+        defer {
+            if let dir = tmpDir {
+                try? FileManager.default.removeItem(at: dir)
+            }
+        }
+
+        let workDuration = (try? audioDurationSeconds(audioURL: workURL)) ?? durationSec
+
+        let rawTurns: [Turn]
+        do {
+            if workDuration <= maxSecondsPerChunk {
+                rawTurns = try await transcribeSingle(audioURL: workURL, apiKey: key, offsetMs: 0, mode: mode)
+            } else {
+                rawTurns = try await transcribeChunked(audioURL: workURL, durationSec: workDuration, apiKey: key, mode: mode)
+            }
         } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
             throw GError.network("No internet — try again when you're online.")
+        }
+
+        // No projection needed when we sent the original through.
+        guard let proj = projection else { return rawTurns }
+        return rawTurns.map {
+            Turn(speakerLabel: $0.speakerLabel,
+                 startMs: proj.toOriginal(compressedMs: $0.startMs),
+                 endMs: proj.toOriginal(compressedMs: $0.endMs),
+                 text: $0.text)
         }
     }
 
