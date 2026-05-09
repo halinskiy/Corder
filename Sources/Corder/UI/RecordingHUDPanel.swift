@@ -17,7 +17,7 @@ final class RecordingHUDPanel {
     /// Total panel size. The blob itself only occupies ~60 % of this;
     /// the rest is breathing room for the radial glow + the hover
     /// scale-up so neither ever clips at the panel boundary.
-    private static let windowSize: CGFloat = 120
+    private static let windowSize: CGFloat = 80
 
     func show() {
         if window?.isVisible == true { return }
@@ -136,7 +136,7 @@ private struct RecordingHUDView: View {
                 )
                 // Glow + drop shadow live on the wrapping frame so the
                 // shape itself stays crisp at any scale.
-                .frame(width: 64, height: 64)
+                .frame(width: 43, height: 43)
                 .shadow(color: Color(red: 0.85, green: 0.20, blue: 0.28).opacity(0.55),
                         radius: 18 + 10 * CGFloat(level), x: 0, y: 6)
                 .shadow(color: Color(red: 0.55, green: 0.10, blue: 0.18).opacity(0.35),
@@ -241,7 +241,7 @@ private enum ShapeTemplate {
     ]
 
     /// One full pass through all four templates.
-    static let cycleDurationSec: Double = 8.0
+    static let cycleDurationSec: Double = 4.0
 }
 
 private struct BlobShape: Shape {
