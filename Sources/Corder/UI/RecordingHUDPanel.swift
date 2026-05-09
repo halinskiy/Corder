@@ -17,7 +17,7 @@ final class RecordingHUDPanel {
     /// Total panel size. The blob itself only occupies ~60 % of this;
     /// the rest is breathing room for the radial glow + the hover
     /// scale-up so neither ever clips at the panel boundary.
-    private static let windowSize: CGFloat = 80
+    private static let windowSize: CGFloat = 110
 
     func show() {
         if window?.isVisible == true { return }
@@ -42,7 +42,10 @@ final class RecordingHUDPanel {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false                       // we draw our own glow
-        panel.isMovableByWindowBackground = false     // drag via DragGesture below
+        // Native AppKit drag for the panel itself — works regardless of
+        // .nonactivatingPanel and beats any SwiftUI DragGesture for
+        // reliability. The on-blob TapGesture handles stop separately.
+        panel.isMovableByWindowBackground = true
         panel.level = .floating
         // Float over every Space + persist when the user switches Spaces.
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
@@ -86,10 +89,6 @@ private struct RecordingHUDView: View {
     let holder: WindowHolder
 
     @ObservedObject private var meter = RecordingLevelMeter.shared
-    /// Cumulative drag-translation since gesture start. Used to (a)
-    /// distinguish tap-from-drag and (b) repeatedly nudge the NSPanel
-    /// origin in `onChanged`.
-    @State private var dragAccumulated: CGSize = .zero
     /// Drives the entry "leak from a single point" animation.
     @State private var appeared = false
     /// Mouse hover for the gentle scale-up affordance.
@@ -122,31 +121,25 @@ private struct RecordingHUDView: View {
         .animation(.spring(response: 0.55, dampingFraction: 0.72), value: appeared)
         .animation(.easeOut(duration: 0.22), value: hovering)
         .onAppear { appeared = true }
-        .onHover { isOver in
-            hovering = isOver
-            if isOver {
+        // onContinuousHover keeps re-applying the cursor on every
+        // mouse movement inside the view. Plain .onHover only fires
+        // at enter/exit, and on a .nonactivatingPanel that single
+        // .set() call gets clobbered by AppKit before it sticks.
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                if !hovering { hovering = true }
                 NSCursor.pointingHand.set()
-            } else {
+            case .ended:
+                hovering = false
                 NSCursor.arrow.set()
             }
         }
         .contentShape(Rectangle())
-        // Drag and tap are split so a click never "leaks" 2-3 px of
-        // accidental translation into a stop. The DragGesture only
-        // fires after 4 pt of movement, anything below that flows
-        // through to the TapGesture cleanly. simultaneousGesture
-        // (rather than .gesture) lets both compete fairly so tap
-        // doesn't get swallowed when the user *starts* a drag.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 4)
-                .onChanged { value in
-                    let dx = value.translation.width - dragAccumulated.width
-                    let dy = value.translation.height - dragAccumulated.height
-                    dragAccumulated = value.translation
-                    moveWindow(dx: dx, dy: dy)
-                }
-                .onEnded { _ in dragAccumulated = .zero }
-        )
+        // Drag is handled natively by isMovableByWindowBackground
+        // on the NSPanel — far more reliable inside a
+        // .nonactivatingPanel than any SwiftUI gesture. Tap stays
+        // here for stop.
         .onTapGesture { stopRecording() }
         .help("Click to stop recording")
     }
@@ -178,9 +171,9 @@ private struct RecordingHUDView: View {
             )
             .frame(width: 43, height: 43)
             .shadow(color: palette.glowOuter.opacity(0.55),
-                    radius: 18 + 10 * CGFloat(level), x: 0, y: 6)
+                    radius: 14 + 8 * CGFloat(level), x: 0, y: 4)
             .shadow(color: palette.glowInner.opacity(0.35),
-                    radius: 6, x: 0, y: 2)
+                    radius: 5, x: 0, y: 2)
     }
 
     /// Default state: brand green. Recording is happening, the user
@@ -209,15 +202,6 @@ private struct RecordingHUDView: View {
             glowOuter: Color(red: 0.85, green: 0.20, blue: 0.28),
             glowInner: Color(red: 0.55, green: 0.10, blue: 0.18)
         )
-    }
-
-    private func moveWindow(dx: CGFloat, dy: CGFloat) {
-        guard let panel = holder.panel else { return }
-        var f = panel.frame
-        // SwiftUI Y goes down, AppKit Y goes up — flip the delta.
-        f.origin.x += dx
-        f.origin.y -= dy
-        panel.setFrameOrigin(f.origin)
     }
 
     private func stopRecording() {
