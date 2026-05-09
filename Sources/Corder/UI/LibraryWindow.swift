@@ -5,12 +5,27 @@ import WebKit
 /// to the window's drag handler. WKWebView normally swallows mouse events,
 /// so isMovableByWindowBackground alone doesn't make the window draggable.
 private final class DragView: NSView {
-    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    override func mouseDown(with event: NSEvent) {
+        // Double-click on the title-bar area: honour the user's
+        // "Double-click a window's title bar to…" preference (Maximize /
+        // Minimize / Fill / nothing). Without this branch our performDrag
+        // call swallows the second click and the window never zooms.
+        if event.clickCount >= 2 {
+            let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
+            switch action {
+            case "Minimize":
+                window?.performMiniaturize(nil)
+            case "Maximize", "Fill":
+                window?.performZoom(nil)
+            default:
+                break
+            }
+            return
+        }
+        window?.performDrag(with: event)
+    }
     override var mouseDownCanMoveWindow: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // Pass clicks through to whatever is below us (close/min/zoom buttons),
-        // but we still get the drag because performDrag is initiated by AppKit
-        // when mouseDownCanMoveWindow is true on this view.
         return super.hitTest(point)
     }
 }
@@ -38,6 +53,16 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(text, forType: .string)
+            }
+        case "openExternal":
+            // Donate buttons + any other "open in default browser" affordances
+            // route through here. WKWebView refuses to follow target=_blank
+            // links without a UIDelegate, so we hand them to NSWorkspace.
+            guard let raw = message.body as? String,
+                  let url = URL(string: raw),
+                  url.scheme == "http" || url.scheme == "https" else { return }
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(url)
             }
         default:
             break
@@ -74,6 +99,7 @@ final class LibraryWindow: NSWindowController {
         let handler = WebBridgeHandler(window: win)
         cfg.userContentController.add(handler, name: "drag")
         cfg.userContentController.add(handler, name: "copy")
+        cfg.userContentController.add(handler, name: "openExternal")
         let bridgeJS = """
         (function() {
           // Drag: mousedown on header background → window.performDrag in Swift.
@@ -89,6 +115,17 @@ final class LibraryWindow: NSWindowController {
           window.corderCopy = function(text) {
             try {
               window.webkit.messageHandlers.copy.postMessage(String(text));
+              return true;
+            } catch (e) { return false; }
+          };
+
+          // Open external URL in the default browser. target="_blank" links
+          // never open in WKWebView without a UIDelegate, so any UI that
+          // wants to send the user to the web (donate buttons, etc.) calls
+          // this and we hand the URL to AppKit's NSWorkspace.
+          window.corderOpenExternal = function(url) {
+            try {
+              window.webkit.messageHandlers.openExternal.postMessage(String(url));
               return true;
             } catch (e) { return false; }
           };

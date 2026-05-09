@@ -22,8 +22,12 @@ enum BoostService {
         }
     }
 
-    /// `gemini-2.5-flash` — current Flash. Multilingual, fast, free tier.
-    private static let model = "gemini-2.5-flash"
+    /// Boost runs on Gemini 2.5 Pro — slower and more expensive than Flash
+    /// (~3-4× cost) but materially better at preserving speaker register and
+    /// fixing recognition errors in mixed-language transcripts. Transcription
+    /// itself stays on Flash; the per-segment polish pass is where the
+    /// quality jump shows up because Pro reasons about full sentence context.
+    private static let model = "gemini-2.5-pro"
 
     static var apiKey: String? {
         if let env = ProcessInfo.processInfo.environment["GEMINI_API_KEY"], !env.isEmpty {

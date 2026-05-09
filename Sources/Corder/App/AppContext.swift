@@ -33,6 +33,18 @@ final class AppContext: ObservableObject {
     @Published var boostMode: Bool = UserDefaults.standard.bool(forKey: BoostMode.key) {
         didSet { UserDefaults.standard.set(boostMode, forKey: BoostMode.key) }
     }
+
+    /// Interface language for the Library window AND the menu-bar popover.
+    /// "ru" / "en". Defaults to "en".
+    @Published var language: String = UserDefaults.standard.string(forKey: AppLanguage.key) ?? "en" {
+        didSet { UserDefaults.standard.set(language, forKey: AppLanguage.key) }
+    }
+}
+
+/// Thread-safe accessor for the persisted UI language.
+enum AppLanguage {
+    static let key = "Corder.language"
+    static var current: String { UserDefaults.standard.string(forKey: key) ?? "en" }
 }
 
 /// Thread-safe accessor for the persisted boost flag, so non-MainActor code
@@ -52,6 +64,30 @@ enum RecordingState: Equatable {
     case idle
     case recording(meetingId: String, startedAt: Date)
     case stopping
+}
+
+/// In-memory store for the last transcription error per meeting. Surfaces
+/// quota / billing problems to the UI as a red toast without needing a DB
+/// migration. Lock-protected so Swifter handlers (background threads) and
+/// the @MainActor pipeline can both read/write safely.
+enum TranscriptionErrors {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var byMeeting: [String: String] = [:]
+
+    static func record(meetingId: String, message: String) {
+        lock.lock(); defer { lock.unlock() }
+        byMeeting[meetingId] = message
+    }
+
+    static func clear(meetingId: String) {
+        lock.lock(); defer { lock.unlock() }
+        byMeeting.removeValue(forKey: meetingId)
+    }
+
+    static func read(meetingId: String) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return byMeeting[meetingId]
+    }
 }
 
 /// Lock-protected mirror of `AppContext.shared.recordingState` so that

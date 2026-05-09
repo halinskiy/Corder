@@ -13,13 +13,11 @@ protocol CaptureEngineDelegate: AnyObject {
 enum CaptureError: Error, LocalizedError {
     case alreadyRecording
     case noDisplay
-    case writerFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .alreadyRecording: return "Already recording"
         case .noDisplay: return "No displays available"
-        case .writerFailed(let msg): return "AVAssetWriter failed: \(msg)"
         }
     }
 }
@@ -43,9 +41,6 @@ final class CaptureEngine: NSObject {
     private var stream: SCStream?
     private let outputQueue = DispatchQueue(label: "com.3mpq.corder.scstream", qos: .userInitiated)
 
-    // Asset writer state — accessed from outputQueue
-    private var writerState = WriterState()
-
     // Microphone via AVAudioEngine — runs on its own thread
     private var audioEngine: AVAudioEngine?
     private var micFile: AVAudioFile?
@@ -58,6 +53,13 @@ final class CaptureEngine: NSObject {
     // transcription does not depend on AVAssetWriter finalising the .mov.
     private var systemAudioFile: AVAudioFile?
     private var systemAudioFormat: AVAudioFormat?
+    // Diagnostic counter for SCStream's `.audio` output. If this stays at
+    // 0 across a recording, ScreenCaptureKit didn't deliver a single
+    // system-audio buffer — typically reproducible when output is on
+    // Bluetooth headphones (SCO mode), which is exactly the broken
+    // scenario users hit on Meet/Zoom calls.
+    private var systemFramesWritten: Int64 = 0
+    private var loggedFirstSystemBuffer = false
 
     func start(meetingId: String, source: CaptureSource) async throws {
         FileLogger.log("CaptureEngine.start: meetingId=\(meetingId) source=\(source)")
@@ -156,25 +158,26 @@ final class CaptureEngine: NSObject {
         config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
-        // ScreenCaptureKit microphone capture (macOS 15+). Routes through the
-        // same shared system tap as the rest of SCStream, so it doesn't fight
-        // with apps like Telegram for exclusive mic access — which silently
-        // killed the AVAudioEngine path during voice-message recording.
-        if #available(macOS 15.0, *) {
-            config.captureMicrophone = true
-        }
+        // We deliberately do NOT use SCStream's `.microphone` output even on
+        // macOS 15+. It looks attractive — a single shared tap — but in
+        // practice the system silently delivers zero frames whenever
+        // another app (Meet, Zoom, Discord, Telegram) holds the mic via
+        // WebRTC, or when the user is on Bluetooth headphones. Granola,
+        // Loom, Krisp and the rest all go through `AVAudioEngine.installTap`
+        // on the default input device for exactly this reason: it goes
+        // through CoreAudio HAL where mic streams are shared, not exclusive.
 
-        // 3. AVAssetWriter is intentionally NOT created.
-        // Empirically AVAssetWriter on this macOS build chokes on every
-        // configuration we tried (BGRA→YUV, mov/mp4, AAC/PCM/no audio):
-        // it flips to .failed within ~1 s with -11800 / -16122 even for a
-        // plain video-only mp4. The recording's source of truth is the
-        // separately-written system.wav + mic.wav (Whisper → transcript,
-        // Dropbox → archive). Video would be a nice-to-have but not worth
-        // a brittle, half-working .mov that leaves zero-byte files behind.
-        // The frontend treats absence of video as "audio-only" and falls
-        // back to the parallel <audio> element.
-        writerState = WriterState()
+        // 3. NOTE: We deliberately do NOT instantiate AVAssetWriter for the
+        //    .mov video file. Empirically every config we tried (BGRA→YUV,
+        //    mov/mp4, AAC/PCM/no audio) flipped the writer to .failed within
+        //    a second with -11800 / -16122 on this macOS build. The source
+        //    of truth for the recording is the parallel system.wav + mic.wav
+        //    written below — Whisper consumes them, Dropbox archives them,
+        //    and the frontend transparently falls back from <video> to
+        //    <audio> when the .mov is missing. The previous WriterState +
+        //    sessionStart machinery has been removed; if we ever bring back
+        //    video capture, see git history for the full handle-the-PTS-gap
+        //    workaround we used to need.
 
         // 4. SCStream — try with audio first, retry without on failure.
         // "Stream failed to start audio" happens with some Bluetooth/AirPods
@@ -182,9 +185,6 @@ final class CaptureEngine: NSObject {
         var activeStream = SCStream(filter: filter, configuration: config, delegate: self)
         try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
         try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
-        if #available(macOS 15.0, *), config.captureMicrophone {
-            try activeStream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: outputQueue)
-        }
         FileLogger.log("CaptureEngine.start: SCStream configured (capturesAudio=\(config.capturesAudio))")
 
         do {
@@ -200,45 +200,42 @@ final class CaptureEngine: NSObject {
         }
         self.stream = activeStream
 
-        // 5. Microphone:
-        //    * Primary path on macOS 15+ — SCStream's `.microphone` output,
-        //      already wired above. mic.wav is opened lazily in writeMicAudio
-        //      from the first sample's actual ASBD (no race with other apps).
-        //    * Legacy path on macOS 13/14 — AVAudioEngine.installTap. Falls
-        //      back to lossy default-input behaviour but keeps older systems
-        //      working.
+        // 5. Microphone via AVAudioEngine.installTap on the default input.
+        //    This is the only path now (no more SCStream.microphone) — see
+        //    the comment on `capturesAudio` above for why.
         self.micURL = micURL
         self.micFile = nil
         self.micFramesWritten = 0
-        if #available(macOS 15.0, *), config.captureMicrophone {
-            FileLogger.log("CaptureEngine.start: mic via SCStream (macOS 15+)")
-        } else {
-            let engine = AVAudioEngine()
-            let inputNode = engine.inputNode
-            let inputFormat = inputNode.outputFormat(forBus: 0)
-            FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) ch")
-            let micFile = try AVAudioFile(
-                forWriting: micURL,
-                settings: inputFormat.settings,
-                commonFormat: .pcmFormatFloat32,
-                interleaved: false
-            )
-            self.micFile = micFile
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
-                guard let self = self else { return }
-                self.micFramesWritten &+= Int64(buffer.frameLength)
-                try? self.micFile?.write(from: buffer)
-            }
-            engine.prepare()
-            try engine.start()
-            self.audioEngine = engine
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) ch")
+        let micFile = try AVAudioFile(
+            forWriting: micURL,
+            settings: inputFormat.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        self.micFile = micFile
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
+            guard let self = self else { return }
+            self.micFramesWritten &+= Int64(buffer.frameLength)
+            try? self.micFile?.write(from: buffer)
+            // Push raw peak to the level meter — the floating HUD
+            // panel observes it to draw the live mic bar.
+            RecordingLevelMeter.shared.ingestMic(buffer: buffer)
         }
+        engine.prepare()
+        try engine.start()
+        self.audioEngine = engine
 
         // 6. system.wav — opened lazily on first SCStream audio buffer (we need
         // the actual AudioStreamBasicDescription from the buffer to create the file).
         self.systemURL = systemURL
         self.systemAudioFile = nil
         self.systemAudioFormat = nil
+        self.systemFramesWritten = 0
+        self.loggedFirstSystemBuffer = false
 
         // 7. Mark recording state
         self.isRecording = true
@@ -268,33 +265,11 @@ final class CaptureEngine: NSObject {
         audioEngine = nil
         micFile = nil
         FileLogger.log("CaptureEngine.stop: mic frames captured = \(micFramesWritten)")
+        FileLogger.log("CaptureEngine.stop: system frames captured = \(systemFramesWritten) (BT/SCO scenario shows 0 here)")
 
         // Close system audio file so it's safe to read for transcription.
         systemAudioFile = nil
         systemAudioFormat = nil
-
-        // Finalize asset writer
-        let writer = writerState.writer
-        let videoInput = writerState.video
-        let audioInput = writerState.audio
-        writerState = WriterState()
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            outputQueue.async {
-                videoInput?.markAsFinished()
-                audioInput?.markAsFinished()
-                if let writer = writer {
-                    writer.finishWriting {
-                        FileLogger.log("CaptureEngine.stop: AVAssetWriter finishWriting completed (status=\(writer.status.rawValue))")
-                        if let err = writer.error {
-                            FileLogger.log("CaptureEngine.stop: AVAssetWriter error: \(err)")
-                        }
-                        cont.resume()
-                    }
-                } else {
-                    cont.resume()
-                }
-            }
-        }
 
         isRecording = false
         FileLogger.log("CaptureEngine.stop: complete")
@@ -306,19 +281,6 @@ final class CaptureEngine: NSObject {
         micURL = nil
         systemURL = nil
     }
-
-    // MARK: - Internal state
-
-    private struct WriterState {
-        var writer: AVAssetWriter?
-        var video: AVAssetWriterInput?
-        var audio: AVAssetWriterInput?
-        var failureLogged: Bool = false
-        var sessionStartedPts: CMTime?
-        var firstVideoFormatLogged: Bool = false
-        var firstAudioFormatLogged: Bool = false
-        var sessionStarted: Bool = false
-    }
 }
 
 // MARK: - SCStreamOutput
@@ -328,128 +290,20 @@ extension CaptureEngine: SCStreamOutput {
         guard sampleBuffer.isValid,
               CMSampleBufferGetNumSamples(sampleBuffer) > 0 else { return }
 
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-
-        Task { @MainActor [weak self] in
-            self?.handleSample(sampleBuffer, type: type, pts: pts)
-        }
-    }
-
-    @MainActor
-    private func handleSample(_ buffer: CMSampleBuffer, type: SCStreamOutputType, pts: CMTime) {
-        // 1. Audio is mirrored to standalone .wav files unconditionally —
-        //    the .mov writer is best-effort, but system.wav + mic.wav are
-        //    what the transcription pipeline actually consumes, so they must
-        //    keep going even if AVAssetWriter fails.
+        // We only handle `.audio` here (system audio). Microphone goes
+        // through AVAudioEngine, not SCStream. `.screen` is registered so
+        // SCStream's frame-pacing keeps the audio clock in sync, but we
+        // don't persist the pixels (see start() for the AVAssetWriter
+        // gotcha).
         if type == .audio {
-            writeSystemAudio(buffer)
-        }
-        if #available(macOS 15.0, *), type == .microphone {
-            writeMicAudio(buffer)
-        }
-
-        // 2. Forward to AVAssetWriter only if it's still healthy.
-        guard let writer = writerState.writer else { return }
-        if writer.status == .failed {
-            // Log once and stop trying — the .mov is dead, but transcription
-            // continues from system.wav + mic.wav so the meeting still works.
-            if !writerState.failureLogged {
-                writerState.failureLogged = true
-                FileLogger.log("CaptureEngine: writer.status=failed (logged once); error=\(writer.error?.localizedDescription ?? "nil")")
+            // Feed the level meter from the audio thread directly —
+            // peak() doesn't touch the main actor, so the floating HUD
+            // gets system-audio movement without waiting on the same
+            // hop the file write needs.
+            RecordingLevelMeter.shared.ingestSystem(sample: sampleBuffer)
+            Task { @MainActor [weak self] in
+                self?.writeSystemAudio(sampleBuffer)
             }
-            return
-        }
-        guard writer.status == .writing else { return }
-
-        // AVAssetWriter requires sessionStart to coincide with the first VIDEO
-        // sample's PTS. If we start the session on an early audio sample,
-        // subsequent video samples can carry a PTS *before* the session start
-        // and the writer flips to .failed silently with -11800/-16122. So we
-        // buffer audio until the first .screen sample arrives.
-        if !writerState.sessionStarted {
-            guard type == .screen else { return }
-            writer.startSession(atSourceTime: pts)
-            writerState.sessionStarted = true
-            writerState.sessionStartedPts = pts
-            FileLogger.log("CaptureEngine: AVAssetWriter session started at pts=\(pts.seconds)")
-        }
-
-        // Drop any audio sample whose PTS is earlier than the video session
-        // start — those late buffers are exactly what flips the writer to
-        // .failed with -16122 (kAudioCodecAudioFormatErr-like behaviour from
-        // AAC encoder when fed out-of-order timestamps).
-        if type == .audio, let start = writerState.sessionStartedPts, pts < start {
-            return
-        }
-
-        switch type {
-        case .screen:
-            if !writerState.firstVideoFormatLogged {
-                writerState.firstVideoFormatLogged = true
-                if let fd = CMSampleBufferGetFormatDescription(buffer) {
-                    let dims = CMVideoFormatDescriptionGetDimensions(fd)
-                    FileLogger.log("CaptureEngine: first video sample \(dims.width)x\(dims.height) pts=\(pts.seconds)")
-                }
-            }
-            if let input = writerState.video, input.isReadyForMoreMediaData {
-                input.append(buffer)
-            }
-        case .audio:
-            if !writerState.firstAudioFormatLogged {
-                writerState.firstAudioFormatLogged = true
-                if let fd = CMSampleBufferGetFormatDescription(buffer),
-                   let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee {
-                    FileLogger.log("CaptureEngine: first audio sample sr=\(asbd.mSampleRate) ch=\(asbd.mChannelsPerFrame) bits=\(asbd.mBitsPerChannel) flags=\(asbd.mFormatFlags) pts=\(pts.seconds)")
-                }
-            }
-            if let input = writerState.audio, input.isReadyForMoreMediaData {
-                input.append(buffer)
-            }
-        case .microphone:
-            break
-        @unknown default:
-            break
-        }
-    }
-
-    @MainActor
-    private func writeMicAudio(_ buffer: CMSampleBuffer) {
-        guard let url = micURL else { return }
-        if micFile == nil {
-            guard let formatDesc = CMSampleBufferGetFormatDescription(buffer),
-                  var asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)?.pointee,
-                  let format = AVAudioFormat(streamDescription: &asbd) else { return }
-            do {
-                let file = try AVAudioFile(forWriting: url,
-                                           settings: format.settings,
-                                           commonFormat: format.commonFormat,
-                                           interleaved: format.isInterleaved)
-                self.micFile = file
-                FileLogger.log("CaptureEngine: opened mic.wav via SCStream (\(format.sampleRate) Hz, \(format.channelCount) ch)")
-            } catch {
-                FileLogger.log("CaptureEngine: failed to open mic.wav: \(error)")
-                return
-            }
-        }
-        guard let file = micFile,
-              let formatDesc = CMSampleBufferGetFormatDescription(buffer),
-              var asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)?.pointee,
-              let format = AVAudioFormat(streamDescription: &asbd) else { return }
-        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(buffer))
-        guard frames > 0,
-              let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
-        pcm.frameLength = frames
-        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
-            buffer, at: 0, frameCount: Int32(frames), into: pcm.mutableAudioBufferList)
-        guard status == noErr else {
-            FileLogger.log("CaptureEngine: mic CMSampleBufferCopy returned \(status)")
-            return
-        }
-        do {
-            try file.write(from: pcm)
-            micFramesWritten &+= Int64(frames)
-        } catch {
-            FileLogger.log("CaptureEngine: mic.wav write error: \(error)")
         }
     }
 
@@ -468,6 +322,7 @@ extension CaptureEngine: SCStreamOutput {
                                            interleaved: format.isInterleaved)
                 self.systemAudioFile = file
                 self.systemAudioFormat = format
+                FileLogger.log("CaptureEngine: opened system.wav (\(format.sampleRate) Hz, \(format.channelCount) ch)")
             } catch {
                 FileLogger.log("CaptureEngine: failed to open system.wav: \(error)")
                 return
@@ -485,8 +340,16 @@ extension CaptureEngine: SCStreamOutput {
             FileLogger.log("CaptureEngine: CMSampleBufferCopy returned \(status)")
             return
         }
-        do { try file.write(from: pcm) }
-        catch { FileLogger.log("CaptureEngine: system.wav write error: \(error)") }
+        if !loggedFirstSystemBuffer {
+            loggedFirstSystemBuffer = true
+            FileLogger.log("CaptureEngine: first system audio buffer arrived (frames=\(frames))")
+        }
+        do {
+            try file.write(from: pcm)
+            systemFramesWritten &+= Int64(frames)
+        } catch {
+            FileLogger.log("CaptureEngine: system.wav write error: \(error)")
+        }
     }
 }
 

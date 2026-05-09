@@ -25,10 +25,16 @@ enum Routes {
             renameSpeaker(req: req, repo: repo)
         }
         server.post["/api/meetings/:id/retranscribe"] = { req in
-            retranscribe(id: req.params[":id"] ?? "")
+            retranscribe(id: req.params[":id"] ?? "", repo: repo)
         }
-        server.post["/api/meetings/:id/boost"] = { req in
-            boostMeeting(id: req.params[":id"] ?? "", repo: repo)
+        server.post["/api/meetings/:id/cancel-transcription"] = { req in
+            cancelTranscription(id: req.params[":id"] ?? "")
+        }
+        server.post["/api/meetings/:id/expected-speakers"] = { req in
+            setExpectedSpeakers(id: req.params[":id"] ?? "", req: req, repo: repo)
+        }
+        server.get["/api/meetings/:id/last-error"] = { req in
+            lastError(id: req.params[":id"] ?? "")
         }
         server.get["/api/recording/state"] = { _ in recordingState() }
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
@@ -36,6 +42,13 @@ enum Routes {
         server.post["/api/settings"] = { req in settingsSet(req: req) }
         server.delete["/api/meetings/:id"] = { req in
             deleteMeeting(id: req.params[":id"] ?? "", repo: repo)
+        }
+        server.get["/api/archive"] = { _ in listArchived(repo: repo) }
+        server.post["/api/meetings/:id/archive"] = { req in
+            archive(id: req.params[":id"] ?? "", repo: repo)
+        }
+        server.post["/api/meetings/:id/restore"] = { req in
+            restore(id: req.params[":id"] ?? "", repo: repo)
         }
         server.get["/api/search"] = { req in
             let q = req.queryParams.first(where: { $0.0 == "q" })?.1 ?? ""
@@ -83,11 +96,20 @@ enum Routes {
             let summaries: [DTO.MeetingSummary] = try meetings.map { m in
                 let segs = try repo.segments(forMeeting: m.id)
                 let speakerIds = Set(segs.map { $0.speakerId })
+                let speakers = try repo.speakers(forMeeting: m.id)
+                // Join custom_name (when set) or label, only for speakers who
+                // actually spoke. Used as a haystack for the sidebar search.
+                let activeNames: [String] = speakers
+                    .filter { speakerIds.contains($0.id) }
+                    .map { ($0.customName?.trimmingCharacters(in: .whitespaces).isEmpty == false)
+                        ? $0.customName!
+                        : $0.label }
                 return DTO.MeetingSummary(
                     id: m.id, started_at: m.startedAt, ended_at: m.endedAt,
                     duration_ms: m.durationMs, status: m.status.rawValue,
                     preview: segs.first?.text,
-                    speaker_count: speakerIds.count
+                    speaker_count: speakerIds.count,
+                    speaker_names: activeNames.isEmpty ? nil : activeNames.joined(separator: " · ")
                 )
             }
             return jsonResponse(summaries)
@@ -112,50 +134,11 @@ enum Routes {
                                    start_ms: $0.startMs, end_ms: $0.endMs, text: $0.text,
                                    text_boost: $0.textBoost)
                 },
-                boosted_text: m.boostedText,
-                boosted_at: m.boostedAt
+                expected_other_speakers: m.expectedOtherSpeakers
             )
             return jsonResponse(dto)
         } catch {
             return .internalServerError
-        }
-    }
-
-    /// Fire-and-forget: kicks off per-segment Gemini polish on a background
-    /// task and returns 200 immediately. The client polls GET /api/meetings/:id
-    /// and watches `text_boost` on individual segments to decide when boost is
-    /// complete (and whether to render polished or raw text in the existing
-    /// TranscriptPane).
-    private static func boostMeeting(id: String, repo: MeetingRepository) -> HttpResponse {
-        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
-        do {
-            guard let _ = try repo.meeting(id: id) else { return .notFound }
-            let segments = try repo.segments(forMeeting: id)
-            guard !segments.isEmpty else {
-                return jsonResponse(DTO.BoostResponse(ok: false, error: "Empty transcript"))
-            }
-            FileLogger.log("boost: queued for \(id), \(segments.count) segments")
-
-            let pairs: [(id: Int64, text: String)] = segments.compactMap {
-                guard let sid = $0.id else { return nil }
-                return (id: sid, text: $0.text)
-            }
-            Task.detached {
-                do {
-                    let map = try await BoostService.boostSegments(pairs)
-                    for (sid, polished) in map {
-                        try? repo.setSegmentBoost(segmentId: sid, text: polished)
-                    }
-                    let now = Int64(Date().timeIntervalSince1970 * 1000)
-                    try? repo.setBoostedText(meetingId: id, text: nil, at: now)
-                    FileLogger.log("boost: done for \(id), \(map.count)/\(pairs.count) segments polished")
-                } catch {
-                    FileLogger.log("boost: failed for \(id): \(error)")
-                }
-            }
-            return jsonResponse(DTO.BoostResponse(ok: true, error: nil))
-        } catch {
-            return jsonResponse(DTO.BoostResponse(ok: false, error: error.localizedDescription))
         }
     }
 
@@ -195,30 +178,80 @@ enum Routes {
     }
 
     private static func settingsGet() -> HttpResponse {
-        return jsonResponse(DTO.Settings(boost_mode: BoostMode.isEnabled))
+        return jsonResponse(DTO.Settings(
+            boost_mode: BoostMode.isEnabled,
+            language: AppLanguage.current
+        ))
     }
 
     private static func settingsSet(req: HttpRequest) -> HttpResponse {
         do {
             let body = Data(req.body)
             let parsed = try JSONDecoder().decode(DTO.Settings.self, from: body)
-            // UserDefaults is thread-safe; the @Published mirror in AppContext
-            // is only relevant for SwiftUI bindings, not for backend reads.
             UserDefaults.standard.set(parsed.boost_mode, forKey: BoostMode.key)
-            FileLogger.log("settings: boost_mode -> \(parsed.boost_mode)")
-            return jsonResponse(DTO.Settings(boost_mode: parsed.boost_mode))
+            if let lang = parsed.language, lang == "ru" || lang == "en" {
+                UserDefaults.standard.set(lang, forKey: AppLanguage.key)
+                Task { @MainActor in
+                    AppContext.shared.language = lang
+                }
+            }
+            FileLogger.log("settings: boost_mode=\(parsed.boost_mode) language=\(parsed.language ?? "nil")")
+            return jsonResponse(DTO.Settings(
+                boost_mode: parsed.boost_mode,
+                language: AppLanguage.current
+            ))
         } catch {
             return .badRequest(.text("\(error)"))
         }
     }
 
-    private static func retranscribe(id: String) -> HttpResponse {
+    private static func retranscribe(id: String, repo: MeetingRepository) -> HttpResponse {
         guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
         FileLogger.log("retranscribe: queued for \(id)")
+        // Flip status + clear old segments synchronously so the very next
+        // GET /api/meetings/:id from the UI returns `transcribing` with an
+        // empty segment list — letting the TranscribingBanner appear
+        // instantly instead of the "Empty transcript" placeholder.
+        if var m = try? repo.meeting(id: id) {
+            m.status = .transcribing
+            try? repo.updateMeeting(m)
+        }
+        try? repo.clearTranscript(meetingId: id)
+        TranscriptionErrors.clear(meetingId: id)
         Task { @MainActor in
-            await TranscriptionPipeline.shared.transcribe(meetingId: id)
+            TranscriptionPipeline.shared.enqueue(meetingId: id)
         }
         return .ok(.text("queued"))
+    }
+
+    private static func cancelTranscription(id: String) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        FileLogger.log("cancelTranscription: \(id)")
+        Task { @MainActor in
+            TranscriptionPipeline.shared.cancel(meetingId: id)
+        }
+        return .ok(.text("cancelled"))
+    }
+
+    private static func lastError(id: String) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        let payload: [String: Any] = ["error": TranscriptionErrors.read(meetingId: id) as Any]
+        return jsonResponse(payload)
+    }
+
+    private static func setExpectedSpeakers(id: String, req: HttpRequest, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        guard let body = try? JSONDecoder().decode(DTO.ExpectedSpeakersRequest.self, from: Data(req.body)) else {
+            return .badRequest(.text("bad json"))
+        }
+        do {
+            guard var m = try repo.meeting(id: id) else { return .notFound }
+            m.expectedOtherSpeakers = body.count
+            try repo.updateMeeting(m)
+            return .ok(.text("ok"))
+        } catch {
+            return .internalServerError
+        }
     }
 
     private static func deleteMeeting(id: String, repo: MeetingRepository) -> HttpResponse {
@@ -238,6 +271,52 @@ enum Routes {
             try? FileManager.default.removeItem(at: dir)
             try repo.deleteMeeting(id: id)
             return .ok(.text("ok"))
+        } catch {
+            return .internalServerError
+        }
+    }
+
+    /// Soft-archive: stamps `archived_at` so the meeting drops out of
+    /// the main library and shows up in the archive panel. Audio stays
+    /// on disk / Dropbox until the user either restores or wipes it,
+    /// or until the 7-day grace period elapses (see launch cleanup).
+    private static func archive(id: String, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        do {
+            try repo.setArchived(meetingId: id, archivedAt: now)
+            return .ok(.text("ok"))
+        } catch {
+            return .internalServerError
+        }
+    }
+
+    private static func restore(id: String, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        do {
+            try repo.setArchived(meetingId: id, archivedAt: nil)
+            return .ok(.text("ok"))
+        } catch {
+            return .internalServerError
+        }
+    }
+
+    private static func listArchived(repo: MeetingRepository) -> HttpResponse {
+        do {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let retentionMs: Int64 = 7 * 24 * 60 * 60 * 1000  // 7 days
+            let items = try repo.listArchived().map { m -> [String: Any] in
+                let archivedAt = m.archivedAt ?? now
+                let purgeAt = archivedAt + retentionMs
+                return [
+                    "id": m.id,
+                    "started_at": m.startedAt,
+                    "duration_ms": m.durationMs as Any,
+                    "archived_at": archivedAt,
+                    "purge_at": purgeAt
+                ]
+            }
+            return jsonResponse(["items": items])
         } catch {
             return .internalServerError
         }
@@ -277,20 +356,41 @@ enum Routes {
     private static func serveMedia(id: String, kind: MediaKind, repo: MeetingRepository, headers: [String: String]) -> HttpResponse {
         do {
             guard let m = try repo.meeting(id: id) else { return .notFound }
-            let path = (kind == .video) ? m.videoPath : m.audioPath
             let dropboxRemote = (kind == .video) ? m.dropboxVideoPath : m.dropboxAudioPath
-            let url = URL(fileURLWithPath: path)
             let contentType = (kind == .video) ? "video/quicktime" : "audio/wav"
 
-            // Cloud fallback: the local file is gone but we have an archive
-            // in Dropbox. We can't 302 to the Dropbox temporary link directly
-            // because Dropbox serves the bytes with `Content-Type:
-            // application/json`, which makes <video> refuse to play. Proxy
-            // the bytes through ourselves with the right Content-Type, and
-            // pass HTTP Range through unchanged so scrubbing still works.
+            // Audio resolution order:
+            //   1. The DB-stored audioPath (usually mic.wav).
+            //   2. The post-mix audio.wav inside the meeting dir — this is
+            //      what AudioMixer produces and what Whisper/Gemini consume.
+            //      When mic.wav never got written (capture race, sleep mid-
+            //      recording, etc.) audioPath points at a missing file but
+            //      audio.wav is still there — the user expects play to work.
+            // Video has only the canonical videoPath; no fallback.
+            var url: URL
+            if kind == .video {
+                url = URL(fileURLWithPath: m.videoPath)
+            } else {
+                let direct = URL(fileURLWithPath: m.audioPath)
+                if FileManager.default.fileExists(atPath: direct.path) {
+                    url = direct
+                } else {
+                    let mixURL = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav")
+                    url = mixURL
+                }
+            }
+
+            // Cloud cache miss: file was archived to Dropbox and the local
+            // copy got deleted. Pull it back to the canonical local path
+            // (one-time blocking download), then continue down the regular
+            // local-file branch — including Range support. Subsequent
+            // scrubbing requests are served straight from disk without
+            // re-blocking a Swifter worker.
             if !FileManager.default.fileExists(atPath: url.path), let remote = dropboxRemote {
-                let rangeHeader = headers["range"] ?? headers["Range"]
-                return proxyDropboxFile(remote: remote, contentType: contentType, range: rangeHeader)
+                FileLogger.log("serveMedia: cache miss for \(id) (\(kind)), fetching from Dropbox \(remote)")
+                guard hydrateDropboxFile(remote: remote, localURL: url) else {
+                    return .internalServerError
+                }
             }
 
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
@@ -328,53 +428,33 @@ enum Routes {
         }
     }
 
-    /// Synchronously fetch a Dropbox-archived file and return it as an
-    /// HttpResponse with the correct Content-Type. We pass through HTTP
-    /// Range so HTML5 <video> can scrub. The actual `temporary_link` request
-    /// + the GET to that link are awaited on a detached task; the request
-    /// thread blocks on a semaphore until the bytes are in memory.
-    private static func proxyDropboxFile(remote: String, contentType: String, range: String?) -> HttpResponse {
+    /// One-time Dropbox → local restore. Used by `serveMedia` when the
+    /// canonical local file has been archived and deleted. Blocks the
+    /// calling Swifter worker for the duration of the download (which can
+    /// be tens of seconds for an hour-long meeting), but only on the very
+    /// first request — once the file lands at `localURL` every subsequent
+    /// request, including Range scrubs, is served straight from disk
+    /// without ever touching this code path again.
+    ///
+    /// We deliberately don't proxy bytes per-request the way the previous
+    /// implementation did: scrubbing produces dozens of Range requests in
+    /// a few seconds, each of which would have blocked a worker thread on
+    /// its own `URLSession.data` round-trip and hammered Dropbox's
+    /// rate limit.
+    private static func hydrateDropboxFile(remote: String, localURL: URL) -> Bool {
         let semaphore = DispatchSemaphore(value: 0)
-        var bodyData: Data?
-        var statusCode = 200
-        var contentLength: String?
-        var contentRange: String?
-
+        var ok = false
         Task.detached {
             defer { semaphore.signal() }
             do {
-                let link = try await DropboxService.shared.getTemporaryLink(remotePath: remote)
-                var req = URLRequest(url: link)
-                req.httpMethod = "GET"
-                req.timeoutInterval = 120
-                if let range = range {
-                    req.setValue(range, forHTTPHeaderField: "Range")
-                }
-                let (data, resp) = try await URLSession.shared.data(for: req)
-                guard let http = resp as? HTTPURLResponse else { return }
-                statusCode = http.statusCode
-                contentLength = http.value(forHTTPHeaderField: "Content-Length")
-                contentRange = http.value(forHTTPHeaderField: "Content-Range")
-                bodyData = data
+                try await DropboxService.shared.download(remotePath: remote, to: localURL)
+                ok = true
             } catch {
-                FileLogger.log("proxyDropboxFile: \(remote) failed: \(error)")
+                FileLogger.log("hydrateDropboxFile: \(remote) → \(localURL.lastPathComponent) failed: \(error)")
             }
         }
         semaphore.wait()
-
-        guard let body = bodyData else { return .internalServerError }
-
-        var responseHeaders: [String: String] = [
-            "Content-Type": contentType,
-            "Accept-Ranges": "bytes",
-            "Content-Length": contentLength ?? "\(body.count)"
-        ]
-        if let cr = contentRange {
-            responseHeaders["Content-Range"] = cr
-        }
-
-        let phrase = statusCode == 206 ? "Partial Content" : "OK"
-        return .raw(statusCode, phrase, responseHeaders) { try $0.write(body) }
+        return ok
     }
 
     // MARK: helpers

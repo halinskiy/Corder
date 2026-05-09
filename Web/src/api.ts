@@ -8,6 +8,8 @@ export interface MeetingSummary {
   status: MeetingStatus;
   preview?: string;
   speaker_count: number;
+  /** "Speaker 2 · Влад" etc. — joined names of who actually spoke. */
+  speaker_names?: string;
 }
 
 export interface SpeakerDTO {
@@ -33,8 +35,7 @@ export interface MeetingDetail {
   status: MeetingStatus;
   speakers: SpeakerDTO[];
   segments: SegmentDTO[];
-  boosted_text?: string | null;
-  boosted_at?: number | null;
+  expected_other_speakers?: number | null;
 }
 
 export async function listMeetings(): Promise<MeetingSummary[]> {
@@ -69,15 +70,56 @@ export async function deleteMeeting(id: string): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+export async function archiveMeeting(id: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/archive`, { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+export async function restoreMeeting(id: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/restore`, { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+export interface ArchivedMeeting {
+  id: string;
+  started_at: number;
+  duration_ms?: number;
+  archived_at: number;
+  /** When the row will be hard-deleted (ms epoch). archived_at + 7 days. */
+  purge_at: number;
+}
+
+export async function listArchive(): Promise<ArchivedMeeting[]> {
+  const r = await fetch("/api/archive");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  return (j.items ?? []) as ArchivedMeeting[];
+}
+
 export async function retranscribe(id: string): Promise<void> {
   const r = await fetch(`/api/meetings/${id}/retranscribe`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
-export async function boostMeeting(id: string): Promise<{ ok: boolean; error?: string }> {
-  const r = await fetch(`/api/meetings/${id}/boost`, { method: "POST" });
+export async function cancelTranscription(id: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/cancel-transcription`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+}
+
+export async function getLastError(id: string): Promise<string | null> {
+  const r = await fetch(`/api/meetings/${id}/last-error`);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return (j.error as string | null) ?? null;
+}
+
+export async function setExpectedSpeakers(id: string, count: number | null): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/expected-speakers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ count }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
 export interface RecordingState {
@@ -100,6 +142,7 @@ export async function stopRecordingNow(): Promise<void> {
 
 export interface Settings {
   boost_mode: boolean;
+  language?: "ru" | "en";
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -116,10 +159,6 @@ export async function setSettings(s: Settings): Promise<Settings> {
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
-}
-
-export function videoSrc(id: string): string {
-  return `/api/meetings/${id}/video`;
 }
 
 export function audioSrc(id: string): string {

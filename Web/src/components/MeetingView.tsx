@@ -1,22 +1,55 @@
 import React from "react";
-import { Copy, RotateCcw, Trash2 } from "lucide-react";
-import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, deleteMeeting, retranscribe } from "../api";
+import { Copy, Archive as ArchiveIcon, Globe, Users } from "lucide-react";
+import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError } from "../api";
+import type { Lang, T } from "../i18n";
+
+// We persist the *whichever* state the user last saw the banner in
+// (open or closed) so the next visit to that meeting matches what
+// they're expecting. "open" entries override the auto-open heuristic
+// (banner stays visible even when diarization is confident); "closed"
+// entries override it the other way (banner stays hidden even when
+// diarization is uncertain).
+const CLARIFY_STATE_KEY = "corder.clarify_state";  // { [id]: "open" | "closed" }
+
+function readClarifyState(meetingId: string): "open" | "closed" | null {
+  try {
+    const m = JSON.parse(localStorage.getItem(CLARIFY_STATE_KEY) || "{}");
+    const v = m[meetingId];
+    return v === "open" || v === "closed" ? v : null;
+  } catch { return null; }
+}
+
+function writeClarifyState(meetingId: string, state: "open" | "closed") {
+  try {
+    const m = JSON.parse(localStorage.getItem(CLARIFY_STATE_KEY) || "{}");
+    m[meetingId] = state;
+    localStorage.setItem(CLARIFY_STATE_KEY, JSON.stringify(m));
+  } catch {}
+}
 
 function BoostSwitch({
-  active, onToggle,
+  active, onToggle, t,
 }: {
-  active: boolean; onToggle: () => void;
+  active: boolean; onToggle: () => void; t: T;
 }) {
   return (
     <button
       className={"boost-switch" + (active ? " on" : "")}
       onClick={onToggle}
-      title="Когда включён, каждая следующая расшифровка автоматически улучшается через Gemini Flash"
+      title={t.btn_boost_title}
     >
       <span className="boost-track">
         <span className="boost-thumb" />
       </span>
-      <span className="boost-label">Усилить</span>
+      <span className="boost-label">{t.btn_boost}</span>
+    </button>
+  );
+}
+
+function LangSwitch({ lang, onToggle, t }: { lang: Lang; onToggle: () => void; t: T }) {
+  return (
+    <button onClick={onToggle} title={t.btn_lang_title}>
+      <Globe size={14} strokeWidth={2} /> {lang.toUpperCase()}
     </button>
   );
 }
@@ -56,18 +89,29 @@ import { RightPanel } from "./RightPanel";
 interface Props {
   meetingId: string;
   onDeleted: (id?: string) => void;
+  /// Opens the global archive panel — toolbar's Archive button hands off
+  /// to this. Archiving the *current* meeting happens via Sidebar's
+  /// context menu or via the EmptyDeleteBanner on failed transcripts.
+  onOpenArchive: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   recordingState: RecordingState;
   onRecordingStopped: () => void;
   boostMode: boolean;
   onBoostModeChange: (next: boolean) => void;
+  lang: Lang;
+  onLangChange: (next: Lang) => void;
+  t: T;
 }
 
-export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onRecordingStopped, boostMode, onBoostModeChange }: Props) {
+export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, recordingState, onRecordingStopped, boostMode, onBoostModeChange, lang, onLangChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
+  // Speakers-clarify banner visibility — controlled here so the toolbar
+  // icon button can toggle it. Auto-opens once per meeting if the diarizer
+  // looks over-segmented and the user hasn't already dismissed for this id.
+  const [clarifyOpen, setClarifyOpen] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
   const load = React.useCallback(async () => {
@@ -76,11 +120,64 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
     catch (e) { setError(String(e)); }
   }, [meetingId]);
 
+  // Show a "Loading…" fallback only if the fetch takes long enough to
+  // be perceptibly slow. Below that threshold the screen briefly flashed
+  // an empty loader before the new meeting painted, which read as jank.
+  const [showLoading, setShowLoading] = React.useState(false);
   React.useEffect(() => {
     setDetail(null);
     setSearch("");
-    load();
+    setClarifyOpen(false);
+    setShowLoading(false);
+    const slow = window.setTimeout(() => setShowLoading(true), 250);
+    load().finally(() => window.clearTimeout(slow));
+    return () => window.clearTimeout(slow);
   }, [load]);
+
+  // Decide whether the clarify banner is open on first paint. Priority:
+  //   1. Persisted per-meeting state — whatever we left it as last time
+  //      wins. Toggling via the toolbar icon or dismissing via X both
+  //      write here.
+  //   2. Auto-open heuristic — only when the diarizer looks unsure
+  //      (≥2 detected "others" AND user never told us how many people
+  //      were on the call). This is the original Granola-style nudge:
+  //      "I noticed multiple speakers — was it really N?"
+  //   3. Otherwise stay closed; the toolbar icon reopens it on demand.
+  React.useEffect(() => {
+    if (!detail) return;
+    if (detail.status !== "ready" || detail.segments.length === 0) return;
+    const persisted = readClarifyState(detail.id);
+    if (persisted === "open")  { setClarifyOpen(true);  return; }
+    if (persisted === "closed") { setClarifyOpen(false); return; }
+    const detected = Math.max(0, detail.speakers.length - 1);
+    const uncertain =
+      detected >= 2 &&
+      (detail.expected_other_speakers === null ||
+       detail.expected_other_speakers === undefined);
+    setClarifyOpen(uncertain);
+  }, [detail?.id, detail?.status, detail?.expected_other_speakers, detail?.speakers.length]);
+
+  const toggleClarify = () => {
+    setClarifyOpen((open) => {
+      const next = !open;
+      if (detail) writeClarifyState(detail.id, next ? "open" : "closed");
+      return next;
+    });
+  };
+
+  const onClarifyDismiss = () => {
+    if (detail) writeClarifyState(detail.id, "closed");
+    setClarifyOpen(false);
+  };
+
+  const onClarifyChosen = () => {
+    // Keep the banner open on purpose: the active pill shows the user
+    // what they just picked, and one more click on a neighbour switches
+    // immediately. Closing it here used to leave people stranded — they
+    // didn't realise the toolbar's Users icon reopens it. Dismiss only
+    // happens via the explicit X button or the toolbar toggle.
+    load();
+  };
 
   React.useEffect(() => {
     if (!detail) return;
@@ -94,8 +191,31 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
     }
   }, [detail, load, boostMode]);
 
-  if (error) return <div className="empty"><div className="empty-title">Ошибка</div><div>{error}</div></div>;
-  if (!detail) return <div className="empty"><div>Загрузка…</div></div>;
+  // Surface backend transcription errors (Gemini quota / billing, missing
+  // key, timeout) as a red toast. Polled once per meeting load — server
+  // clears the marker on the next successful run.
+  const lastErrorShown = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!detail || detail.status !== "failed") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const err = await getLastError(detail.id);
+        if (cancelled || !err) return;
+        if (lastErrorShown.current === err) return;
+        lastErrorShown.current = err;
+        onToast(err, "error");
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [detail?.id, detail?.status, onToast]);
+
+  if (error) return <div className="empty"><div className="empty-title">{t.error_label}</div><div>{error}</div></div>;
+  if (!detail) {
+    // Hide the loader during fast fetches; the blank space is less
+    // distracting than a quarter-second flash of "Loading…".
+    return showLoading ? <div className="empty"><div>{t.loading}</div></div> : <div className="empty" />;
+  }
 
   const onSeek = (sec: number) => {
     const v = videoRef.current;
@@ -126,29 +246,13 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
     try {
       const text = await getTranscriptText(detail.id);
       await copyText(text);
-      onToast("Транскрипт скопирован", "success");
-    } catch { onToast("Не удалось скопировать", "error"); }
+      onToast(t.toast_copied, "success");
+    } catch { onToast(t.toast_copy_failed, "error"); }
   };
 
-  const onDelete = async () => {
-    // No confirm() — WKWebView's native confirm sheet doesn't fire without
-    // a UIDelegate, so the dialog never appeared and the user perceived the
-    // button as broken. Toast confirms the action after the fact.
-    try {
-      await deleteMeeting(detail.id);
-      onDeleted(detail.id);
-    } catch {
-      onToast("Не удалось удалить", "error");
-    }
-  };
-
-  const onRetranscribe = async () => {
-    try {
-      await retranscribe(detail.id);
-      onToast("Запускаю расшифровку…", "success");
-      setTimeout(load, 1000);
-    } catch { onToast("Не удалось запустить расшифровку", "error"); }
-  };
+  // Toolbar's Archive button opens the archive panel (the bin itself).
+  // Archiving *this* meeting goes through the sidebar's right-click menu
+  // or, for failed/empty meetings, the in-pane "В архив" button.
 
   const hasBoost = !!detail?.segments.some((s) => s.text_boost);
   // Boost is now a global mode: the switch reflects the persisted setting and
@@ -162,59 +266,81 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
     <>
       <div className="main-header">
         <div className="breadcrumb">
-          <span>Записи</span>
+          <span>{t.breadcrumb_records}</span>
           <span style={{ opacity: 0.4 }}>›</span>
-          <span className="breadcrumb-current">{formatDate(detail.started_at)}</span>
+          <span className="breadcrumb-current">{formatDate(detail.started_at, lang)}</span>
         </div>
         <BoostSwitch
           active={boostMode}
           onToggle={() => onBoostModeChange(!boostMode)}
+          t={t}
         />
         <div className="spacer" />
         <div className="toolbar">
+          <LangSwitch lang={lang} onToggle={() => onLangChange(lang === "ru" ? "en" : "ru")} t={t} />
           <button onClick={onCopy} disabled={detail.segments.length === 0}>
-            <Copy size={14} strokeWidth={2} /> Копировать
+            <Copy size={14} strokeWidth={2} /> {t.btn_copy}
           </button>
-          <button className="ghost" onClick={onRetranscribe}>
-            <RotateCcw size={14} strokeWidth={2} /> Расшифровать заново
-          </button>
-          <button className="ghost danger" onClick={onDelete}>
-            <Trash2 size={14} strokeWidth={2} /> Удалить
+          <button className="ghost" onClick={onOpenArchive} title={t.archive_open_title}>
+            <ArchiveIcon size={14} strokeWidth={2} /> {t.btn_archive}
           </button>
         </div>
       </div>
       <div className="detail">
-        <div className="transcript-wrap">
-          <div className="tabs">
-            <span className="tab active">Транскрипт</span>
+        <div className="detail-tabs">
+          <div className="detail-tab-col detail-tab-col-left">
+            <span className="tab active">{t.tab_transcript}</span>
           </div>
-          <div className="transcript-toolbar">
-            <input
-              type="search"
-              placeholder="Поиск по транскрипту…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+          <div className="detail-tab-col detail-tab-col-right">
+            <span className="tab active">{t.audio_card_title}</span>
+          </div>
+        </div>
+        <div className="detail-body">
+          <div className="transcript-wrap">
+            <div className="transcript-toolbar">
+              <input
+                type="search"
+                placeholder={t.transcript_search}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {detail.status === "ready" && detail.segments.length > 0 && (
+                <button
+                  className={"toolbar-icon-btn" + (clarifyOpen ? " active" : "")}
+                  onClick={toggleClarify}
+                  title={t.clarify_question}
+                  aria-label={t.clarify_question}
+                >
+                  <Users size={16} strokeWidth={2} />
+                </button>
+              )}
+            </div>
+            <TranscriptPane
+              detail={detail}
+              currentTimeSec={currentTime}
+              onSeek={onSeek}
+              onSpeakersUpdated={load}
+              query={search}
+              boostOn={boostOn}
+              recordingState={recordingState}
+              onRecordingStopped={onRecordingStopped}
+              onDeleted={onDeleted}
+              clarifyOpen={clarifyOpen}
+              onClarifyDismiss={onClarifyDismiss}
+              onClarifyChosen={onClarifyChosen}
+              onToast={onToast}
+              t={t}
             />
           </div>
-          <TranscriptPane
+          <RightPanel
             detail={detail}
+            videoRef={videoRef}
+            onTimeUpdate={setCurrentTime}
             currentTimeSec={currentTime}
             onSeek={onSeek}
-            onSpeakersUpdated={load}
-            query={search}
-            boostOn={boostOn}
-            recordingState={recordingState}
-            onRecordingStopped={onRecordingStopped}
-            onToast={onToast}
+            t={t}
           />
         </div>
-        <RightPanel
-          detail={detail}
-          videoRef={videoRef}
-          onTimeUpdate={setCurrentTime}
-          currentTimeSec={currentTime}
-          onSeek={onSeek}
-        />
       </div>
     </>
   );

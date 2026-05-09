@@ -2,7 +2,11 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import React from "react";
 import { renameSpeaker } from "../api";
 import { RecordingBanner } from "./RecordingBanner";
-export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, boostOn, recordingState, onRecordingStopped, onToast }) {
+import { RecordingPlaceholder } from "./RecordingPlaceholder";
+import { TranscribingBanner } from "./TranscribingBanner";
+import { SpeakersClarifyBanner } from "./SpeakersClarifyBanner";
+import { EmptyDeleteBanner } from "./EmptyDeleteBanner";
+export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, t }) {
     const speakerById = React.useMemo(() => {
         const map = new Map();
         detail.speakers.forEach((s) => map.set(s.id, s));
@@ -43,6 +47,15 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
         if (el)
             el.scrollIntoView({ block: "center", behavior: "smooth" });
     }, [activeSegmentId]);
+    // When the clarify banner opens, glide the transcript to the top so the
+    // user actually sees the card that just appeared. Without this, opening
+    // the banner mid-scroll silently expands a region above the viewport
+    // and reads as "the button does nothing".
+    React.useEffect(() => {
+        if (clarifyOpen) {
+            containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+        }
+    }, [clarifyOpen]);
     // While the active recording is the one we're viewing, replace the empty
     // "Идёт запись…" placeholder with a live status card that includes a Stop
     // button — same layout as the popover's RecordingStatus block.
@@ -50,23 +63,34 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
         recordingState.active &&
         recordingState.meeting_id === detail.id;
     if (detail.segments.length === 0) {
-        return (_jsx("div", { className: "transcript", ref: containerRef, children: isLiveRecording ? (_jsx(RecordingBanner, { state: recordingState, onStopped: onRecordingStopped, onToast: onToast })) : (_jsx("div", { className: "transcript-empty", children: detail.status === "ready"
-                    ? "Транскрипт пуст — Whisper не распознал речь."
-                    : detail.status === "transcribing"
-                        ? "Расшифровка…"
-                        : detail.status === "failed"
-                            ? "Расшифровка не удалась. Нажми «Расшифровать заново»."
-                            : "Идёт запись…" })) }));
+        return (_jsx("div", { className: "transcript", ref: containerRef, children: isLiveRecording ? (_jsx(RecordingBanner, { state: recordingState, onStopped: onRecordingStopped, onToast: onToast, t: t })) : detail.status === "recording" ? (
+            // Recording session that isn't currently live (we already pressed
+            // Stop and the pipeline hasn't yet flipped status to transcribing).
+            // Hold the rec-card visual so the UI doesn't flash a text-only
+            // placeholder during that race window.
+            _jsx(RecordingPlaceholder, { t: t })) : detail.status === "transcribing" ? (_jsx(TranscribingBanner, { meetingId: detail.id, onCancelled: onRecordingStopped, onToast: onToast, t: t })) : detail.status === "ready" || detail.status === "failed" ? (_jsx(EmptyDeleteBanner, { meetingId: detail.id, onDeleted: onDeleted, failed: detail.status === "failed", onRetranscribed: onSpeakersUpdated, onToast: onToast, t: t })) : (_jsx("div", { className: "transcript-empty", children: t.transcript_empty_recording })) }));
     }
-    return (_jsxs("div", { className: "transcript", ref: containerRef, children: [filteredGroups.map((g, gi) => {
+    // The clarify banner is now driven by the parent (MeetingView) so the
+    // toolbar's icon button can toggle it on/off with the same source of
+    // truth. The local component only renders the wrapper that animates
+    // its max-height in and out.
+    return (_jsxs("div", { className: "transcript", ref: containerRef, children: [clarifyOpen && (
+            // Mounted/unmounted directly. We tried wrapping it in a max-height
+            // collapsible and a grid-rows collapsible — both leaked the banner's
+            // own padding/border as 28-30 px of dead space when closed, because
+            // the wrapper sits inside `.transcript`'s flex column with `gap: 28px`
+            // and an item that close-to-zero still attracts a gap on each side.
+            // Conditional render is the cleanest fix: when the user dismisses,
+            // the gap goes away because the element goes away.
+            _jsx(SpeakersClarifyBanner, { meetingId: detail.id, currentOthers: detail.expected_other_speakers ?? Math.max(0, detail.speakers.length - 1), onChanged: onClarifyChosen, onDismiss: onClarifyDismiss, onToast: onToast, t: t })), filteredGroups.map((g, gi) => {
                 const sp = speakerById.get(g.speakerId);
                 const name = sp?.custom_name?.trim() || sp?.label || "Speaker";
                 const color = avatarColor(name);
-                return (_jsxs("div", { className: "segment-group", children: [_jsxs("div", { className: "segment-head", children: [_jsx("div", { className: "speaker-avatar", style: { background: color }, children: initial(name) }), _jsx(SpeakerName, { meetingId: detail.id, speaker: sp, display: name === "you" ? "Я" : name, onUpdated: onSpeakersUpdated })] }), _jsx("div", { className: "segment-paragraph", children: g.segs.map((s, i) => {
+                return (_jsxs("div", { className: "segment-group", children: [_jsxs("div", { className: "segment-head", children: [_jsx("div", { className: "speaker-avatar", style: { background: color }, children: initial(name) }), _jsx(SpeakerName, { meetingId: detail.id, speaker: sp, display: name === "you" ? t.speaker_self : name, onUpdated: onSpeakersUpdated, t: t })] }), _jsx("div", { className: "segment-paragraph", children: g.segs.map((s, i) => {
                                 const display = boostOn && s.text_boost ? s.text_boost : s.text;
                                 return (_jsxs(React.Fragment, { children: [_jsx("span", { "data-segid": s.id, className: "segment-line" + (s.id === activeSegmentId ? " active" : ""), onClick: () => onSeek(s.start_ms / 1000), children: highlight(display, q) }), i < g.segs.length - 1 ? " " : ""] }, s.id));
                             }) })] }, gi));
-            }), filteredGroups.length === 0 && q && (_jsxs("div", { className: "transcript-empty", children: ["\u041D\u0435\u0442 \u0441\u043E\u0432\u043F\u0430\u0434\u0435\u043D\u0438\u0439 \u043F\u043E \u00AB", q, "\u00BB."] }))] }));
+            }), filteredGroups.length === 0 && q && (_jsx("div", { className: "transcript-empty", children: t.transcript_no_match(q) })), _jsx("div", { className: "transcript-spacer" })] }));
 }
 function initial(name) {
     const parts = name.trim().split(/\s+/);
@@ -101,12 +125,12 @@ function highlight(text, q) {
         }
         if (idx > i)
             out.push(text.slice(i, idx));
-        out.push(_jsx("mark", { style: { background: "#fff099", color: "inherit", padding: 0 }, children: text.slice(idx, idx + q.length) }, idx));
+        out.push(_jsx("mark", { style: { background: "#cdebd9", color: "inherit", padding: 0 }, children: text.slice(idx, idx + q.length) }, idx));
         i = idx + q.length;
     }
     return out;
 }
-function SpeakerName({ meetingId, speaker, display, onUpdated }) {
+function SpeakerName({ meetingId, speaker, display, onUpdated, t }) {
     const [editing, setEditing] = React.useState(false);
     const [draft, setDraft] = React.useState(speaker?.custom_name || "");
     const inputRef = React.useRef(null);
@@ -115,7 +139,7 @@ function SpeakerName({ meetingId, speaker, display, onUpdated }) {
     if (!speaker)
         return _jsx("span", { className: "speaker-name", children: display });
     if (editing) {
-        return (_jsx("input", { ref: inputRef, className: "inline-editor", value: draft, placeholder: "\u0418\u043C\u044F", onChange: (e) => setDraft(e.target.value), onBlur: async () => {
+        return (_jsx("input", { ref: inputRef, className: "inline-editor", value: draft, placeholder: t.inline_editor_placeholder, onChange: (e) => setDraft(e.target.value), onBlur: async () => {
                 setEditing(false);
                 const trimmed = draft.trim();
                 const next = trimmed.length === 0 ? null : trimmed;
@@ -135,5 +159,5 @@ function SpeakerName({ meetingId, speaker, display, onUpdated }) {
                 }
             } }));
     }
-    return (_jsx("span", { className: "speaker-name editable", onClick: () => { setDraft(speaker.custom_name || ""); setEditing(true); }, title: "\u041A\u043B\u0438\u043A\u043D\u0438 \u0447\u0442\u043E\u0431\u044B \u043F\u0435\u0440\u0435\u0438\u043C\u0435\u043D\u043E\u0432\u0430\u0442\u044C", children: display }));
+    return (_jsx("span", { className: "speaker-name editable", onClick: () => { setDraft(speaker.custom_name || ""); setEditing(true); }, title: t.speaker_rename_title, children: display }));
 }
