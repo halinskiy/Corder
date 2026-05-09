@@ -1,23 +1,16 @@
 import React from "react";
 import { Search } from "lucide-react";
-import { MeetingSummary, MeetingStatus, deleteMeeting, retranscribe } from "../api";
+import { MeetingSummary, MeetingStatus, retranscribe } from "../api";
 import { formatDate, formatDuration, dateBucket } from "../format";
+import type { Lang, T } from "../i18n";
 
-function statusLabel(s: MeetingStatus): string {
+function statusLabel(s: MeetingStatus, t: T): string {
   switch (s) {
-    case "recording":    return "запись";
-    case "transcribing": return "расшифровка";
-    case "ready":        return "готово";
-    case "failed":       return "ошибка";
+    case "recording":    return t.status_recording;
+    case "transcribing": return t.status_transcribing;
+    case "ready":        return t.status_ready;
+    case "failed":       return t.status_failed;
   }
-}
-
-function plural(n: number): string {
-  // Russian plural for участник: 1 участник, 2-4 участника, 5+ участников.
-  const mod10 = n % 10, mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "а";
-  return "ов";
 }
 
 function UserFilledIcon() {
@@ -29,8 +22,6 @@ function UserFilledIcon() {
   );
 }
 
-
-
 interface Props {
   meetings: MeetingSummary[];
   activeId: string | null;
@@ -39,20 +30,15 @@ interface Props {
   onSelect: (id: string) => void;
   onDeleted: (id: string) => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
+  t: T;
+  lang: Lang;
 }
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, onDeleted, onToast }: Props) {
+export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, onDeleted, onToast, t, lang }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
 
-  // Close the menu on any click outside or Escape. We deliberately do NOT
-  // subscribe to `contextmenu` here — that exact handler is what was
-  // killing the menu the moment it opened: the meeting-item's onContextMenu
-  // fires, setMenu({...}) runs, the effect mounts and immediately receives
-  // the same event bubbling up to window, and the menu closes again.
-  // A fresh right-click on another item will open it for that item via the
-  // `setMenu` path, which replaces the previous state anyway.
   React.useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
@@ -64,26 +50,27 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
       window.removeEventListener("keydown", onKey);
     };
   }, [menu]);
+
   const filtered = React.useMemo(() => {
     if (!query.trim()) return meetings;
     const q = query.toLowerCase();
     return meetings.filter((m) =>
       (m.preview || "").toLowerCase().includes(q) ||
-      formatDate(m.started_at).toLowerCase().includes(q)
+      (m.speaker_names || "").toLowerCase().includes(q) ||
+      formatDate(m.started_at, lang).toLowerCase().includes(q)
     );
-  }, [meetings, query]);
+  }, [meetings, query, lang]);
 
-  // Group by date bucket while preserving sort order (newest first).
   const groups = React.useMemo(() => {
     const out: { label: string; items: MeetingSummary[] }[] = [];
     for (const m of filtered) {
-      const label = dateBucket(m.started_at);
+      const label = dateBucket(m.started_at, lang);
       const last = out[out.length - 1];
       if (last && last.label === label) last.items.push(m);
       else out.push({ label, items: [m] });
     }
     return out;
-  }, [filtered]);
+  }, [filtered, lang]);
 
   return (
     <aside className="sidebar">
@@ -93,7 +80,7 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
           <Search size={14} strokeWidth={2} />
           <input
             type="search"
-            placeholder="Поиск записей…"
+            placeholder={t.sidebar_search}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
           />
@@ -102,9 +89,7 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
       <div className="sidebar-list">
         {filtered.length === 0 && (
           <div style={{ padding: 16, color: "var(--fg-muted)", fontSize: 13 }}>
-            {meetings.length === 0
-              ? "Записей пока нет. Нажми Start в menu bar."
-              : "Нет совпадений."}
+            {meetings.length === 0 ? t.sidebar_empty : t.sidebar_no_match}
           </div>
         )}
         {groups.map((g) => (
@@ -121,9 +106,9 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
                 }}
               >
                 <div className="meeting-row">
-                  <div className="meeting-title">{formatDate(m.started_at)}</div>
+                  <div className="meeting-title">{formatDate(m.started_at, lang)}</div>
                   {m.speaker_count > 0 && (
-                    <div className="meeting-people" title={`${m.speaker_count} участник${plural(m.speaker_count)}`}>
+                    <div className="meeting-people" title={t.participants(m.speaker_count)}>
                       <span className="meeting-people-count">{m.speaker_count}</span>
                       <UserFilledIcon />
                     </div>
@@ -131,30 +116,32 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
                 </div>
                 <div className="meeting-meta">
                   <span className={`status-dot ${m.status}`} />
-                  <span>{formatDuration(m.duration_ms)}</span>
-                  {m.status !== "ready" && <span>· {statusLabel(m.status)}</span>}
+                  <span>{formatDuration(m.duration_ms, lang)}</span>
+                  {m.status !== "ready" && <span>· {statusLabel(m.status, t)}</span>}
                 </div>
                 {m.preview && <div className="meeting-preview">{m.preview}</div>}
               </div>
             ))}
           </React.Fragment>
         ))}
+        <div className="sidebar-list-spacer" />
       </div>
       {menu && (
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          onDelete={async () => {
+          t={t}
+          onDelete={() => {
             const id = menu.meetingId;
             setMenu(null);
-            try { await deleteMeeting(id); onDeleted(id); }
-            catch { onToast("Не удалось удалить", "error"); }
+            // Actual DELETE is scheduled by the parent (10s undo window).
+            onDeleted(id);
           }}
           onRetranscribe={async () => {
             const id = menu.meetingId;
             setMenu(null);
-            try { await retranscribe(id); onToast("Запускаю расшифровку…", "success"); }
-            catch { onToast("Не удалось запустить расшифровку", "error"); }
+            try { await retranscribe(id); onToast(t.toast_retranscribe_started, "success"); }
+            catch { onToast(t.toast_retranscribe_failed, "error"); }
           }}
         />
       )}
@@ -162,8 +149,8 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
   );
 }
 
-function ContextMenu({ x, y, onDelete, onRetranscribe }: {
-  x: number; y: number; onDelete: () => void; onRetranscribe: () => void;
+function ContextMenu({ x, y, onDelete, onRetranscribe, t }: {
+  x: number; y: number; onDelete: () => void; onRetranscribe: () => void; t: T;
 }) {
   return (
     <div
@@ -172,9 +159,9 @@ function ContextMenu({ x, y, onDelete, onRetranscribe }: {
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <button className="ctx-item" onClick={onRetranscribe}>Расшифровать заново</button>
+      <button className="ctx-item" onClick={onRetranscribe}>{t.ctx_retranscribe}</button>
       <div className="ctx-sep" />
-      <button className="ctx-item ctx-danger" onClick={onDelete}>Удалить</button>
+      <button className="ctx-item" onClick={onDelete}>{t.ctx_archive}</button>
     </div>
   );
 }

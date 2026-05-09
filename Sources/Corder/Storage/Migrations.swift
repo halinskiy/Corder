@@ -102,6 +102,45 @@ enum Migrations {
             """)
         }
 
+        // User-provided hint for diarization: how many participants were on
+        // the call besides the local user. Optional — when set we pin
+        // FluidAudio to that exact cluster count, otherwise we let it
+        // auto-detect (and clean up with mergeTinyClusters).
+        m.registerMigration("v5_expected_speakers") { db in
+            try db.execute(sql: """
+                ALTER TABLE meetings ADD COLUMN expected_other_speakers INTEGER;
+            """)
+        }
+
+        // Drop the legacy meeting-level boost columns. These were superseded
+        // by per-segment `text_boost` (v3) ages ago and have been written-only
+        // dead weight since. SQLite 3.35+ supports DROP COLUMN; macOS 14 ships
+        // 3.39, so this migration is safe.
+        m.registerMigration("v6_drop_legacy_boost_columns") { db in
+            try db.execute(sql: "ALTER TABLE meetings DROP COLUMN boosted_text;")
+            try db.execute(sql: "ALTER TABLE meetings DROP COLUMN boosted_at;")
+        }
+
+        // Cache the raw Gemini transcription output so subsequent
+        // re-mappings (clarify "1 speaker" → "3 speakers", etc.) don't
+        // need to re-upload the audio and re-bill another generateContent.
+        // `gemini_raw_turns` stores the array of {speaker, start_ms, end_ms,
+        // text} dictionaries as JSON. `audio_hash` is the MD5 of the file
+        // we sent to Gemini — used to invalidate the cache if the audio
+        // gets re-mixed (e.g. user re-runs after a fix to AudioMixer).
+        m.registerMigration("v7_gemini_raw_cache") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN gemini_raw_turns TEXT;")
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN audio_hash TEXT;")
+        }
+
+        // Soft-archive: when set to a non-null timestamp the meeting is
+        // hidden from the main library and shown in the archive panel
+        // instead. Records that have been archived for more than 7 days
+        // get hard-deleted (DB row + Dropbox files) on the next launch.
+        m.registerMigration("v8_archive") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN archived_at INTEGER;")
+        }
+
         return m
     }
 }

@@ -9,6 +9,10 @@ enum DTO {
         let status: String
         let preview: String?
         let speaker_count: Int
+        /// Speaker labels + custom names, joined by " · ". Used by the
+        /// sidebar's text filter so the user can find a meeting by who
+        /// was on the call ("Vadim", "Влад", etc.) without opening it.
+        let speaker_names: String?
     }
 
     struct MeetingDetail: Codable {
@@ -18,17 +22,16 @@ enum DTO {
         let status: String
         let speakers: [SpeakerDTO]
         let segments: [SegmentDTO]
-        let boosted_text: String?
-        let boosted_at: Int64?
+        let expected_other_speakers: Int?
     }
 
-    struct BoostResponse: Codable {
-        let ok: Bool
-        let error: String?
+    struct ExpectedSpeakersRequest: Codable {
+        let count: Int?
     }
 
     struct Settings: Codable {
         let boost_mode: Bool
+        let language: String?
     }
 
     struct SpeakerDTO: Codable {

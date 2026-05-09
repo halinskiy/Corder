@@ -1,20 +1,17 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import React from "react";
+import { Download } from "lucide-react";
 import { audioSrc } from "../api";
 import { formatDuration } from "../format";
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek }) {
-    // Recording is currently audio-only (video.mov isn't produced — see
-    // CaptureEngine for the AVAssetWriter rationale). The "videoRef" prop is
-    // kept for the seek/play API surface used elsewhere; we route it onto the
-    // hidden <audio> element via type cast.
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "ru" }) {
     const audioRef = videoRef;
-    return (_jsxs("div", { className: "right-panel", children: [_jsx(AudioCard, { detail: detail, audioRef: audioRef, onTimeUpdate: onTimeUpdate }), _jsx(SpeakerTimeline, { detail: detail, currentTimeSec: currentTimeSec, onSeek: onSeek })] }));
+    return (_jsxs("div", { className: "right-panel", children: [_jsx(AudioCard, { detail: detail, audioRef: audioRef, onTimeUpdate: onTimeUpdate, t: t }), _jsx(SpeakerTimeline, { detail: detail, currentTimeSec: currentTimeSec, onSeek: onSeek, t: t, lang: lang })] }));
 }
 /** Custom audio player shaped like the old video card: 16/10 box with a
  *  big centred play button, ±10s skip buttons in the bottom bar, current
  *  time / duration, and a clickable scrub line. The native <audio>
  *  element is kept hidden — we drive it through React state. */
-function AudioCard({ detail, audioRef, onTimeUpdate, }) {
+function AudioCard({ detail, audioRef, onTimeUpdate, t, }) {
     const [playing, setPlaying] = React.useState(false);
     const [duration, setDuration] = React.useState((detail.duration_ms ?? 0) / 1000);
     const [time, setTime] = React.useState(0);
@@ -44,7 +41,12 @@ function AudioCard({ detail, audioRef, onTimeUpdate, }) {
         setHover({ pct: ratio * 100, time: ratio * duration });
     };
     const cursorPct = duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;
-    return (_jsxs("div", { className: "audio-card", children: [_jsx("div", { className: "audio-card-tabs", children: _jsx("span", { className: "audio-card-tab active", children: "\u0417\u0430\u043F\u0438\u0441\u044C" }) }), _jsxs("div", { className: "audio-controls", children: [_jsx("button", { className: "audio-btn audio-btn-primary", onClick: togglePlay, children: playing ? _jsx(PauseSmall, {}) : _jsx(PlaySmall, {}) }), _jsxs("div", { className: "audio-time", children: [fmtTime(time), " / ", fmtTime(duration)] }), _jsxs("div", { className: "audio-scrub", onClick: onScrubClick, onMouseMove: onScrubMove, onMouseLeave: () => setHover(null), children: [_jsx("div", { className: "audio-scrub-fill", style: { width: `${cursorPct}%` } }), hover && (_jsx("div", { className: "audio-scrub-tooltip", style: { left: `${hover.pct}%` }, children: fmtTime(hover.time) }))] })] }), _jsx("audio", { ref: audioRef, src: audioSrc(detail.id), preload: "auto", style: { display: "none" }, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onEnded: () => setPlaying(false), onLoadedMetadata: (e) => {
+    // Empty / not-yet-finalised meetings have nothing to play — disable the
+    // primary control instead of letting the user click into nothing.
+    const playable = duration > 0 &&
+        detail.status !== "recording" &&
+        !!detail.duration_ms;
+    return (_jsxs(_Fragment, { children: [_jsxs("div", { className: "audio-controls", children: [_jsx("button", { className: "audio-btn audio-btn-primary", onClick: togglePlay, disabled: !playable, children: playing ? _jsx(PauseSmall, {}) : _jsx(PlaySmall, {}) }), _jsxs("div", { className: "audio-time", children: [fmtTime(time), " / ", fmtTime(duration)] }), _jsxs("div", { className: "audio-scrub", onClick: onScrubClick, onMouseMove: onScrubMove, onMouseLeave: () => setHover(null), children: [_jsx("div", { className: "audio-scrub-fill", style: { width: `${cursorPct}%` } }), hover && (_jsx("div", { className: "audio-scrub-tooltip", style: { left: `${hover.pct}%` }, children: fmtTime(hover.time) }))] }), _jsx("a", { className: "toolbar-icon-btn audio-download-btn", href: audioSrc(detail.id), download: `corder-${detail.id}.wav`, title: t.download_audio_title, "aria-label": t.download_audio_title, children: _jsx(Download, { size: 16, strokeWidth: 2 }) })] }), _jsx("audio", { ref: audioRef, src: audioSrc(detail.id), preload: "auto", style: { display: "none" }, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onEnded: () => setPlaying(false), onLoadedMetadata: (e) => {
                     const d = e.target.duration;
                     if (isFinite(d) && d > 0)
                         setDuration(d);
@@ -85,22 +87,6 @@ function colorForSpeaker(name) {
         h = (h * 31 + name.charCodeAt(i)) >>> 0;
     return PALETTE[h % PALETTE.length];
 }
-/// WCAG-style relative luminance for a hex colour (#RRGGBB).
-function relLuminance(hex) {
-    const v = hex.replace("#", "");
-    const r = parseInt(v.slice(0, 2), 16) / 255;
-    const g = parseInt(v.slice(2, 4), 16) / 255;
-    const b = parseInt(v.slice(4, 6), 16) / 255;
-    const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-function contrastRatio(a, b) {
-    const la = relLuminance(a);
-    const lb = relLuminance(b);
-    const hi = Math.max(la, lb);
-    const lo = Math.min(la, lb);
-    return (hi + 0.05) / (lo + 0.05);
-}
 /// For each speech segment, lay down ~2-3 px ticks every 220 ms. This gives
 /// the Grain look — natural pauses (silent gaps in the source) become gaps
 /// between ticks; long monologues turn into a dense run of ticks.
@@ -119,7 +105,7 @@ function ticksFor(segs, totalMs) {
     }
     return out;
 }
-function SpeakerTimeline({ detail, currentTimeSec, onSeek, }) {
+function SpeakerTimeline({ detail, currentTimeSec, onSeek, t, lang, }) {
     const totalMs = detail.duration_ms || 0;
     if (totalMs === 0 || detail.segments.length === 0)
         return null;
@@ -137,7 +123,7 @@ function SpeakerTimeline({ detail, currentTimeSec, onSeek, }) {
         const ratio = (e.clientX - rect.left) / rect.width;
         onSeek(Math.max(0, Math.min(1, ratio)) * (totalMs / 1000));
     };
-    return (_jsxs("div", { className: "timeline-card", children: [_jsx("div", { className: "timeline-tabs", children: _jsx("span", { className: "timeline-tab active", children: "\u0422\u0430\u0439\u043C\u043B\u0430\u0439\u043D" }) }), activeSpeakers.map((sp) => {
+    return (_jsxs("div", { className: "timeline-card", children: [_jsx("div", { className: "timeline-tabs", children: _jsx("span", { className: "timeline-tab active", children: t.timeline_title }) }), activeSpeakers.map((sp) => {
                 const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
                 const sum = totals.get(sp.id) || 0;
                 const pct = Math.round((sum / totalMs) * 100);
@@ -145,15 +131,6 @@ function SpeakerTimeline({ detail, currentTimeSec, onSeek, }) {
                 const color = sp.color_hex && /^#[0-9a-f]{6}$/i.test(sp.color_hex)
                     ? sp.color_hex
                     : colorForSpeaker(name);
-                // Adaptive cursor colour: sample what's directly underneath the
-                // cursor on this row at the current time — either an active speaker
-                // tick (this speaker's colour) or the empty grey bar — and flip the
-                // cursor to white if green doesn't provide enough contrast against
-                // it (WCAG ratio < 2.5).
-                const tMs = currentTimeSec * 1000;
-                const overTick = segs.some((s) => tMs >= s.start_ms && tMs <= s.end_ms);
-                const behindColor = overTick ? color : "#ececea";
-                const cursorColor = contrastRatio("#1E7A50", behindColor) >= 2.5 ? "#1E7A50" : "#ffffff";
-                return (_jsxs("div", { className: "tl-row", children: [_jsxs("div", { className: "tl-row-head", children: [_jsx("span", { className: "tl-name", children: name }), _jsxs("span", { className: "tl-stats", children: [pct, "% \u00B7 ", formatDuration(sum)] })] }), _jsxs("div", { className: "tl-bar", onClick: onBarClick, children: [ticksFor(segs, totalMs).map((leftPct, i) => (_jsx("div", { className: "tl-bar-tick", style: { left: `${leftPct}%`, background: color } }, i))), _jsx("div", { className: "tl-bar-cursor", style: { left: `${cursorPct}%`, background: cursorColor } })] })] }, sp.id));
+                return (_jsxs("div", { className: "tl-row", children: [_jsxs("div", { className: "tl-row-head", children: [_jsx("span", { className: "tl-name", children: name }), _jsxs("span", { className: "tl-stats", children: [pct, "% \u00B7 ", formatDuration(sum, lang)] })] }), _jsxs("div", { className: "tl-bar", onClick: onBarClick, children: [ticksFor(segs, totalMs).map((leftPct, i) => (_jsx("div", { className: "tl-bar-tick", style: { left: `${leftPct}%`, background: color } }, i))), _jsx("div", { className: "tl-bar-cursor", style: { left: `${cursorPct}%` } })] })] }, sp.id));
             })] }));
 }

@@ -7,19 +7,26 @@ enum MeetingStatus: String, Codable, DatabaseValueConvertible {
 
 struct Meeting: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "meetings"
+    // Optional fields default to nil so the synthesised memberwise init can
+    // be called with only the required arguments (id / startedAt / paths /
+    // status) — keeps callers from having to pass `nil` for every metadata
+    // field they don't care about, and adding new optional columns won't
+    // break the call sites.
     var id: String
     var startedAt: Int64
-    var endedAt: Int64?
-    var durationMs: Int64?
+    var endedAt: Int64? = nil
+    var durationMs: Int64? = nil
     var videoPath: String
     var audioPath: String
-    var transcribedAt: Int64?
+    var transcribedAt: Int64? = nil
     var status: MeetingStatus
-    var boostedText: String?
-    var boostedAt: Int64?
-    var dropboxVideoPath: String?
-    var dropboxAudioPath: String?
-    var dropboxUploadedAt: Int64?
+    var dropboxVideoPath: String? = nil
+    var dropboxAudioPath: String? = nil
+    var dropboxUploadedAt: Int64? = nil
+    var expectedOtherSpeakers: Int? = nil
+    var geminiRawTurns: String? = nil
+    var audioHash: String? = nil
+    var archivedAt: Int64? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -30,11 +37,13 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case audioPath = "audio_path"
         case transcribedAt = "transcribed_at"
         case status
-        case boostedText = "boosted_text"
-        case boostedAt = "boosted_at"
         case dropboxVideoPath = "dropbox_video_path"
         case dropboxAudioPath = "dropbox_audio_path"
         case dropboxUploadedAt = "dropbox_uploaded_at"
+        case expectedOtherSpeakers = "expected_other_speakers"
+        case geminiRawTurns = "gemini_raw_turns"
+        case audioHash = "audio_hash"
+        case archivedAt = "archived_at"
     }
 }
 
@@ -43,7 +52,7 @@ struct Speaker: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var meetingId: String
     var label: String
-    var customName: String?
+    var customName: String? = nil
     var colorHex: String
 
     enum CodingKeys: String, CodingKey {
@@ -57,14 +66,14 @@ struct Speaker: Codable, FetchableRecord, PersistableRecord {
 
 struct Segment: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "segments"
-    var id: Int64?
+    var id: Int64? = nil
     var meetingId: String
     var speakerId: String
     var startMs: Int64
     var endMs: Int64
     var text: String
-    var wordsJson: String?
-    var textBoost: String?
+    var wordsJson: String? = nil
+    var textBoost: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id

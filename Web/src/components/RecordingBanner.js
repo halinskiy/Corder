@@ -3,9 +3,9 @@ import React from "react";
 import { stopRecordingNow } from "../api";
 /// Status card pinned to the top of the sidebar while a recording is active —
 /// mirrors the IdleStatus / RecordingStatus blocks from the menu-bar popover so
-/// the user can see "ИДЁТ ЗАПИСЬ <timer>" and tap Stop without leaving the
+/// the user can see "RECORDING <timer>" and tap Stop without leaving the
 /// Library window.
-export function RecordingBanner({ state, onStopped, onToast }) {
+export function RecordingBanner({ state, onStopped, onToast, t }) {
     const [now, setNow] = React.useState(Date.now());
     React.useEffect(() => {
         const t = setInterval(() => setNow(Date.now()), 1000);
@@ -22,12 +22,11 @@ export function RecordingBanner({ state, onStopped, onToast }) {
     const onStop = async () => {
         try {
             await stopRecordingNow();
-            onToast("Останавливаю…", "success");
             onStopped();
         }
         catch {
-            onToast("Не удалось остановить", "error");
+            onToast(t.toast_settings_failed, "error");
         }
     };
-    return (_jsxs("div", { className: "rec-banner", children: [_jsxs("div", { className: "rec-banner-row", children: [_jsx("span", { className: "rec-dot" + (blink ? " on" : "") }), _jsxs("div", { className: "rec-text", children: [_jsx("div", { className: "rec-label", children: stopping ? "ОСТАНАВЛИВАЕМ…" : "ИДЁТ ЗАПИСЬ" }), _jsxs("div", { className: "rec-time", children: [m, ":", s] })] })] }), _jsxs("button", { className: "rec-stop", onClick: onStop, disabled: stopping, children: [_jsx("span", { className: "rec-stop-square" }), "\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C"] })] }));
+    return (_jsxs("div", { className: "rec-banner", children: [_jsxs("div", { className: "rec-banner-row", children: [_jsx("span", { className: "rec-dot" + (blink ? " on" : "") }), _jsxs("div", { className: "rec-text", children: [_jsx("div", { className: "rec-label", children: t.rec_label }), _jsxs("div", { className: "rec-time", children: [m, ":", s] })] })] }), _jsxs("button", { className: "rec-stop", onClick: onStop, disabled: stopping, children: [_jsx("span", { className: "rec-stop-square" }), t.rec_stop] })] }));
 }

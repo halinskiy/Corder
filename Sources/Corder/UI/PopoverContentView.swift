@@ -1,5 +1,33 @@
 import SwiftUI
 
+/// Strings used by the menu-bar popover. Keyed by feature; resolved at view
+/// render time against `AppContext.language`, so flipping the toggle in the
+/// Library window updates the popover on the next runloop tick.
+fileprivate enum L {
+    static func t(_ key: String, lang: String) -> String {
+        let dict = lang == "ru" ? ru : en
+        return dict[key] ?? en[key] ?? key
+    }
+    private static let en: [String: String] = [
+        "idle": "Not recording",
+        "recording": "Recording",
+        "saving": "Saving…",
+        "start": "Start recording",
+        "stop": "Stop recording",
+        "open_library": "Open library",
+        "quit": "Quit",
+    ]
+    private static let ru: [String: String] = [
+        "idle": "Запись не идёт",
+        "recording": "Идёт запись",
+        "saving": "Сохраняем…",
+        "start": "Начать запись",
+        "stop": "Остановить запись",
+        "open_library": "Открыть библиотеку",
+        "quit": "Выйти",
+    ]
+}
+
 struct PopoverContentView: View {
     @ObservedObject var ctx: AppContext = .shared
     let onOpenLibrary: () -> Void
@@ -24,7 +52,7 @@ struct PopoverContentView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "rectangle.stack")
-                        Text("Открыть библиотеку")
+                        Text(L.t("open_library", lang: ctx.language))
                     }
                 }
                 .buttonStyle(FlatButtonStyle(role: .secondary))
@@ -32,7 +60,7 @@ struct PopoverContentView: View {
                 Button {
                     NSApp.terminate(nil)
                 } label: {
-                    Text("Выйти")
+                    Text(L.t("quit", lang: ctx.language))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
@@ -51,7 +79,7 @@ struct PopoverContentView: View {
     @ViewBuilder
     private var idleSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            IdleStatus()
+            IdleStatus(lang: ctx.language)
             Button {
                 Task {
                     await RecordingController.shared.startRecording(source: .fullDisplay)
@@ -59,7 +87,7 @@ struct PopoverContentView: View {
             } label: {
                 HStack(spacing: 8) {
                     Circle().fill(Color.red).frame(width: 8, height: 8)
-                    Text("Начать запись")
+                    Text(L.t("start", lang: ctx.language))
                 }
             }
             .buttonStyle(FlatButtonStyle(role: .primary))
@@ -71,17 +99,15 @@ struct PopoverContentView: View {
 
     private func recordingSection(startedAt: Date) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            RecordingStatus(startedAt: startedAt)
+            RecordingStatus(startedAt: startedAt, lang: ctx.language)
             Button {
                 Task { await RecordingController.shared.stopRecording() }
             } label: {
                 HStack(spacing: 8) {
-                    // Match the button's foreground (which itself flips with the
-                    // appearance: dark glyph on light fill, light glyph on dark fill).
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(Color(NSColor.windowBackgroundColor))
                         .frame(width: 9, height: 9)
-                    Text("Остановить запись")
+                    Text(L.t("stop", lang: ctx.language))
                 }
             }
             .buttonStyle(FlatButtonStyle(role: .primary))
@@ -94,7 +120,7 @@ struct PopoverContentView: View {
     private var stoppingSection: some View {
         HStack(spacing: 10) {
             ProgressView().scaleEffect(0.7)
-            Text("Сохраняем…")
+            Text(L.t("saving", lang: ctx.language))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
@@ -107,13 +133,14 @@ struct PopoverContentView: View {
 // MARK: - Idle status (same shape as RecordingStatus, all grey, no animation)
 
 private struct IdleStatus: View {
+    let lang: String
     var body: some View {
         HStack(spacing: 12) {
             Circle()
                 .fill(Color.secondary.opacity(0.45))
                 .frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Запись не идёт")
+                Text(L.t("idle", lang: lang))
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
                 Text("00:00")
@@ -137,6 +164,7 @@ private struct IdleStatus: View {
 
 private struct RecordingStatus: View {
     let startedAt: Date
+    let lang: String
     @State private var now: Date = .init()
     private static let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -147,7 +175,7 @@ private struct RecordingStatus: View {
                 .frame(width: 10, height: 10)
                 .opacity(blink ? 1.0 : 0.25)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Идёт запись")
+                Text(L.t("recording", lang: lang))
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
                 Text(formatted)
