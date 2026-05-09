@@ -175,6 +175,33 @@ final class TranscriptionPipeline {
 
             try Task.checkCancellation()
 
+            // 2.5. Empty-recording short-circuit: when both tracks
+            //      came back with zero turns (the VAD pre-pass found
+            //      <500 ms of speech in each, or the mic was muted
+            //      and the system stream was silent), there's nothing
+            //      to map / boost / archive to Dropbox. Flip the row
+            //      straight into the 7-day archive bin so the user
+            //      doesn't see an empty session in their library —
+            //      it'll auto-purge after 7 days like any other
+            //      archived meeting.
+            let hasAnyContent = usingDualTrack
+                ? (!userTurns.isEmpty || !otherTurns.isEmpty)
+                : !legacyTurns.isEmpty
+            if !hasAnyContent {
+                FileLogger.log("transcribe(): no speech detected — auto-archiving \(meetingId)")
+                let now = Int64(Date().timeIntervalSince1970 * 1000)
+                var silent = meeting
+                silent.status = .ready
+                silent.transcribedAt = now
+                silent.archivedAt = now
+                try? repo.updateMeeting(silent)
+                // Best-effort: drop the local audio dir too — there's
+                // nothing of value in it. Dropbox archive is skipped
+                // by virtue of returning before the upload branch.
+                try? FileManager.default.removeItem(at: AppPaths.recordingDir(for: meetingId))
+                return
+            }
+
             // 3. Map turns → speakers + segments.
             let chosenUserLabel: String?
             if usingDualTrack {

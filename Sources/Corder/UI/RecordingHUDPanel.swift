@@ -102,45 +102,17 @@ private struct RecordingHUDView: View {
         // morph + breathing wobble keep moving even during silence.
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            BlobShape(time: t, level: CGFloat(level))
-                .fill(
-                    // Three-stop radial gradient: hot cherry core →
-                    // rose-red mid → deep crimson rim. All in the red
-                    // family, no orange.
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.95, green: 0.30, blue: 0.36),
-                            Color(red: 0.78, green: 0.16, blue: 0.24),
-                            Color(red: 0.52, green: 0.08, blue: 0.14)
-                        ],
-                        center: UnitPoint(x: 0.38, y: 0.32),
-                        startRadius: 6,
-                        endRadius: 60
-                    )
-                )
-                .overlay(
-                    // Faint top-rim highlight so the blob reads
-                    // volumetric instead of as a flat sticker.
-                    BlobShape(time: t, level: CGFloat(level))
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.32),
-                                    Color.white.opacity(0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1
-                        )
-                )
-                // Glow + drop shadow live on the wrapping frame so the
-                // shape itself stays crisp at any scale.
-                .frame(width: 43, height: 43)
-                .shadow(color: Color(red: 0.85, green: 0.20, blue: 0.28).opacity(0.55),
-                        radius: 18 + 10 * CGFloat(level), x: 0, y: 6)
-                .shadow(color: Color(red: 0.55, green: 0.10, blue: 0.18).opacity(0.35),
-                        radius: 6, x: 0, y: 2)
+            ZStack {
+                // Two stacked blobs share the exact same shape so
+                // morphing reads identically; only their fills + glow
+                // colours differ. We crossfade by toggling the red
+                // copy's opacity on hover.
+                blobLayer(time: t, level: level, palette: greenPalette)
+                    .opacity(hovering ? 0 : 1)
+                blobLayer(time: t, level: level, palette: redPalette)
+                    .opacity(hovering ? 1 : 0)
+            }
+            .animation(.easeInOut(duration: 0.28), value: hovering)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Entry animation: blob "leaks out" from a tiny dot in the
@@ -159,27 +131,84 @@ private struct RecordingHUDView: View {
             }
         }
         .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
+        // Drag and tap are split so a click never "leaks" 2-3 px of
+        // accidental translation into a stop. The DragGesture only
+        // fires after 4 pt of movement, anything below that flows
+        // through to the TapGesture cleanly. simultaneousGesture
+        // (rather than .gesture) lets both compete fairly so tap
+        // doesn't get swallowed when the user *starts* a drag.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 4)
                 .onChanged { value in
                     let dx = value.translation.width - dragAccumulated.width
                     let dy = value.translation.height - dragAccumulated.height
                     dragAccumulated = value.translation
-                    if abs(value.translation.width) + abs(value.translation.height) > 3 {
-                        moveWindow(dx: dx, dy: dy)
-                    }
+                    moveWindow(dx: dx, dy: dy)
                 }
-                .onEnded { value in
-                    let total = abs(value.translation.width) + abs(value.translation.height)
-                    dragAccumulated = .zero
-                    // Treat as a tap if the cursor barely moved between
-                    // press-down and release.
-                    if total < 3 {
-                        stopRecording()
-                    }
-                }
+                .onEnded { _ in dragAccumulated = .zero }
         )
+        .onTapGesture { stopRecording() }
         .help("Click to stop recording")
+    }
+
+    @ViewBuilder
+    private func blobLayer(time: TimeInterval, level: Float, palette: BlobPalette) -> some View {
+        BlobShape(time: time, level: CGFloat(level))
+            .fill(
+                RadialGradient(
+                    colors: palette.fillStops,
+                    center: UnitPoint(x: 0.38, y: 0.32),
+                    startRadius: 6,
+                    endRadius: 60
+                )
+            )
+            .overlay(
+                BlobShape(time: time, level: CGFloat(level))
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.32),
+                                Color.white.opacity(0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .frame(width: 43, height: 43)
+            .shadow(color: palette.glowOuter.opacity(0.55),
+                    radius: 18 + 10 * CGFloat(level), x: 0, y: 6)
+            .shadow(color: palette.glowInner.opacity(0.35),
+                    radius: 6, x: 0, y: 2)
+    }
+
+    /// Default state: brand green. Recording is happening, the user
+    /// shouldn't feel the blob is "danger-coloured" until they hover
+    /// to indicate intent to stop.
+    private var greenPalette: BlobPalette {
+        BlobPalette(
+            fillStops: [
+                Color(red: 0.18, green: 0.66, blue: 0.40),    // bright leaf
+                Color(red: 0.06, green: 0.49, blue: 0.27),    // brand #0e7c44
+                Color(red: 0.03, green: 0.30, blue: 0.16)     // deep forest
+            ],
+            glowOuter: Color(red: 0.10, green: 0.60, blue: 0.34),
+            glowInner: Color(red: 0.04, green: 0.34, blue: 0.18)
+        )
+    }
+
+    /// Hover state: crimson, signals "click here to stop".
+    private var redPalette: BlobPalette {
+        BlobPalette(
+            fillStops: [
+                Color(red: 0.95, green: 0.30, blue: 0.36),
+                Color(red: 0.78, green: 0.16, blue: 0.24),
+                Color(red: 0.52, green: 0.08, blue: 0.14)
+            ],
+            glowOuter: Color(red: 0.85, green: 0.20, blue: 0.28),
+            glowInner: Color(red: 0.55, green: 0.10, blue: 0.18)
+        )
     }
 
     private func moveWindow(dx: CGFloat, dy: CGFloat) {
@@ -196,6 +225,16 @@ private struct RecordingHUDView: View {
             await RecordingController.shared.stopRecording()
         }
     }
+}
+
+/// Bundle of colours that define a single state of the blob —
+/// recording (green) vs about-to-stop (red). Kept as a value type so
+/// the SwiftUI body can crossfade between two stacked copies without
+/// any imperative state plumbing.
+private struct BlobPalette {
+    let fillStops: [Color]
+    let glowOuter: Color
+    let glowInner: Color
 }
 
 // MARK: - Shape morphing
