@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a launch just means the entries linger one extra day, which is
         // fine — the cap is "≥7 days, eventually wiped".
         purgeExpiredArchive()
+        // Free disk: delete mic.wav + system.wav for meetings older than
+        // 30 days that already have gemini_raw_turns cached. Re-transcribe
+        // hits the cache and never needs the originals again.
+        purgeStaleOriginals()
         startServer()
         _ = RecordingController.shared    // bootstrap delegate wiring
         // Kick off WhisperKit model download in the background so the first
@@ -136,6 +140,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let dir = AppPaths.recordingDir(for: id)
             try? FileManager.default.removeItem(at: dir)
             try? repo.deleteMeeting(id: id)
+        }
+    }
+
+    /// Disk-pressure relief: for meetings transcribed >30 days ago whose
+    /// raw Gemini turns are already cached, the original mic.wav and
+    /// system.wav are dead weight. Re-transcribe (clarify-banner, pinned
+    /// speaker count) reuses gemini_raw_turns and never touches the
+    /// originals again. mix.wav stays — it's still served for playback.
+    /// Idempotent: re-runs are no-ops when files have already been purged.
+    private func purgeStaleOriginals() {
+        let retentionMs: Int64 = 30 * 24 * 60 * 60 * 1000
+        let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - retentionMs
+        let repo = AppContext.shared.repo
+        guard let ids = try? repo.transcribedWithCacheOlderThan(cutoff), !ids.isEmpty else { return }
+        var freed: Int64 = 0
+        var purged = 0
+        for id in ids {
+            let dir = AppPaths.recordingDir(for: id)
+            for name in ["mic.wav", "system.wav"] {
+                let url = dir.appendingPathComponent(name)
+                if let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int64 {
+                    freed += size
+                    purged += 1
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
+        if purged > 0 {
+            let mb = Double(freed) / 1_048_576
+            FileLogger.log(String(format: "purgeStaleOriginals: removed %d original tracks across %d cached meetings, freed %.1f MB",
+                                  purged, ids.count, mb))
         }
     }
 }
