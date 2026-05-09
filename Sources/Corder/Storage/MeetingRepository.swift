@@ -60,6 +60,23 @@ struct MeetingRepository {
         }
     }
 
+    /// Active (non-archived) meetings transcribed before `cutoffMs` that
+    /// already have their raw Gemini turns cached. The originals
+    /// (mic.wav + system.wav) can be deleted from disk for those —
+    /// re-transcribe will hit the cache and never need the audio again.
+    func transcribedWithCacheOlderThan(_ cutoffMs: Int64) throws -> [String] {
+        try dbq.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT id FROM meetings
+                WHERE archived_at IS NULL
+                  AND transcribed_at IS NOT NULL
+                  AND transcribed_at < ?
+                  AND gemini_raw_turns IS NOT NULL
+                  AND audio_hash IS NOT NULL
+            """, arguments: [cutoffMs])
+        }
+    }
+
     func insertSpeaker(_ s: Speaker) throws {
         try dbq.write { try s.insert($0) }
     }
