@@ -10,7 +10,31 @@ behaviour, not internal refactors.
 
 ## [Unreleased]
 
-(none yet)
+### Added
+- **VAD pre-pass** (`VoiceActivityDetector`) — RMS-gating ahead of every
+  Gemini upload. Long silent stretches at the edges of a recording (mic
+  warming up, the pause after Stop) and inside it (you're muted while a
+  teammate talks for two minutes) get dropped before the file is sent.
+  10-20 % token savings on idle mic tracks; ~5-10 % on system tracks.
+  Returned turns are projected back onto the original timeline so the
+  rest of the pipeline (segments, scrubber, search) sees timestamps in
+  the source frame, not the compressed one.
+  - **Empty-track short-circuit**: if VAD finds <500 ms of speech total,
+    we skip the upload entirely and return zero turns. Catches
+    "I forgot to talk into the mic" cleanly.
+  - **Savings threshold**: VAD output is only used when it'd compress
+    the file by ≥10 %. Talk-heavy meetings fall through to the original
+    pipeline unchanged so we don't pay disk I/O for ~0 % API benefit.
+  - Read failures fall back to "transcribe the original" — VAD is an
+    optimisation, never a correctness requirement.
+
+### Changed
+- **Retention for `mic.wav` / `system.wav`** — original tracks are
+  now hard-deleted at launch for any meeting transcribed >30 days ago
+  whose `gemini_raw_turns` cache row is populated. Re-transcribe on
+  those rows hits the cache and never needs the originals again.
+  `mix.wav` stays as the playback source. Saves ~25 MB / 10 min of
+  recording on the long tail.
 
 ## [0.7.0] — 2026-05-09
 

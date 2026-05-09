@@ -108,9 +108,15 @@ Transcription/
 │                              auto-boost; auto-archive; hallucination
 │                              filter
 ├ GeminiTranscriber.swift   Cloud provider: TranscribeMode { single,
-│                           diarize }, File API upload → poll ACTIVE
-│                           → :generateContent; auto-split on JSON
-│                           truncation (depth ≤ 3, slice ≥ 70 s)
+│                           diarize }, VAD pre-pass + concat speech-
+│                           only wav, File API upload → poll ACTIVE →
+│                           :generateContent; auto-split on JSON
+│                           truncation (depth ≤ 3, slice ≥ 70 s);
+│                           projects compressed-timeline turns back
+│                           onto the original frame
+├ VoiceActivityDetector.swift  RMS-gating speech detector + concat
+│                              + projection table from compressed
+│                              speech-only timeline → original frame
 ├ Diarizer.swift            Channel-gate (mic_RMS vs system_RMS) for
 │                           the legacy single-stream Gemini path only
 └ AudioMixer.swift          16 kHz mono mix; peak-normalised, not /N
@@ -397,12 +403,11 @@ audio clock in sync; we just never persist the pixels.
   meeting — subsequent Range requests are served straight from local
   disk without blocking.
 
-- **No VAD pre-pass.** Long silent stretches still get uploaded to
-  Gemini even though the model has nothing to do with them; we rely
-  on the anti-hallucination prompt clause to make those uploads
-  cheap (the response is empty rather than fabricated). A local VAD
-  pre-pass would shave 10-20 % off API cost on quiet meetings —
-  on the roadmap.
+- **VAD overshoot on whispered audio.** The RMS gate at -46 dBFS
+  (`VoiceActivityDetector.Config.rmsThreshold = 0.005`) covers normal
+  conversational levels but trims confidently-whispered speech
+  alongside true silence. Whispered meetings are rare; if they become
+  a real complaint, lower the threshold or add an ML detector.
 
 ## What we deliberately don't do
 

@@ -141,7 +141,7 @@ Library window (WKWebView)
 | ---------------- | ------------------------------------------------------------------------------- |
 | `App/`           | `CorderApp` entry, `AppDelegate` (LSUIElement, main menu, archive purge), `RecordingController` (state machine + HUD), `RecordingLevelMeter` (HUD-feeding ObservableObject), `NetworkMonitor`, `Notifications`, `SleepWatchdog`, `FileLogger`, `UpdateController` (Sparkle) |
 | `Capture/`       | `CaptureEngine` (SCStream system audio + AVAudioEngine mic, level-meter ingest), `PermissionsChecker` |
-| `Transcription/` | `AudioMixer`, `TranscriptionPipeline` (driver + dual-track fork + cache + auto-boost + auto-archive), `GeminiTranscriber` (cloud, with `TranscribeMode.{single,diarize}` and auto-split), `Diarizer` (channel gate for legacy single-stream path only) |
+| `Transcription/` | `AudioMixer`, `TranscriptionPipeline` (driver + dual-track fork + cache + auto-boost + auto-archive), `GeminiTranscriber` (cloud, with `TranscribeMode.{single,diarize}`, VAD pre-pass, auto-split), `VoiceActivityDetector` (RMS-gating + concat + projection), `Diarizer` (channel gate for legacy single-stream path only) |
 | `Boost/`         | `BoostService` — Gemini 2.5 Pro, per-segment polish                             |
 | `Cloud/`         | `DropboxService` — refresh-token OAuth, chunked upload, temporary-link proxy    |
 | `Storage/`       | GRDB models (with default-nil optionals), repository, migrations (v1..v8_archive) |
