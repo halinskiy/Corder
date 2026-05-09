@@ -19,6 +19,10 @@ mkdir -p "$APP/Contents/Resources"
 # Replace just the executable + bundled web resources.
 cp "$ROOT/.build/release/Corder" "$APP/Contents/MacOS/Corder"
 
+# Make sure dyld can find Sparkle.framework (and any future bundled
+# frameworks). swift-build doesn't set this rpath on bare CLI builds.
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Corder" 2>/dev/null || true
+
 if [ -d "$ROOT/.build/release/Corder_Corder.bundle" ]; then
     rm -rf "$APP/Contents/Resources/Corder_Corder.bundle"
     cp -R "$ROOT/.build/release/Corder_Corder.bundle" "$APP/Contents/Resources/"

@@ -30,16 +30,48 @@ export async function deleteMeeting(id) {
     if (!r.ok)
         throw new Error(`HTTP ${r.status}`);
 }
+export async function archiveMeeting(id) {
+    const r = await fetch(`/api/meetings/${id}/archive`, { method: "POST" });
+    if (!r.ok)
+        throw new Error(`HTTP ${r.status}`);
+}
+export async function restoreMeeting(id) {
+    const r = await fetch(`/api/meetings/${id}/restore`, { method: "POST" });
+    if (!r.ok)
+        throw new Error(`HTTP ${r.status}`);
+}
+export async function listArchive() {
+    const r = await fetch("/api/archive");
+    if (!r.ok)
+        throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    return (j.items ?? []);
+}
 export async function retranscribe(id) {
     const r = await fetch(`/api/meetings/${id}/retranscribe`, { method: "POST" });
     if (!r.ok)
         throw new Error(`HTTP ${r.status}`);
 }
-export async function boostMeeting(id) {
-    const r = await fetch(`/api/meetings/${id}/boost`, { method: "POST" });
+export async function cancelTranscription(id) {
+    const r = await fetch(`/api/meetings/${id}/cancel-transcription`, { method: "POST" });
     if (!r.ok)
         throw new Error(`HTTP ${r.status}`);
-    return r.json();
+}
+export async function getLastError(id) {
+    const r = await fetch(`/api/meetings/${id}/last-error`);
+    if (!r.ok)
+        return null;
+    const j = await r.json();
+    return j.error ?? null;
+}
+export async function setExpectedSpeakers(id, count) {
+    const r = await fetch(`/api/meetings/${id}/expected-speakers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count }),
+    });
+    if (!r.ok)
+        throw new Error(`HTTP ${r.status}`);
 }
 export async function getRecordingState() {
     const r = await fetch("/api/recording/state");
@@ -67,9 +99,6 @@ export async function setSettings(s) {
     if (!r.ok)
         throw new Error(`HTTP ${r.status}`);
     return r.json();
-}
-export function videoSrc(id) {
-    return `/api/meetings/${id}/video`;
 }
 export function audioSrc(id) {
     return `/api/meetings/${id}/audio`;

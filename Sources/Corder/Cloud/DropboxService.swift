@@ -116,10 +116,11 @@ actor DropboxService {
         let argData = try JSONSerialization.data(withJSONObject: arg)
         req.setValue(String(data: argData, encoding: .utf8), forHTTPHeaderField: "Dropbox-API-Arg")
 
-        let data = try Data(contentsOf: localFile)
-        req.httpBody = data
-
-        let (respData, resp) = try await URLSession.shared.data(for: req)
+        // `upload(for:fromFile:)` streams the body straight off disk in
+        // small chunks instead of buffering the whole file into RAM (which
+        // `Data(contentsOf:)` + `httpBody` did). Critical for hour-long
+        // recordings where the .wav reaches ~110 MB.
+        let (respData, resp) = try await URLSession.shared.upload(for: req, fromFile: localFile)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw DropboxError.http(status, String(data: respData, encoding: .utf8) ?? "")
@@ -247,8 +248,15 @@ actor DropboxService {
     }
 
     /// Streams a Dropbox file straight to a local URL. Used by retranscribe
-    /// when the audio mix has been archived but we need it back on disk to
-    /// feed Whisper.
+    /// when the audio mix has been archived, and by `Routes.hydrateDropboxFile`
+    /// for media playback.
+    ///
+    /// Implementation: `URLSession.shared.download(for:)` writes to a
+    /// temporary file as chunks come in, never buffering the whole body in
+    /// memory. We then move that temp file into place. For hour-long
+    /// recordings this keeps the resident-memory bump under a few MB
+    /// instead of the full ~110 MB the previous `data(for:)` + `write(to:)`
+    /// path consumed.
     func download(remotePath: String, to localURL: URL) async throws {
         let token = try await getAccessToken()
         var req = URLRequest(url: URL(string: "https://content.dropboxapi.com/2/files/download")!)
@@ -258,14 +266,22 @@ actor DropboxService {
         let arg = try JSONSerialization.data(withJSONObject: ["path": remotePath])
         req.setValue(String(data: arg, encoding: .utf8), forHTTPHeaderField: "Dropbox-API-Arg")
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (tempURL, resp) = try await URLSession.shared.download(for: req)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            throw DropboxError.http(status, String(data: data, encoding: .utf8) ?? "")
+            // download(for:) writes the error body to the temp file too —
+            // surface it for diagnosis.
+            let body = (try? String(contentsOf: tempURL, encoding: .utf8)) ?? ""
+            throw DropboxError.http(status, body)
         }
-        try FileManager.default.createDirectory(at: localURL.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true)
-        try data.write(to: localURL)
+
+        let dir = localURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // `move` won't overwrite — make sure the destination is clear first.
+        try? FileManager.default.removeItem(at: localURL)
+        try FileManager.default.moveItem(at: tempURL, to: localURL)
     }
 
     /// Best-effort delete (used when a meeting is removed from the library).

@@ -1,6 +1,8 @@
 import React from "react";
+import { Download } from "lucide-react";
 import { MeetingDetail, audioSrc } from "../api";
 import { formatDuration } from "../format";
+import type { Lang, T } from "../i18n";
 
 interface Props {
   detail: MeetingDetail;
@@ -8,18 +10,16 @@ interface Props {
   onTimeUpdate: (sec: number) => void;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
+  t: T;
+  lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek }: Props) {
-  // Recording is currently audio-only (video.mov isn't produced — see
-  // CaptureEngine for the AVAssetWriter rationale). The "videoRef" prop is
-  // kept for the seek/play API surface used elsewhere; we route it onto the
-  // hidden <audio> element via type cast.
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "ru" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   return (
     <div className="right-panel">
-      <AudioCard detail={detail} audioRef={audioRef} onTimeUpdate={onTimeUpdate} />
-      <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} />
+      <AudioCard detail={detail} audioRef={audioRef} onTimeUpdate={onTimeUpdate} t={t} />
+      <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
     </div>
   );
 }
@@ -29,11 +29,12 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
  *  time / duration, and a clickable scrub line. The native <audio>
  *  element is kept hidden — we drive it through React state. */
 function AudioCard({
-  detail, audioRef, onTimeUpdate,
+  detail, audioRef, onTimeUpdate, t,
 }: {
   detail: MeetingDetail;
   audioRef: React.RefObject<HTMLAudioElement>;
   onTimeUpdate: (sec: number) => void;
+  t: T;
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState((detail.duration_ms ?? 0) / 1000);
@@ -61,13 +62,21 @@ function AudioCard({
 
   const cursorPct = duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;
 
+  // Empty / not-yet-finalised meetings have nothing to play — disable the
+  // primary control instead of letting the user click into nothing.
+  const playable =
+    duration > 0 &&
+    detail.status !== "recording" &&
+    !!detail.duration_ms;
+
   return (
-    <div className="audio-card">
-      <div className="audio-card-tabs">
-        <span className="audio-card-tab active">Запись</span>
-      </div>
+    <>
       <div className="audio-controls">
-        <button className="audio-btn audio-btn-primary" onClick={togglePlay}>
+        <button
+          className="audio-btn audio-btn-primary"
+          onClick={togglePlay}
+          disabled={!playable}
+        >
           {playing ? <PauseSmall /> : <PlaySmall />}
         </button>
         <div className="audio-time">
@@ -86,6 +95,15 @@ function AudioCard({
             </div>
           )}
         </div>
+        <a
+          className="toolbar-icon-btn audio-download-btn"
+          href={audioSrc(detail.id)}
+          download={`corder-${detail.id}.wav`}
+          title={t.download_audio_title}
+          aria-label={t.download_audio_title}
+        >
+          <Download size={16} strokeWidth={2} />
+        </a>
       </div>
       <audio
         ref={audioRef}
@@ -105,7 +123,7 @@ function AudioCard({
           onTimeUpdate(t);
         }}
       />
-    </div>
+    </>
   );
 }
 
@@ -150,23 +168,6 @@ function colorForSpeaker(name: string): string {
   return PALETTE[h % PALETTE.length];
 }
 
-/// WCAG-style relative luminance for a hex colour (#RRGGBB).
-function relLuminance(hex: string): number {
-  const v = hex.replace("#", "");
-  const r = parseInt(v.slice(0, 2), 16) / 255;
-  const g = parseInt(v.slice(2, 4), 16) / 255;
-  const b = parseInt(v.slice(4, 6), 16) / 255;
-  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-function contrastRatio(a: string, b: string): number {
-  const la = relLuminance(a);
-  const lb = relLuminance(b);
-  const hi = Math.max(la, lb);
-  const lo = Math.min(la, lb);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
 /// For each speech segment, lay down ~2-3 px ticks every 220 ms. This gives
 /// the Grain look — natural pauses (silent gaps in the source) become gaps
 /// between ticks; long monologues turn into a dense run of ticks.
@@ -189,10 +190,14 @@ function SpeakerTimeline({
   detail,
   currentTimeSec,
   onSeek,
+  t,
+  lang,
 }: {
   detail: MeetingDetail;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
+  t: T;
+  lang: Lang;
 }) {
   const totalMs = detail.duration_ms || 0;
   if (totalMs === 0 || detail.segments.length === 0) return null;
@@ -217,7 +222,7 @@ function SpeakerTimeline({
   return (
     <div className="timeline-card">
       <div className="timeline-tabs">
-        <span className="timeline-tab active">Таймлайн</span>
+        <span className="timeline-tab active">{t.timeline_title}</span>
       </div>
       {activeSpeakers.map((sp) => {
         const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
@@ -227,20 +232,11 @@ function SpeakerTimeline({
         const color = sp.color_hex && /^#[0-9a-f]{6}$/i.test(sp.color_hex)
           ? sp.color_hex
           : colorForSpeaker(name);
-        // Adaptive cursor colour: sample what's directly underneath the
-        // cursor on this row at the current time — either an active speaker
-        // tick (this speaker's colour) or the empty grey bar — and flip the
-        // cursor to white if green doesn't provide enough contrast against
-        // it (WCAG ratio < 2.5).
-        const tMs = currentTimeSec * 1000;
-        const overTick = segs.some((s) => tMs >= s.start_ms && tMs <= s.end_ms);
-        const behindColor = overTick ? color : "#ececea";
-        const cursorColor = contrastRatio("#1E7A50", behindColor) >= 2.5 ? "#1E7A50" : "#ffffff";
         return (
           <div key={sp.id} className="tl-row">
             <div className="tl-row-head">
               <span className="tl-name">{name}</span>
-              <span className="tl-stats">{pct}% · {formatDuration(sum)}</span>
+              <span className="tl-stats">{pct}% · {formatDuration(sum, lang)}</span>
             </div>
             <div className="tl-bar" onClick={onBarClick}>
               {ticksFor(segs, totalMs).map((leftPct, i) => (
@@ -250,7 +246,7 @@ function SpeakerTimeline({
                   style={{ left: `${leftPct}%`, background: color }}
                 />
               ))}
-              <div className="tl-bar-cursor" style={{ left: `${cursorPct}%`, background: cursorColor }} />
+              <div className="tl-bar-cursor" style={{ left: `${cursorPct}%` }} />
             </div>
           </div>
         );

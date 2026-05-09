@@ -1,0 +1,1266 @@
+:root {
+  --bg: #ffffff;
+  --bg-elev: #f7f7f6;
+  /* Hover/active fills tuned to be barely-perceptible — barely a tint
+     above the white background of the toolbar buttons. */
+  --bg-hover: #fafaf8;
+  --bg-active: #f3f3f1;
+  --bg-input: #ffffff;
+  --border: #ececea;
+  --border-strong: #d8d8d4;
+  --fg: #0e0e0d;
+  --fg-muted: #6b6b68;
+  --fg-dim: #a0a09c;
+  /* Primary accent — Corder's green. Used for selected pills, CTA fills,
+     toggle ON states. NEVER use --fg (black) for those — black is just
+     for text and icons. See corder-design-system memory. */
+  --accent: #0e7c44;
+  --accent-pressed: #0a5e34;
+  --speaker-1: #5a3aa6;
+  --speaker-2: #1f7a4f;
+  --speaker-3: #b03a3a;
+  --speaker-4: #1a4f8a;
+  --danger: #b8443c;
+  --status-ready: #1f7a4f;
+  --status-warn: #b07b1a;
+  --status-fail: #b8443c;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  /* Pill — corners fully rounded so all controls in the header read as a
+     family with the "Усилить" toggle. */
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+button:active { background: var(--bg-active); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
+button.primary:hover { background: #2a2a28; }
+/* `.ghost` keeps the same hover treatment as the default button so all three
+   toolbar items (Копировать / Расшифровать заново / Удалить) feel uniform. */
+button.ghost { border-color: var(--border-strong); }
+button.ghost:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+button.danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+input[type="text"], input[type="search"] {
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  /* Match the toolbar `button` proportions so search fields and buttons
+     read as siblings (same height, same horizontal padding). */
+  padding: 8px 14px;
+  /* Pill — same shape as the toolbar buttons. */
+  border-radius: 999px;
+  outline: none;
+}
+input[type="text"]:hover, input[type="search"]:hover {
+  background: var(--bg-hover);
+  border-color: #b8b8b4;
+}
+input[type="text"]:focus, input[type="search"]:focus {
+  border-color: var(--fg-muted);
+  background: var(--bg-input);
+}
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #d8d8d4;
+  border-radius: 4px;
+  /* Without min-height the thumb collapses into a stubby pill that reads
+     as a dot rather than a scrollbar — see the transcript pane where
+     content overflow is small relative to the viewport. */
+  min-height: 48px;
+}
+::-webkit-scrollbar-thumb:hover { background: #b8b8b4; }
+
+/* App layout */
+.app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: 100vh;
+  overflow: hidden;
+  /* Use the same colour as the main pane so the sidebar's
+     `to right ... transparent` gradient reveals the white area cleanly,
+     instead of bleeding the elevated grey colour past the divider. */
+  background: var(--bg);
+}
+
+/* Sidebar */
+.sidebar {
+  /* `min-height: 0` so the inner `.sidebar-list` can actually scroll
+     instead of stretching the sidebar past the grid row's edge — see the
+     long comment on `.transcript-wrap` for the same fix on the main pane. */
+  min-height: 0;
+  /* Two stacked gradients drawn in one background:
+     1) a 1 px vertical hairline at `right: 5px` (the divider).
+     2) a grey fill that stops 5 px before the right edge so the final
+        strip is transparent and reveals the white main-area body.
+     Drawing the line as part of the background — instead of an absolutely
+     positioned ::after — means the native scrollbar (which paints AFTER
+     background) sits on top of it without any z-index gymnastics. */
+  background:
+    linear-gradient(to right,
+      transparent 0,
+      transparent calc(100% - 4px),
+      var(--border) calc(100% - 4px),
+      var(--border) calc(100% - 3px),
+      transparent calc(100% - 3px),
+      transparent 100%),
+    linear-gradient(to right,
+      var(--bg-elev) 0,
+      var(--bg-elev) calc(100% - 4px),
+      transparent calc(100% - 4px),
+      transparent 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.sidebar-titlebar-pad { height: 36px; }
+.sidebar-search { padding: 4px 12px 12px; }
+
+/* Search field with a leading magnifier icon. The icon is absolutely
+   positioned over the input so the input keeps its native focus ring.
+
+   Left padding matches a toolbar `button`: 14 px from the field's edge to
+   the icon (same as button left padding to its leading icon), then a 6 px
+   gap, then the placeholder/text — total left padding 14 + 14 + 6 = 34 px. */
+.search-field { position: relative; display: block; }
+.search-field svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--fg-dim);
+  pointer-events: none;
+  width: 14px;
+  height: 14px;
+}
+.search-field input {
+  padding-left: 34px;
+  padding-right: 14px;
+}
+
+/* Active-recording card — same shape as IdleStatus / RecordingStatus in the
+   popover so the visual language matches across the menu-bar and Library. */
+.rec-banner {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg);
+  max-width: 360px;
+}
+.rec-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c4423a;
+  opacity: 0.25;
+  transition: opacity 200ms ease;
+}
+.rec-dot.on { opacity: 1; }
+.rec-text { display: flex; flex-direction: column; gap: 1px; }
+.rec-label {
+  /* Same type as the sidebar's meeting-title (Today, 17:56) — quiet 13/500
+     instead of the previous loud all-caps with wide tracking. */
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+.rec-time {
+  font-size: 18px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.rec-stop {
+  /* Same proportions as the popover's primary "Остановить запись" button —
+     full-width row, generous vertical padding — but in red to mark a
+     destructive action inside the live-recording card. */
+  background: #B7443C;
+  color: #fff;
+  border: 1px solid #B7443C;
+  border-radius: 8px;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: stretch;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.rec-stop:hover { background: #9e3a32; border-color: #9e3a32; }
+.rec-stop:disabled { opacity: 0.5; cursor: default; }
+.rec-stop-square {
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  border-radius: 1.5px;
+  display: inline-block;
+}
+
+/* Transcribing card — same shape as `.rec-banner`, but in our accent green
+   so it visually says "work in progress, not destructive". Sits in the
+   same slot inside `.transcript` while detail.status === 'transcribing'. */
+.trans-banner {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg);
+  max-width: 360px;
+}
+.trans-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.trans-spinner {
+  color: var(--accent, #0e7c44);
+  animation: corder-spin 900ms linear infinite;
+}
+.trans-text { display: flex; flex-direction: column; gap: 1px; }
+.trans-label {
+  /* Match `.rec-label` — same type family as meeting-title in the sidebar. */
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+.trans-time {
+  font-size: 18px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.trans-stop {
+  /* Same size & radius as before — only fill/border swapped to match the
+     header's outline buttons (EN / Copy / Delete). */
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: stretch;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+.trans-stop:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+.trans-stop:disabled { opacity: 0.5; cursor: default; }
+.trans-stop-square {
+  width: 9px;
+  height: 9px;
+  background: var(--fg);
+  border-radius: 1.5px;
+  display: inline-block;
+}
+.sidebar-search input { width: 100%; }
+.sidebar-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 8px 0;
+  /* Stop the scrollbar 16 px before the bottom of the sidebar so the
+     scroll track doesn't run up against the sidebar's bottom edge. */
+  margin-bottom: 16px;
+}
+/* Real in-flow element — WebKit reliably counts its height in
+   `scrollHeight`, unlike the container's own `padding-bottom`. Just
+   enough breathing room (24 px) so the last meeting card's preview
+   line never reads as clipped. */
+.sidebar-list-spacer {
+  height: 24px;
+  flex-shrink: 0;
+}
+.sidebar-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding: 12px 8px 6px;
+}
+/* Visual break between date buckets (TODAY / YESTERDAY / N DAYS AGO …):
+   a hairline plus extra top breathing room on every label that isn't the
+   first one in the list. */
+.meeting-item + .sidebar-section-label {
+  margin-top: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.meeting-item {
+  padding: 10px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background 60ms ease;
+}
+/* Hairline divider between consecutive meetings (within the same date
+   bucket). 4 px breathing room on both sides of the line. */
+.meeting-item + .meeting-item {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 14px;
+}
+/* Sidebar lives on `--bg-elev`, so a hover that uses the toolbar's
+   `--bg-hover` (which is whiter than `--bg-elev`) actually makes items
+   *lighter* than the surrounding panel — invisible. Use explicit darker
+   greys here so hover/active read clearly on the elevated surface. */
+.meeting-item:hover { background: #ececea; }
+.meeting-item.active { background: #e8e8e5; }
+.meeting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.meeting-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.meeting-people {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.meeting-people-count { font-variant-numeric: tabular-nums; }
+.meeting-people svg { display: block; }
+.meeting-meta {
+  font-size: 13.5px;
+  color: var(--fg-muted);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.ready { background: var(--status-ready); }
+.status-dot.recording { background: var(--status-fail); animation: pulse 1.6s ease-in-out infinite; }
+.status-dot.transcribing { background: var(--status-warn); animation: pulse 1.6s ease-in-out infinite; }
+.status-dot.failed { background: var(--status-fail); opacity: 0.4; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+.meeting-preview {
+  font-size: 14px;
+  color: var(--fg-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+/* Main */
+.main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.main-header {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  /* Horizontal padding 20 px (32 − 12). Tabs row, transcript-toolbar,
+     audio-controls and timeline all use the same inset so columns line
+     up vertically. */
+  padding: 18px 20px;
+  gap: 12px;
+  background: var(--bg);
+  min-height: 64px;
+  /* Empty space in the header behaves like a draggable title bar.
+     The page-level mousedown handler asks AppKit to perform the drag, while
+     individual buttons inside still receive clicks normally. */
+  cursor: default;
+  /* Don't let the breadcrumb/title text be selected — it would interfere
+     with grabbing the header to drag the window. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.main-header input,
+.main-header button {
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+.breadcrumb {
+  font-size: 14px;
+  color: var(--fg-muted);
+  display: flex; align-items: center; gap: 8px;
+}
+.breadcrumb-current { color: var(--fg); font-weight: 600; }
+.spacer { flex: 1; }
+.toolbar { display: flex; align-items: center; gap: 6px; }
+.toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.toolbar button svg { display: block; width: 14px; height: 14px; }
+
+/* Empty state */
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--fg-muted);
+  text-align: center;
+  padding: 40px;
+}
+.empty-title { color: var(--fg); font-weight: 500; font-size: 16px; }
+
+/* Detail layout — column-stack of (tabs row spanning both columns, body grid).
+   The tabs row hairline runs continuously from "Transcript" to "Recording";
+   the vertical divider between the two columns extends through both rows. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.detail-tabs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-tab-col {
+  padding: 18px 20px 0;
+  display: flex;
+  gap: 24px;
+}
+.detail-tab-col-left {
+  /* Hairline at 3-4 px from the right edge — same offset as the sidebar
+     divider, centred under the 7 px scrollbar of the transcript pane
+     below. */
+  background: linear-gradient(to right,
+    var(--bg) 0,
+    var(--bg) calc(100% - 4px),
+    var(--border) calc(100% - 4px),
+    var(--border) calc(100% - 3px),
+    var(--bg) calc(100% - 3px),
+    var(--bg) 100%);
+}
+.detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Tabs row above transcript (kept for backwards compat — currently unused) */
+.tabs {
+  display: flex;
+  gap: 24px;
+  padding: 18px 32px 0 32px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  font-size: 14px;
+  color: var(--fg-muted);
+  padding: 4px 0 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 60ms ease;
+}
+.tab:hover { color: var(--fg); }
+.tab.active { color: var(--fg); border-bottom-color: var(--fg); font-weight: 500; }
+.tab.disabled { color: var(--fg-dim); cursor: default; }
+.tab.disabled:hover { color: var(--fg-dim); }
+
+/* Transcript area */
+.transcript-wrap {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Critical: grid items default to `min-height: auto` which ignores
+     overflow on children — the inner `.transcript` then stretches to
+     its content size and the bottom of the meeting list is clipped by
+     the grid row instead of being scrolled into. */
+  min-height: 0;
+  min-width: 0;
+  /* Hairline at 3-4 px from the right edge — matches the sidebar divider
+     so the transcript scrollbar sits centred on the same line as the
+     sidebar one. */
+  background: linear-gradient(to right,
+    var(--bg) 0,
+    var(--bg) calc(100% - 4px),
+    var(--border) calc(100% - 4px),
+    var(--border) calc(100% - 3px),
+    var(--bg) calc(100% - 3px),
+    var(--bg) 100%);
+}
+.transcript-toolbar {
+  padding: 20px 20px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.transcript-toolbar input { flex: 1; max-width: 480px; }
+
+/* Round icon-only button at the right edge of the transcript-toolbar.
+   Sized to optically match the height of the adjacent search input
+   (font 13 + padding 8/8 + 1 border ≈ 34-36px), so the two reads as a
+   pair in the toolbar row. */
+.toolbar-icon-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+  flex-shrink: 0;
+}
+.toolbar-icon-btn:hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
+/* Active state — barely darker than hover so it reads as "currently
+   engaged" without shouting. Same delta as the sidebar's active row
+   (#ececea hover → #e8e8e5 active). */
+.toolbar-icon-btn.active {
+  /* Hover is #fafaf8; active sits one tick darker so it's perceptible
+     but stays in the same near-white range. No hover treatment — once
+     the banner is open the button is "currently doing its job", an extra
+     hover state would just look noisy. */
+  background: #f4f4f0;
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.toolbar-icon-btn.active:hover { background: #f4f4f0; }
+
+/* Collapsible wrapper for SpeakersClarifyBanner. Uses max-height + opacity
+   for a soft expand/collapse. The closed-state max-height is 0; when open
+   we set a deliberately generous ceiling so a longer translation of the
+   question + the 4-button row never gets clipped. The actual height is
+   driven by the banner's content, the ceiling is just enough that the
+   transition has a known target. */
+.clarify-collapsible {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 240ms ease, opacity 200ms ease, margin-bottom 240ms ease;
+  margin-bottom: 0;
+}
+.clarify-collapsible.open {
+  max-height: 500px;
+  opacity: 1;
+  margin-bottom: 12px;
+}
+
+/* SpeakersClarifyBanner — same outline card as `.trans-banner`, but without
+   the icon column. Body uses the same big-light type as the recording timer
+   so all three banners (recording / transcribing / clarify) read as a family. */
+.clarify-banner { max-width: 420px; position: relative; }
+.clarify-dismiss {
+  /* X button anchored to the top-right corner of the card. Outline-less,
+     muted hover — discreet because dismissing is a passive action. */
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 4px !important;
+  border-radius: 6px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 80ms ease, color 80ms ease;
+}
+.clarify-dismiss:hover { background: var(--bg-hover) !important; color: var(--fg); }
+.clarify-text { display: flex; flex-direction: column; gap: 6px; }
+.clarify-body {
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1.35;
+  color: var(--fg);
+}
+/* Action row: 1 / 2 / 3+ pills laid out side-by-side at equal width,
+   styled like .trans-stop (outline, 8px radius, 13×16 padding). */
+.clarify-actions {
+  display: flex;
+  gap: 8px;
+  align-self: stretch;
+}
+/* Vertical-stack variant (Re-transcribe + Delete in EmptyDeleteBanner). */
+.clarify-actions-stack { flex-direction: column; }
+.clarify-btn {
+  flex: 1;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+.clarify-btn:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+.clarify-btn:disabled { opacity: 0.5; cursor: default; }
+/* Currently-selected option — auto-detected by the diarizer or picked
+   by the user previously. Filled with the accent green so the choice
+   is instantly readable. No hover treatment: it's already the answer,
+   the affordance is "pick another or close with X". */
+.clarify-btn.active {
+  /* Slightly darker than --accent so the selection reads as "pressed"
+     rather than "another inviting CTA". */
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+  color: #fff;
+  cursor: default;
+}
+.clarify-btn.active:hover {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+}
+
+/* Destructive variant — used by EmptyDeleteBanner. Same shape as
+   `.rec-stop` (red fill, white text) so all destructive primary actions
+   read the same regardless of which card hosts them. */
+.clarify-btn.danger {
+  background: #B7443C;
+  color: #fff;
+  border-color: #B7443C;
+}
+.clarify-btn.danger:hover { background: #9e3a32; border-color: #9e3a32; }
+
+/* Pill button used inside SpeakersClarifyBanner: 1 / 2 / 3+ / Auto. */
+.speakers-pill {
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+.speakers-pill:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+.speakers-pill.active {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: #fff;
+}
+.speakers-pill:disabled { opacity: 0.5; cursor: default; }
+.transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 20px 0;
+  /* Stop the scroll track 16 px before the bottom — same trick as the
+     sidebar's `.sidebar-list`. */
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  scroll-behavior: smooth;
+}
+/* Real in-flow spacer — WebKit ignores `padding-bottom` of an
+   `overflow: auto` container in `scrollHeight`. Mirrors the sidebar
+   solution. 80 px = enough breathing room under the last segment so
+   long paragraphs don't read as cropped on long meetings. */
+.transcript-spacer {
+  height: 80px;
+  flex-shrink: 0;
+}
+.transcript-empty {
+  color: var(--fg-muted);
+  font-size: 14px;
+  padding: 24px 0;
+}
+/* Spinner used by TranscribingBanner. Defined globally so other components
+   can reuse it (Library shell, future progress indicators). */
+@keyframes corder-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Speaker block (Grain-style: avatar + name + paragraph) */
+.segment-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.segment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.speaker-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0;
+}
+.speaker-name {
+  font-weight: 600;
+  color: var(--fg);
+  font-size: 14px;
+}
+.speaker-name.editable { cursor: text; }
+.speaker-name.editable:hover { text-decoration: underline; text-decoration-color: var(--fg-dim); text-underline-offset: 2px; }
+.segment-paragraph {
+  font-size: 15px;
+  color: var(--fg);
+  line-height: 1.7;
+  display: block;
+}
+.segment-line {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 2px;
+  transition: background 60ms ease;
+  display: inline;
+}
+.segment-line:hover { background: #ececea; }
+.segment-line.active {
+  background: #dff1e5;
+}
+
+/* Right pane (audio controls + timeline). No outer padding — children
+   manage their own spacing so the audio controls sit flush with the
+   shared tabs row above, matching the transcript column on the left. */
+.right-panel {
+  overflow-y: auto;
+  padding: 0 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg);
+}
+.video-card {
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.video-card video { width: 100%; display: block; aspect-ratio: 16 / 10; background: #000; }
+.video-fallback {
+  color: var(--fg-muted);
+  background: #fafafa;
+  padding: 48px 24px;
+  text-align: center;
+  font-size: 13px;
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Audio player — sits directly under the shared tabs row, no card wrapper
+   any more; matches the transcript-toolbar's layout on the left so the
+   two columns read as the same composition. Horizontal padding matches
+   `.transcript-toolbar` (32 px). */
+.audio-controls {
+  padding: 20px 20px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.audio-btn {
+  background: transparent;
+  border: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 0;
+}
+.audio-btn:hover { background: var(--bg-hover); }
+/* Primary (play/pause) — fully round green pill, brand colour. */
+.audio-btn-primary {
+  background: #1E7A50;
+  color: #fff;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+}
+.audio-btn-primary:hover { background: #186439; }
+/* Disabled state when there is nothing to play yet — flat neutral grey,
+   no hover, no opacity-fade (we want a solid, intentional look, not a
+   ghosted button). */
+.audio-btn-primary:disabled,
+.audio-btn-primary:disabled:hover {
+  background: #cbcbc7;
+  cursor: default;
+  opacity: 1;
+}
+.audio-time {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+  /* Symmetric breathing room — left/right margins on top of the parent's
+     `gap: 6px`, so the visible space between the time label and its
+     neighbours (play button on the left, scrub bar on the right) ends up
+     identical (12 px on both sides). */
+  margin-left: 6px;
+  margin-right: 6px;
+}
+/* Scrub bar lives in a fixed-height row so growing the inner track on
+   hover doesn't shove neighbouring controls. The track is centred
+   vertically inside the row. Default = thick (8px); hover bumps to 10px.
+   Border-radius is half the height so the pill stays fully rounded
+   regardless of the size jump. */
+.audio-scrub {
+  flex: 1;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+.audio-scrub::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 8px;
+  background: #ececea;
+  border-radius: 999px;
+  transition: height 100ms ease;
+}
+.audio-scrub:hover::before { height: 10px; }
+.audio-scrub-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+  background: #1E7A50;
+  border-radius: 999px;
+  transition: height 100ms ease;
+  pointer-events: none;
+}
+.audio-scrub:hover .audio-scrub-fill { height: 10px; }
+.audio-scrub-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+.timeline-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Right-panel itself has no horizontal padding now, so the timeline
+     card carries its own margin so it stays aligned with the audio
+     controls above it. 20 px to match `.transcript-toolbar` on the left. */
+  margin: 0 20px;
+  padding: 14px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.timeline-tabs {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: -6px;
+}
+.timeline-tab {
+  font-size: 14px;
+  color: var(--fg-muted);
+  padding-bottom: 9px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -11px;
+  cursor: default;
+}
+.timeline-tab.active { color: var(--fg); border-bottom-color: var(--fg); font-weight: 500; }
+
+/* Per-speaker activity row */
+.tl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tl-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+}
+.tl-name { font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-stats {
+  font-size: 12px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.tl-bar {
+  position: relative;
+  height: 20px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  /* Clip ticks/cursor to the bar so they never visually leak past the right
+     edge of the timeline card when a segment ends close to total duration. */
+  overflow: hidden;
+}
+.tl-bar-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+}
+.tl-bar-cursor {
+  position: absolute;
+  top: -2px; bottom: -2px;
+  width: 2px;
+  background: var(--fg);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.inline-editor {
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  outline: none;
+  width: 160px;
+}
+
+/* Boost toggle in header */
+.boost-switch {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  /* Padding chosen so the pill renders at the same height as a toolbar
+     `button`. Extra 8 px on the left so the toggle track sits visually
+     inset from the pill border, not flush against it. */
+  padding: 7px 14px 7px 16px;
+  /* Extra breathing room between the breadcrumb date and the switch on
+     top of the header's flex `gap`. */
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-weight: 500;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+.boost-switch:hover { background: var(--bg-hover); border-color: #b8b8b4; color: var(--fg); }
+.boost-switch.loading { color: var(--fg-muted); }
+.boost-switch:disabled { opacity: 0.4; cursor: default; }
+.boost-track {
+  width: 26px;
+  height: 14px;
+  background: var(--border-strong);
+  border-radius: 999px;
+  position: relative;
+  transition: background 120ms ease;
+}
+.boost-thumb {
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-radius: 999px;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 140ms ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.boost-switch.on .boost-track { background: rgba(255, 255, 255, 0.55); }
+.boost-switch.on .boost-thumb { transform: translateX(12px); background: #fff; }
+.boost-switch.on {
+  color: #fff;
+  border-color: #1f7a4f;
+  background: #1f7a4f;
+}
+.boost-switch.on:hover { background: #186439; border-color: #186439; }
+.boost-switch.on .boost-label { color: #fff; }
+
+
+/* Context menu (right-click on sidebar items) */
+.ctx-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 200px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.16);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.ctx-item {
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--fg);
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+/* Darker than the toolbar `--bg-hover` — the context menu sits on the
+   floating white panel and needs a perceptible hover. */
+.ctx-item:hover { background: #ececea; }
+.ctx-danger { color: var(--danger); }
+.ctx-danger:hover { background: #fbf2f1; }
+.ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  /* Default state is the resting position. Enter and exit are driven by
+     `.toast.entering` / `.toast.leaving` modifiers — clearer than a
+     CSS-only animation because we want different durations and easings. */
+  transform: translate(-50%, 0);
+  opacity: 1;
+  color: #fff;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  transition:
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity   220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast.entering {
+  transform: translate(-50%, 32px);
+  opacity: 0;
+}
+.toast.leaving {
+  transform: translate(-50%, 32px);
+  opacity: 0;
+}
+/* Success / info toasts mimic the toolbar pill buttons (EN, Copy,
+   Delete) — white fill, hairline border, ink text. Keeps neutral state
+   notifications visually quiet. */
+.toast-success {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+}
+.toast-error {
+  background: #c4423a;
+  color: #fff;
+  border: 1px solid #c4423a;
+}
+/* Inline action button (Undo). Same size as the toast text but with a
+   subtle white-on-translucent pill so it reads as tappable inside the
+   coloured toast body. */
+.toast-action {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #fff !important;
+  border: 0 !important;
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.toast-action:hover { background: rgba(255, 255, 255, 0.3) !important; }
+/* "5s · 4s · 3s …" countdown sitting flush right of the action button.
+   Tabular numerals so the toast's width stays stable as the digit changes. */
+.toast-countdown {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+  min-width: 2.4ch;
+  text-align: right;
+}
+
+/* Floating donate button — bottom-right, white pill matching toolbar
+   buttons (EN / Copy / Delete) so it doesn't compete with the action
+   colour. Just an icon. */
+.donate-fab {
+  position: fixed;
+  right: 20px; bottom: 20px;
+  width: 44px; height: 44px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+  z-index: 60;
+  padding: 0;
+}
+.donate-fab:hover {
+  background: var(--bg-hover);
+  border-color: #b8b8b4;
+}
+
+.donate-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.32);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: donate-fade 160ms ease;
+}
+@keyframes donate-fade { from { opacity: 0; } to { opacity: 1; } }
+.donate-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 26px 32px 22px;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  /* explicit per-child margins below — title→body 8 px, body→amounts 20 px */
+  box-shadow: 0 24px 64px rgba(0,0,0,0.28);
+}
+.donate-card-title { margin-bottom: 4px; }
+.donate-card-body  { margin-bottom: 20px; }
+.donate-amounts    { margin-bottom: 14px; }
+.donate-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+.donate-card-body {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+.donate-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+/* Match toolbar buttons (Copy / Delete / EN): pill, hairline border,
+   transparent fill, light hover. */
+.donate-amount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font-weight: 500;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.donate-amount:hover {
+  background: var(--bg-hover);
+  border-color: #b8b8b4;
+}
+.donate-dismiss {
+  align-self: center;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 6px 10px;
+  margin-top: 2px;
+}
+.donate-dismiss:hover { color: var(--fg); }

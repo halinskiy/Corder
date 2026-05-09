@@ -24,7 +24,39 @@ struct MeetingRepository {
 
     func listMeetings() throws -> [Meeting] {
         try dbq.read { db in
-            try Meeting.order(Column("started_at").desc).fetchAll(db)
+            try Meeting
+                .filter(Column("archived_at") == nil)
+                .order(Column("started_at").desc)
+                .fetchAll(db)
+        }
+    }
+
+    /// All archived meetings, newest-archived first. Used by the archive
+    /// view to show the 7-day grace bin.
+    func listArchived() throws -> [Meeting] {
+        try dbq.read { db in
+            try Meeting
+                .filter(Column("archived_at") != nil)
+                .order(Column("archived_at").desc)
+                .fetchAll(db)
+        }
+    }
+
+    func setArchived(meetingId: String, archivedAt: Int64?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET archived_at = ? WHERE id = ?",
+                           arguments: [archivedAt, meetingId])
+        }
+    }
+
+    /// IDs whose `archived_at` is older than the given cutoff (ms).
+    /// Used at launch to decide which archived rows to hard-delete.
+    func archivedOlderThan(_ cutoffMs: Int64) throws -> [String] {
+        try dbq.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT id FROM meetings
+                WHERE archived_at IS NOT NULL AND archived_at < ?
+            """, arguments: [cutoffMs])
         }
     }
 
@@ -87,14 +119,6 @@ struct MeetingRepository {
         }
     }
 
-    func setBoostedText(meetingId: String, text: String?, at: Int64?) throws {
-        try dbq.write { db in
-            try db.execute(sql: """
-                UPDATE meetings SET boosted_text = ?, boosted_at = ? WHERE id = ?
-            """, arguments: [text, at, meetingId])
-        }
-    }
-
     func setSegmentBoost(segmentId: Int64, text: String?) throws {
         try dbq.write { db in
             try db.execute(sql: "UPDATE segments SET text_boost = ? WHERE id = ?",
@@ -102,10 +126,21 @@ struct MeetingRepository {
         }
     }
 
-    func clearAllSegmentBoosts(meetingId: String) throws {
+    /// Targeted UPDATE for the raw-turns cache. We must NOT use the full
+    /// `updateMeeting(_:)` here — that would write every column from a
+    /// stale local copy of the row, including `status`, which was just
+    /// flipped to `.ready` inside mapTurnsToSpeakers. Round-tripping
+    /// through `updateMeeting` would silently revert the row back to
+    /// `.transcribing` and the next launch's resetStuckMeetings() would
+    /// then mark it as `.failed`.
+    func setRawTurnsCache(meetingId: String, geminiRawTurns: String?, audioHash: String?) throws {
         try dbq.write { db in
-            try db.execute(sql: "UPDATE segments SET text_boost = NULL WHERE meeting_id = ?",
-                           arguments: [meetingId])
+            try db.execute(sql: """
+                UPDATE meetings
+                SET gemini_raw_turns = ?,
+                    audio_hash = ?
+                WHERE id = ?
+            """, arguments: [geminiRawTurns, audioHash, meetingId])
         }
     }
 

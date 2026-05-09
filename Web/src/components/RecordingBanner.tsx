@@ -1,17 +1,19 @@
 import React from "react";
 import { RecordingState, stopRecordingNow } from "../api";
+import type { T } from "../i18n";
 
 interface Props {
   state: RecordingState;
   onStopped: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
+  t: T;
 }
 
 /// Status card pinned to the top of the sidebar while a recording is active —
 /// mirrors the IdleStatus / RecordingStatus blocks from the menu-bar popover so
-/// the user can see "ИДЁТ ЗАПИСЬ <timer>" and tap Stop without leaving the
+/// the user can see "RECORDING <timer>" and tap Stop without leaving the
 /// Library window.
-export function RecordingBanner({ state, onStopped, onToast }: Props) {
+export function RecordingBanner({ state, onStopped, onToast, t }: Props) {
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -29,10 +31,9 @@ export function RecordingBanner({ state, onStopped, onToast }: Props) {
   const onStop = async () => {
     try {
       await stopRecordingNow();
-      onToast("Останавливаю…", "success");
       onStopped();
     } catch {
-      onToast("Не удалось остановить", "error");
+      onToast(t.toast_settings_failed, "error");
     }
   };
 
@@ -41,13 +42,13 @@ export function RecordingBanner({ state, onStopped, onToast }: Props) {
       <div className="rec-banner-row">
         <span className={"rec-dot" + (blink ? " on" : "")} />
         <div className="rec-text">
-          <div className="rec-label">{stopping ? "ОСТАНАВЛИВАЕМ…" : "ИДЁТ ЗАПИСЬ"}</div>
+          <div className="rec-label">{t.rec_label}</div>
           <div className="rec-time">{m}:{s}</div>
         </div>
       </div>
       <button className="rec-stop" onClick={onStop} disabled={stopping}>
         <span className="rec-stop-square" />
-        Остановить запись
+        {t.rec_stop}
       </button>
     </div>
   );

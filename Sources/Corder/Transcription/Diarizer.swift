@@ -1,151 +1,55 @@
 import Foundation
 import AVFoundation
-import FluidAudio
 
-/// Diarizes Whisper segments into speakers using a two-source approach:
+/// Channel-gate over per-segment audio windows: which side (mic or
+/// system) was louder over a given time range? Used by the cloud
+/// transcription pipeline to decide which Gemini speaker label
+/// corresponds to the local user.
 ///
-/// Step 1 — channel gate. Because we capture mic.wav (only the local user)
-/// and system.wav (only remote participants) separately, the user/remote
-/// decision is just a per-segment energy comparison: mic dominant → "user",
-/// system dominant → "other". Hysteresis (≥6 dB margin for ≥150 ms within the
-/// segment window) tolerates speaker bleed and AEC residue.
-///
-/// Step 2 — diarize remote-only audio. We hand the **system** stream to
-/// FluidAudio (Apple-Neural-Engine-accelerated CoreML port of pyannote 3.1
-/// segmentation + WeSpeaker embeddings + clustering) and map each Whisper
-/// segment to whichever FluidAudio speaker covers the most of its window.
-/// The user is never in this clustering pool, which fixes both
-/// "user voice ends up in `other-N`" and "two speakers split into three".
+/// We previously hosted a richer two-stage diarizer here — channel-gate
+/// plus FluidAudio (CoreML pyannote 3.1 + WeSpeaker) — that ran on the
+/// local Whisper path. Whisper itself has been retired (see
+/// CHANGELOG.md / ARCHITECTURE.md "Why no Whisper any more"), so the
+/// FluidAudio dependency is gone too. Only the channel-gate survives,
+/// because the cloud pipeline still needs it.
 enum Diarizer {
-    struct Decision: Equatable {
-        /// Stable key: "user", or "other-N" where N is FluidAudio's speakerId.
-        let speakerKey: String
-        let userRms: Float
-        let otherRms: Float
-    }
 
-    /// Triggers download/load of the FluidAudio Core ML bundles ahead of
-    /// time so the first meeting doesn't pay the cold-start cost.
-    static func warmUp() async throws {
-        _ = try await loadDiarizer()
-    }
-
-    /// Whisper segment → speaker decision.
-    static func decide(segments: [(start: Double, end: Double)],
-                       userPath: URL,
-                       otherPath: URL) async throws -> [Decision] {
-        // Both audio streams pulled into memory at their native sample rate
-        // for the per-segment RMS gate. We don't use otherSamples directly
-        // for clustering — FluidAudio reads/resamples the file itself.
+    /// Per-segment vote: `true` means the local microphone was clearly
+    /// louder than the system stream in that window — i.e. the local
+    /// user was speaking. The cloud pipeline runs this for every Gemini
+    /// turn and tallies the votes per speaker label; the label with the
+    /// most "true" votes becomes the user, the rest stay "other-N".
+    ///
+    /// Hysteresis: ratio ≥ 2× and absolute mic floor ≥ 0.005. Both
+    /// matter — without the floor we'd label total silence as "user"
+    /// just because the system was even quieter; without the ratio
+    /// we'd misclassify any time the mic picked up speaker bleed
+    /// (peer's voice played through the user's speakers and back into
+    /// the mic).
+    static func userMicDominance(segments: [(start: Double, end: Double)],
+                                 userPath: URL,
+                                 otherPath: URL) throws -> [Bool] {
         let userSamples = try readSamples(at: userPath)
         let otherSamples = try readSamples(at: otherPath)
-
-        // ---------- Step 1: channel-gate decision per Whisper segment.
-        struct Pre { let isUser: Bool; let userRms: Float; let otherRms: Float }
-        let pre: [Pre] = segments.map { seg in
+        return segments.map { seg in
             let u = rms(samples: userSamples.samples,
                         sampleRate: userSamples.sampleRate,
                         start: seg.start, end: seg.end)
             let o = rms(samples: otherSamples.samples,
                         sampleRate: otherSamples.sampleRate,
                         start: seg.start, end: seg.end)
-            return Pre(isUser: micDominates(mic: u, sys: o), userRms: u, otherRms: o)
+            return micDominates(mic: u, sys: o)
         }
-
-        // ---------- Step 2: diarize the remote (system) stream once.
-        let remoteSegments = try await diarizeRemote(otherPath: otherPath)
-        FileLogger.log("Diarizer: remote stream produced \(remoteSegments.count) speaker turns, " +
-                       "speakers=\(Set(remoteSegments.map { $0.speakerId }).count)")
-
-        // Map Whisper segments to FluidAudio speakers.
-        var decisions: [Decision] = []
-        decisions.reserveCapacity(pre.count)
-        for (p, seg) in zip(pre, segments) {
-            if p.isUser {
-                decisions.append(Decision(speakerKey: "user",
-                                          userRms: p.userRms, otherRms: p.otherRms))
-                continue
-            }
-            // Pick the FluidAudio turn with the largest temporal overlap.
-            let speaker = bestOverlap(start: seg.start, end: seg.end, in: remoteSegments)
-                ?? "0" // fallback when FluidAudio produced no covering turn
-            decisions.append(Decision(speakerKey: "other-\(speaker)",
-                                      userRms: p.userRms, otherRms: p.otherRms))
-        }
-
-        return decisions
     }
 
-    // MARK: - Channel gate
+    // MARK: - Channel gate math
 
     /// 6 dB hysteresis. RMS ratios in linear domain — 6 dB ≈ 2× louder.
     /// Plus a small absolute floor (mic > 0.005 RMS) so we don't mark
-    /// silent-mic segments as "user" just because system is also quiet.
+    /// silent-mic segments as "user" just because the system is also quiet.
     private static func micDominates(mic u: Float, sys o: Float) -> Bool {
         guard u > 0.005 else { return false }
-        // 2× ≈ +6 dB. Inverted form to avoid divide-by-zero when sys is 0.
         return u > o * 2.0
-    }
-
-    // MARK: - FluidAudio bridge
-
-    /// Lazy-loaded FluidAudio diarizer. Models are cached to disk by
-    /// FluidAudio in `~/Library/Application Support/FluidAudio/Models/…`,
-    /// so the first call downloads (~30 MB), subsequent calls are instant.
-    /// Held inside an actor so concurrent diarize calls coalesce on the
-    /// same model load instead of racing.
-    private actor DiarizerHolder {
-        var manager: DiarizerManager?
-        func setManager(_ m: DiarizerManager) { manager = m }
-    }
-    private static let holder = DiarizerHolder()
-
-    private struct RemoteTurn {
-        let speakerId: String
-        let start: Double
-        let end: Double
-    }
-
-    private static func diarizeRemote(otherPath: URL) async throws -> [RemoteTurn] {
-        let manager = try await loadDiarizer()
-
-        // FluidAudio handles resampling internally via its bundled converter;
-        // we hand it the original system.wav.
-        let converter = AudioConverter()
-        let samples = try converter.resampleAudioFile(otherPath)
-        guard !samples.isEmpty else { return [] }
-
-        let result = try await manager.performCompleteDiarization(samples)
-        return result.segments.map {
-            RemoteTurn(speakerId: $0.speakerId,
-                       start: Double($0.startTimeSeconds),
-                       end: Double($0.endTimeSeconds))
-        }
-    }
-
-    private static func loadDiarizer() async throws -> DiarizerManager {
-        if let m = await holder.manager { return m }
-        FileLogger.log("Diarizer: downloading/loading FluidAudio models…")
-        let models = try await DiarizerModels.downloadIfNeeded()
-        let manager = DiarizerManager()
-        manager.initialize(models: models)
-        FileLogger.log("Diarizer: FluidAudio ready")
-        await holder.setManager(manager)
-        return manager
-    }
-
-    /// Returns the speakerId with the longest temporal overlap with [start, end].
-    private static func bestOverlap(start: Double, end: Double, in turns: [RemoteTurn]) -> String? {
-        var bestId: String?
-        var bestOverlap: Double = 0
-        for t in turns {
-            let overlap = min(end, t.end) - max(start, t.start)
-            if overlap > bestOverlap {
-                bestOverlap = overlap
-                bestId = t.speakerId
-            }
-        }
-        return bestId
     }
 
     // MARK: - Audio I/O

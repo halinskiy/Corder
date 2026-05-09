@@ -38,16 +38,21 @@ final class RecordingController {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
 
         let meeting = Meeting(
-            id: id, startedAt: now, endedAt: nil, durationMs: nil,
-            videoPath: videoPath, audioPath: audioPath,
-            transcribedAt: nil, status: .recording,
-            boostedText: nil, boostedAt: nil
+            id: id,
+            startedAt: now,
+            videoPath: videoPath,
+            audioPath: audioPath,
+            status: .recording
         )
 
         do {
             try AppContext.shared.repo.insertMeeting(meeting)
             try await AppContext.shared.capture.start(meetingId: id, source: source)
             AppContext.shared.recordingState = .recording(meetingId: id, startedAt: Date())
+            // Float Granola-style recording pill over every space so the
+            // user always knows capture is alive (and can stop without
+            // chasing the menu bar).
+            RecordingHUDPanel.shared.show()
             FileLogger.log("RecordingController: started \(id)")
         } catch {
             FileLogger.log("RecordingController: start failed for \(id): \(error)")
@@ -60,6 +65,7 @@ final class RecordingController {
     func stopRecording() async {
         guard case .recording(let id, let startedAt) = AppContext.shared.recordingState else { return }
         AppContext.shared.recordingState = .stopping
+        RecordingHUDPanel.shared.hide()
         await AppContext.shared.capture.stop()
 
         let endedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -72,7 +78,8 @@ final class RecordingController {
                 meeting.status = .transcribing
                 try AppContext.shared.repo.updateMeeting(meeting)
             }
-            postNotification(title: "Запись сохранена", body: "Расшифровка \(durationMs / 1000)с…")
+            NotificationsService.post(title: "Запись сохранена",
+                                      body: "Расшифровка \(durationMs / 1000)с…")
         } catch {
             present(error: "Не удалось сохранить запись: \(error.localizedDescription)")
         }
@@ -85,13 +92,9 @@ final class RecordingController {
         // dropped if the dispatch queue gets cleaned up under memory pressure.
         FileLogger.log("stopRecording: scheduling transcription for \(id)")
         Task { @MainActor in
-            await TranscriptionPipeline.shared.transcribe(meetingId: id)
-            let n = NSUserNotification()
-            n.title = "Расшифровка готова"
-            n.informativeText = "Открой библиотеку чтобы посмотреть."
-            n.hasActionButton = true
-            n.actionButtonTitle = "Открыть"
-            NSUserNotificationCenter.default.deliver(n)
+            await TranscriptionPipeline.shared.enqueue(meetingId: id).value
+            NotificationsService.post(title: "Расшифровка готова",
+                                      body: "Открой библиотеку чтобы посмотреть.")
         }
     }
 
@@ -102,19 +105,27 @@ final class RecordingController {
         alert.alertStyle = .warning
         alert.runModal()
     }
-
-    private func postNotification(title: String, body: String) {
-        let n = NSUserNotification()
-        n.title = title
-        n.informativeText = body
-        NSUserNotificationCenter.default.deliver(n)
-    }
 }
 
 extension RecordingController: CaptureEngineDelegate {
     func captureEngine(_ engine: CaptureEngine, didStartMeeting id: String) {}
     func captureEngine(_ engine: CaptureEngine, didStopMeeting id: String) {}
     func captureEngine(_ engine: CaptureEngine, didFailWithError error: Error) {
+        FileLogger.log("RecordingController: capture failed: \(error)")
+        // Whatever meeting was being recorded is now toast — flip its DB
+        // row to .failed so the UI never gets stuck on a green dot. The
+        // app crash recovery (`resetStuckMeetings` on launch) covers the
+        // scenario where the process dies before this delegate fires; this
+        // path covers the scenario where the process stays up but SCStream
+        // silently bails (most often: Screen Recording permission revoked
+        // mid-session, or the user logged out and back in).
+        if case .recording(let id, _) = AppContext.shared.recordingState {
+            if var meeting = try? AppContext.shared.repo.meeting(id: id) {
+                meeting.status = .failed
+                try? AppContext.shared.repo.updateMeeting(meeting)
+            }
+        }
+        RecordingHUDPanel.shared.hide()
         present(error: "Capture failed: \(error.localizedDescription)")
         AppContext.shared.recordingState = .idle
     }

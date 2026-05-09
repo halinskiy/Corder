@@ -1,6 +1,11 @@
 import React from "react";
 import { MeetingDetail, SegmentDTO, SpeakerDTO, RecordingState, renameSpeaker } from "../api";
 import { RecordingBanner } from "./RecordingBanner";
+import { RecordingPlaceholder } from "./RecordingPlaceholder";
+import { TranscribingBanner } from "./TranscribingBanner";
+import { SpeakersClarifyBanner } from "./SpeakersClarifyBanner";
+import { EmptyDeleteBanner } from "./EmptyDeleteBanner";
+import type { T } from "../i18n";
 
 interface Props {
   detail: MeetingDetail;
@@ -11,10 +16,15 @@ interface Props {
   boostOn: boolean;
   recordingState: RecordingState;
   onRecordingStopped: () => void;
+  onDeleted: (id: string) => void;
+  clarifyOpen: boolean;
+  onClarifyDismiss: () => void;
+  onClarifyChosen: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
+  t: T;
 }
 
-export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, boostOn, recordingState, onRecordingStopped, onToast }: Props) {
+export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, t }: Props) {
   const speakerById = React.useMemo(() => {
     const map = new Map<string, SpeakerDTO>();
     detail.speakers.forEach((s) => map.set(s.id, s));
@@ -54,6 +64,16 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeSegmentId]);
 
+  // When the clarify banner opens, glide the transcript to the top so the
+  // user actually sees the card that just appeared. Without this, opening
+  // the banner mid-scroll silently expands a region above the viewport
+  // and reads as "the button does nothing".
+  React.useEffect(() => {
+    if (clarifyOpen) {
+      containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [clarifyOpen]);
+
   // While the active recording is the one we're viewing, replace the empty
   // "Идёт запись…" placeholder with a live status card that includes a Stop
   // button — same layout as the popover's RecordingStatus block.
@@ -70,24 +90,63 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
             state={recordingState}
             onStopped={onRecordingStopped}
             onToast={onToast}
+            t={t}
+          />
+        ) : detail.status === "recording" ? (
+          // Recording session that isn't currently live (we already pressed
+          // Stop and the pipeline hasn't yet flipped status to transcribing).
+          // Hold the rec-card visual so the UI doesn't flash a text-only
+          // placeholder during that race window.
+          <RecordingPlaceholder t={t} />
+        ) : detail.status === "transcribing" ? (
+          <TranscribingBanner
+            meetingId={detail.id}
+            onCancelled={onRecordingStopped}
+            onToast={onToast}
+            t={t}
+          />
+        ) : detail.status === "ready" || detail.status === "failed" ? (
+          <EmptyDeleteBanner
+            meetingId={detail.id}
+            onDeleted={onDeleted}
+            failed={detail.status === "failed"}
+            onRetranscribed={onSpeakersUpdated}
+            onToast={onToast}
+            t={t}
           />
         ) : (
-          <div className="transcript-empty">
-            {detail.status === "ready"
-              ? "Транскрипт пуст — Whisper не распознал речь."
-              : detail.status === "transcribing"
-                ? "Расшифровка…"
-                : detail.status === "failed"
-                  ? "Расшифровка не удалась. Нажми «Расшифровать заново»."
-                  : "Идёт запись…"}
-          </div>
+          <div className="transcript-empty">{t.transcript_empty_recording}</div>
         )}
       </div>
     );
   }
 
+  // The clarify banner is now driven by the parent (MeetingView) so the
+  // toolbar's icon button can toggle it on/off with the same source of
+  // truth. The local component only renders the wrapper that animates
+  // its max-height in and out.
+
   return (
     <div className="transcript" ref={containerRef}>
+      {clarifyOpen && (
+        // Mounted/unmounted directly. We tried wrapping it in a max-height
+        // collapsible and a grid-rows collapsible — both leaked the banner's
+        // own padding/border as 28-30 px of dead space when closed, because
+        // the wrapper sits inside `.transcript`'s flex column with `gap: 28px`
+        // and an item that close-to-zero still attracts a gap on each side.
+        // Conditional render is the cleanest fix: when the user dismisses,
+        // the gap goes away because the element goes away.
+        <SpeakersClarifyBanner
+          meetingId={detail.id}
+          currentOthers={
+            detail.expected_other_speakers ?? Math.max(0, detail.speakers.length - 1)
+          }
+          onChanged={onClarifyChosen}
+          onDismiss={onClarifyDismiss}
+          onToast={onToast}
+          t={t}
+        />
+      )}
       {filteredGroups.map((g, gi) => {
         const sp = speakerById.get(g.speakerId);
         const name = sp?.custom_name?.trim() || sp?.label || "Speaker";
@@ -101,8 +160,9 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
               <SpeakerName
                 meetingId={detail.id}
                 speaker={sp}
-                display={name === "you" ? "Я" : name}
+                display={name === "you" ? t.speaker_self : name}
                 onUpdated={onSpeakersUpdated}
+                t={t}
               />
             </div>
             <div className="segment-paragraph">
@@ -126,8 +186,9 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
         );
       })}
       {filteredGroups.length === 0 && q && (
-        <div className="transcript-empty">Нет совпадений по «{q}».</div>
+        <div className="transcript-empty">{t.transcript_no_match(q)}</div>
       )}
+      <div className="transcript-spacer" />
     </div>
   );
 }
@@ -160,7 +221,7 @@ function highlight(text: string, q: string): React.ReactNode {
     const idx = lower.indexOf(q, i);
     if (idx < 0) { out.push(text.slice(i)); break; }
     if (idx > i) out.push(text.slice(i, idx));
-    out.push(<mark key={idx} style={{ background: "#fff099", color: "inherit", padding: 0 }}>{text.slice(idx, idx + q.length)}</mark>);
+    out.push(<mark key={idx} style={{ background: "#cdebd9", color: "inherit", padding: 0 }}>{text.slice(idx, idx + q.length)}</mark>);
     i = idx + q.length;
   }
   return out;
@@ -171,9 +232,10 @@ interface SpeakerNameProps {
   speaker: SpeakerDTO | undefined;
   display: string;
   onUpdated: () => void;
+  t: T;
 }
 
-function SpeakerName({ meetingId, speaker, display, onUpdated }: SpeakerNameProps) {
+function SpeakerName({ meetingId, speaker, display, onUpdated, t }: SpeakerNameProps) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(speaker?.custom_name || "");
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -188,7 +250,7 @@ function SpeakerName({ meetingId, speaker, display, onUpdated }: SpeakerNameProp
         ref={inputRef}
         className="inline-editor"
         value={draft}
-        placeholder="Имя"
+        placeholder={t.inline_editor_placeholder}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={async () => {
           setEditing(false);
@@ -209,7 +271,7 @@ function SpeakerName({ meetingId, speaker, display, onUpdated }: SpeakerNameProp
     <span
       className="speaker-name editable"
       onClick={() => { setDraft(speaker.custom_name || ""); setEditing(true); }}
-      title="Кликни чтобы переименовать"
+      title={t.speaker_rename_title}
     >
       {display}
     </span>

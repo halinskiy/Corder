@@ -1,43 +1,53 @@
 # Corder
 
-Local-first macOS meeting recorder. Captures system audio + your microphone,
-transcribes via WhisperKit (large-v3, RU/EN), diarizes speakers via FluidAudio
-(CoreML port of pyannote 3.1), polishes transcripts via Gemini Flash, and
-optionally archives recordings to your own Dropbox so the local disk stays
-empty. Runs entirely on-device. No cloud, no signups.
+A macOS meeting recorder + transcriber for people who hate that Grain
+and Otter ship audio to a third party and bake their bot into the
+call. Corder runs as your local app, never invites a bot, and only
+talks to the one provider you opted into (Gemini).
 
 > Status-bar app. macOS 14+ (Sonoma). Apple Silicon recommended.
 
+## What it does
+
+- **Records** — single click in the menu bar. Captures system audio
+  (via ScreenCaptureKit) and your microphone (via AVAudioEngine) onto
+  **separate** `.wav` tracks. The HUD pill floats over every Space
+  while you're recording, with a live waveform meter so you can tell
+  capture is actually working.
+- **Transcribes — dual-track** — `mic.wav` and `system.wav` go to
+  Google's Gemini 2.5 Flash File API as **two separate calls** in
+  parallel. The mic call is forced to a single speaker ("you"); the
+  system call is asked to diarise everyone on the remote side. Results
+  are merged by start-time. This is the fix for the "it merged my words
+  with the other person's during silence" class of bugs that you get
+  when you mix both streams and ask one model to guess.
+- **Caches the raw transcript** by audio MD5 — so re-mapping speakers
+  (e.g. after the clarify banner pins a count) and re-transcribes
+  after a Dropbox archive don't re-bill the Gemini File API.
+- **Polishes (optional)** — toggle Boost in the Library; every new
+  transcript is auto-cleaned segment-by-segment via Gemini 2.5 Pro.
+- **Archives (optional)** — if you fill in `~/.config/corder/dropbox.json`,
+  each recording's `mix.wav` (plus its mic + system tracks) is uploaded
+  after transcription and the local copies are deleted. Playback streams
+  via signed Dropbox links.
+- **Archive bin** — sessions you don't want to see go to a 7-day bin
+  before being purged. Restore or delete-forever from the toolbar.
+- **Lives in a Library window** — sidebar of meetings, transcript with
+  speakers, audio scrubber, per-speaker timeline, full-text search.
+
 ## Why
 
-Off-the-shelf meeting tools (Grain, Otter, Fireflies) ship audio to their
-servers. For private 1-on-1s, brainstorms and diary-style "talk-it-through"
-sessions, that's the wrong default. Corder records to your machine, runs
-transcription locally, and only touches the network if you explicitly turn on
-the Gemini-polish toggle or hand it Dropbox creds.
-
-## Features
-
-- **Status-bar recording** — single click Start/Stop, no window in your way.
-- **Two-source capture** — `mic.wav` (you) and `system.wav` (everyone else)
-  recorded separately via ScreenCaptureKit (incl. macOS 15+ shared mic tap),
-  so we know who said what without blind diarization.
-- **Whisper large-v3 + VAD chunking** — handles 1-hour recordings, Russian +
-  English mixed, drops known hallucinations.
-- **FluidAudio diarizer** — pyannote 3.1 segmentation + WeSpeaker embeddings,
-  Apple Neural Engine accelerated. Up to 17.7% DER on AMI.
-- **"Усилить" toggle** — when on, every new transcript is automatically
-  polished segment-by-segment via Gemini 2.5 Flash (free tier). Toggle persists
-  across launches.
-- **Dropbox archive** — uploads `audio.wav` after transcription, deletes local
-  copies. Playback streams via signed temporary links proxied through the app.
-- **Live banner** — while a meeting is recording the Library window shows a
-  red-dot card with timer + Stop button. Menu-bar icon turns red.
+Off-the-shelf meeting tools (Grain, Otter, Fireflies) ship audio to
+their own servers and join the call as a participant. Corder runs on
+your machine, never joins anything, talks only to Gemini for the
+transcribe call (audio is auto-deleted from Google's File API after the
+job), and lets you turn the cloud part off entirely if you want — at
+the cost of nothing transcribing at all.
 
 ## Install
 
 ```bash
-git clone https://github.com/<you>/Corder.git
+git clone https://github.com/halinskiy/Corder.git
 cd Corder
 
 # One-time setup: drop config templates into ~/.config/corder/
@@ -47,18 +57,22 @@ scripts/bootstrap.sh
 Scripts/build-app.sh
 
 # Move into Applications (optional, keeps TCC permissions stable):
-mv Corder.app /Applications/
+ditto Corder.app /Applications/Corder.app
+xattr -dr com.apple.quarantine /Applications/Corder.app
 open /Applications/Corder.app
 ```
 
 First launch:
+
 1. macOS prompts for **Screen Recording**, then **Microphone**. Allow both.
-2. Click the menu-bar icon → **Открыть библиотеку**.
+2. Click the menu-bar icon → **Open Library**.
+3. Paste your Gemini API key into `~/.config/corder/gemini_key`. Without
+   it, transcription fails with a red toast (Boost too).
 
 ## Configuration
 
-All secrets live outside the repo, under `~/.config/corder/`. Templates are
-copied by `scripts/bootstrap.sh`; fill them in by hand.
+All secrets live outside the repo, under `~/.config/corder/`. Templates
+are copied by `scripts/bootstrap.sh`; fill them in by hand.
 
 ```
 ~/.config/corder/
@@ -66,19 +80,27 @@ copied by `scripts/bootstrap.sh`; fill them in by hand.
 └── gemini_key       # one-line API key
 ```
 
-Without these the app still runs — Boost simply errors and Dropbox archival
-silently skips. Read `docs/SECURITY.md` for how to obtain the keys safely
-and why the repo enforces zero-secrets via gitleaks.
+Without these the app still runs — Boost simply errors and Dropbox
+archival silently skips. Read [`docs/SECURITY.md`](docs/SECURITY.md)
+for how to obtain the keys safely.
 
-## Architecture
+## Documentation
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). TL;DR: a status-bar app
-spawns a local Swifter HTTP server, the WKWebView library window loads a
-Vite/React UI from the same process, recordings flow through SCStream →
-AudioMixer → WhisperKit → FluidAudio → SQLite (GRDB) → Dropbox.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — modules, data
+  lifecycle, SQLite schema, dual-track transcription model.
+- [`docs/SECURITY.md`](docs/SECURITY.md) — threat model, secret
+  hygiene, runtime privacy by provider.
+- [`docs/API.md`](docs/API.md) — every endpoint of the local HTTP
+  server.
+- [`docs/DESIGN.md`](docs/DESIGN.md) — colour, type, components, motion.
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — first-time setup,
+  build loop, common tasks, code style.
+- [`docs/RELEASE.md`](docs/RELEASE.md) — Sparkle update workflow.
+- [`AGENTS.md`](AGENTS.md) — single source of truth for AI agents
+  working on this repo.
 
 ## License
 
-MIT (forthcoming). For now: personal project, all rights reserved by the
-author. Open issues / PRs are welcome but the repo is not a community project
-yet.
+MIT (forthcoming). For now: personal project, all rights reserved by
+the author. Open issues / PRs are welcome but the repo is not a
+community project yet.

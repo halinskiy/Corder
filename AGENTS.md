@@ -1,21 +1,24 @@
 # AGENTS.md — Corder
 
-Local-only macOS meeting recorder + transcriber. Status-bar app (LSUIElement) with
-a SwiftUI popover, an embedded Swifter HTTP server, and a WKWebView Library
-window that loads a Vite/React frontend served by the same process.
+macOS meeting recorder + transcriber. Status-bar app (LSUIElement) with
+a SwiftUI popover, a floating recording HUD, an embedded Swifter HTTP
+server, and a WKWebView Library window that loads a Vite/React frontend
+served by the same process.
 
-This file is the single source of truth for AI agents (Claude Code, Codex,
-Cursor, Copilot, Aider). Keep it short, dense, and fresh — every change to
-build commands, architecture, or gotchas goes here.
+This file is the single source of truth for AI agents (Claude Code,
+Codex, Cursor, Copilot, Aider). Keep it short, dense, and fresh —
+every change to build commands, architecture, or gotchas goes here.
 
 ## Project at a glance
 
 | Thing             | Value                                                                              |
 | ----------------- | ---------------------------------------------------------------------------------- |
-| Language          | Swift 6 (executable target, swift-tools 6.0)                                        |
-| Min macOS         | 14.0 (FluidAudio requires Sequoia)                                                 |
-| Architecture      | Status-bar app + local HTTP server + WKWebView frontend                            |
+| Language          | Swift 6 (executable target, swift-tools 6.0)                                       |
+| Min macOS         | 14.0 (15+ recommended for ScreenCaptureKit shared mic-tap path; we now use AVAudioEngine for mic regardless) |
+| Architecture      | Status-bar app + floating HUD pill + local HTTP server + WKWebView frontend       |
 | Frontend          | Vite + React 18 + TypeScript, bundled into `Sources/Corder/Resources/web/`         |
+| ASR               | Gemini 2.5 Flash, **dual-track** (mic + system as parallel calls)                  |
+| Boost             | Gemini 2.5 Pro for per-segment polish                                              |
 | Storage           | GRDB on top of SQLite, `~/Library/Application Support/Corder/corder.db`            |
 | Recordings dir    | `~/Library/Application Support/Corder/recordings/<meeting-id>/`                    |
 | Logs              | `/tmp/corder.log` (FileLogger, simple append)                                      |
@@ -42,9 +45,9 @@ open Corder.app
 tail -f /tmp/corder.log
 ```
 
-Always rebuild the **app bundle** (`Scripts/build-app.sh`) after Swift or web
-changes — a bare `swift build` produces a binary without the `Corder_Corder.bundle`
-that Swifter serves the web assets from.
+Always rebuild the **app bundle** (`Scripts/build-app.sh`) after Swift
+or web changes — a bare `swift build` produces a binary without the
+`Corder_Corder.bundle` that Swifter serves the web assets from.
 
 ## Pipeline (recording → transcript)
 
@@ -52,89 +55,144 @@ that Swifter serves the web assets from.
 Menu-bar Start
     │
     ▼
-CaptureEngine.start (Capture/CaptureEngine.swift)
-    │   SCStream:  .screen + .audio + .microphone (macOS 15+)
-    │   ↳ system.wav (system audio)
-    │   ↳ mic.wav    (user mic)
-    │   AVAssetWriter is intentionally NOT created — flips to .failed
-    │   with -16122 on every config we tried. Video is omitted; audio
-    │   files are the source of truth.
+RecordingController.start
+    │   • shows RecordingHUDPanel (floating pill, all Spaces)
+    │   • CaptureEngine.start
     ▼
-RecordingController.stopRecording
+CaptureEngine
+    │   SCStream:        .screen + .audio        →  system.wav
+    │   AVAudioEngine:   default input tap        →  mic.wav
+    │   Both taps also feed RecordingLevelMeter (sqrt-scaled peak,
+    │   30 Hz publish, 12 Hz history shift) → drives HUD waveform.
+    │   AVAssetWriter is intentionally NOT created — flips to .failed
+    │   with -16122 on every config we tried. The .screen output is
+    │   left registered to keep audio-clock pacing intact.
+    ▼
+Stop pressed → RecordingController.stopRecording → TranscriptionPipeline.enqueue
+    │   • hides HUD
     │
     ▼
 TranscriptionPipeline.transcribe
-    │   AudioMixer.produceWhisperInput(system.wav, mic.wav) → audio.wav (16k mono)
-    │   WhisperKit large-v3, language=ru, VAD chunking
-    │   Diarizer.decide:
-    │       • Channel gate: mic_RMS > 2× system_RMS && mic_RMS > 0.005 → "user"
-    │       • System-only stream → FluidAudio (CoreML port of pyannote 3.1)
-    │       • Whisper segment → speakerId by max temporal overlap
-    │   Hallucination filter (TranscriptionPipeline.isHallucination) drops
-    │   YouTube-subtitle artifacts: "Субтитры сделал DimaTorzok",
-    │   "Спасибо за просмотр", "Продолжение следует…"
+    │
+    │   AudioMixer.produceMixIfNeeded → mix.wav (16 k mono, peak-norm)
+    │   used for playback + as the single-stream fallback if the
+    │   originals were already archived.
+    │
+    │   Cache check: MD5(mic.wav) + MD5(system.wav) (or MD5(mix.wav)
+    │   for legacy rows). Hit → reuse `gemini_raw_turns` from DB,
+    │   skip Gemini entirely, jump to mapping.
+    │
+    │   Miss + both tracks present (the normal path):
+    │     async let micPart =
+    │       GeminiTranscriber.transcribe(audioURL: mic.wav,    mode: .single)
+    │     async let sysPart =
+    │       GeminiTranscriber.transcribe(audioURL: system.wav, mode: .diarize)
+    │     let (userTurns, otherTurns) = try await (micPart, sysPart)
+    │
+    │   Miss + only mix.wav (post-archive, no cache):
+    │     legacyTurns = GeminiTranscriber.transcribe(audioURL: mix.wav, mode: .diarize)
+    │
+    │   Per-chunk auto-split: chunks > 9 min are sliced; on JSON
+    │   truncation (`GError.parse`) the chunk is halved and retried,
+    │   recursively up to depth 3 (≥ 70 s slice).
+    │
+    │   mapDualTrackTurns:
+    │     userTurns      → speakerId = userSpeakerId
+    │     otherTurns     → grouped by Gemini label, each label →
+    │                       "other-N" (in arrival order)
+    │     merged by start_ms.
+    │
+    │   mapTurnsToSpeakers (legacy single-stream): channel-gate
+    │   (mic_RMS vs system_RMS) decides which Gemini label is the user.
+    │
+    │   Hallucination filter (`isHallucination`) drops YouTube-subtitle
+    │   artefacts ("Субтитры сделал DimaTorzok", "Спасибо за просмотр",
+    │   "Продолжение следует…"). Anti-hallucination clause in the
+    │   Gemini prompt makes silent-stretch poetry rare in the first place.
+    │
+    │   Persist: `setRawTurnsCache` (gemini_raw_turns + audio_hash)
+    │   then segments / speakers tables. Status flips ready.
+    ▼
+Optional: BoostService (Gemini 2.5 Pro) — segment-by-segment polish
+Optional: DropboxService — upload mix.wav + mic.wav + system.wav,
+          delete local copies (kept under archive_root, see SECURITY)
     │
     ▼
-Optional: BoostService (Gemini 2.5 Flash) — segment-by-segment polish
-Optional: DropboxService — upload audio.wav, then delete local files
-    │
-    ▼
-SQLite via GRDB — meetings, speakers, segments tables
+SQLite via GRDB — meetings, speakers, segments
     │
     ▼
 Library window (WKWebView)
-    │   GET /api/meetings        → list
-    │   GET /api/meetings/:id    → detail
-    │   GET /api/meetings/:id/audio  → file or Dropbox proxy (302 → temporary_link)
-    │   POST /api/meetings/:id/boost → fire-and-forget Gemini polish
-    │   POST /api/meetings/:id/retranscribe → re-run pipeline
+    GET    /api/meetings              → list (excludes archived)
+    GET    /api/archive               → archived rows + purge_at
+    GET    /api/meetings/:id          → detail
+    GET    /api/meetings/:id/audio    → file or Dropbox proxy
+    POST   /api/meetings/:id/retranscribe         → re-run pipeline
+    POST   /api/meetings/:id/cancel-transcription → cancel + flip failed
+    POST   /api/meetings/:id/archive  → soft-archive (sets archived_at)
+    POST   /api/meetings/:id/restore  → un-archive
+    DELETE /api/meetings/:id          → hard delete (used by archive UI)
+    POST   /api/meetings/:id/expected-speakers    → pin numClusters
+    GET    /api/meetings/:id/last-error           → red toast
 ```
 
 ## Module map (`Sources/Corder/`)
 
 | Folder           | Responsibility                                                                  |
 | ---------------- | ------------------------------------------------------------------------------- |
-| `App/`           | `CorderApp` entry, `AppDelegate` (LSUIElement, main menu), `RecordingController` (state machine), `FileLogger` |
-| `Capture/`       | `CaptureEngine` (SCStream wiring, mic via SC microphone output on macOS 15+)    |
-| `Transcription/` | `AudioMixer`, `TranscriptionPipeline` (Whisper + diar + boost + Dropbox), `Diarizer` (channel gate + FluidAudio) |
-| `Boost/`         | `BoostService` — Gemini 2.5 Flash, per-segment polish                           |
+| `App/`           | `CorderApp` entry, `AppDelegate` (LSUIElement, main menu, archive purge), `RecordingController` (state machine + HUD), `RecordingLevelMeter` (HUD-feeding ObservableObject), `NetworkMonitor`, `Notifications`, `SleepWatchdog`, `FileLogger`, `UpdateController` (Sparkle) |
+| `Capture/`       | `CaptureEngine` (SCStream system audio + AVAudioEngine mic, level-meter ingest), `PermissionsChecker` |
+| `Transcription/` | `AudioMixer`, `TranscriptionPipeline` (driver + dual-track fork + cache + auto-boost + auto-archive), `GeminiTranscriber` (cloud, with `TranscribeMode.{single,diarize}` and auto-split), `Diarizer` (channel gate for legacy single-stream path only) |
+| `Boost/`         | `BoostService` — Gemini 2.5 Pro, per-segment polish                             |
 | `Cloud/`         | `DropboxService` — refresh-token OAuth, chunked upload, temporary-link proxy    |
-| `Storage/`       | GRDB models, repository, migrations (currently v1..v4_dropbox)                  |
-| `Server/`        | Swifter routes, range-aware media serving, JSON DTOs                            |
-| `UI/`            | `MenuBarController` (status-item + popover), `PopoverContentView` (SwiftUI), `LibraryWindow` (NSWindow + WKWebView + JS↔Swift bridge) |
+| `Storage/`       | GRDB models (with default-nil optionals), repository, migrations (v1..v8_archive) |
+| `Server/`        | Swifter routes, range-aware media serving, JSON DTOs, RangeRequest parser       |
+| `UI/`            | `MenuBarController` (status-item + popover), `PopoverContentView` (SwiftUI), `LibraryWindow` (NSWindow + WKWebView + JS↔Swift bridge), `RecordingHUDPanel` (floating NSPanel pill) |
 | `Shared/`        | `AppPaths` — single source of truth for filesystem locations                    |
-| `Resources/web/` | Built Vite output. Don't hand-edit; rebuild via `Scripts/build-web.sh`.         |
+| `Resources/web/` | Built Vite output. Don't hand-edit; rebuild via `Scripts/build-app.sh`.          |
 
 Frontend lives in `Web/src/`:
 
-- `main.tsx` — App shell, polls recording state every 1s, manages settings.
-- `components/Sidebar.tsx` — meeting list with date buckets, search, ctx menu (delete / re-transcribe).
-- `components/MeetingView.tsx` — header (Усилить toggle, Копировать/Расшифровать заново/Удалить), routes data into TranscriptPane + RightPanel.
-- `components/TranscriptPane.tsx` — speaker grouping, search-highlight, RecordingBanner when live.
-- `components/RightPanel.tsx` — audio player + per-speaker timeline (FluidAudio diarizer output).
+- `main.tsx` — App shell, polls recording state every 1 s, owns soft-
+  archive + toast state, mounts `ArchiveView` modal, mounts `Donate` FAB.
+- `components/Sidebar.tsx` — meeting list with date buckets, search, ctx menu.
+- `components/MeetingView.tsx` — header + transcript-toolbar; owns the
+  clarify-banner state machine + per-meeting open/closed persistence in
+  localStorage; the toolbar Archive button opens the archive view (not
+  the current meeting).
+- `components/ArchiveView.tsx` — modal listing archived rows, master +
+  per-row checkboxes, Restore / Delete-forever (with `confirm()`).
+- `components/TranscriptPane.tsx` — speaker grouping, search highlight, banner switching.
+- `components/{RecordingBanner,TranscribingBanner,RecordingPlaceholder,SpeakersClarifyBanner,EmptyDeleteBanner}.tsx` — status cards.
+- `components/RightPanel.tsx` — audio scrub + per-speaker timeline.
+- `components/Donate.tsx` — floating Buy Me a Coffee FAB (bottom-right).
 - `api.ts` — typed wrapper around the Swift backend.
+- `i18n.ts` — ru / en string tables.
+- `format.ts` — date / duration / bucket helpers (these are NOT in i18n).
+- `styles.css` — global tokens + component styles.
 
 ## Common tasks (cookbooks)
 
 ### Add a new API endpoint
 
 1. Define the DTO in `Server/DTOs.swift`.
-2. Add route in `Server/Routes.swift::register`.
-3. Add typed wrapper in `Web/src/api.ts`.
-4. Rebuild: `Scripts/build-app.sh`.
+2. Add the route in `Server/Routes.swift::register`.
+3. Add the typed wrapper in `Web/src/api.ts`.
+4. Document it in `docs/API.md`.
+5. Rebuild: `Scripts/build-app.sh`.
 
 ### Add a database column
 
-1. Append a migration in `Storage/Migrations.swift` (`v5_…`). Never edit existing migrations.
-2. Add the field to the model in `Storage/Models.swift` + `CodingKeys`.
-3. Add helper in `Storage/MeetingRepository.swift` if it's a write path.
-4. Surface in `Server/DTOs.swift` if the frontend needs it.
+1. Append a migration in `Storage/Migrations.swift` (`v9_…`). Never
+   edit existing migrations.
+2. Add the field to `Storage/Models.swift` + `CodingKeys`. Default
+   optional fields to `nil` (`var newField: Int? = nil`).
+3. Surface in `Server/DTOs.swift` if the frontend needs it.
 
-### Bump the WhisperKit model
+### Add a UI string
 
-`TranscriptionPipeline.swift::modelName`. `large-v3` is current. `medium`
-is faster and still acceptable for Russian. Whisper stores models under
-`~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-<name>`.
+1. Add the key to the `Strings` interface in `Web/src/i18n.ts`.
+2. Add Russian and English values. Never ship a partial translation.
+3. Use as `t.foo`. Never inline a string in JSX.
 
 ### Forget Dropbox / Gemini auth
 
@@ -142,107 +200,162 @@ is faster and still acceptable for Russian. Whisper stores models under
 rm ~/.config/corder/dropbox.json
 rm ~/.config/corder/gemini_key
 ```
-The app falls back gracefully — Dropbox archival skips if creds missing,
-Gemini boost throws "missingAPIKey".
 
 ### Reset microphone TCC permission
 
 ```bash
 tccutil reset Microphone com.3mpq.Corder
 ```
-Next `Start` will re-prompt. Required because LSUIElement apps need an
-active activation policy for the prompt to render — see `CaptureEngine.start`.
 
-### Re-run diarization on existing recordings
+### Force the icon cache to drop a cached old icon
 
-In the UI: right-click a meeting → **Расшифровать заново**. Re-fetches
-`audio.wav` from Dropbox if local copies were cleaned, runs Whisper +
-FluidAudio anew. The `text_boost` stays untouched unless Boost is on
-(triggers per-segment Gemini polish on the new segments).
+```bash
+sudo rm -rf /Library/Caches/com.apple.iconservices.store
+killall iconservicesd Dock NotificationCenter
+# Bump CFBundleVersion in Info.plist if the cache survives this.
+```
 
 ## Gotchas
 
-- **AVAssetWriter on this macOS build is broken for SCStream output.** Every
-  config we tried (BGRA→YUV, mov/mp4, AAC/PCM/no audio) ends in
-  `kAudioCodecAudioFormatErr (-16122)` within ~1 s. We don't write video at
-  all; the frontend treats absence as audio-only. See the long comment in
-  `CaptureEngine.start` step 3.
+- **Dual-track is the source of truth.** If `mic.wav` and `system.wav`
+  both exist, transcribe each separately (`mode: .single` for mic,
+  `mode: .diarize` for system) and merge by start-ms. NEVER mix the
+  two streams and ask one Gemini call to label speakers — that path
+  produces "your words attributed to your friend" failures during
+  silent stretches and is reserved for legacy rows whose originals
+  were already archived (single-stream + channel-gate fallback).
 
-- **Swifter request handlers run on background threads, not the main actor.**
-  When you need MainActor state inside a handler, hop with `Task { @MainActor }`
-  or use `RecordingStateSnapshot` (NSLock-protected mirror in `AppContext`).
+- **Don't delete `mic.wav` / `system.wav` after Dropbox upload.** The
+  re-transcribe path needs them. Only delete on hard-delete (the archive
+  bin's "Delete forever" or the legacy DELETE route).
+
+- **The cache is keyed by audio MD5, not meeting id.** That's what
+  makes re-transcribe + re-map free. When you edit anything that
+  *would* change the raw Gemini output (prompt, model, chunking),
+  invalidate by adding a version prefix to the cache key —
+  `dual:v2:{micMD5}:{sysMD5}` — not by clearing the column.
+
+- **`setRawTurnsCache(meetingId:geminiRawTurns:audioHash:)` is the
+  ONLY way to write the cache.** It uses a targeted UPDATE that
+  doesn't touch `status`. The earlier pattern (load row → mutate →
+  save row) carried a stale `status = .transcribing` and tripped
+  `resetStuckMeetings()` on next launch into `.failed`.
+
+- **AVAssetWriter on this macOS build is broken for SCStream output.**
+  Every config we tried (BGRA→YUV, mov/mp4, AAC/PCM/no audio) ends in
+  `-16122` within ~1 s. We don't write video; the frontend treats
+  absence as audio-only. See the long comment in `CaptureEngine.start`
+  step 3.
+
+- **Mic capture path is AVAudioEngine, not SCStream `.microphone`.**
+  We tried SCStream's shared mic-tap (macOS 15+) and it silently
+  loses samples whenever Discord / Telegram holds an exclusive claim.
+  AVAudioEngine on the default input is more reliable. The `.microphone`
+  case in the SCStream output handler has been removed.
+
+- **Swifter request handlers run on background threads, not the main
+  actor.** When you need MainActor state inside a handler, hop with
+  `Task { @MainActor }` or use `RecordingStateSnapshot` (NSLock-mirror
+  in `AppContext`). For per-meeting transcription errors, write/read
+  through `TranscriptionErrors` (also lock-protected).
+
+- **The HUD panel is `.nonactivatingPanel` + `.canJoinAllSpaces` +
+  `.stationary` + `.fullScreenAuxiliary`.** Don't collapse those flags
+  when adding behaviour — losing `.canJoinAllSpaces` makes the pill
+  vanish on Space switches; losing `.nonactivatingPanel` steals focus
+  every time the user clicks the Stop button.
 
 - **WKWebView ⌘C beep.** WKWebView doesn't dispatch `copy:` to a first
-  responder when the app has no `Edit` menu. We added a real Edit menu in
-  `AppDelegate.installMainMenu` plus a JS keydown handler in
-  `LibraryWindow.swift` that calls `e.preventDefault()`. Don't undo either.
+  responder when the app has no `Edit` menu. We added a real Edit menu
+  in `AppDelegate.installMainMenu` plus a JS keydown handler in
+  `LibraryWindow.swift` that calls `e.preventDefault()`. Don't undo
+  either.
 
-- **Hardened runtime needs entitlements.** `Corder.entitlements` is committed
-  and contains `com.apple.security.device.audio-input`. Without it, `--options
-  runtime` codesigning silently breaks the macOS Microphone TCC prompt.
+- **WKWebView `target="_blank"` doesn't open URLs.** We added a native
+  `window.corderOpenExternal(url)` bridge that hands the URL to
+  `NSWorkspace.shared.open`. Use it for any external link from the UI
+  (donate buttons, etc.).
 
-- **Self-signed cert + TCC.** Re-using identity `ScreenOCR Dev` keeps Screen
-  Recording / Microphone permissions across rebuilds. If you change the
-  signing identity, all TCC grants reset.
+- **WKWebView clipboard.** Same story — we route Copy through native
+  via `window.corderCopy(text)`. The web `navigator.clipboard` fallback
+  exists for `npm run dev` only.
 
-- **Hallucinations on silent audio.** Whisper `large-v3` invents
-  YouTube-subtitle phrases on silence. Drop list lives in
-  `TranscriptionPipeline.hallucinationPatterns`. Add new variants there.
+- **First playback of a Dropbox-archived meeting** blocks one Swifter
+  worker while `hydrateDropboxFile` pulls the audio back to local disk.
+  Subsequent Range scrubs read from disk without blocking.
+
+- **Hardened runtime needs entitlements.** `Corder.entitlements` is
+  committed and contains `com.apple.security.device.audio-input`.
+  Without it, `--options runtime` codesigning silently breaks the
+  Microphone TCC prompt.
+
+- **Self-signed cert + TCC.** Re-using identity `ScreenOCR Dev` keeps
+  Screen Recording / Microphone permissions across rebuilds. If you
+  change the signing identity, all TCC grants reset.
+
+- **Anti-hallucination clause in the Gemini prompt is load-bearing.**
+  Without it, long silent gaps come back as poetry / weather forecasts /
+  song lyrics, which then survive the hallucination filter (it only
+  catches a fixed list of YouTube-subtitle phrases). Keep the
+  "no clearly intelligible speech → output NO segment" rule.
 
 ## Code style
 
-- Swift 6 with `.swiftLanguageMode(.v5)` (set in `Package.swift`). No strict
-  concurrency yet.
-- `@MainActor` on UI/state classes; detached `Task` for I/O off the main thread.
-- 4-space indent. No force-unwraps in production paths; `try?` is fine for
-  best-effort filesystem cleanup.
-- Comments explain *why*, not *what*. WhisperKit/SCStream/AVAssetWriter quirks
-  earn comments; obvious code does not.
-- TypeScript strict; Tailwind not used — hand-written CSS in `Web/src/styles.css`.
+- Swift 6 with `.swiftLanguageMode(.v5)` (set in `Package.swift`). No
+  strict concurrency yet.
+- `@MainActor` on UI/state classes; `actor` for I/O isolation
+  (`DropboxService`); detached `Task` for background work.
+- 4-space indent. No force-unwraps in production paths; `try?` is
+  fine for best-effort filesystem cleanup.
+- **Comments explain why, not what.** SCStream / AVAssetWriter / Gemini
+  / cache-invariant quirks earn comments; obvious code does not.
+- **Frontend brand accent is green** (`var(--accent)` =`#1f7a4f`).
+  NEVER use black (`var(--fg)`) for primary actions, selected states,
+  or toggle ON. Black is for text and icons only.
+- Selected state has no hover treatment.
+- TypeScript strict, `noUnusedLocals`, `noUnusedParameters`. Tailwind
+  is NOT used — hand-written CSS in `Web/src/styles.css`.
 
 ## Testing
 
-There is no automated test suite yet. Manual smoke test before commit:
+There is no automated test suite for the cloud pipeline yet (would
+need to mock Gemini). Manual smoke test before commit:
 
 1. `Scripts/build-app.sh && open Corder.app`
-2. Menu-bar Start → speak ~10 s → Stop.
-3. Open Library → check transcript appeared, speakers diarized correctly,
-   audio plays, scrub works, search highlights work.
-4. Right-click a meeting → Удалить → row disappears immediately.
-5. Tail `/tmp/corder.log` for `writer.status=failed` (expected, harmless),
-   `Diarizer: remote stream produced N speakers`, `mic frames captured > 0`.
+2. Menu-bar Start → speak ~10 s → Stop. HUD pill should appear over
+   every Space, react to your voice, and disappear on Stop.
+3. Open Library → check transcript appeared, dual-track turns merged
+   in start-ms order, audio plays, scrub works, search highlights work.
+4. Right-click a meeting → Archive → row disappears with Undo toast,
+   reopen archive panel from toolbar → row is there with `purge_at`
+   in 7 days.
+5. Re-transcribe a row → log should say `cache hit (dual)` if the
+   raw turns are cached, or `dual-track — transcribing mic.wav +
+   system.wav in parallel` if not.
+6. Tail `/tmp/corder.log` for unexpected errors.
 
 ## Where things live on disk
 
 ```
 ~/Library/Application Support/Corder/
 ├── corder.db
-├── models/                    # WhisperKit downloaded weights
 └── recordings/<id>/
-    ├── system.wav             # before Dropbox archive
-    ├── mic.wav                # before Dropbox archive
-    └── audio.wav              # mix; after archive only this remains until upload
-
-~/Library/Application Support/FluidAudio/Models/
-└── speaker-diarization-coreml/
-    ├── pyannote_segmentation.mlmodelc
-    └── wespeaker_v2.mlmodelc
+    ├── system.wav             # SCStream system audio
+    ├── mic.wav                # AVAudioEngine mic
+    └── mix.wav                # 16k mono mix; written by AudioMixer
 
 ~/.config/corder/
 ├── dropbox.json               # { app_key, app_secret, refresh_token, remote_root }
 └── gemini_key                 # one-line Gemini API key
 ```
 
-Tail of useful runtime log lines:
-
-- `CaptureEngine.start: …` — bookkeeping for capture session.
-- `Diarizer: remote stream produced N speaker turns, speakers=K` — diarizer health.
-- `dropbox: video at /Corder/<id>/video.mov` — archive succeeded.
-- `transcribe(): dropping Whisper hallucination: <text>` — hallucination filter active.
-
 ## See also
 
-- `docs/ARCHITECTURE.md` — diagram + lifecycle details.
-- `docs/SECURITY.md` — secret-handling policy and gitleaks proof.
-- `CHANGELOG.md` — release history (kept for Sparkle).
+- `docs/ARCHITECTURE.md` — diagram, modules, lifecycle, schema.
+- `docs/SECURITY.md` — threat model + secret hygiene.
+- `docs/DESIGN.md` — colour, type, components, motion.
+- `docs/API.md` — every HTTP endpoint.
+- `docs/DEVELOPMENT.md` — first-time setup, common tasks, code style.
+- `docs/RELEASE.md` — Sparkle update workflow.
+- `CHANGELOG.md` — release history (read by Sparkle).
 - `README.md` — human-facing intro.
