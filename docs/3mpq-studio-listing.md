@@ -1,24 +1,35 @@
-# Adding Corder to 3mpq Studio
+# Corder card on 3mpq.studio
 
-The portfolio site at https://halinskiy.github.io/3mpq-studio/ ships as a
-prebuilt Vite/React bundle on `gh-pages`. The source repo isn't public, so
-to add / refresh Corder you need to ping Mikhail with the artifacts below.
+The portfolio site at https://halinskiy.github.io/3mpq-studio/ is built
+from a Vite + React source (`/Users/3mpq/3mpq-studio-export/`) and
+deployed to the public repo `halinskiy/3mpq-studio` on the `gh-pages`
+branch. The deploy artifact is the `dist/` output, copied wholesale
+into the repo root.
 
-> Last refreshed: dual-track Gemini transcription, recording HUD, archive
-> bin, raw-turn cache. The previous "local-first / Whisper / FluidAudio"
-> framing is **stale** — see CHANGELOG `[Unreleased]` for the full diff.
+## Updating the Corder card
 
-## Asset
+1. Edit the source: `src/data/products.ts` in `3mpq-studio-export/`.
+   Find the `id: 'corder'` entry and adjust copy / features.
+2. If the icon needs updating, replace
+   `public/icons/corder.svg` with the new artwork. Keep the file at
+   1024×1024 (the studio renders at multiple sizes).
+3. Build with the GitHub Pages base path:
+   ```bash
+   cd /Users/3mpq/3mpq-studio-export
+   VITE_BASE=/3mpq-studio/ npm run build
+   ```
+4. Sync `dist/` into the deploy repo:
+   ```bash
+   cd /tmp && gh repo clone halinskiy/3mpq-studio
+   cd 3mpq-studio
+   rm -f assets/index-*.js assets/index-*.css index.html
+   cp -R /Users/3mpq/3mpq-studio-export/dist/. ./
+   git add -A && git commit -m "content: refresh Corder card"
+   git push origin gh-pages
+   ```
+5. GitHub Pages picks up the push within ~30 s.
 
-`Resources/icons/corder-portfolio.svg` — 1024×1024. Two glossy 3D pause
-bars on a warm-white radial-gradient ground. The exact SVG also lives at
-`/Users/3mpq/3mpq-studio-export/public/icons/corder.svg` if you have
-that local export handy.
-
-Drop it into the studio repo at `public/icons/corder.svg` (overwrite
-the previous green-record-circle version).
-
-## Product object to insert into the products array
+## Current copy (state at last refresh)
 
 ```ts
 {
@@ -70,27 +81,8 @@ the previous green-record-circle version).
         "timer clean them up automatically.",
     },
   ],
-  icon: `${Os}icons/corder.svg`,
+  icon: `${BASE}icons/corder.svg`,
   type: 'product',
   downloadUrl: 'https://github.com/halinskiy/Corder/releases/latest/download/Corder.zip',
 }
 ```
-
-(`${Os}` = the same `import.meta.env.BASE_URL`-prefix template the
-existing entries use; copy whatever they already do for `pts.svg` etc.)
-
-## Where to drop it
-
-Replace the existing `corder` entry in the `products` array. Position
-stays the same (alphabetical, between `cms` and `finex` works).
-
-## Verification
-
-After deploy:
-
-1. `https://halinskiy.github.io/3mpq-studio/` shows the `Corder` card with
-   the new pause-bars icon (not the old green record circle).
-2. Card hover → details panel with the four features above.
-3. Icon renders crisp; SVG ~3 kB, no PNG fallback needed.
-4. Tagline reads "Local meeting recorder & transcriber for macOS"
-   (was: "Local-first meeting recorder & transcriber").
