@@ -2,44 +2,41 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key>
-    <string>com.3mpq.Corder</string>
-    <key>CFBundleName</key>
-    <string>Corder</string>
-    <key>CFBundleDisplayName</key>
-    <string>Corder</string>
-    <key>CFBundleExecutable</key>
-    <string>Corder</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.2.0</string>
-    <key>CFBundleVersion</key>
-    <string>2</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Corder records your microphone so meetings can be transcribed.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>Corder does not use the camera.</string>
-    <!-- Sparkle autoupdate. SUPublicEDKey is filled in by scripts/release.sh
-         after `generate_keys` writes the matching private half into the
-         macOS Keychain. SUFeedURL is the publicly-hosted appcast. -->
-    <key>SUFeedURL</key>
-    <string>https://halinskiy.github.io/corder-updates/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>2Ne7z6Ps8wOBB0xFredP5la4nQbr61Gpn0vh8f3YOyo=</string>
-    <key>SUEnableInstallerLauncherService</key>
-    <true/>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
+	<key>CFBundleDisplayName</key>
+	<string>Corder</string>
+	<key>CFBundleExecutable</key>
+	<string>Corder</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.3mpq.Corder</string>
+	<key>CFBundleName</key>
+	<string>Corder</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.7.0</string>
+	<key>CFBundleVersion</key>
+	<string>7</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Corder does not use the camera.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Corder records your microphone so meetings can be transcribed.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://halinskiy.github.io/corder-updates/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>2Ne7z6Ps8wOBB0xFredP5la4nQbr61Gpn0vh8f3YOyo=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>
