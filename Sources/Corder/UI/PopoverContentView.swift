@@ -105,12 +105,12 @@ struct PopoverContentView: View {
             } label: {
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(Color(NSColor.windowBackgroundColor))
+                        .fill(Color.white)
                         .frame(width: 9, height: 9)
                     Text(L.t("stop", lang: ctx.language))
                 }
             }
-            .buttonStyle(FlatButtonStyle(role: .primary))
+            .buttonStyle(FlatButtonStyle(role: .danger))
             .keyboardShortcut("s", modifiers: [.command])
         }
     }
@@ -207,7 +207,7 @@ private struct RecordingStatus: View {
 // MARK: - Flat IBM/Airbnb-style button
 
 private struct FlatButtonStyle: ButtonStyle {
-    enum Role { case primary, secondary }
+    enum Role { case primary, secondary, danger }
     let role: Role
 
     func makeBody(configuration: Configuration) -> some View {
@@ -264,6 +264,12 @@ private struct FlatButtonView: View {
             if pressed { return Color.primary.opacity(0.08) }
             if hovered { return Color.primary.opacity(0.04) }
             return Color.clear
+        case .danger:
+            // Same crimson family as the HUD's "active" palette so the
+            // recording state reads consistently across menu and HUD.
+            if pressed { return Color(red: 0.62, green: 0.10, blue: 0.16) }
+            if hovered { return Color(red: 0.85, green: 0.22, blue: 0.30) }
+            return Color(red: 0.78, green: 0.16, blue: 0.24)
         }
     }
     private var strokeColor: Color {
@@ -274,6 +280,8 @@ private struct FlatButtonView: View {
             if pressed { return Color.primary.opacity(0.24) }
             if hovered { return Color.primary.opacity(0.20) }
             return Color.primary.opacity(0.16)
+        case .danger:
+            return fillColor // border tracks fill exactly
         }
     }
 
@@ -293,6 +301,7 @@ private struct FlatButtonView: View {
         switch role {
         case .primary:   return Color(NSColor.windowBackgroundColor)
         case .secondary: return Color.primary
+        case .danger:    return Color.white
         }
     }
 }
