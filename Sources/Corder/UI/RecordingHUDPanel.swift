@@ -48,10 +48,11 @@ final class RecordingHUDPanel {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false                       // we draw our own glow
-        // Native AppKit drag for the panel itself — works regardless of
-        // .nonactivatingPanel and beats any SwiftUI DragGesture for
-        // reliability. The on-blob TapGesture handles stop separately.
-        panel.isMovableByWindowBackground = true
+        // Drag is driven by a SwiftUI DragGesture so we can react to
+        // the motion (blob deforms against the velocity vector). The
+        // native AppKit drag is therefore disabled — there's no way
+        // to observe its velocity from SwiftUI.
+        panel.isMovableByWindowBackground = false
         panel.level = .floating
         // Float over every Space + persist when the user switches Spaces.
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
@@ -163,6 +164,15 @@ private struct RecordingHUDView: View {
     /// Mouse hover for the gentle scale-up affordance.
     @State private var hovering = false
 
+    // Drag tracking. We measure pointer velocity in pt/s, normalize
+    // it (1000 pt/s ≈ 1.0), low-pass filter it, then feed the result
+    // into BlobShape so the blob deforms against the motion vector
+    // — the side facing the direction of travel pulls in, the trailing
+    // side stretches out. A spring on release snaps it back to neutral.
+    @State private var dragVelocity: CGSize = .zero
+    @State private var lastDragTranslation: CGSize = .zero
+    @State private var lastDragTime: Date?
+
     var body: some View {
         let level = max(meter.micLevel, meter.systemLevel)
         // Peak over the last ~0.5 s ring buffer, scaled so a normal
@@ -188,11 +198,17 @@ private struct RecordingHUDView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
-                blobLayer(time: t, level: level, activity: activity, palette: greenPalette)
+                blobLayer(time: t, level: level, activity: activity,
+                          dragVx: dragVelocity.width, dragVy: dragVelocity.height,
+                          palette: greenPalette)
                     .opacity(silentOpacity)
-                blobLayer(time: t, level: level, activity: activity, palette: activeRedPalette)
+                blobLayer(time: t, level: level, activity: activity,
+                          dragVx: dragVelocity.width, dragVy: dragVelocity.height,
+                          palette: activeRedPalette)
                     .opacity(activeOpacity)
-                blobLayer(time: t, level: level, activity: activity, palette: hoverDarkRedPalette)
+                blobLayer(time: t, level: level, activity: activity,
+                          dragVx: dragVelocity.width, dragVy: dragVelocity.height,
+                          palette: hoverDarkRedPalette)
                     .opacity(hoverOpacity)
             }
             .animation(.easeInOut(duration: 0.28), value: hovering)
@@ -220,17 +236,76 @@ private struct RecordingHUDView: View {
             }
         }
         .contentShape(Rectangle())
-        // Drag is handled natively by isMovableByWindowBackground
-        // on the NSPanel — far more reliable inside a
-        // .nonactivatingPanel than any SwiftUI gesture. Tap stays
-        // here for stop.
-        .onTapGesture { stopRecording() }
+        // Drag and tap share one DragGesture. The 4 pt threshold in
+        // onEnded splits them: short clicks become stop, anything
+        // longer was a drag and we just spring the velocity back to
+        // zero so the blob settles back into its neutral shape.
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    // Move the panel itself — we drive the position
+                    // from SwiftUI here so we can also observe velocity.
+                    let dx = value.translation.width - lastDragTranslation.width
+                    let dy = value.translation.height - lastDragTranslation.height
+                    if abs(value.translation.width) + abs(value.translation.height) > 1 {
+                        moveWindow(dx: dx, dy: dy)
+                    }
+
+                    // Velocity in pt/s, normalized so a brisk drag
+                    // (≈1000 pt/s) maps to ~1.0. Low-pass filter
+                    // (alpha=0.35) smooths out single-frame spikes.
+                    let now = Date()
+                    if let last = lastDragTime {
+                        let dt = now.timeIntervalSince(last)
+                        if dt > 0.001 {
+                            let scale: CGFloat = 1.0 / 1000.0
+                            let rawVx = (dx / CGFloat(dt)) * scale
+                            let rawVy = (dy / CGFloat(dt)) * scale
+                            let alpha: CGFloat = 0.35
+                            dragVelocity.width = dragVelocity.width * (1 - alpha) + rawVx * alpha
+                            dragVelocity.height = dragVelocity.height * (1 - alpha) + rawVy * alpha
+                        }
+                    }
+                    lastDragTranslation = value.translation
+                    lastDragTime = now
+                }
+                .onEnded { value in
+                    let total = abs(value.translation.width) + abs(value.translation.height)
+                    lastDragTranslation = .zero
+                    lastDragTime = nil
+                    if total < 4 {
+                        // Treat as a tap — barely moved, never really
+                        // had a velocity. Don't bother springing.
+                        dragVelocity = .zero
+                        stopRecording()
+                    } else {
+                        // Spring the deformation back to neutral. A
+                        // little overshoot (dampingFraction 0.55)
+                        // gives the blob a satisfying jiggle on
+                        // settle.
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
+                            dragVelocity = .zero
+                        }
+                    }
+                }
+        )
         .help("Click to stop recording")
     }
 
+    private func moveWindow(dx: CGFloat, dy: CGFloat) {
+        guard let panel = holder.panel else { return }
+        var f = panel.frame
+        // SwiftUI Y goes down, AppKit Y goes up — flip the delta.
+        f.origin.x += dx
+        f.origin.y -= dy
+        panel.setFrameOrigin(f.origin)
+    }
+
     @ViewBuilder
-    private func blobLayer(time: TimeInterval, level: Float, activity: CGFloat, palette: BlobPalette) -> some View {
-        BlobShape(time: time, level: CGFloat(level), activity: activity)
+    private func blobLayer(time: TimeInterval, level: Float, activity: CGFloat,
+                           dragVx: CGFloat, dragVy: CGFloat, palette: BlobPalette) -> some View {
+        BlobShape(time: time, level: CGFloat(level), activity: activity,
+                  dragVx: dragVx, dragVy: dragVy)
             .fill(
                 RadialGradient(
                     colors: palette.fillStops,
@@ -240,7 +315,8 @@ private struct RecordingHUDView: View {
                 )
             )
             .overlay(
-                BlobShape(time: time, level: CGFloat(level), activity: activity)
+                BlobShape(time: time, level: CGFloat(level), activity: activity,
+                          dragVx: dragVx, dragVy: dragVy)
                     .stroke(
                         LinearGradient(
                             colors: [
@@ -375,6 +451,12 @@ private struct BlobShape: Shape {
     /// breath only); 1 = active speech (full morph through the
     /// shape cycle, full-amplitude wobble).
     var activity: CGFloat
+    /// Pointer velocity components in normalised units (±1 ≈ 1000 pt/s).
+    /// Each control point's radius is shifted by a projection of this
+    /// vector onto its own outward direction, so the blob trails
+    /// behind the cursor while being dragged.
+    var dragVx: CGFloat
+    var dragVy: CGFloat
 
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
@@ -438,7 +520,20 @@ private struct BlobShape: Shape {
             let levelPhase = sin(time * 2.1 + Double(i) * 1.2)
             let levelBoost = Double(level) * 0.55 * (0.5 + 0.5 * levelPhase)
 
-            let r = baseRadius * (baseR + CGFloat(wobble) + CGFloat(levelBoost))
+            // Drag deformation: each point moves in the direction
+            // OPPOSITE to the panel's motion. Project the negative
+            // velocity vector onto the point's own outward unit
+            // vector — points facing the direction of travel get
+            // a negative offset (they pull in), trailing points
+            // get a positive offset (they stretch out). 0.22 is the
+            // amplitude cap; at full velocity (≈1000 pt/s) the
+            // deformation reaches ±22 % of base radius.
+            let unitX = cos(angle)
+            let unitY = sin(angle)
+            let dragProj = -unitX * Double(dragVx) - unitY * Double(dragVy)
+            let dragDeform = dragProj * 0.22
+
+            let r = baseRadius * (baseR + CGFloat(wobble) + CGFloat(levelBoost) + CGFloat(dragDeform))
             let px = center.x + CGFloat(cos(angle)) * r
             let py = center.y + CGFloat(sin(angle)) * r
             points.append(CGPoint(x: px, y: py))
@@ -464,11 +559,22 @@ private struct BlobShape: Shape {
         a + (b - a) * t
     }
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(level, activity) }
+    /// Four animatable scalars — level, activity, dragVx, dragVy —
+    /// packed into nested AnimatablePairs. The spring on drag-end
+    /// rides on dragVx/dragVy; level + activity continue to update
+    /// continuously from RecordingLevelMeter.
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get {
+            AnimatablePair(
+                AnimatablePair(level, activity),
+                AnimatablePair(dragVx, dragVy)
+            )
+        }
         set {
-            level = newValue.first
-            activity = newValue.second
+            level = newValue.first.first
+            activity = newValue.first.second
+            dragVx = newValue.second.first
+            dragVy = newValue.second.second
         }
     }
 }
