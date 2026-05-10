@@ -173,19 +173,27 @@ private struct RecordingHUDView: View {
         let recentPeak = meter.history.max() ?? 0
         let activity = CGFloat(min(1, max(0, (recentPeak - 0.05) * 6)))
 
+        // Three palettes, one stacked layer each. Opacity is the
+        // crossfade driver:
+        //   • silent (green)    when not hovering AND no speech
+        //   • active (red)      when not hovering AND speech detected
+        //   • hover  (dark red) whenever the cursor is over the blob,
+        //                      regardless of speech.
+        let hoverOpacity: CGFloat = hovering ? 1.0 : 0.0
+        let activeOpacity = (1 - hoverOpacity) * activity
+        let silentOpacity = (1 - hoverOpacity) * (1 - activity)
+
         // TimelineView gives us a steady 60 Hz tick so the breathing
         // wobble keeps moving even when audio is flat.
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
-                // Two stacked blobs share the exact same shape so
-                // morphing reads identically; only their fills + glow
-                // colours differ. We crossfade by toggling the red
-                // copy's opacity on hover.
                 blobLayer(time: t, level: level, activity: activity, palette: greenPalette)
-                    .opacity(hovering ? 0 : 1)
-                blobLayer(time: t, level: level, activity: activity, palette: redPalette)
-                    .opacity(hovering ? 1 : 0)
+                    .opacity(silentOpacity)
+                blobLayer(time: t, level: level, activity: activity, palette: activeRedPalette)
+                    .opacity(activeOpacity)
+                blobLayer(time: t, level: level, activity: activity, palette: hoverDarkRedPalette)
+                    .opacity(hoverOpacity)
             }
             .animation(.easeInOut(duration: 0.28), value: hovering)
         }
@@ -267,8 +275,10 @@ private struct RecordingHUDView: View {
         )
     }
 
-    /// Hover state: crimson, signals "click here to stop".
-    private var redPalette: BlobPalette {
+    /// Active speech: bright crimson, draws attention. Same hue as
+    /// the previous "hover" state — the role moved to "someone is
+    /// talking right now" instead.
+    private var activeRedPalette: BlobPalette {
         BlobPalette(
             fillStops: [
                 Color(red: 0.95, green: 0.30, blue: 0.36),
@@ -277,6 +287,21 @@ private struct RecordingHUDView: View {
             ],
             glowOuter: Color(red: 0.85, green: 0.20, blue: 0.28),
             glowInner: Color(red: 0.55, green: 0.10, blue: 0.18)
+        )
+    }
+
+    /// Hover state: deep wine — clearly distinguished from the active
+    /// crimson so the user can tell whether the blob is reacting to
+    /// audio or to their cursor.
+    private var hoverDarkRedPalette: BlobPalette {
+        BlobPalette(
+            fillStops: [
+                Color(red: 0.62, green: 0.10, blue: 0.16),
+                Color(red: 0.44, green: 0.06, blue: 0.12),
+                Color(red: 0.26, green: 0.02, blue: 0.06)
+            ],
+            glowOuter: Color(red: 0.50, green: 0.08, blue: 0.14),
+            glowInner: Color(red: 0.30, green: 0.04, blue: 0.10)
         )
     }
 
@@ -390,19 +415,28 @@ private struct BlobShape: Shape {
             let staticR = ShapeTemplate.blob[i]
             let baseR = lerp(staticR, morphedR, act)
 
-            // Per-point breathing wobble. Frequencies are deliberately
-            // close-but-not-commensurate so the blob never settles
-            // into a repeating loop.
+            // Base breathing wobble — present even at activity=0 so
+            // the blob never looks frozen. Frequencies are deliberately
+            // close-but-not-commensurate so it never settles into a
+            // repeating loop.
             let phase1 = time * 1.6 + Double(i) * 0.71
             let phase2 = time * 2.7 + Double(i) * 1.23
             let wobbleRaw = sin(phase1) * 0.05 + sin(phase2) * 0.03
-            let wobble = wobbleRaw * Double(wobbleScaleMorphed) * Double(wobbleAmplitude)
+            let baseWobble = wobbleRaw * Double(wobbleScaleMorphed) * Double(wobbleAmplitude)
+
+            // High-frequency jitter that fades in with activity. This
+            // is what makes the blob look "agitated" when someone is
+            // actually speaking — the slow breath alone reads too calm.
+            let jitterPhase1 = time * 7.5 + Double(i) * 1.13
+            let jitterPhase2 = time * 13.1 + Double(i) * 2.37
+            let jitter = (sin(jitterPhase1) * 0.07 + sin(jitterPhase2) * 0.05) * Double(act)
+            let wobble = baseWobble + jitter
 
             // Audio level pushes the radius outward. Phase rotates
             // per-point so loud audio bulges different sides at
             // different times rather than uniformly inflating.
             let levelPhase = sin(time * 2.1 + Double(i) * 1.2)
-            let levelBoost = Double(level) * 0.32 * (0.5 + 0.5 * levelPhase)
+            let levelBoost = Double(level) * 0.55 * (0.5 + 0.5 * levelPhase)
 
             let r = baseRadius * (baseR + CGFloat(wobble) + CGFloat(levelBoost))
             let px = center.x + CGFloat(cos(angle)) * r
