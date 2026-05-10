@@ -252,16 +252,27 @@ final class CaptureEngine: NSObject {
         guard isRecording, let id = meetingId else { return }
         FileLogger.log("CaptureEngine.stop: meetingId=\(id)")
 
-        // Stop SCStream
+        // Stop SCStream. Order matters: detach our outputs FIRST,
+        // then stopCapture, then drop the reference. Without the
+        // explicit removeStreamOutput calls, macOS keeps the
+        // System-Audio-Recording privacy indicator (purple dot in
+        // Control Center) lit indefinitely after stop — the captured
+        // session is "completed" but the registered handlers count
+        // as live consumers of system audio in TCC's view.
         if let stream = stream {
+            try? stream.removeStreamOutput(self, type: .audio)
+            try? stream.removeStreamOutput(self, type: .screen)
             do { try await stream.stopCapture(); FileLogger.log("CaptureEngine.stop: SCStream stopped") }
             catch { FileLogger.log("CaptureEngine.stop: SCStream.stopCapture error: \(error)") }
         }
         stream = nil
 
-        // Stop microphone
+        // Stop microphone — removeTap before stop, then reset() so
+        // the engine fully relinquishes its grip on the input device
+        // (otherwise the orange mic indicator can also linger).
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
+        audioEngine?.reset()
         audioEngine = nil
         micFile = nil
         FileLogger.log("CaptureEngine.stop: mic frames captured = \(micFramesWritten)")
