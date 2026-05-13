@@ -212,9 +212,13 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
 
   if (error) return <div className="empty"><div className="empty-title">{t.error_label}</div><div>{error}</div></div>;
   if (!detail) {
-    // Hide the loader during fast fetches; the blank space is less
-    // distracting than a quarter-second flash of "Loading…".
-    return showLoading ? <div className="empty"><div>{t.loading}</div></div> : <div className="empty" />;
+    // Skeleton during the first detail fetch — keeps the layout stable
+    // so the header/columns don't flash in on arrival. We only show
+    // the skeleton once `showLoading` flips (delayed ~150 ms so fast
+    // local fetches don't strobe), and only on the very first load
+    // (when no detail has ever arrived); subsequent re-fetches preserve
+    // the previous detail as `detail` is non-null.
+    return showLoading ? <MeetingSkeleton /> : <div className="empty" />;
   }
 
   const onSeek = (sec: number) => {
@@ -340,6 +344,72 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
             onSeek={onSeek}
             t={t}
           />
+        </div>
+      </div>
+    </>
+  );
+}
+
+/// Placeholder rendered while the first GET /api/meetings/:id is in
+/// flight. Mirrors the real layout (header + two-column body + audio
+/// card on the right) so the eventual content slides in without a
+/// layout jump.
+function MeetingSkeleton() {
+  return (
+    <>
+      <div className="main-header">
+        <div className="breadcrumb">
+          <span className="skel-pill skel-pill-sm" />
+        </div>
+        <div className="spacer" />
+      </div>
+      <div className="detail">
+        <div className="detail-tabs">
+          <div className="detail-tab-col detail-tab-col-left">
+            <span className="skel-pill skel-pill-tab" />
+          </div>
+          <div className="detail-tab-col detail-tab-col-right">
+            <span className="skel-pill skel-pill-tab" />
+          </div>
+        </div>
+        <div className="detail-body">
+          <div className="transcript-wrap">
+            <div className="transcript-toolbar">
+              <span className="skel-line skel-line-input" />
+            </div>
+            <div className="meeting-skeleton-transcript">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div className="skel-paragraph" key={i}>
+                  <div className="skel-line skel-line-meta-sm" />
+                  <div className="skel-line skel-line-text" />
+                  <div className="skel-line skel-line-text skel-line-text-short" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="right-panel">
+            <div className="audio-controls">
+              <span className="skel-circle" />
+              <span className="skel-line skel-line-time" />
+              <span className="skel-line skel-line-scrub" />
+            </div>
+            <div className="timeline-card">
+              <div className="timeline-tabs">
+                <span className="skel-pill skel-pill-tab" />
+              </div>
+              <div className="timeline-rows">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div className="tl-row" key={i}>
+                    <div className="tl-row-head">
+                      <span className="skel-line skel-line-name" />
+                      <span className="skel-line skel-line-stats" />
+                    </div>
+                    <div className="skel-line skel-line-bar" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </>

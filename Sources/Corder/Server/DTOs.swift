@@ -23,6 +23,11 @@ enum DTO {
         let speakers: [SpeakerDTO]
         let segments: [SegmentDTO]
         let expected_other_speakers: Int?
+        /// True if the meeting has a playable video.mov — either on
+        /// disk in recordingDir or archived to Dropbox. The frontend
+        /// uses this to decide whether to render the `<video>` block
+        /// above the audio player.
+        let has_video: Bool
     }
 
     struct ExpectedSpeakersRequest: Codable {

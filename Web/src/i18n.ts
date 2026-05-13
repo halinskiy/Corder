@@ -26,7 +26,6 @@ interface Strings {
 
   btn_copy: string;
   btn_retranscribe: string;
-  btn_delete: string;
   btn_archive: string;
   btn_boost: string;
   btn_boost_title: string;
@@ -50,7 +49,6 @@ interface Strings {
   empty_archive_btn: string;
 
   ctx_retranscribe: string;
-  ctx_delete: string;
   ctx_archive: string;
 
   speaker_self: string;
@@ -72,11 +70,6 @@ interface Strings {
   no_meeting_selected_body: string;
   error_label: string;
   loading: string;
-
-  donate_button_title: string;
-  donate_card_title: string;
-  donate_card_body: string;
-  donate_dismiss: string;
 
   archive_open_title: string;
   archive_title: string;
@@ -117,7 +110,6 @@ const ru: Strings = {
 
   btn_copy: "Копировать",
   btn_retranscribe: "Расшифровать заново",
-  btn_delete: "Удалить",
   btn_archive: "В архив",
   btn_boost: "Усилить",
   btn_boost_title: "Когда включён, каждая следующая расшифровка автоматически улучшается через Gemini Flash",
@@ -141,7 +133,6 @@ const ru: Strings = {
   empty_archive_btn: "Архивировать сессию",
 
   ctx_retranscribe: "Расшифровать заново",
-  ctx_delete: "Удалить",
   ctx_archive: "В архив",
 
   speaker_self: "Я",
@@ -163,11 +154,6 @@ const ru: Strings = {
   no_meeting_selected_body: "Выбери запись из списка слева, или нажми Start в menu bar.",
   error_label: "Ошибка",
   loading: "Загрузка…",
-
-  donate_button_title: "Поддержать Corder",
-  donate_card_title: "Поддержать Corder",
-  donate_card_body: "Если Corder экономит тебе время — отблагодари автора кофе. Прямой перевод через Buy Me a Coffee.",
-  donate_dismiss: "Не сейчас",
 
   archive_open_title: "Открыть архив",
   archive_title: "Архив",
@@ -209,7 +195,6 @@ const en: Strings = {
 
   btn_copy: "Copy",
   btn_retranscribe: "Re-transcribe",
-  btn_delete: "Delete",
   btn_archive: "Archive",
   btn_boost: "Boost",
   btn_boost_title: "When on, every next transcription is auto-polished via Gemini Flash",
@@ -233,7 +218,6 @@ const en: Strings = {
   empty_archive_btn: "Archive Session",
 
   ctx_retranscribe: "Re-transcribe",
-  ctx_delete: "Delete",
   ctx_archive: "Archive",
 
   speaker_self: "I",
@@ -255,11 +239,6 @@ const en: Strings = {
   no_meeting_selected_body: "Pick a recording from the list on the left, or press Start in the menu bar.",
   error_label: "Error",
   loading: "Loading…",
-
-  donate_button_title: "Support Corder",
-  donate_card_title: "Support Corder",
-  donate_card_body: "If Corder saves you time, buy the author a coffee. Direct transfer via Buy Me a Coffee.",
-  donate_dismiss: "Not now",
 
   archive_open_title: "Open archive",
   archive_title: "Archive",

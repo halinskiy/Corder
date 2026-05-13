@@ -286,16 +286,13 @@ final class TranscriptionPipeline {
                             uploadedAt: Int64(Date().timeIntervalSince1970 * 1000)
                         )
 
-                        // Keep mic.wav + system.wav locally so we can
-                        // re-transcribe with the upcoming dual-track
-                        // pipeline (one Gemini call per source instead
-                        // of a single mix → way cleaner speaker
-                        // assignment, mirrors how Granola does it). Only
-                        // the mix and the .mov get cleaned.
-                        for url in [videoURL, mixCopy] {
-                            try? FileManager.default.removeItem(at: url)
-                        }
-                        FileLogger.log("dropbox: video + mix cleaned for \(mid); mic.wav/system.wav kept for dual-track retranscribe")
+                        // Keep mic.wav + system.wav locally for dual-track
+                        // retranscribe, and keep audio.wav (the mix) for
+                        // playback — it's the only file with BOTH the user
+                        // and the interlocutor on one timeline. Only the
+                        // video gets cleaned (Dropbox is the cold store).
+                        try? FileManager.default.removeItem(at: videoURL)
+                        FileLogger.log("dropbox: video cleaned for \(mid); audio + mic + system kept locally")
                     } catch {
                         FileLogger.log("dropbox: archive failed for \(mid): \(error)")
                     }
@@ -450,21 +447,58 @@ final class TranscriptionPipeline {
         try? repo.clearTranscript(meetingId: meetingId)
 
         let userSpeakerId = "\(meetingId)-you"
-        try repo.insertSpeaker(Speaker(id: userSpeakerId, meetingId: meetingId,
-                                       label: "Speaker 1", customName: "you", colorHex: "#3b82f6"))
-
         let collapseAll = (meeting.expectedOtherSpeakers == 0)
-        // Each distinct label inside system.wav maps to one "other" id.
-        let otherLabels = collapseAll
-            ? []
-            : Array(Set(otherTurns.map { $0.speakerLabel })).sorted()
+        // "User said there's exactly 1 other person on the call" — fold
+        // every Gemini label inside system.wav into a single "Speaker 2"
+        // bucket. This is the common case for auto-detected 1:1 calls,
+        // and it's also the right answer when the clarify banner pill
+        // "2 people" is clicked. Without this collapse, Gemini's
+        // over-counting (5 labels on a 12-minute call with one
+        // interlocutor) would leak straight through.
+        let collapseOthers = (meeting.expectedOtherSpeakers == 1)
+        // Only persist the user speaker when they'll actually own
+        // segments — either they spoke (userTurns non-empty) or
+        // `collapseAll` will land every other-turn on the user. The
+        // previous unconditional insert left a ghost "Speaker 1" row
+        // for dual-track recordings where the mic was silent — that
+        // row inflated `speakers.length` and skewed the clarify banner
+        // to a higher pill than the actual speaker count.
+        let userHasContent = collapseAll || !userTurns.isEmpty
+        if userHasContent {
+            try repo.insertSpeaker(Speaker(id: userSpeakerId, meetingId: meetingId,
+                                           label: "Speaker 1", customName: "you", colorHex: "#3b82f6"))
+        }
+
+        // Each distinct label inside system.wav maps to one "other" id —
+        // unless `collapseOthers` is on, in which case every label gets
+        // folded into a single bucket.
+        let othersLabelOffset = userHasContent ? 2 : 1
+        let singleOtherSpeakerId = "\(meetingId)-other-0"
         var otherSpeakerIds: [String: String] = [:]
-        for (i, label) in otherLabels.enumerated() {
-            let id = "\(meetingId)-other-\(i)"
-            otherSpeakerIds[label] = id
-            try repo.insertSpeaker(Speaker(id: id, meetingId: meetingId,
-                                           label: "Speaker \(i + 2)", customName: nil,
-                                           colorHex: otherColorHex(index: i)))
+        if collapseAll {
+            // no "other" rows — everything lands on the user
+        } else if collapseOthers {
+            try repo.insertSpeaker(Speaker(id: singleOtherSpeakerId, meetingId: meetingId,
+                                           label: "Speaker \(othersLabelOffset)", customName: nil,
+                                           colorHex: otherColorHex(index: 0)))
+            // Map every distinct Gemini label onto the single bucket id.
+            for label in Set(otherTurns.map { $0.speakerLabel }) {
+                otherSpeakerIds[label] = singleOtherSpeakerId
+            }
+        } else {
+            // When the user-speaker is present, others start at "Speaker 2"
+            // (the user is Speaker 1). When the mic track had no detectable
+            // speech and we skipped the user-speaker entirely, start
+            // numbering at "Speaker 1" so the transcript doesn't show
+            // a gap (Speaker 2, Speaker 3, … with no Speaker 1).
+            let otherLabels = Array(Set(otherTurns.map { $0.speakerLabel })).sorted()
+            for (i, label) in otherLabels.enumerated() {
+                let id = "\(meetingId)-other-\(i)"
+                otherSpeakerIds[label] = id
+                try repo.insertSpeaker(Speaker(id: id, meetingId: meetingId,
+                                               label: "Speaker \(i + othersLabelOffset)", customName: nil,
+                                               colorHex: otherColorHex(index: i)))
+            }
         }
 
         // Merge both lists by start_ms so the transcript reads in the

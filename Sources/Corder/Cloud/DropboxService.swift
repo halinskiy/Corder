@@ -224,29 +224,6 @@ actor DropboxService {
         throw DropboxError.decode("chunked upload didn't reach finish")
     }
 
-    /// Direct-stream URL good for ~4 hours. Supports HTTP Range so HTML5
-    /// `<video>` and `<audio>` elements can scrub.
-    func getTemporaryLink(remotePath: String) async throws -> URL {
-        let token = try await getAccessToken()
-        var req = URLRequest(url: URL(string: "https://api.dropboxapi.com/2/files/get_temporary_link")!)
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["path": remotePath])
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            throw DropboxError.http(status, String(data: data, encoding: .utf8) ?? "")
-        }
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let link = json["link"] as? String,
-              let url = URL(string: link) else {
-            throw DropboxError.decode("temporary_link response: \(String(data: data, encoding: .utf8) ?? "")")
-        }
-        return url
-    }
-
     /// Streams a Dropbox file straight to a local URL. Used by retranscribe
     /// when the audio mix has been archived, and by `Routes.hydrateDropboxFile`
     /// for media playback.

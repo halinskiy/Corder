@@ -36,6 +36,10 @@ export interface MeetingDetail {
   speakers: SpeakerDTO[];
   segments: SegmentDTO[];
   expected_other_speakers?: number | null;
+  /// Set by the backend when video.mov is on disk locally or
+  /// archived to Dropbox. The RightPanel uses it to decide
+  /// whether to render the screen-capture preview above the audio.
+  has_video?: boolean;
 }
 
 export async function listMeetings(): Promise<MeetingSummary[]> {
@@ -140,6 +144,11 @@ export async function stopRecordingNow(): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+export async function startRecordingNow(): Promise<void> {
+  const r = await fetch("/api/recording/start", { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 export interface Settings {
   boost_mode: boolean;
   language?: "ru" | "en";
@@ -163,4 +172,8 @@ export async function setSettings(s: Settings): Promise<Settings> {
 
 export function audioSrc(id: string): string {
   return `/api/meetings/${id}/audio`;
+}
+
+export function videoSrc(id: string): string {
+  return `/api/meetings/${id}/video`;
 }

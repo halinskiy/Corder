@@ -31,6 +31,70 @@ struct MeetingRepository {
         }
     }
 
+    /// Sidebar summary row — everything the meetings list needs in a
+    /// single round trip per column. Replaces the N+1 path that fetched
+    /// every meeting and then re-queried segments + speakers per row;
+    /// at 50+ meetings that was ≥150 SQLite reads on each
+    /// /api/meetings poll.
+    struct SummaryRow {
+        let id: String
+        let startedAt: Int64
+        let endedAt: Int64?
+        let durationMs: Int64?
+        let status: String
+        let preview: String?
+        let speakerCount: Int
+        let speakerNames: String?
+    }
+
+    func listMeetingSummaries() throws -> [SummaryRow] {
+        try dbq.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT
+                    m.id,
+                    m.started_at,
+                    m.ended_at,
+                    m.duration_ms,
+                    m.status,
+                    (SELECT s.text
+                       FROM segments s
+                       WHERE s.meeting_id = m.id
+                       ORDER BY s.start_ms ASC
+                       LIMIT 1) AS preview,
+                    (SELECT COUNT(DISTINCT s.speaker_id)
+                       FROM segments s
+                       WHERE s.meeting_id = m.id) AS speaker_count,
+                    (SELECT GROUP_CONCAT(name, ' · ')
+                       FROM (
+                         SELECT DISTINCT
+                            COALESCE(NULLIF(TRIM(sp.custom_name), ''), sp.label) AS name
+                         FROM speakers sp
+                         WHERE sp.meeting_id = m.id
+                           AND EXISTS (
+                             SELECT 1 FROM segments s
+                             WHERE s.meeting_id = m.id
+                               AND s.speaker_id = sp.id
+                           )
+                       )) AS speaker_names
+                FROM meetings m
+                WHERE m.archived_at IS NULL
+                ORDER BY m.started_at DESC
+            """)
+            return rows.map { r in
+                SummaryRow(
+                    id: r["id"] ?? "",
+                    startedAt: r["started_at"] ?? 0,
+                    endedAt: r["ended_at"],
+                    durationMs: r["duration_ms"],
+                    status: r["status"] ?? "",
+                    preview: r["preview"],
+                    speakerCount: r["speaker_count"] ?? 0,
+                    speakerNames: r["speaker_names"]
+                )
+            }
+        }
+    }
+
     /// All archived meetings, newest-archived first. Used by the archive
     /// view to show the 7-day grace bin.
     func listArchived() throws -> [Meeting] {
@@ -111,11 +175,16 @@ struct MeetingRepository {
     }
 
     func resetStuckMeetings() throws {
-        // Recovers from app crashes mid-recording or mid-transcribing.
+        // Recovers from app crashes mid-recording.
         // - status=recording with no duration: the .mov was never finalised, so
         //   nothing useful to keep; drop the row + files.
-        // - status=transcribing: keep the row and re-flag failed so the user can
-        //   click Re-transcribe (the audio files are intact).
+        // - status=recording WITH a duration: capture finished but the status
+        //   write never made it; flip to failed so the user can re-transcribe.
+        //
+        // Meetings stuck in status=transcribing are NOT touched here — the
+        // caller (AppDelegate) reads them via `stuckTranscribingMeetingIds()`
+        // and re-enqueues each one on launch. mic.wav/system.wav are still on
+        // disk (we only delete them on archive), so resume is free.
         let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 1000
         try dbq.write { db in
             try db.execute(sql: """
@@ -124,8 +193,43 @@ struct MeetingRepository {
             """, arguments: [cutoff])
             try db.execute(sql: """
                 UPDATE meetings SET status = 'failed'
-                WHERE status IN ('recording', 'transcribing') AND started_at < ?
+                WHERE status = 'recording' AND started_at < ?
             """, arguments: [cutoff])
+        }
+    }
+
+    /// IDs of meetings that were mid-transcription when the previous
+    /// process died. Caller re-enqueues them via TranscriptionPipeline so
+    /// the user never has to click "Re-transcribe" manually after a crash
+    /// or a forced quit.
+    func stuckTranscribingMeetingIds() throws -> [String] {
+        try dbq.read { db in
+            try Meeting
+                .filter(Column("status") == "transcribing")
+                .fetchAll(db)
+                .map { $0.id }
+        }
+    }
+
+    /// One-time cleanup for "ghost" speakers — rows in the speakers table
+    /// that have no segments referencing them. They came from the older
+    /// dual-track code path that unconditionally inserted a "Speaker 1"
+    /// row even when the mic was silent, and they skewed the clarify
+    /// banner's "how many people were on the call?" default to one
+    /// higher than the actual count. Gated to terminal-state meetings so
+    /// we don't race a transcription that's between insertSpeaker() and
+    /// insertSegment(). Returns the number of rows deleted.
+    @discardableResult
+    func purgeOrphanSpeakers() throws -> Int {
+        try dbq.write { db in
+            try db.execute(sql: """
+                DELETE FROM speakers
+                WHERE meeting_id IN (SELECT id FROM meetings WHERE status IN ('ready', 'archived'))
+                  AND NOT EXISTS (
+                    SELECT 1 FROM segments WHERE segments.speaker_id = speakers.id
+                  )
+            """)
+            return db.changesCount
         }
     }
 

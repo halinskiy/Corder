@@ -790,32 +790,48 @@ input[type="text"]:focus, input[type="search"]:focus {
    manage their own spacing so the audio controls sit flush with the
    shared tabs row above, matching the transcript column on the left. */
 .right-panel {
-  overflow-y: auto;
-  padding: 0 0 24px;
+  /* No outer scroll any more — the speakers timeline owns its own
+     scroll so the audio card and (optional) screen video stay pinned
+     at the top regardless of how many speakers the meeting has. */
+  overflow: hidden;
+  /* 130 px reserves clearance for the floating start/stop blob
+     (110 px tall + 8 px margin + breathing room) so the timeline's
+     last row never sits behind the blob. */
+  padding: 0 0 130px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  /* No flex gap — each child owns its own top margin so the video
+     case (when present) can have its own spacing rules without
+     piling onto the audio-controls' inner padding-top. */
+  gap: 0;
   background: var(--bg);
+  min-height: 0;
 }
-.video-card {
-  background: #000;
+/* Screen-capture preview that sits above the audio controls when the
+   meeting has a video.mov. Audio is the master clock; this element is
+   purely visual, kept in sync from JS.
+   margin-top 20 px mirrors `.transcript-toolbar`'s padding-top on the
+   left column — keeps the "Recording" tab → video gap visually equal
+   to the "Transcript" tab → search input gap. */
+.screen-video-card {
+  margin: 20px 20px 0;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  background: #000;
 }
-.video-card video { width: 100%; display: block; aspect-ratio: 16 / 10; background: #000; }
-.video-fallback {
-  color: var(--fg-muted);
-  background: #fafafa;
-  padding: 48px 24px;
-  text-align: center;
-  font-size: 13px;
+/* When the video is present, the audio controls sit close to the
+   video — tighter than they'd be as a first child, and tighter than
+   the original flex-gap layout. */
+.screen-video-card + .audio-controls {
+  padding-top: 12px;
+}
+.screen-video {
+  width: 100%;
+  display: block;
   aspect-ratio: 16 / 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: contain;
+  background: #000;
 }
 
 /* Audio player — sits directly under the shared tabs row, no card wrapper
@@ -929,13 +945,34 @@ input[type="text"]:focus, input[type="search"]:focus {
   border-radius: 8px;
   /* Right-panel itself has no horizontal padding now, so the timeline
      card carries its own margin so it stays aligned with the audio
-     controls above it. 20 px to match `.transcript-toolbar` on the left. */
-  margin: 0 20px;
+     controls above it. 20 px to match `.transcript-toolbar` on the left.
+     The 14 px top reproduces the previous flex-gap value, now that
+     right-panel has gap: 0 and each child owns its own spacing. */
+  margin: 14px 20px 0;
   padding: 14px 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  /* Take all the height left in the right-panel column so the rows
+     have somewhere to scroll into without pushing past the blob. */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
+/* Scrollable inner container that holds the per-speaker rows. The
+   tabs row above stays pinned; only this region scrolls when there
+   are more speakers than fit in the card. Scrollbar is hidden — the
+   user navigates by wheel/trackpad inside the rows, and the visible
+   chrome would compete with the timeline ticks. */
+.timeline-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.timeline-rows::-webkit-scrollbar { display: none; }
 .timeline-tabs {
   display: flex;
   gap: 18px;
@@ -1396,3 +1433,54 @@ input[type="text"]:focus, input[type="search"]:focus {
   gap: 6px;
 }
 .archive-actions button svg { display: block; width: 14px; height: 14px; }
+
+/* ───────────────────────────── Skeleton placeholders ─────────────────────────── */
+/* Shown while the first /api/meetings or /api/meetings/:id fetch is
+   in flight. The shimmer is a slow horizontal gradient sweep so the
+   user sees motion (the app is alive) without strobing flicker. */
+@keyframes corder-shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+.skel-line, .skel-pill, .skel-circle {
+  background-color: #ececec;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255,255,255,0) 0,
+    rgba(255,255,255,0.55) 50%,
+    rgba(255,255,255,0) 100%
+  );
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  border-radius: 4px;
+  animation: corder-shimmer 1.4s linear infinite;
+}
+.skel-line { display: block; height: 12px; width: 100%; margin: 4px 0; }
+.skel-pill { display: inline-block; height: 14px; border-radius: 999px; }
+.skel-pill-sm  { width: 140px; }
+.skel-pill-tab { width: 90px;  height: 16px; }
+.skel-circle   { display: inline-block; width: 36px; height: 36px; border-radius: 50%; }
+
+/* Sidebar list — fake meeting rows */
+.sidebar-skeleton { padding: 4px 0; }
+.skeleton-item { cursor: default; }
+.skel-line-title   { width: 70%; height: 13px; }
+.skel-line-meta    { width: 45%; height: 10px; margin-top: 6px; }
+.skel-line-preview { width: 92%; height: 11px; margin-top: 8px; }
+
+/* Detail pane — fake transcript paragraphs */
+.meeting-skeleton-transcript { padding: 16px 32px; }
+.skel-paragraph { margin-bottom: 20px; }
+.skel-line-meta-sm    { width: 30%; height: 10px; }
+.skel-line-text       { width: 95%; height: 12px; margin-top: 8px; }
+.skel-line-text-short { width: 70%; }
+
+/* Detail pane — fake audio card */
+.skel-line-input  { width: 100%; height: 32px; border-radius: 6px; }
+.skel-line-time   { width: 88px; height: 12px; }
+.skel-line-scrub  { width: 100%; height: 8px; border-radius: 999px; flex: 1; }
+
+/* Detail pane — fake speaker rows */
+.skel-line-name   { width: 100px; height: 12px; }
+.skel-line-stats  { width: 70px;  height: 10px; }
+.skel-line-bar    { width: 100%;  height: 20px; border-radius: 2px; }
