@@ -345,16 +345,20 @@ struct RecordingHUDView: View {
         let palette: BlobPalette = isRecording ? .activeRed : .silentGreen
 
         // Frame-rate is state-driven so the blob doesn't burn CPU
-        // 60× / sec when nothing on screen is meaningfully changing:
+        // when nothing meaningful is changing on screen:
         //   • Recording:     30 Hz — fast enough to track voice ticks.
-        //   • Idle, hovered:  20 Hz — gentle "I'm awake" breathe.
-        //   • Idle, resting:   6 Hz — just enough to look alive.
-        // Drops the always-on idle cost by ~10× vs the previous 60 Hz.
-        // `paused: !visible` halts the timeline outright when the host
-        // window is occluded (Library minimised, another app full-
-        // screen, etc.) — see the `onReceive` further down.
-        let fps: Double = isRecording ? 30 : (hovering ? 20 : 6)
-        TimelineView(.animation(minimumInterval: 1.0 / fps, paused: !visible)) { timeline in
+        //   • Idle, hovered: 20 Hz — gentle "I'm awake" breathe.
+        //   • Idle, resting: TimelineView paused outright (static
+        //     circle). Previously a 6 Hz idle tick still cost the full
+        //     SwiftUI ViewGraph + NSHostingView layout pass every
+        //     frame, which showed up as ~10 % background CPU on M-series
+        //     just for the inline Library blob doing nothing.
+        // `paused: !visible` extends this to also halt while the host
+        // window is occluded (minimised, hidden behind a fullscreen
+        // app, etc.).
+        let animating = isRecording || hovering
+        let fps: Double = isRecording ? 30 : 20
+        TimelineView(.animation(minimumInterval: 1.0 / fps, paused: !visible || !animating)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             blobLayer(time: t, level: level, activity: shapeActivity,
                       palette: palette)
