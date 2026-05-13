@@ -16,6 +16,7 @@ interface Props {
 export function UpdatePill({ t, onToast }: Props) {
   const [available, setAvailable] = React.useState(false);
   const [version, setVersion] = React.useState<string | undefined>(undefined);
+  const [busy, setBusy] = React.useState(false);
 
   // Poll Sparkle's verdict every 60 s + also re-check whenever the
   // window comes back into focus. Cheap (just a NSLock read on the
@@ -45,11 +46,17 @@ export function UpdatePill({ t, onToast }: Props) {
   if (!available) return null;
 
   const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
     try {
       await triggerUpdateCheck();
     } catch {
       onToast(t.toast_settings_failed, "error");
     }
+    // Release busy after a short delay — long enough that the user
+    // sees the pulse, short enough not to lock the button if Sparkle's
+    // dialog never appears (e.g. it was already on screen).
+    window.setTimeout(() => setBusy(false), 2200);
   };
 
   // Append the target version so the user knows exactly what they're
@@ -61,8 +68,9 @@ export function UpdatePill({ t, onToast }: Props) {
   return (
     <button
       type="button"
-      className="update-pill"
+      className={"update-pill" + (busy ? " busy" : "")}
       onClick={onClick}
+      disabled={busy}
       title={t.update_available_title}
     >
       <span className="update-pill-shine" aria-hidden />
