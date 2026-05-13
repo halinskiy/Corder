@@ -1611,3 +1611,15 @@ input[type="text"]:focus, input[type="search"]:focus {
   .update-pill-shine::after { transform: translateX(-180%); }
   .update-pill-sparkles span { opacity: 0; }
 }
+
+/* Pill in busy state — after click, before Sparkle's dialog appears.
+   Slight pulse so the user sees the click registered. */
+.update-pill.busy {
+  cursor: default;
+  animation: update-pill-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes update-pill-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(14, 124, 68, 0.0); }
+  50%      { box-shadow: 0 0 0 6px rgba(14, 124, 68, 0.18); }
+}
+.update-pill:disabled { opacity: 1; } /* keep the green visible while busy */
