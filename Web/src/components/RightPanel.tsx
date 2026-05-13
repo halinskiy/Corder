@@ -51,6 +51,14 @@ function ScreenVideo({
   audioRef: React.RefObject<HTMLAudioElement>;
   currentTimeSec: number;
 }) {
+  // `has_video` is set on the backend by checking the file path + the
+  // Dropbox archive flag, but the actual fetch can still 404 — the
+  // Dropbox copy may have been pruned, the meeting may pre-date the
+  // video-recording feature, etc. We hide the whole card the moment
+  // the <video> element fires its `error` event so empty black boxes
+  // never show up in the layout.
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => { setFailed(false); }, [detail.id]);
   // Pull the video clock toward the audio clock whenever they drift
   // by more than ~0.3 s. Setting currentTime on every audio
   // timeupdate (4-5 Hz) would cause stutter from the keyframe seeks.
@@ -81,6 +89,7 @@ function ScreenVideo({
     };
   }, [audioRef, videoRef]);
 
+  if (failed) return null;
   return (
     <div className="screen-video-card">
       <video
@@ -90,6 +99,7 @@ function ScreenVideo({
         playsInline
         preload="metadata"
         className="screen-video"
+        onError={() => setFailed(true)}
       />
     </div>
   );
