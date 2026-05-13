@@ -55,6 +55,8 @@ enum Routes {
             let q = req.queryParams.first(where: { $0.0 == "q" })?.1 ?? ""
             return search(query: q, repo: repo)
         }
+        server.get["/api/update-status"] = { _ in updateStatus() }
+        server.post["/api/update-check"] = { _ in updateCheck() }
     }
 
     // MARK: static
@@ -187,6 +189,28 @@ enum Routes {
             await RecordingController.shared.stopRecording()
         }
         return .ok(.text("stopping"))
+    }
+
+    /// Polled by the React toolbar (~once a minute). Returns the
+    /// newest version Sparkle has resolved from the appcast, if any.
+    /// Sparkle keeps re-checking on its own 24h schedule + at startup;
+    /// we just expose the latest verdict.
+    private static func updateStatus() -> HttpResponse {
+        let v = AvailableUpdateSnapshot.read()
+        var payload: [String: Any] = ["available": v != nil]
+        if let v = v { payload["version"] = v }
+        return jsonResponse(payload)
+    }
+
+    /// Fire-and-forget: tells Sparkle to show its standard update UI
+    /// (the "A new version of Corder is available" panel with the
+    /// release notes from `appcast.xml`). Click on the green toolbar
+    /// pill posts here.
+    private static func updateCheck() -> HttpResponse {
+        Task { @MainActor in
+            UpdateController.shared.checkForUpdates(nil)
+        }
+        return .ok(.text("checking"))
     }
 
     private static func settingsGet() -> HttpResponse {

@@ -177,3 +177,16 @@ export function audioSrc(id: string): string {
 export function videoSrc(id: string): string {
   return `/api/meetings/${id}/video`;
 }
+
+export interface UpdateStatus { available: boolean; version?: string }
+
+export async function getUpdateStatus(): Promise<UpdateStatus> {
+  const r = await fetch("/api/update-status");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function triggerUpdateCheck(): Promise<void> {
+  const r = await fetch("/api/update-check", { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}

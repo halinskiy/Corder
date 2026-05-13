@@ -137,7 +137,7 @@ export function ArchiveView({ onClose, onChanged, onToast, t, lang }: Props) {
                     <span className="archive-cell-date">
                       <span className="archive-row-title">{formatDate(it.started_at, lang)}</span>
                       {it.duration_ms != null && (
-                        <span className="archive-row-meta">{formatDuration(it.duration_ms)}</span>
+                        <span className="archive-row-meta">{formatDuration(it.duration_ms, lang)}</span>
                       )}
                     </span>
                     <span className="archive-cell-purge">{t.archive_purge_in(daysLeft)}</span>
