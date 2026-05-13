@@ -20,6 +20,14 @@ final class AppContext: ObservableObject {
         didSet { RecordingStateSnapshot.update(recordingState) }
     }
 
+    /// Sparkle-reported version string of the newest pending update,
+    /// e.g. "0.8.0". `nil` means no update is available right now. The
+    /// React toolbar polls `/api/update-status` and renders a green
+    /// pill linking to `POST /api/check-update` when this is set.
+    @Published var availableUpdateVersion: String? = nil {
+        didSet { AvailableUpdateSnapshot.update(availableUpdateVersion) }
+    }
+
     // Persisted source preference (Full screen vs last picked window stays remembered).
     @Published var sourceMode: SourceMode = SourceMode(
         rawValue: UserDefaults.standard.string(forKey: "Corder.sourceMode") ?? "full"
@@ -103,6 +111,24 @@ enum RecordingStateSnapshot {
     }
 
     static func read() -> RecordingState {
+        lock.lock(); defer { lock.unlock() }
+        return current
+    }
+}
+
+/// Same pattern as `RecordingStateSnapshot` for the Sparkle-reported
+/// "newer version available" flag — Swifter handlers run off-actor and
+/// need a synchronous read without hopping to `@MainActor`.
+enum AvailableUpdateSnapshot {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var current: String? = nil
+
+    static func update(_ version: String?) {
+        lock.lock(); defer { lock.unlock() }
+        current = version
+    }
+
+    static func read() -> String? {
         lock.lock(); defer { lock.unlock() }
         return current
     }

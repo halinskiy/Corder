@@ -71,6 +71,9 @@ interface Strings {
   error_label: string;
   loading: string;
 
+  update_available_label: string;
+  update_available_title: string;
+
   archive_open_title: string;
   archive_title: string;
   archive_empty: string;
@@ -154,6 +157,9 @@ const ru: Strings = {
   no_meeting_selected_body: "Выбери запись из списка слева, или нажми Start в menu bar.",
   error_label: "Ошибка",
   loading: "Загрузка…",
+
+  update_available_label: "Доступен апдейт",
+  update_available_title: "Нажмите чтобы установить",
 
   archive_open_title: "Открыть архив",
   archive_title: "Архив",
@@ -239,6 +245,9 @@ const en: Strings = {
   no_meeting_selected_body: "Pick a recording from the list on the left, or press Start in the menu bar.",
   error_label: "Error",
   loading: "Loading…",
+
+  update_available_label: "Update available",
+  update_available_title: "Click to install",
 
   archive_open_title: "Open archive",
   archive_title: "Archive",
