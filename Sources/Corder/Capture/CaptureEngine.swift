@@ -3,6 +3,7 @@ import Foundation
 import AVFoundation
 import CoreMedia
 import ScreenCaptureKit
+import VideoToolbox
 
 protocol CaptureEngineDelegate: AnyObject {
     @MainActor func captureEngine(_ engine: CaptureEngine, didStartMeeting id: String)
@@ -48,6 +49,15 @@ final class CaptureEngine: NSObject {
     // stays at 0 across a recording, AVAudioEngine isn't getting any audio
     // (mic disabled / device race with Telegram / etc.).
     private var micFramesWritten: Int64 = 0
+
+    // Video writer for screen capture. HEVC at 15fps + ~1.5 Mbps —
+    // tuned for meeting recordings (mostly static UI, occasional cursor /
+    // window motion). The first `.screen` sample's PTS becomes the
+    // session start; subsequent samples are appended directly.
+    private var videoWriter: AVAssetWriter?
+    private var videoInput: AVAssetWriterInput?
+    private var videoSessionStarted = false
+    private var videoFramesAppended: Int64 = 0
 
     // System audio captured by SCStream is mirrored into a standalone .wav so
     // transcription does not depend on AVAssetWriter finalising the .mov.
@@ -155,7 +165,11 @@ final class CaptureEngine: NSObject {
         // avoids the conversion path entirely.
         config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         config.queueDepth = 6
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+        // 15 fps is plenty for meeting recordings — cursor and window
+        // motion read fine at that rate, and the encoder's per-second
+        // bitrate target shrinks accordingly. 30 fps would just double
+        // the data with no perceptible quality gain on screen content.
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 15)
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
         // We deliberately do NOT use SCStream's `.microphone` output even on
@@ -167,17 +181,51 @@ final class CaptureEngine: NSObject {
         // on the default input device for exactly this reason: it goes
         // through CoreAudio HAL where mic streams are shared, not exclusive.
 
-        // 3. NOTE: We deliberately do NOT instantiate AVAssetWriter for the
-        //    .mov video file. Empirically every config we tried (BGRA→YUV,
-        //    mov/mp4, AAC/PCM/no audio) flipped the writer to .failed within
-        //    a second with -11800 / -16122 on this macOS build. The source
-        //    of truth for the recording is the parallel system.wav + mic.wav
-        //    written below — Whisper consumes them, Dropbox archives them,
-        //    and the frontend transparently falls back from <video> to
-        //    <audio> when the .mov is missing. The previous WriterState +
-        //    sessionStart machinery has been removed; if we ever bring back
-        //    video capture, see git history for the full handle-the-PTS-gap
-        //    workaround we used to need.
+        // 3. AVAssetWriter for video.mov. HEVC at ~1.5 Mbps + 15 fps,
+        //    feeding the YUV samples SCStream already delivers — no
+        //    BGRA→YUV converter pass, which is the path that historically
+        //    flipped the writer to .failed with -16122 partway through.
+        //    Session start is deferred to the first sample we receive
+        //    (sample PTS, not zero) so SCStream's arbitrary clock origin
+        //    doesn't blow up the writer. Failures here are non-fatal —
+        //    audio capture continues, the frontend renders <audio> when
+        //    the .mov is missing.
+        do {
+            try? FileManager.default.removeItem(at: videoURL)
+            let writer = try AVAssetWriter(url: videoURL, fileType: .mov)
+            let videoSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.hevc,
+                AVVideoWidthKey: config.width,
+                AVVideoHeightKey: config.height,
+                AVVideoCompressionPropertiesKey: [
+                    // Average ~1.5 Mbps. Screen content is mostly static so
+                    // the encoder dips well below this most of the time.
+                    AVVideoAverageBitRateKey: 1_500_000,
+                    AVVideoExpectedSourceFrameRateKey: 15,
+                    // I-frame every 4s at 15fps. Lets the user scrub the
+                    // recorded video in the Library without long waits to
+                    // the next keyframe.
+                    AVVideoMaxKeyFrameIntervalKey: 60,
+                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel as String
+                ]
+            ]
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+            input.expectsMediaDataInRealTime = true
+            if writer.canAdd(input) {
+                writer.add(input)
+            }
+            if writer.startWriting() {
+                self.videoWriter = writer
+                self.videoInput = input
+                self.videoSessionStarted = false
+                self.videoFramesAppended = 0
+                FileLogger.log("CaptureEngine.start: AVAssetWriter armed (HEVC, \(config.width)x\(config.height), 15fps, 1.5 Mbps)")
+            } else {
+                FileLogger.log("CaptureEngine.start: AVAssetWriter.startWriting failed: \(writer.error?.localizedDescription ?? "?"). Continuing without video.")
+            }
+        } catch {
+            FileLogger.log("CaptureEngine.start: AVAssetWriter init failed: \(error). Continuing without video.")
+        }
 
         // 4. SCStream — try with audio first, retry without on failure.
         // "Stream failed to start audio" happens with some Bluetooth/AirPods
@@ -282,6 +330,25 @@ final class CaptureEngine: NSObject {
         systemAudioFile = nil
         systemAudioFormat = nil
 
+        // Finalise the video writer if we have one. finishWriting is async
+        // and can take a moment to flush the trailer; we wait for it so
+        // the .mov is fully written by the time stop() returns and the
+        // Dropbox archive task picks the file up.
+        if let writer = videoWriter, writer.status == .writing {
+            videoInput?.markAsFinished()
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                writer.finishWriting {
+                    FileLogger.log("CaptureEngine.stop: video.mov finalised, frames=\(self.videoFramesAppended), status=\(writer.status.rawValue)")
+                    cont.resume()
+                }
+            }
+        } else if let writer = videoWriter {
+            FileLogger.log("CaptureEngine.stop: skipping video finalise; writer status=\(writer.status.rawValue)")
+        }
+        videoWriter = nil
+        videoInput = nil
+        videoSessionStarted = false
+
         isRecording = false
         FileLogger.log("CaptureEngine.stop: complete")
         delegate?.captureEngine(self, didStopMeeting: id)
@@ -301,12 +368,8 @@ extension CaptureEngine: SCStreamOutput {
         guard sampleBuffer.isValid,
               CMSampleBufferGetNumSamples(sampleBuffer) > 0 else { return }
 
-        // We only handle `.audio` here (system audio). Microphone goes
-        // through AVAudioEngine, not SCStream. `.screen` is registered so
-        // SCStream's frame-pacing keeps the audio clock in sync, but we
-        // don't persist the pixels (see start() for the AVAssetWriter
-        // gotcha).
-        if type == .audio {
+        switch type {
+        case .audio:
             // Feed the level meter from the audio thread directly —
             // peak() doesn't touch the main actor, so the floating HUD
             // gets system-audio movement without waiting on the same
@@ -315,6 +378,47 @@ extension CaptureEngine: SCStreamOutput {
             Task { @MainActor [weak self] in
                 self?.writeSystemAudio(sampleBuffer)
             }
+        case .screen:
+            // ScreenCaptureKit also emits "no-pixel" sample buffers (status =
+            // .idle, .blank, .suspended) when the screen content hasn't
+            // changed. We only want frames with actual image data.
+            if let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
+               let first = attachments.first,
+               let statusRaw = first[SCStreamFrameInfo.status as CFString] as? Int,
+               let status = SCFrameStatus(rawValue: statusRaw),
+               status != .complete {
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.writeVideo(sampleBuffer)
+            }
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func writeVideo(_ buffer: CMSampleBuffer) {
+        guard let writer = videoWriter, let input = videoInput else { return }
+        guard writer.status == .writing else {
+            if writer.status == .failed {
+                FileLogger.log("CaptureEngine.writeVideo: writer failed: \(writer.error?.localizedDescription ?? "?")")
+                videoWriter = nil
+                videoInput = nil
+            }
+            return
+        }
+        if !videoSessionStarted {
+            let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+            writer.startSession(atSourceTime: pts)
+            videoSessionStarted = true
+            FileLogger.log("CaptureEngine.writeVideo: session started at \(pts.seconds)s")
+        }
+        // Drop frames silently when the encoder is backed up. Better a
+        // skipped frame than blocking SCStream's delivery queue.
+        guard input.isReadyForMoreMediaData else { return }
+        if input.append(buffer) {
+            videoFramesAppended &+= 1
         }
     }
 

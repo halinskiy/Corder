@@ -10,31 +10,48 @@ behaviour, not internal refactors.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-05-13
+
 ### Added
-- **VAD pre-pass** (`VoiceActivityDetector`) — RMS-gating ahead of every
-  Gemini upload. Long silent stretches at the edges of a recording (mic
-  warming up, the pause after Stop) and inside it (you're muted while a
-  teammate talks for two minutes) get dropped before the file is sent.
-  10-20 % token savings on idle mic tracks; ~5-10 % on system tracks.
-  Returned turns are projected back onto the original timeline so the
-  rest of the pipeline (segments, scrubber, search) sees timestamps in
-  the source frame, not the compressed one.
-  - **Empty-track short-circuit**: if VAD finds <500 ms of speech total,
-    we skip the upload entirely and return zero turns. Catches
-    "I forgot to talk into the mic" cleanly.
-  - **Savings threshold**: VAD output is only used when it'd compress
-    the file by ≥10 %. Talk-heavy meetings fall through to the original
-    pipeline unchanged so we don't pay disk I/O for ~0 % API benefit.
-  - Read failures fall back to "transcribe the original" — VAD is an
-    optimisation, never a correctness requirement.
+- **Auto-detect видео-звонков** — когда запускается знакомое meeting-
+  приложение (Zoom, Teams, Meet, Slack, браузеры с веб-звонками) и
+  системный микрофон занят ≥3 с, всплывает blurred-капсула с
+  предложением начать запись. Тап — морф в плавающий блоб.
+- **Блоб в Library** — кнопка в правом нижнем углу окна теперь тот же
+  морфящийся блоб (а не Buy Me a Coffee). Клик переключает запись.
+  Плавающий блоб уходит, пока Library в фокусе.
+- **Видео-запись экрана** — `video.mov` теперь действительно пишется
+  (HEVC, 15 fps, ~1.5 Mbps). В UI отображается немое превью над
+  плеером; аудио ведёт таймлайн.
+- **Skeleton UI** — список встреч и панель деталей рендерят
+  плейсхолдеры на первой загрузке вместо пустоты.
+- **VAD pre-pass** — RMS-gating длинных тишин перед загрузкой в
+  Gemini (см. полный список в diff'е).
 
 ### Changed
-- **Retention for `mic.wav` / `system.wav`** — original tracks are
-  now hard-deleted at launch for any meeting transcribed >30 days ago
-  whose `gemini_raw_turns` cache row is populated. Re-transcribe on
-  those rows hits the cache and never needs the originals again.
-  `mix.wav` stays as the playback source. Saves ~25 MB / 10 min of
-  recording on the long tail.
+- **Плейбек содержит обоих собеседников** — `audio.wav` (полный
+  mic+system mix) больше не удаляется после Dropbox-загрузки, и
+  audio-роут предпочитает его mic.wav-only.
+- **Авто-детект ставит ожидаемых спикеров = 2** — Gemini-диаризация
+  больше не разваливает одного собеседника на 5 «Speaker N» на длинном
+  звонке. Группа всегда правится в clarify-баннере.
+- **Блоб упирается в края экрана** — нельзя утащить за visible-frame.
+
+### Performance
+- **TimelineView блоба** — 60 Hz → state-driven 6–30 Hz, плюс пауза
+  пока host-окно скрыто/occluded. Главный источник фоновой нагрузки.
+- **React polling** — `getRecordingState` 1 с → 5 с в idle (1 с во
+  время записи), `listMeetings` 5 с → 15 с в idle (5 с в записи).
+- **MeetingDetector** — тик 2 с → 4 с; CoreAudio-запрос пропускается
+  если ни одного meeting-приложения не запущено.
+- **`/api/meetings`** — N+1 (по segments+speakers на каждую встречу)
+  свернут в один SQL запрос с correlated subselects.
+
+### Removed
+- Buy Me a Coffee FAB и связанная обвязка.
+- Мёртвый `DropboxService.getTemporaryLink()`, неиспользуемые i18n
+  ключи, лишний CSS (`.video-card`, `.video-fallback`).
+- Старые `.js` файлы в `Web/src/` (tsc теперь с `noEmit`).
 
 ## [0.7.0] — 2026-05-09
 

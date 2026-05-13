@@ -8,9 +8,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         FileLogger.log("AppDelegate: applicationDidFinishLaunching")
-        // Recover from prior crashes: any meeting still marked recording/transcribing
-        // belongs to a previous app run, so it can never finish — flag it failed.
+        // Recover from prior crashes: drop orphan recording rows and flip
+        // bare 'recording' state to failed. Transcribing rows are recovered
+        // separately below — they get re-enqueued, not failed.
         try? AppContext.shared.repo.resetStuckMeetings()
+        // If a transcription was in flight when the previous process died
+        // (forced quit, rebuild during dev, machine sleep), pick it up
+        // again automatically. The audio files (mic.wav / system.wav) are
+        // preserved through transcription, so resume is cheap. User sees
+        // the spinner banner come back, not a red "failed" card.
+        if let stuck = try? AppContext.shared.repo.stuckTranscribingMeetingIds(), !stuck.isEmpty {
+            for id in stuck {
+                FileLogger.log("AppDelegate: auto-resuming transcription for \(id) (was stuck on prior launch)")
+                TranscriptionErrors.clear(meetingId: id)
+                TranscriptionPipeline.shared.enqueue(meetingId: id)
+            }
+        }
+        // One-time cleanup of "ghost" speakers (rows with zero segments) —
+        // legacy dual-track transcriptions used to insert "Speaker 1"
+        // unconditionally even when the mic was silent, which skewed the
+        // clarify banner's auto-default. Idempotent; safe to run on every
+        // launch.
+        if let purged = try? AppContext.shared.repo.purgeOrphanSpeakers(), purged > 0 {
+            FileLogger.log("AppDelegate: purged \(purged) orphan speaker rows")
+        }
         // Scrub Whisper hallucinations ("Субтитры сделал DimaTorzok", etc.) from
         // any pre-existing transcripts so the user sees a clean library on launch.
         TranscriptionPipeline.purgeKnownHallucinations(repo: AppContext.shared.repo)
@@ -54,6 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // drops during a recording, and so we can auto-retry meetings that
         // failed during an offline window once connectivity is back.
         NetworkMonitor.shared.start()
+        // Watch for videoconference apps + a sustained mic-busy state on
+        // the system; when both are true and we haven't already offered,
+        // pop the invite capsule asking whether to record.
+        MeetingDetector.shared.start()
     }
 
     /// Builds an Edit menu so standard shortcuts (⌘C, ⌘X, ⌘V, ⌘A, ⌘Z) have

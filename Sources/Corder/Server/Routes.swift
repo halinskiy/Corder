@@ -37,6 +37,7 @@ enum Routes {
             lastError(id: req.params[":id"] ?? "")
         }
         server.get["/api/recording/state"] = { _ in recordingState() }
+        server.post["/api/recording/start"] = { _ in startRecordingNow() }
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
@@ -92,24 +93,20 @@ enum Routes {
 
     private static func listMeetings(repo: MeetingRepository) -> HttpResponse {
         do {
-            let meetings = try repo.listMeetings()
-            let summaries: [DTO.MeetingSummary] = try meetings.map { m in
-                let segs = try repo.segments(forMeeting: m.id)
-                let speakerIds = Set(segs.map { $0.speakerId })
-                let speakers = try repo.speakers(forMeeting: m.id)
-                // Join custom_name (when set) or label, only for speakers who
-                // actually spoke. Used as a haystack for the sidebar search.
-                let activeNames: [String] = speakers
-                    .filter { speakerIds.contains($0.id) }
-                    .map { ($0.customName?.trimmingCharacters(in: .whitespaces).isEmpty == false)
-                        ? $0.customName!
-                        : $0.label }
-                return DTO.MeetingSummary(
-                    id: m.id, started_at: m.startedAt, ended_at: m.endedAt,
-                    duration_ms: m.durationMs, status: m.status.rawValue,
-                    preview: segs.first?.text,
-                    speaker_count: speakerIds.count,
-                    speaker_names: activeNames.isEmpty ? nil : activeNames.joined(separator: " · ")
+            // Single SQL query with correlated subselects — replaces the
+            // old per-meeting segments + speakers fan-out that produced
+            // ≥2N reads on every sidebar poll.
+            let rows = try repo.listMeetingSummaries()
+            let summaries: [DTO.MeetingSummary] = rows.map { r in
+                DTO.MeetingSummary(
+                    id: r.id,
+                    started_at: r.startedAt,
+                    ended_at: r.endedAt,
+                    duration_ms: r.durationMs,
+                    status: r.status,
+                    preview: r.preview,
+                    speaker_count: r.speakerCount,
+                    speaker_names: r.speakerNames
                 )
             }
             return jsonResponse(summaries)
@@ -123,6 +120,8 @@ enum Routes {
             guard let m = try repo.meeting(id: id) else { return .notFound }
             let speakers = try repo.speakers(forMeeting: id)
             let segments = try repo.segments(forMeeting: id)
+            let hasVideo = FileManager.default.fileExists(atPath: m.videoPath)
+                || (m.dropboxVideoPath != nil)
             let dto = DTO.MeetingDetail(
                 id: m.id, started_at: m.startedAt, duration_ms: m.durationMs,
                 status: m.status.rawValue,
@@ -134,7 +133,8 @@ enum Routes {
                                    start_ms: $0.startMs, end_ms: $0.endMs, text: $0.text,
                                    text_boost: $0.textBoost)
                 },
-                expected_other_speakers: m.expectedOtherSpeakers
+                expected_other_speakers: m.expectedOtherSpeakers,
+                has_video: hasVideo
             )
             return jsonResponse(dto)
         } catch {
@@ -168,6 +168,18 @@ enum Routes {
         case .stopping:
             return jsonResponse(["active": true, "stopping": true] as [String: Any])
         }
+    }
+
+    private static func startRecordingNow() -> HttpResponse {
+        // The inline blob in the Library window posts here. Same path as
+        // the menu-bar Start button: tell the meeting detector to drop
+        // any pending invite (we already know about the call), then
+        // start a full-display capture.
+        Task { @MainActor in
+            MeetingDetector.shared.userStartedRecordingManually()
+            await RecordingController.shared.startRecording(source: .fullDisplay)
+        }
+        return .ok(.text("starting"))
     }
 
     private static func stopRecordingNow() -> HttpResponse {
@@ -360,23 +372,31 @@ enum Routes {
             let contentType = (kind == .video) ? "video/quicktime" : "audio/wav"
 
             // Audio resolution order:
-            //   1. The DB-stored audioPath (usually mic.wav).
-            //   2. The post-mix audio.wav inside the meeting dir — this is
-            //      what AudioMixer produces and what Whisper/Gemini consume.
-            //      When mic.wav never got written (capture race, sleep mid-
-            //      recording, etc.) audioPath points at a missing file but
-            //      audio.wav is still there — the user expects play to work.
+            //   1. The post-mix audio.wav inside the meeting dir — this is
+            //      what AudioMixer produces from mic+system, and the only
+            //      local file that contains BOTH the user and the
+            //      interlocutor. Always prefer it when it's on disk.
+            //   2. The DB-stored audioPath (usually mic.wav) — fallback for
+            //      meetings where mix.wav is gone but mic.wav is still around
+            //      (legacy rows pre-dual-track, or capture races).
+            //   3. Neither exists → fall through to Dropbox hydrate below,
+            //      which restores audio.wav from the archive.
             // Video has only the canonical videoPath; no fallback.
             var url: URL
             if kind == .video {
                 url = URL(fileURLWithPath: m.videoPath)
             } else {
-                let direct = URL(fileURLWithPath: m.audioPath)
-                if FileManager.default.fileExists(atPath: direct.path) {
-                    url = direct
-                } else {
-                    let mixURL = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav")
+                let mixURL = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav")
+                if FileManager.default.fileExists(atPath: mixURL.path) {
                     url = mixURL
+                } else {
+                    let direct = URL(fileURLWithPath: m.audioPath)
+                    if FileManager.default.fileExists(atPath: direct.path) {
+                        url = direct
+                    } else {
+                        // Hydrate target — full mix lives at audio.wav remote.
+                        url = mixURL
+                    }
                 }
             }
 

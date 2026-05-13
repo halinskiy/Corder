@@ -81,6 +81,7 @@ struct PopoverContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             IdleStatus(lang: ctx.language)
             Button {
+                MeetingDetector.shared.userStartedRecordingManually()
                 Task {
                     await RecordingController.shared.startRecording(source: .fullDisplay)
                 }
