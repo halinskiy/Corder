@@ -1,6 +1,7 @@
 import React from "react";
 import { Copy, Archive as ArchiveIcon, Globe, Users } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError } from "../api";
+import { UpdatePill } from "./UpdatePill";
 import type { Lang, T } from "../i18n";
 
 // We persist the *whichever* state the user last saw the banner in
@@ -281,6 +282,7 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
         />
         <div className="spacer" />
         <div className="toolbar">
+          <UpdatePill t={t} onToast={onToast} />
           <LangSwitch lang={lang} onToggle={() => onLangChange(lang === "ru" ? "en" : "ru")} t={t} />
           <button onClick={onCopy} disabled={detail.segments.length === 0}>
             <Copy size={14} strokeWidth={2} /> {t.btn_copy}

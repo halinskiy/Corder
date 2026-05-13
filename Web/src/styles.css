@@ -1356,16 +1356,22 @@ input[type="text"]:focus, input[type="search"]:focus {
   flex: 0 1 auto;
   min-height: 0;
 }
+/* Archive rows are a 3-column grid: checkbox · title+meta · purge-in.
+   Vertical centring uses the first baseline (title row) so the purge-in
+   pill on the right lines up with the title text, not the midpoint of
+   the two-line stack. Without this the right column floats half a line
+   below the title, which read as "uneven" in the screenshot. */
 .archive-row {
   display: grid;
-  grid-template-columns: 36px 1fr 110px;
+  grid-template-columns: 24px 1fr auto;
   align-items: center;
-  padding: 11px 32px;
-  gap: 12px;
+  padding: 14px 32px;
+  column-gap: 16px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   transition: background 60ms ease;
 }
+.archive-row:last-child { border-bottom: none; }
 .archive-row:hover { background: var(--bg-hover); }
 .archive-row.selected { background: var(--bg-active); }
 .archive-row-head {
@@ -1373,7 +1379,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
   cursor: default;
-  padding: 8px 32px;
+  padding: 10px 32px;
 }
 .archive-row-head:hover { background: var(--bg-elev); }
 .archive-head-label {
@@ -1381,43 +1387,54 @@ input[type="text"]:focus, input[type="search"]:focus {
   font-weight: 600;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 .archive-check {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
 }
 .archive-check input {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
   cursor: pointer;
+  margin: 0;
 }
 .archive-cell-date {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
+  line-height: 1.25;
 }
 .archive-row-title {
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--fg);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.25;
 }
 .archive-row-meta {
   font-size: 12.5px;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
+  line-height: 1.25;
 }
 .archive-cell-purge {
-  font-size: 12px;
-  color: var(--fg-dim);
+  font-size: 12.5px;
+  color: var(--fg-muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+  /* align with the title baseline rather than the cell midpoint */
+  align-self: start;
+  padding-top: 1px;
 }
 .archive-actions {
   display: flex;
@@ -1484,3 +1501,113 @@ input[type="text"]:focus, input[type="search"]:focus {
 .skel-line-name   { width: 100px; height: 12px; }
 .skel-line-stats  { width: 70px;  height: 10px; }
 .skel-line-bar    { width: 100%;  height: 20px; border-radius: 2px; }
+
+/* ───────────────────────────── Update-available pill ─────────────────────────── */
+/* Sits to the left of the language switch in MeetingView's toolbar.
+   Same height + border-radius as the other pill buttons (8/14 padding,
+   border-radius 999px) so it reads as a sibling, not a banner. Green
+   accent fill with a slow diagonal shine sweep + a few twinkling
+   stars — borrowed from the corder-landing's pricing CTA pattern. */
+.update-pill {
+  /* Match the base `button` rule (8px 14px padding) so total height is
+     identical to the Copy / Archive buttons next to it. */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  transition: background 80ms ease, border-color 80ms ease, transform 80ms ease;
+  /* No font/family override — inherits the toolbar's sans-serif. */
+}
+.update-pill:hover {
+  background: var(--accent-pressed, #0a5e34);
+  border-color: var(--accent-pressed, #0a5e34);
+}
+.update-pill:active {
+  transform: scale(0.98);
+}
+
+/* Diagonal shine that sweeps left → right every ~9 s. The 60 %-wide
+   strip starts off-screen, sweeps across, then waits the rest of the
+   cycle to avoid feeling spammy. */
+.update-pill-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.update-pill-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  transform: translateX(-180%);
+  animation: update-pill-shine 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform;
+}
+@keyframes update-pill-shine {
+  0%   { transform: translateX(-180%); }
+  35%  { transform: translateX(220%); }
+  100% { transform: translateX(220%); }
+}
+
+/* Six tiny twinkling stars distributed across the pill. Each fades in
+   and out on its own delay so the cluster reads as a sparkle field
+   instead of a synchronous blink. */
+.update-pill-sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.update-pill-sparkles span {
+  position: absolute;
+  color: #ffffff;
+  line-height: 1;
+  opacity: 0;
+  animation: update-pill-sparkle 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.7);
+  will-change: opacity, transform;
+}
+.update-pill-sparkles span:nth-child(1) { top: 3px;  left: 10%; font-size: 7px; animation-delay: 0s; }
+.update-pill-sparkles span:nth-child(2) { top: 17px; left: 18%; font-size: 6px; animation-delay: 0.55s; }
+.update-pill-sparkles span:nth-child(3) { top: 4px;  left: 28%; font-size: 8px; animation-delay: 1.15s; }
+.update-pill-sparkles span:nth-child(4) { top: 17px; left: 72%; font-size: 6px; animation-delay: 0.8s; }
+.update-pill-sparkles span:nth-child(5) { top: 3px;  left: 82%; font-size: 8px; animation-delay: 1.5s; }
+.update-pill-sparkles span:nth-child(6) { top: 17px; left: 90%; font-size: 6px; animation-delay: 0.3s; }
+@keyframes update-pill-sparkle {
+  0%, 100% { opacity: 0; transform: scale(0.6); }
+  50%      { opacity: 1; transform: scale(1.05); }
+}
+
+.update-pill-text {
+  position: relative;
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-pill-shine::after,
+  .update-pill-sparkles span {
+    animation: none;
+  }
+  .update-pill-shine::after { transform: translateX(-180%); }
+  .update-pill-sparkles span { opacity: 0; }
+}
