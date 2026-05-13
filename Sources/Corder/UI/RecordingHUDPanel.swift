@@ -186,6 +186,12 @@ final class RecordingHUDPanel {
 /// but cheap to defend against).
 final class HUDHostingView<Content: View>: NSHostingView<Content> {
     private var trackingArea: NSTrackingArea?
+    /// Tracks whether we've pushed `.pointingHand` onto the cursor
+    /// stack so mouseExited can pop exactly once. The push/pop pair
+    /// beats `addCursorRect` on .nonactivatingPanel windows where
+    /// AppKit's window-drag handler keeps resetting the cursor on
+    /// every mouseMoved tick.
+    private var pushedCursor = false
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
@@ -204,7 +210,7 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
         if let area = trackingArea { removeTrackingArea(area) }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.activeAlways, .inVisibleRect, .cursorUpdate, .mouseMoved],
+            options: [.activeAlways, .inVisibleRect, .cursorUpdate, .mouseEnteredAndExited, .mouseMoved],
             owner: self,
             userInfo: nil
         )
@@ -212,7 +218,23 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
         trackingArea = area
     }
 
+    override func mouseEntered(with event: NSEvent) {
+        if !pushedCursor {
+            NSCursor.pointingHand.push()
+            pushedCursor = true
+        }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if pushedCursor {
+            NSCursor.pop()
+            pushedCursor = false
+        }
+    }
     override func mouseMoved(with event: NSEvent) {
+        // Drag handler resets the system cursor on every move while the
+        // panel is .nonactivatingPanel + isMovableByWindowBackground;
+        // re-set ours so the pointer doesn't flicker back to the arrow
+        // between push() and the next AppKit reset.
         NSCursor.pointingHand.set()
     }
     override func cursorUpdate(with event: NSEvent) {
@@ -348,16 +370,14 @@ struct RecordingHUDView: View {
         // `isRecording` so nothing else animates with it.
         .animation(.easeInOut(duration: 0.10), value: isRecording)
         .onAppear { appeared = true }
-        // onContinuousHover keeps re-applying the cursor on every
-        // mouse movement inside the view.
+        // Hover state for the gentle scale-up only. The cursor is
+        // owned by HUDHostingView (NSTrackingArea push/pop). Don't
+        // touch NSCursor here — racing against the AppKit drag handler
+        // is what kept the pointer stuck on the arrow before.
         .onContinuousHover { phase in
             switch phase {
-            case .active:
-                if !hovering { hovering = true }
-                NSCursor.pointingHand.set()
-            case .ended:
-                hovering = false
-                NSCursor.arrow.set()
+            case .active: if !hovering { hovering = true }
+            case .ended:  hovering = false
             }
         }
         .contentShape(Rectangle())

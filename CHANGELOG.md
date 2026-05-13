@@ -10,6 +10,17 @@ behaviour, not internal refactors.
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-05-13
+
+### Fixed
+- Sparkle теперь делает silent background-check через 2 секунды после
+  старта (по дефолту откладывал первую проверку на 24 ч). Без этого
+  pill «Доступен апдейт» не загорался у свежеустановленных копий пока
+  не пройдут сутки.
+- Курсор плавающего блоба наконец стабильно превращается в pointing
+  hand: NSTrackingArea с mouseEntered/Exited делает push/pop, плюс
+  убран конфликтующий `NSCursor.set()` из SwiftUI onContinuousHover.
+
 ## [0.8.2] — 2026-05-13
 
 ### Changed

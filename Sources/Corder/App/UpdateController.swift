@@ -35,6 +35,14 @@ final class UpdateController: NSObject {
             userDriverDelegate: nil
         )
         super.init()
+        // Sparkle's scheduled check fires only after the configured
+        // interval (24h) has elapsed since the last successful check —
+        // which means a freshly installed copy doesn't hit the appcast
+        // until tomorrow. Force a silent check ~2 s after launch so the
+        // pill can light up right away on a meaningful release cadence.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.controller.updater.checkForUpdatesInBackground()
+        }
     }
 
     /// Hook a "Check for Updates…" menu item OR the React toolbar
