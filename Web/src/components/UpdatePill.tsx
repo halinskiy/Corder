@@ -15,21 +15,31 @@ interface Props {
 /// standard "Update available" panel via /api/update-check.
 export function UpdatePill({ t, onToast }: Props) {
   const [available, setAvailable] = React.useState(false);
+  const [version, setVersion] = React.useState<string | undefined>(undefined);
 
-  // Poll Sparkle's verdict every 60 s. Cheap (just a NSLock read on
-  // the Swift side, no I/O), and lets the pill appear/disappear
-  // without the user having to reload the Library window.
+  // Poll Sparkle's verdict every 60 s + also re-check whenever the
+  // window comes back into focus. Cheap (just a NSLock read on the
+  // Swift side, no I/O), and lets the pill appear/disappear without
+  // the user having to reload the Library window.
   React.useEffect(() => {
     let alive = true;
     const tick = async () => {
       try {
         const s = await getUpdateStatus();
-        if (alive) setAvailable(s.available);
+        if (!alive) return;
+        setAvailable(s.available);
+        setVersion(s.version);
       } catch {}
     };
     tick();
     const id = window.setInterval(tick, 60_000);
-    return () => { alive = false; window.clearInterval(id); };
+    const onFocus = () => { tick(); };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   if (!available) return null;
@@ -41,6 +51,12 @@ export function UpdatePill({ t, onToast }: Props) {
       onToast(t.toast_settings_failed, "error");
     }
   };
+
+  // Append the target version so the user knows exactly what they're
+  // about to install — useful when the appcast bumps twice in a day.
+  const label = version
+    ? `${t.update_available_label} ${version}`
+    : t.update_available_label;
 
   return (
     <button
@@ -58,7 +74,7 @@ export function UpdatePill({ t, onToast }: Props) {
         <span>✦</span>
         <span>✦</span>
       </span>
-      <span className="update-pill-text">{t.update_available_label}</span>
+      <span className="update-pill-text">{label}</span>
     </button>
   );
 }
