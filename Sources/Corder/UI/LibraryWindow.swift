@@ -171,6 +171,39 @@ final class LibraryWindow: NSWindowController {
                                               width: win.contentView!.bounds.width, height: 28))
         dragView.autoresizingMask = [.width, .minYMargin]
         win.contentView?.addSubview(dragView)
+
+        // Same SwiftUI blob the floating HUD uses, embedded directly in
+        // the bottom-right of the Library window. Reused — not a copy.
+        // Click toggles recording (start when idle, stop when recording);
+        // the click target is state-aware, the visuals (hover spotlight,
+        // morph, palette swap on audio activity) all come from the
+        // unmodified RecordingHUDView.
+        let blob = HUDHostingView(rootView:
+            RecordingHUDView(onTap: {
+                Task { @MainActor in
+                    switch AppContext.shared.recordingState {
+                    case .idle:
+                        MeetingDetector.shared.userStartedRecordingManually()
+                        await RecordingController.shared.startRecording(source: .fullDisplay)
+                    case .recording:
+                        await RecordingController.shared.stopRecording()
+                    case .stopping:
+                        return
+                    }
+                }
+            })
+        )
+        let blobSize: CGFloat = 110
+        let blobMargin: CGFloat = 8
+        blob.frame = NSRect(
+            x: win.contentView!.bounds.width - blobSize - blobMargin,
+            y: blobMargin,
+            width: blobSize, height: blobSize
+        )
+        // Anchor to bottom-right: distance to left grows when resized
+        // (.minXMargin flexible), distance to top grows too (.maxYMargin).
+        blob.autoresizingMask = [.minXMargin, .maxYMargin]
+        win.contentView?.addSubview(blob)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -192,5 +225,19 @@ extension LibraryWindow: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         // Return to menu-bar-only behaviour when the user closes the window.
         NSApp.setActivationPolicy(.accessory)
+        // Restore the floating HUD if a recording is in flight — the
+        // inline blob in the page is going away with the window.
+        RecordingHUDPanel.shared.setLibrarySuppressed(false)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        // While the Library is the key window, the inline blob in the
+        // page provides the start/stop affordance — hide the floating HUD
+        // so the two don't double up.
+        RecordingHUDPanel.shared.setLibrarySuppressed(true)
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        RecordingHUDPanel.shared.setLibrarySuppressed(false)
     }
 }

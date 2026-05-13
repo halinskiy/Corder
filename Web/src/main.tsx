@@ -4,7 +4,6 @@ import { listMeetings, MeetingSummary, RecordingState, getRecordingState, getSet
 import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
 import { ArchiveView } from "./components/ArchiveView";
-import { Donate } from "./components/Donate";
 import { STRINGS, Lang, T } from "./i18n";
 
 function Toast({ toast, leaving }: { toast: ToastState; leaving: boolean }) {
@@ -60,6 +59,10 @@ interface ToastState {
 
 function App() {
   const [meetings, setMeetings] = React.useState<MeetingSummary[]>([]);
+  // First-load flag — distinguishes "no meetings yet, still fetching" from
+  // "fetched, list is empty". Sidebar renders skeleton rows in the former
+  // case and an empty-state in the latter.
+  const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
   const [toast, setToast] = React.useState<ToastState | null>(null);
@@ -86,6 +89,7 @@ function App() {
     try {
       const m = await listMeetings();
       setMeetings(m);
+      setMeetingsLoaded(true);
       // Pick a new active row only from meetings that aren't currently
       // pending soft-delete — otherwise the just-deleted row would briefly
       // come back as active until the 5-second timer finalises the DELETE.
@@ -99,19 +103,30 @@ function App() {
 
   React.useEffect(() => { refresh(); }, [refresh]);
 
+  // Two-speed polling. While a recording is in flight we want fresh
+  // state for the live HUD / banner; when the app is idle there's
+  // nothing changing on the server side that matters at 1 s
+  // granularity, so we drop both polls to a much lazier 5 s.
+  // Previously the recording-state poll ran every second
+  // unconditionally, which kept the whole React tree re-rendering and
+  // showed up as background CPU even when the user wasn't doing
+  // anything.
+  const isActive = recState.active;
   React.useEffect(() => {
-    const t = setInterval(refresh, 5000);
-    return () => clearInterval(t);
-  }, [refresh]);
-
-  React.useEffect(() => {
+    const ms = isActive ? 1000 : 5000;
     const tick = async () => {
       try { setRecState(await getRecordingState()); } catch {}
     };
     tick();
-    const t = setInterval(tick, 1000);
+    const t = setInterval(tick, ms);
     return () => clearInterval(t);
-  }, []);
+  }, [isActive]);
+
+  React.useEffect(() => {
+    const ms = isActive ? 5000 : 15000;
+    const t = setInterval(refresh, ms);
+    return () => clearInterval(t);
+  }, [refresh, isActive]);
 
   const dismissToast = React.useCallback(() => {
     if (toastTimer.current) { window.clearTimeout(toastTimer.current); toastTimer.current = null; }
@@ -227,6 +242,7 @@ function App() {
     <div className="app">
       <Sidebar
         meetings={visibleMeetings}
+        loaded={meetingsLoaded}
         activeId={activeId}
         query={query}
         onQueryChange={setQuery}
@@ -265,7 +281,6 @@ function App() {
         )}
       </main>
       {toast && <Toast toast={toast} leaving={toastLeaving} />}
-      <Donate t={t} />
       {archiveOpen && (
         <ArchiveView
           onClose={() => setArchiveOpen(false)}

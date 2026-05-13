@@ -1,6 +1,6 @@
 import React from "react";
 import { Download } from "lucide-react";
-import { MeetingDetail, audioSrc } from "../api";
+import { MeetingDetail, audioSrc, videoSrc } from "../api";
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 
@@ -16,10 +16,81 @@ interface Props {
 
 export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "ru" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
+  const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   return (
     <div className="right-panel">
-      <AudioCard detail={detail} audioRef={audioRef} onTimeUpdate={onTimeUpdate} t={t} />
+      {detail.has_video && (
+        <ScreenVideo
+          detail={detail}
+          videoRef={screenVideoRef}
+          audioRef={audioRef}
+          currentTimeSec={currentTimeSec}
+        />
+      )}
+      <AudioCard
+        detail={detail}
+        audioRef={audioRef}
+        onTimeUpdate={onTimeUpdate}
+        t={t}
+      />
       <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
+    </div>
+  );
+}
+
+/// Silent screen-capture preview that sits above the audio controls.
+/// The audio element is the master clock: its play / pause / seek
+/// events drive the video, never the other way around. We mute the
+/// video so the muxed-in track (which is empty in our writer config,
+/// but defensive belt-and-braces) can't double up with mix.wav.
+function ScreenVideo({
+  detail, videoRef, audioRef, currentTimeSec,
+}: {
+  detail: MeetingDetail;
+  videoRef: React.MutableRefObject<HTMLVideoElement | null>;
+  audioRef: React.RefObject<HTMLAudioElement>;
+  currentTimeSec: number;
+}) {
+  // Pull the video clock toward the audio clock whenever they drift
+  // by more than ~0.3 s. Setting currentTime on every audio
+  // timeupdate (4-5 Hz) would cause stutter from the keyframe seeks.
+  React.useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (Math.abs(v.currentTime - currentTimeSec) > 0.3) {
+      v.currentTime = currentTimeSec;
+    }
+  }, [currentTimeSec, videoRef]);
+
+  // Mirror play / pause from audio onto video. The two media
+  // elements end up moving together; only the audio one is "real"
+  // for transport purposes.
+  React.useEffect(() => {
+    const a = audioRef.current;
+    const v = videoRef.current;
+    if (!a || !v) return;
+    const onPlay = () => { v.play().catch(() => {}); };
+    const onPause = () => { v.pause(); };
+    a.addEventListener("play", onPlay);
+    a.addEventListener("pause", onPause);
+    a.addEventListener("seeking", onPause);
+    return () => {
+      a.removeEventListener("play", onPlay);
+      a.removeEventListener("pause", onPause);
+      a.removeEventListener("seeking", onPause);
+    };
+  }, [audioRef, videoRef]);
+
+  return (
+    <div className="screen-video-card">
+      <video
+        ref={videoRef}
+        src={videoSrc(detail.id)}
+        muted
+        playsInline
+        preload="metadata"
+        className="screen-video"
+      />
     </div>
   );
 }
@@ -224,6 +295,7 @@ function SpeakerTimeline({
       <div className="timeline-tabs">
         <span className="timeline-tab active">{t.timeline_title}</span>
       </div>
+      <div className="timeline-rows">
       {activeSpeakers.map((sp) => {
         const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
         const sum = totals.get(sp.id) || 0;
@@ -251,6 +323,7 @@ function SpeakerTimeline({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

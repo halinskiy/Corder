@@ -24,6 +24,10 @@ function UserFilledIcon() {
 
 interface Props {
   meetings: MeetingSummary[];
+  /// False during the very first /api/meetings fetch — drives the
+  /// shimmer skeleton so the empty-list state doesn't flash before the
+  /// first response arrives.
+  loaded: boolean;
   activeId: string | null;
   query: string;
   onQueryChange: (q: string) => void;
@@ -36,7 +40,7 @@ interface Props {
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, onDeleted, onToast, t, lang }: Props) {
+export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSelect, onDeleted, onToast, t, lang }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
 
   React.useEffect(() => {
@@ -87,7 +91,18 @@ export function Sidebar({ meetings, activeId, query, onQueryChange, onSelect, on
         </div>
       </div>
       <div className="sidebar-list">
-        {filtered.length === 0 && (
+        {!loaded && (
+          <div className="sidebar-skeleton" aria-hidden>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div className="meeting-item skeleton-item" key={i}>
+                <div className="skel-line skel-line-title" />
+                <div className="skel-line skel-line-meta" />
+                <div className="skel-line skel-line-preview" />
+              </div>
+            ))}
+          </div>
+        )}
+        {loaded && filtered.length === 0 && (
           <div style={{ padding: 16, color: "var(--fg-muted)", fontSize: 13 }}>
             {meetings.length === 0 ? t.sidebar_empty : t.sidebar_no_match}
           </div>

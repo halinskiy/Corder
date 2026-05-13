@@ -8,7 +8,19 @@ final class RecordingController {
         AppContext.shared.capture.delegate = self
     }
 
-    func startRecording(source: CaptureSource) async {
+    /// Start a new recording.
+    ///
+    /// `expectedOtherSpeakers` lets the caller seed the meeting with a
+    /// known speaker count *before* transcription runs. The auto-detect
+    /// path (MeetingDetector → `MeetingInvitePanel.shared.show`) passes
+    /// 1 because the vast majority of calls it catches are 1:1 — that
+    /// keeps Gemini's over-counting (12-min audio sometimes diarized
+    /// into 5 buckets for a single interlocutor) from showing up as a
+    /// bogus "6 speakers" pill. The user can still flip to "3" or "4+"
+    /// in the clarify banner and re-map without re-billing Gemini.
+    /// Pass `nil` (the default, used by manual Start) to let Gemini
+    /// pick the count.
+    func startRecording(source: CaptureSource, expectedOtherSpeakers: Int? = nil) async {
         // Permissions
         switch await PermissionsChecker.checkScreenRecording() {
         case .granted: break
@@ -37,13 +49,14 @@ final class RecordingController {
         let audioPath = dir.appendingPathComponent("mic.wav").path
         let now = Int64(Date().timeIntervalSince1970 * 1000)
 
-        let meeting = Meeting(
+        var meeting = Meeting(
             id: id,
             startedAt: now,
             videoPath: videoPath,
             audioPath: audioPath,
             status: .recording
         )
+        meeting.expectedOtherSpeakers = expectedOtherSpeakers
 
         do {
             try AppContext.shared.repo.insertMeeting(meeting)

@@ -1,0 +1,2 @@
+# tsc never emits with noEmit:true, but guard against stale .js
+src/**/*.js
