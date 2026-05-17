@@ -17,8 +17,7 @@ every change to build commands, architecture, or gotchas goes here.
 | Min macOS         | 14.0 (15+ recommended for ScreenCaptureKit shared mic-tap path; we now use AVAudioEngine for mic regardless) |
 | Architecture      | Status-bar app + floating HUD pill + local HTTP server + WKWebView frontend       |
 | Frontend          | Vite + React 18 + TypeScript, bundled into `Sources/Corder/Resources/web/`         |
-| ASR               | Gemini 2.5 Flash, **dual-track** (mic + system as parallel calls)                  |
-| Boost             | Gemini 2.5 Pro for per-segment polish                                              |
+| ASR               | Gemini 2.5 Flash, **dual-track** (mic + system as parallel calls). Only provider — no local/Whisper fallback. |
 | Storage           | GRDB on top of SQLite, `~/Library/Application Support/Corder/corder.db`            |
 | Recordings dir    | `~/Library/Application Support/Corder/recordings/<meeting-id>/`                    |
 | Logs              | `/tmp/corder.log` (FileLogger, simple append)                                      |
@@ -113,7 +112,6 @@ TranscriptionPipeline.transcribe
     │   Persist: `setRawTurnsCache` (gemini_raw_turns + audio_hash)
     │   then segments / speakers tables. Status flips ready.
     ▼
-Optional: BoostService (Gemini 2.5 Pro) — segment-by-segment polish
 Optional: DropboxService — upload mix.wav + mic.wav + system.wav,
           delete local copies (kept under archive_root, see SECURITY)
     │
@@ -141,8 +139,7 @@ Library window (WKWebView)
 | ---------------- | ------------------------------------------------------------------------------- |
 | `App/`           | `CorderApp` entry, `AppDelegate` (LSUIElement, main menu, archive purge), `RecordingController` (state machine + HUD), `RecordingLevelMeter` (HUD-feeding ObservableObject), `NetworkMonitor`, `Notifications`, `SleepWatchdog`, `FileLogger`, `UpdateController` (Sparkle) |
 | `Capture/`       | `CaptureEngine` (SCStream system audio + AVAudioEngine mic, level-meter ingest), `PermissionsChecker` |
-| `Transcription/` | `AudioMixer`, `TranscriptionPipeline` (driver + dual-track fork + cache + auto-boost + auto-archive), `GeminiTranscriber` (cloud, with `TranscribeMode.{single,diarize}`, VAD pre-pass, auto-split), `VoiceActivityDetector` (RMS-gating + concat + projection), `Diarizer` (channel gate for legacy single-stream path only) |
-| `Boost/`         | `BoostService` — Gemini 2.5 Pro, per-segment polish                             |
+| `Transcription/` | `AudioMixer`, `TranscriptionPipeline` (driver + dual-track fork + cache + auto-archive), `GeminiTranscriber` (cloud, with `TranscribeMode.{single,diarize}`, VAD pre-pass, auto-split), `VoiceActivityDetector` (RMS-gating + concat + projection), `Diarizer` (channel gate for legacy single-stream path only) |
 | `Cloud/`         | `DropboxService` — refresh-token OAuth, chunked upload, temporary-link proxy    |
 | `Storage/`       | GRDB models (with default-nil optionals), repository, migrations (v1..v8_archive) |
 | `Server/`        | Swifter routes, range-aware media serving, JSON DTOs, RangeRequest parser       |

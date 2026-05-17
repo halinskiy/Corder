@@ -4,14 +4,24 @@ import SwiftUI
 
 @MainActor
 final class MenuBarController {
+    /// Set in init so non-UI singletons (MeetingDetector) can drop the
+    /// "Record this call?" offer into the menu-bar popover without
+    /// threading a reference through every layer.
+    static private(set) weak var shared: MenuBarController?
+
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let onOpenLibrary: () -> Void
     private var cancellable: AnyCancellable?
+    /// The normal popover content (menu). Stashed while the invite
+    /// offer temporarily takes over the popover so we can restore it.
+    private var menuHost: NSViewController?
+    private var inviteDismissTimer: Timer?
 
     init(onOpenLibrary: @escaping () -> Void) {
         self.onOpenLibrary = onOpenLibrary
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        MenuBarController.shared = self
 
         if let button = statusItem.button {
             button.target = self
@@ -25,6 +35,7 @@ final class MenuBarController {
         })
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
+        self.menuHost = host
 
         // Reflect recording state in the menu-bar icon: filled red circle
         // while recording, neutral outline circle otherwise.
@@ -72,13 +83,219 @@ final class MenuBarController {
     @objc private func togglePopover(_ sender: AnyObject?) {
         guard let button = statusItem.button else { return }
         if popover.isShown {
+            // A click on the icon while the invite is up = dismiss it
+            // (and restore the normal menu for the next open).
+            if popover.contentViewController !== menuHost {
+                dismissInvite(fireDismiss: true)
+                return
+            }
             popover.performClose(sender)
         } else {
-            // Force SwiftUI to compute its preferred size before anchoring,
-            // otherwise the popover sometimes appears mid-screen.
             popover.contentViewController?.view.layoutSubtreeIfNeeded()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    // MARK: - "Record this call?" offer (replaces the old floating toast)
+
+    private var inviteOnDismiss: (() -> Void)?
+
+    /// Drop the call-record offer down from the menu-bar icon as a real
+    /// NSPopover. Note: a status-bar popover is tied to the app, so it
+    /// won't float over a fullscreen call on another Space — the user
+    /// explicitly chose this native behaviour over the persistent
+    /// floating panel. We activate the app so the popover can present
+    /// even though Corder is LSUIElement and currently in the
+    /// background, and use `.applicationDefined` so it stays put until
+    /// the user answers (or the 25 s timeout fires) instead of vanishing
+    /// on the first outside click.
+    func showInviteOffer(appName: String,
+                         onAccept: @escaping () -> Void,
+                         onDismiss: @escaping () -> Void) {
+        guard let button = statusItem.button else { return }
+        inviteDismissTimer?.invalidate()
+        inviteOnDismiss = onDismiss
+
+        let host = NSHostingController(rootView: InviteOfferView(
+            appName: appName,
+            lang: AppContext.shared.language,
+            onAccept: { [weak self] in
+                self?.dismissInvite(fireDismiss: false)
+                onAccept()
+            },
+            onDismiss: { [weak self] in
+                self?.dismissInvite(fireDismiss: true)
+            }
+        ))
+        host.sizingOptions = .preferredContentSize
+
+        popover.behavior = .applicationDefined
+        popover.contentViewController = host
+        host.view.layoutSubtreeIfNeeded()
+
+        NSApp.activate(ignoringOtherApps: true)
+        if popover.isShown { popover.performClose(nil) }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+
+        inviteDismissTimer = Timer.scheduledTimer(withTimeInterval: 25,
+                                                  repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.dismissInvite(fireDismiss: true) }
+        }
+    }
+
+    /// Public cancel — used when the user starts recording manually
+    /// while a call-offer is still up, so a stale offer doesn't linger.
+    /// No dismiss callback (the caller already took over).
+    func cancelInviteOffer() {
+        guard popover.contentViewController !== menuHost else { return }
+        dismissInvite(fireDismiss: false)
+    }
+
+    private func dismissInvite(fireDismiss: Bool) {
+        inviteDismissTimer?.invalidate()
+        inviteDismissTimer = nil
+        let cb = inviteOnDismiss
+        inviteOnDismiss = nil
+        if popover.isShown { popover.performClose(nil) }
+        // Restore the regular menu content + transient behaviour for
+        // the next normal open.
+        if let menuHost = menuHost {
+            popover.contentViewController = menuHost
+        }
+        popover.behavior = .transient
+        if fireDismiss { cb?() }
+    }
+
+    // MARK: - "Starting recording…" loading state
+
+    /// Show the warm-up spinner in the SAME popover (replaces the old
+    /// floating loading capsule). Called from
+    /// `RecordingController.startRecording` right before the SCStream +
+    /// AVAudioEngine warm-up (~200-400 ms). On the auto-detect path the
+    /// invite popover was just closed by `dismissInvite`; this re-opens
+    /// the popover from the same status-item anchor so the user reads
+    /// invite → loading → blob as one continuous element. On the manual
+    /// Start path the menu popover may still be open from the click —
+    /// we just swap its content.
+    func showLoadingState() {
+        guard let button = statusItem.button else { return }
+        inviteDismissTimer?.invalidate()
+        let host = NSHostingController(rootView:
+            LoadingStateView(lang: AppContext.shared.language))
+        host.sizingOptions = .preferredContentSize
+        popover.behavior = .applicationDefined
+        popover.contentViewController = host
+        host.view.layoutSubtreeIfNeeded()
+        NSApp.activate(ignoringOtherApps: true)
+        if popover.isShown { popover.performClose(nil) }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
+    /// Tear the loading state down and restore the normal menu. Used
+    /// both on success (the blob takes over) and on the start-failure
+    /// path so the user isn't left staring at a spinner that never
+    /// resolves.
+    func finishLoadingState() {
+        if popover.isShown { popover.performClose(nil) }
+        if let menuHost = menuHost {
+            popover.contentViewController = menuHost
+        }
+        popover.behavior = .transient
+    }
+}
+
+/// Warm-up spinner. Built from the exact same shell as
+/// `InviteOfferView` / `PopoverContentView` (320 × padding-20 ×
+/// windowBackground, rounded-8 hairline-bordered status card) so it
+/// reads as one more state of the menu, not a separate toast.
+private struct LoadingStateView: View {
+    let lang: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                ProgressView().scaleEffect(0.7)
+                Text(L.t("starting_recording", lang: lang))
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .padding(20)
+        .frame(width: 320)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+/// "We noticed a call — record it?" offer. Built from the *exact* same
+/// pieces as `PopoverContentView`: a bordered status card (mirrors
+/// IdleStatus/RecordingStatus) + `FlatButtonStyle` buttons, same 320 ×
+/// padding-20 × windowBackground shell. So it reads as one more state
+/// of the menu, not a separate toast pretending to be it.
+private struct InviteOfferView: View {
+    let appName: String
+    let lang: String
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        // Exact composition of PopoverContentView's idle state:
+        //   VStack(spacing:18) { [status card + primary] (spacing:14),
+        //                         hairline, [secondary] }
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                // Status card — same metrics as IdleStatus
+                // (h16 / v14, rounded-8, primary.opacity(0.10) border).
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(appName)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(Color.red)
+                    Text(L.t("invite_question", lang: lang))
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(.primary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                )
+
+                // Primary — identical to the menu's idle "Start
+                // recording" (red dot + FlatButtonStyle .primary).
+                Button(action: onAccept) {
+                    HStack(spacing: 8) {
+                        Circle().fill(Color.red).frame(width: 8, height: 8)
+                        Text(L.t("start", lang: lang))
+                    }
+                }
+                .buttonStyle(FlatButtonStyle(role: .primary))
+            }
+
+            // Hairline — same as the menu's primary↔library divider.
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 1)
+                .padding(.vertical, 2)
+
+            // Secondary — same treatment as "Open library".
+            Button(action: onDismiss) {
+                Text(L.t("invite_not_now", lang: lang))
+            }
+            .buttonStyle(FlatButtonStyle(role: .secondary))
+        }
+        .padding(20)
+        .frame(width: 320)
+        .background(Color(NSColor.windowBackgroundColor))
     }
 }

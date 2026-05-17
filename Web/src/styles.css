@@ -24,9 +24,98 @@
   --status-ready: #1f7a4f;
   --status-warn: #b07b1a;
   --status-fail: #b8443c;
+  /* Recessed timeline channel — overridden in dark. */
+  --tl-track: rgba(14, 14, 13, 0.05);
+}
+
+/* Dark theme. Same warm-neutral family as the light palette, just
+   inverted. Applied by toggling `.dark` on <html>/<body>; the actual
+   light→dark wipe is the cursor-origin circle below. */
+.dark {
+  color-scheme: dark;
+  --bg: #161615;
+  --bg-elev: #1d1d1c;
+  --bg-hover: #222221;
+  --bg-active: #2a2a28;
+  --bg-input: #1d1d1c;
+  --border: #2c2c2a;
+  --border-strong: #3a3a37;
+  --fg: #f2f2f0;
+  --fg-muted: #a0a09b;
+  --fg-dim: #6e6e6a;
+  --accent: #1f9d59;
+  --accent-pressed: #178048;
+  --speaker-1: #9b7ce0;
+  --speaker-2: #46c08a;
+  --speaker-3: #e07d7d;
+  --speaker-4: #6fa6e0;
+  --danger: #e0655c;
+  --status-ready: #46c08a;
+  --status-warn: #d6a445;
+  --status-fail: #e0655c;
+  --tl-track: rgba(255, 255, 255, 0.08);
+}
+
+/* Hardcoded near-white surfaces predate the theme work; re-point them
+   at tokens only under .dark so the light look is untouched. */
+.dark .ctx-item:hover { background: var(--bg-hover); }
+/* Sessions: lighter, clearly liftable hover. */
+.dark .meeting-item:hover { background: rgba(255, 255, 255, 0.055); }
+/* Settings rows: simpler/subtler than the border, like the old session
+   hover — not a strong fill. */
+.dark .settings-row:hover { background: var(--bg-hover); }
+/* Transcript line hover — noticeably lighter than other hovers so a
+   line you're pointing at clearly lifts off the dark page. */
+.dark .segment-line:hover { background: rgba(255, 255, 255, 0.07); }
+.dark .meeting-item.active,
+.dark .toolbar-icon-btn.active,
+.dark .toolbar-icon-btn.active:hover { background: var(--bg-active); }
+.dark .audio-scrub::before { background: var(--bg-active); }
+/* The play-button scrim is a white wash in light mode; in dark it has
+   to darken the preview instead, or the video reads as a white sheet. */
+.dark .screen-video-scrim { background: rgba(0, 0, 0, 0.5); }
+/* Currently-playing transcript line: the light mint is glaring on dark.
+   A low accent tint marks position without shouting. */
+.dark .segment-line.active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* While the theme wipe is running, freeze element CSS transitions so
+   colour-transitioning bits (timeline card, bars) don't double-animate
+   under the View Transition and flicker. The VT itself is a
+   pseudo-element animation and is unaffected by this. */
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition: none !important;
+}
+
+/* View Transitions API: kill the default cross-fade so only the
+   cursor-origin clip-path circle (driven from theme.ts) plays. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 * { box-sizing: border-box; }
+
+/* Explicit selection colour — the WebKit default washed out to an
+   invisible near-white box on the dark theme. A translucent accent
+   tint reads on both backgrounds; text keeps its own colour so
+   contrast is preserved. */
+::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+/* Transcript search match. Accent tint instead of the old hardcoded
+   mint so it reads on both themes; text keeps its own colour. */
+.tp-hl {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
 
 html, body, #root {
   margin: 0;
@@ -54,6 +143,106 @@ button {
   transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
 button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+
+
+/* Toolbar divider before the profile avatar. */
+.toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border-strong);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+.avatar-btn {
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.avatar-btn:hover { border-color: var(--fg-dim); background: var(--bg-elev); }
+/* No photo yet → clean white (page-bg) button instead of the grey
+   elevated fill, so the fallback person glyph reads as a crisp avatar
+   placeholder rather than a muddy chip. */
+.avatar-btn.is-empty { background: var(--bg); }
+.avatar-btn.is-empty:hover { background: var(--bg-elev); }
+.avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-fallback { color: var(--fg-muted); display: flex; }
+/* Floating profile dropdown — fixed, above the modal layer (overlay is
+   z 70). */
+.profile-pop {
+  position: fixed;
+  z-index: 90;
+  width: 232px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+  padding: 8px;
+  animation: donate-fade 140ms ease;
+}
+.profile-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 8px 10px;
+}
+.avatar-img-lg {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+}
+.avatar-img-lg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.profile-pop-id { min-width: 0; }
+.profile-pop-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-pop-sub {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-top: 1px;
+}
+.profile-pop-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 2px -8px 6px;
+}
+.profile-pop-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.profile-pop-item:hover { background: var(--bg-hover); }
+.profile-pop-item svg { color: var(--fg-muted); flex-shrink: 0; }
 button:active { background: var(--bg-active); }
 button:disabled { opacity: 0.4; cursor: default; }
 button.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
@@ -105,9 +294,10 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* App layout */
 .app {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--sidebar-w, 240px) 1fr;
   height: 100vh;
   overflow: hidden;
+  position: relative;
   /* Use the same colour as the main pane so the sidebar's
      `to right ... transparent` gradient reveals the white area cleanly,
      instead of bleeding the elevated grey colour past the divider. */
@@ -120,26 +310,17 @@ input[type="text"]:focus, input[type="search"]:focus {
      instead of stretching the sidebar past the grid row's edge — see the
      long comment on `.transcript-wrap` for the same fix on the main pane. */
   min-height: 0;
-  /* Two stacked gradients drawn in one background:
-     1) a 1 px vertical hairline at `right: 5px` (the divider).
-     2) a grey fill that stops 5 px before the right edge so the final
-        strip is transparent and reveals the white main-area body.
-     Drawing the line as part of the background — instead of an absolutely
-     positioned ::after — means the native scrollbar (which paints AFTER
-     background) sits on top of it without any z-index gymnastics. */
-  background:
-    linear-gradient(to right,
-      transparent 0,
-      transparent calc(100% - 4px),
-      var(--border) calc(100% - 4px),
-      var(--border) calc(100% - 3px),
-      transparent calc(100% - 3px),
-      transparent 100%),
-    linear-gradient(to right,
-      var(--bg-elev) 0,
-      var(--bg-elev) calc(100% - 4px),
-      transparent calc(100% - 4px),
-      transparent 100%);
+  /* ONE divider line, exactly at the sidebar's right edge.
+     History: the old gradient drew the hairline 4 px IN from the edge
+     (so a space-reserving scrollbar could overlap it). With a solid
+     fill that left two visible verticals — the hairline at -4 px AND
+     the grey→white seam at the true edge — i.e. the "2 lines + gap"
+     the user reported. A solid fill + a single 1 px inset shadow at
+     the very edge collapses it to ONE crisp divider at the real
+     sidebar/main boundary; the scrollbar sits immediately inside it,
+     no white sliver, no double line. */
+  background: var(--bg-elev);
+  box-shadow: inset -1px 0 0 var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -251,6 +432,11 @@ input[type="text"]:focus, input[type="search"]:focus {
   gap: 12px;
   background: var(--bg);
   max-width: 360px;
+  /* Never let the flex column compress the card — it sits inside
+     `.transcript` (flex, scrolls). Without this it gets squeezed and,
+     with overflow:hidden on the clarify variant, the content is clipped
+     so the banner looks like it "didn't open". */
+  flex-shrink: 0;
 }
 .trans-banner-row {
   display: flex;
@@ -305,6 +491,12 @@ input[type="text"]:focus, input[type="search"]:focus {
 .sidebar-list {
   flex: 1;
   min-height: 0;
+  /* Symmetric 8 px padding (restored): the scrollbar must NOT overlap
+     the cards. The earlier "remove right padding" attempt made the
+     scrollbar climb onto the session cards — worse. The white gap is
+     fixed at the source instead: the sidebar fill is now solid to the
+     edge (see `.sidebar` background), so there's no white strip for
+     the scrollbar to float in. */
   overflow-y: auto;
   padding: 4px 8px 0;
   /* Stop the scrollbar 16 px before the bottom of the sidebar so the
@@ -373,6 +565,35 @@ input[type="text"]:focus, input[type="search"]:focus {
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* Inline rename field — sits in place of the title, same metrics so
+   the row doesn't jump when entering edit mode. */
+.meeting-title-edit {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: -3px 0;
+  outline: none;
+}
+/* Numeric date in the meta line, just right of the duration. */
+.meeting-date {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.meeting-date::before {
+  content: "·";
+  margin-right: 6px;
+  /* Was var(--border) — invisible on the sidebar surface, so it read
+     as "no separator between 1m 39s and 23:57". A dim foreground tone
+     makes the dot visible without competing with the text. */
+  color: var(--fg-dim);
+}
 .meeting-people {
   display: inline-flex;
   align-items: center;
@@ -381,6 +602,8 @@ input[type="text"]:focus, input[type="search"]:focus {
   font-size: 12px;
   flex-shrink: 0;
 }
+/* Speaker chip now lives in the meta line; push it to the far right. */
+.meeting-meta .meeting-people { margin-left: auto; }
 .meeting-people-count { font-variant-numeric: tabular-nums; }
 .meeting-people svg { display: block; }
 .meeting-meta {
@@ -389,7 +612,15 @@ input[type="text"]:focus, input[type="search"]:focus {
   display: flex;
   gap: 6px;
   align-items: center;
+  /* Single line, always. When the sidebar is dragged narrow the row
+     must clip — never wrap the duration ("1m 39s") or status label
+     onto a second line (looked broken). */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
 }
+.meeting-meta > span { white-space: nowrap; flex-shrink: 0; }
 .status-dot {
   width: 8px; height: 8px; border-radius: 50%;
   display: inline-block;
@@ -397,11 +628,37 @@ input[type="text"]:focus, input[type="search"]:focus {
 .status-dot.ready { background: var(--status-ready); }
 .status-dot.recording { background: var(--status-fail); animation: pulse 1.6s ease-in-out infinite; }
 .status-dot.transcribing { background: var(--status-warn); animation: pulse 1.6s ease-in-out infinite; }
-.status-dot.failed { background: var(--status-fail); opacity: 0.4; }
+/* Softer-than-pure-red dot for failed rows — bright enough to spot in
+   a list but doesn't shout. The previous 0.4-opacity dot read as
+   "low priority". */
+.status-dot.failed { background: #d04a3e; }
+
+/* Only the title turns red on failed rows. Meta stays grey (duration +
+   "failed" label keep their default colour) so the row reads as
+   "this thing is broken" without the whole entry shouting. */
+.meeting-item.failed .meeting-title { color: #d04a3e; }
+/* Pinned session — a small gold dot at the end of the title row
+   instead of recolouring the title (the title stays the normal
+   colour now). Gold tuned per theme so it reads warm on white and
+   on near-black, not muddy. */
+.pin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b07d18;
+  flex-shrink: 0;
+  align-self: center;
+}
+.dark .pin-dot { background: #e3b950; }
+
+/* Breadcrumb in the main pane when viewing a failed meeting — same
+   muted red so the user knows the open record is the problem one. */
+.breadcrumb-current.failed { color: #d04a3e; }
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.8); }
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 .meeting-preview {
   font-size: 14px;
   color: var(--fg-muted);
@@ -445,6 +702,27 @@ input[type="text"]:focus, input[type="search"]:focus {
   display: flex; align-items: center; gap: 8px;
 }
 .breadcrumb-current { color: var(--fg); font-weight: 600; }
+/* The current title doubles as a click-to-rename target. */
+.breadcrumb-rename {
+  cursor: text;
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  transition: background 80ms ease;
+}
+.breadcrumb-rename:hover { background: var(--bg-hover); }
+.breadcrumb-edit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin: -3px 0;
+  min-width: 240px;
+  outline: none;
+}
 .spacer { flex: 1; }
 .toolbar { display: flex; align-items: center; gap: 6px; }
 .toolbar button {
@@ -478,10 +756,11 @@ input[type="text"]:focus, input[type="search"]:focus {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  position: relative;
 }
 .detail-tabs {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) var(--right-w, 380px);
   border-bottom: 1px solid var(--border);
 }
 .detail-tab-col {
@@ -503,11 +782,43 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .detail-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) var(--right-w, 380px);
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
+
+/* Drag strips. Invisible until hover; a short centred grip fades in so
+   the affordance is discoverable without adding a permanent visual
+   seam. Double-click resets to the default width. */
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 11px;
+  z-index: 60;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+.resizer-sidebar { left: var(--sidebar-w, 240px); transform: translateX(-6px); }
+/* Inside `.detail` (which spans the main column, flush to the window's
+   right edge), so a right offset lands exactly on the right-panel's
+   left border regardless of sidebar width. */
+.resizer-split { right: var(--right-w, 380px); transform: translateX(6px); }
+.resizer-grip {
+  width: 3px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.resizer:hover .resizer-grip,
+body.resizing .resizer-grip { opacity: 1; }
+body.resizing { cursor: col-resize; user-select: none; }
 
 /* Tabs row above transcript (kept for backwards compat — currently unused) */
 .tabs {
@@ -517,6 +828,12 @@ input[type="text"]:focus, input[type="search"]:focus {
   border-bottom: 1px solid var(--border);
 }
 .tab {
+  /* Used as both <span> and <button>; reset UA button chrome but keep
+     the bottom indicator border. */
+  appearance: none;
+  background: none;
+  border: 0;
+  font-family: inherit;
   font-size: 14px;
   color: var(--fg-muted);
   padding: 4px 0 12px;
@@ -524,9 +841,18 @@ input[type="text"]:focus, input[type="search"]:focus {
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 60ms ease;
+  /* No focus ring — the active state is the bottom border + bold text,
+     not the browser's default rounded outline on <button>. */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
+.tab:focus,
+.tab:focus-visible { outline: none; box-shadow: none; }
 .tab:hover { color: var(--fg); }
-.tab.active { color: var(--fg); border-bottom-color: var(--fg); font-weight: 500; }
+/* No font-weight change on active — bolder text is wider and shifted
+   the layout when switching tabs. Active = colour + bottom border only,
+   constant metrics. */
+.tab.active { color: var(--fg); border-bottom-color: var(--fg); }
 .tab.disabled { color: var(--fg-dim); cursor: default; }
 .tab.disabled:hover { color: var(--fg-dim); }
 
@@ -558,7 +884,63 @@ input[type="text"]:focus, input[type="search"]:focus {
   align-items: center;
   gap: 10px;
 }
-.transcript-toolbar input { flex: 1; }
+.transcript-toolbar .search-field { flex: 1; min-width: 0; }
+.transcript-toolbar .search-field input { width: 100%; }
+
+/* Summary block — full-width card pinned at the top of the transcript.
+   Same outline language as the clarify card but spans the whole section
+   instead of the fixed 420 px. */
+.summary-card {
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.summary-card-head {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.summary-card-body {
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--fg);
+}
+.summary-card-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  padding: 2px 0;
+}
+.summary-p { margin: 0 0 14px; }
+.summary-p:last-child { margin-bottom: 0; }
+.summary-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+.summary-retry {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  color: var(--fg);
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.summary-retry:hover { background: var(--border); }
 
 /* Round icon-only button at the right edge of the transcript-toolbar.
    Sized to optically match the height of the adjacent search input
@@ -610,7 +992,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* SpeakersClarifyBanner — same outline card as `.trans-banner`, but without
    the icon column. Body uses the same big-light type as the recording timer
    so all three banners (recording / transcribing / clarify) read as a family. */
-.clarify-banner { max-width: 420px; position: relative; }
+.clarify-banner { max-width: 420px; position: relative; overflow: hidden; }
 .clarify-dismiss {
   /* X button anchored to the top-right corner of the card. Outline-less,
      muted hover — discreet because dismissing is a passive action. */
@@ -640,13 +1022,18 @@ input[type="text"]:focus, input[type="search"]:focus {
    styled like .trans-stop (outline, 8px radius, 13×16 padding). */
 .clarify-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-self: stretch;
 }
 /* Vertical-stack variant (Re-transcribe + Delete in EmptyDeleteBanner). */
 .clarify-actions-stack { flex-direction: column; }
 .clarify-btn {
-  flex: 1;
+  /* Grow to share the row, but allow shrinking and wrapping: when the
+     section narrows the pills drop onto their own rows instead of
+     overflowing the card. */
+  flex: 1 1 72px;
+  min-width: 0;
   background: transparent;
   color: var(--fg);
   border: 1px solid var(--border-strong);
@@ -790,10 +1177,13 @@ input[type="text"]:focus, input[type="search"]:focus {
    manage their own spacing so the audio controls sit flush with the
    shared tabs row above, matching the transcript column on the left. */
 .right-panel {
-  /* No outer scroll any more — the speakers timeline owns its own
-     scroll so the audio card and (optional) screen video stay pinned
-     at the top regardless of how many speakers the meeting has. */
-  overflow: hidden;
+  /* The WHOLE panel scrolls. The old design gave the timeline its own
+     cramped inner scroll with a hidden scrollbar — when a screen video
+     was present that box only fit ~2 speaker rows and silently clipped
+     the rest, so a 3-speaker meeting looked like 2. Scrolling the panel
+     as one keeps every speaker reachable with a normal, discoverable
+     scrollbar. */
+  overflow-y: auto;
   /* 130 px reserves clearance for the floating start/stop blob
      (110 px tall + 8 px margin + breathing room) so the timeline's
      last row never sits behind the blob. */
@@ -814,11 +1204,15 @@ input[type="text"]:focus, input[type="search"]:focus {
    left column — keeps the "Recording" tab → video gap visually equal
    to the "Transcript" tab → search input gap. */
 .screen-video-card {
+  position: relative;
   margin: 20px 20px 0;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #000;
+  /* Light surface, matches `--bg-elev` used elsewhere — reads as a
+     plain placeholder card, not a black "player off" hole. The real
+     video frame paints on top once the user hits play. */
+  background: var(--bg-elev);
 }
 /* When the video is present, the audio controls sit close to the
    video — tighter than they'd be as a first child, and tighter than
@@ -831,8 +1225,266 @@ input[type="text"]:focus, input[type="search"]:focus {
   display: block;
   aspect-ratio: 16 / 10;
   object-fit: contain;
-  background: #000;
+  /* transparent so the parent's grey placeholder shows through until
+     the first frame is decoded — no jarring flash of pure black on
+     load. */
+  background: transparent;
+  border-radius: 8px;
 }
+
+/* Light translucent scrim painted over the static first-frame preview
+   so the play button reads clearly even when the underlying frame is
+   busy (light desktop wallpaper, white app, etc.). Removed the moment
+   playback starts — we want the live video unobstructed. */
+.screen-video-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.72);
+  pointer-events: none;
+}
+
+/* Apple-style centred play affordance shown while audio is paused.
+   Frosted-glass circle, hairline border, white triangle. Clicking
+   the button (or the surrounding card region, via the same click
+   target) starts the audio master clock; the video sync effect on
+   the React side mirrors the play onto the muted <video>. */
+/* Whole card is the click target while paused — hovering anywhere on
+   the screenshot lights up the play affordance, not just the small
+   circle. The button itself is purely visual (no onClick); clicks on
+   it bubble to the card's onClick. */
+.screen-video-card.paused { cursor: pointer; }
+
+.screen-video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  /* Lower alpha — the underlying frame should read through the glass,
+     not get hidden behind a near-opaque puck. */
+  background: rgba(20, 20, 20, 0.28);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+}
+.screen-video-play svg {
+  /* Optical centring — the SVG's geometric centre sits a touch right
+     of the visual centre of the triangle, so we nudge the glyph left
+     to balance it inside the circle. */
+  margin-left: -2px;
+}
+/* Hover anywhere on the card (not just the puck) bumps the play
+   button — gives a clearer "this whole thing is clickable" affordance. */
+.screen-video-card.paused:hover .screen-video-play {
+  background: rgba(20, 20, 20, 0.42);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+.screen-video-card.paused:active .screen-video-play {
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+/* Fullscreen affordance, bottom-right of the preview. Subtle by
+   default, lifts on card hover so it's discoverable without shouting. */
+.screen-video-fs-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.42);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  /* Hidden until the pointer is over the video block. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.screen-video-card:hover .screen-video-fs-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+.screen-video-fs-btn:hover {
+  background: rgba(20, 20, 20, 0.62);
+  transform: scale(1.06);
+}
+.screen-video-fs-btn:active { transform: scale(0.94); }
+
+/* ── Telegram-style fullscreen lightbox ────────────────────────────── */
+.video-fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  background: rgba(8, 8, 9, 0);
+  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: blur(0px);
+  /* Backdrop fades + the inner video scales in. cubic-bezier is the
+     gentle overshoot-free ease Telegram uses for media open. */
+  transition: background 280ms cubic-bezier(0.22, 1, 0.36, 1),
+              backdrop-filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+              -webkit-backdrop-filter 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-fs-overlay.shown {
+  background: rgba(8, 8, 9, 0.92);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+/* FLIP target. No CSS transition here — the open/close transforms +
+   their transition are set imperatively in JS (transformToRect), so
+   the box literally grows out of the card's on-screen rect and
+   shrinks back into it. transform-origin centred so the scale maths
+   in transformToRect line up. */
+.video-fs-inner {
+  position: relative;
+  display: flex;
+  /* Video on top, scrubber directly under it as one column. */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center center;
+  will-change: transform;
+}
+/* Fullscreen scrub bar: speech segments tinted per speaker, doubling
+   as a who-spoke-when map. Sits under the video at the video's width. */
+.video-fs-scrub {
+  position: relative;
+  align-self: stretch;   /* match the video's width */
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  touch-action: none;
+}
+.video-fs-overlay.shown .video-fs-scrub { opacity: 1; }
+.video-fs-scrub-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 10px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+}
+.video-fs-scrub-seg {
+  position: absolute;
+  top: 50%;
+  height: 18px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  min-width: 2px;
+  opacity: 0.92;
+  pointer-events: none;
+}
+/* Same contrast trick as the timeline cursor: white core ringed by a
+   dark hairline so it stays visible over any video frame. */
+.video-fs-scrub-cursor {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.6);
+  border-radius: 1.5px;
+  pointer-events: none;
+  z-index: 1;
+}
+.video-fs-video {
+  max-width: 100%;
+  /* Leave room under the video for the scrubber row (38 px) + the
+     column gap (14 px) so the bar always fits below, not over. */
+  max-height: calc(100% - 56px);
+  display: block;
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+/* Transient play/pause badge — pops in, lingers, fades out (the React
+   side unmounts it after ~1.1s; this just handles the in/out feel). */
+.video-fs-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 84px;
+  height: 84px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(15, 15, 17, 0.55);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: fs-hint 1.1s ease forwards;
+}
+.video-fs-hint svg { margin-left: 1px; }
+.video-fs-hint.pause svg { margin-left: 0; }
+@keyframes fs-hint {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.08); }
+}
+.video-fs-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  /* Above the FLIP-transformed video (which makes its own stacking
+     context) and the scrubber, so it's never occluded and always
+     clickable — it was rendering behind the video before. */
+  z-index: 10002;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  /* Solid, not see-through — at 0.12 alpha the video's desktop content
+     bled through and it read as "behind the window". Opaque dark pill
+     + blur + shadow so it unambiguously floats on top. */
+  background: rgba(18, 18, 20, 0.82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 240ms ease 60ms, background 140ms ease;
+}
+.video-fs-overlay.shown .video-fs-close { opacity: 1; }
+.video-fs-close:hover { background: rgba(38, 38, 42, 0.92); }
 
 /* Audio player — sits directly under the shared tabs row, no card wrapper
    any more; matches the transcript-toolbar's layout on the left so the
@@ -953,26 +1605,24 @@ input[type="text"]:focus, input[type="search"]:focus {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  /* Take all the height left in the right-panel column so the rows
-     have somewhere to scroll into without pushing past the blob. */
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  /* Sizes to its content (all speaker rows). The right-panel scrolls
+     as a whole, so the card never needs an inner scroll that hides
+     speakers. */
+  flex: 0 0 auto;
+  /* Own compositing layer. The card is a clipped box full of absolutely
+     positioned bars; without an explicit layer WebKit rasterises it
+     inconsistently into the View-Transition snapshot and the rows
+     flicker on theme switch. translateZ(0) pins a stable layer. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
-/* Scrollable inner container that holds the per-speaker rows. The
-   tabs row above stays pinned; only this region scrolls when there
-   are more speakers than fit in the card. Scrollbar is hidden — the
-   user navigates by wheel/trackpad inside the rows, and the visible
-   chrome would compete with the timeline ticks. */
+/* One row per speaker, all rendered — the right-panel scroll makes
+   them reachable, so nothing is ever hidden. */
 .timeline-rows {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
-.timeline-rows::-webkit-scrollbar { display: none; }
 .timeline-tabs {
   display: flex;
   gap: 18px;
@@ -1010,28 +1660,42 @@ input[type="text"]:focus, input[type="search"]:focus {
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+/* Recessed pill channel. No hard border — a faint inset fill reads as a
+   carved track, which is the quiet, slightly-futuristic look we want
+   instead of the old bordered box full of ticks. */
 .tl-bar {
   position: relative;
-  height: 20px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 2px;
+  height: 9px;
+  background: var(--tl-track, rgba(14, 14, 13, 0.05));
+  border-radius: 999px;
   cursor: pointer;
-  /* Clip ticks/cursor to the bar so they never visually leak past the right
-     edge of the timeline card when a segment ends close to total duration. */
+  /* Clip segments/cursor so a near-total-duration block never bleeds
+     past the rounded right edge. */
   overflow: hidden;
 }
-.tl-bar-tick {
+/* One continuous, fully-rounded bar per speech segment. Speaker colour
+   at a slight transparency so it sits calmly on the track rather than
+   shouting like the old saturated tick barcode. */
+.tl-seg {
   position: absolute;
   top: 0; bottom: 0;
-  width: 2px;
-  border-radius: 1px;
+  min-width: 2px;
+  /* Soft corners, not full-pill: capsule ends made adjacent blocks
+     look like broken sausages. Merging (segBlocks) joins artifact-
+     adjacent speech; real pauses still read as clean gaps. */
+  border-radius: 2px;
+  opacity: 0.9;
 }
 .tl-bar-cursor {
   position: absolute;
-  top: -2px; bottom: -2px;
+  top: -3px; bottom: -3px;
   width: 2px;
-  background: var(--fg);
+  /* White core + thin dark hairline ring: reads on every coloured
+     speaker segment and stays visible against the pale empty track,
+     on both dark and light stretches, without per-pixel blend maths. */
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.45);
+  border-radius: 999px;
   pointer-events: none;
   z-index: 2;
 }
@@ -1049,57 +1713,209 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 /* Boost toggle in header */
-.boost-switch {
-  background: transparent;
+/* Settings page (right column, draft) */
+.settings-pane {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 22px 22px 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.settings-note {
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.settings-section { display: flex; flex-direction: column; gap: 10px; }
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+/* Editable settings (vocabulary, API key) + privacy text. */
+.settings-field { display: flex; flex-direction: column; gap: 8px; }
+.settings-textarea,
+.settings-input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg-input);
   border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  resize: vertical;
+  transition: border-color 80ms ease;
+}
+.settings-textarea { min-height: 64px; line-height: 1.5; }
+.settings-textarea:focus,
+.settings-input:focus { border-color: var(--accent); }
+.settings-textarea::placeholder,
+.settings-input::placeholder { color: var(--fg-dim); }
+.settings-keyrow { display: flex; gap: 8px; }
+.settings-keyrow .settings-input { flex: 1; min-width: 0; }
+.settings-save-btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 0 16px;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.settings-save-btn:hover { background: var(--accent-pressed); border-color: var(--accent-pressed); }
+.settings-save-btn:disabled { opacity: 0.45; cursor: default; }
+.settings-field-hint {
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+.settings-privacy {
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 80ms ease;
+}
+.settings-row:hover { background: #ececea; }
+.settings-row:focus,
+.settings-row:focus-visible { outline: none; box-shadow: none; }
+.settings-row + .settings-row { border-top: 1px solid var(--border); }
+.settings-row-text { flex: 1; min-width: 0; }
+.settings-row-label { font-size: 14px; color: var(--fg); }
+.settings-row-desc {
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+/* iOS-style switch in the green brand accent. */
+.set-switch {
+  appearance: none;
+  border: none;
+  flex-shrink: 0;
+  width: 40px;
+  height: 24px;
   border-radius: 999px;
-  /* Padding chosen so the pill renders at the same height as a toolbar
-     `button`. Extra 8 px on the left so the toggle track sits visually
-     inset from the pill border, not flush against it. */
-  padding: 7px 14px 7px 16px;
-  /* Extra breathing room between the breadcrumb date and the switch on
-     top of the header's flex `gap`. */
-  margin-left: 8px;
-  display: inline-flex;
+  background: var(--border-strong);
+  position: relative;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.set-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 140ms ease;
+}
+.set-switch.on { background: var(--accent); }
+.set-switch.on .set-switch-thumb { transform: translateX(16px); }
+.settings-pro-note {
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: center;
+}
+
+
+.settings-ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* "Coming soon" promo (extension / mobile / Telegram bot). Brand logo
+   on the left, full-width text on the right, an inert grey SOON chip.
+   No CTA button — it used to squeeze the text into a thin column. */
+.promo {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+/* Top row: logo, then title + SOON to its right. */
+.promo-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.promo-logo {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+.promo-title-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
-  font-size: 13px;
+  flex-wrap: wrap;
+}
+.promo-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+/* Inert grey chip — deliberately reads as "not yet", not a CTA. */
+.promo-soon {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.promo-desc {
+  font-size: 12.5px;
   color: var(--fg-muted);
-  font-weight: 500;
-  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+  line-height: 1.5;
+  margin-top: 12px;
 }
-.boost-switch:hover { background: var(--bg-hover); border-color: #b8b8b4; color: var(--fg); }
-.boost-switch.loading { color: var(--fg-muted); }
-.boost-switch:disabled { opacity: 0.4; cursor: default; }
-.boost-track {
-  width: 26px;
-  height: 14px;
-  background: var(--border-strong);
-  border-radius: 999px;
-  position: relative;
-  transition: background 120ms ease;
-}
-.boost-thumb {
-  width: 10px;
-  height: 10px;
-  background: #fff;
-  border-radius: 999px;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: transform 140ms ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-.boost-switch.on .boost-track { background: rgba(255, 255, 255, 0.55); }
-.boost-switch.on .boost-thumb { transform: translateX(12px); background: #fff; }
-.boost-switch.on {
-  color: #fff;
-  border-color: #1f7a4f;
-  background: #1f7a4f;
-}
-.boost-switch.on:hover { background: #186439; border-color: #186439; }
-.boost-switch.on .boost-label { color: #fff; }
 
 
 /* Context menu (right-click on sidebar items) */
@@ -1236,14 +2052,21 @@ input[type="text"]:focus, input[type="search"]:focus {
 .donate-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.32);
+  background: rgba(0,0,0,0.28);
   z-index: 70;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: donate-fade 160ms ease;
+  /* Soft blur of everything behind any popup, ramped in smoothly with
+     the fade so the interface eases out of focus rather than snapping. */
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  animation: donate-fade 240ms ease;
 }
-@keyframes donate-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes donate-fade {
+  from { opacity: 0; -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); }
+  to   { opacity: 1; -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); }
+}
 .donate-card {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -1340,6 +2163,40 @@ input[type="text"]:focus, input[type="search"]:focus {
   color: var(--fg);
   border-color: #b8b8b4;
 }
+/* Download chooser — reuses .donate-card + .archive-card verbatim (same
+   width, padding, close button, title→body spacing) so it's pixel-
+   consistent with the Archive popup. Only the row list is download-
+   specific. */
+.download-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.download-row:hover { background: var(--bg-hover); border-color: var(--fg-dim); }
+.download-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  color: var(--fg-muted);
+}
+.download-row:hover .download-row-icon { color: var(--accent); }
+
 .archive-empty {
   padding: 18px 0;
   text-align: center;
@@ -1352,7 +2209,6 @@ input[type="text"]:focus, input[type="search"]:focus {
 .archive-list {
   overflow-y: auto;
   margin: 0 -32px;
-  border-top: 1px solid var(--border);
   flex: 0 1 auto;
   min-height: 0;
 }
@@ -1374,7 +2230,11 @@ input[type="text"]:focus, input[type="search"]:focus {
 .archive-row:last-child { border-bottom: none; }
 .archive-row:hover { background: var(--bg-hover); }
 .archive-row.selected { background: var(--bg-active); }
+/* Bleed to the card edges like .archive-list so its 32px padding lands
+   the checkbox/label on the same x as the list rows below (it used to
+   sit inside the card padding AND its own, doubly indented). */
 .archive-row-head {
+  margin: 0 -32px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
@@ -1471,6 +2331,17 @@ input[type="text"]:focus, input[type="search"]:focus {
   background-repeat: no-repeat;
   border-radius: 4px;
   animation: corder-shimmer 1.4s linear infinite;
+}
+/* Dark: a quiet elevated block with a faint light sweep — the light
+   value glared as near-white bars on the dark page. */
+.dark .skel-line, .dark .skel-pill, .dark .skel-circle {
+  background-color: #242422;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255,255,255,0) 0,
+    rgba(255,255,255,0.07) 50%,
+    rgba(255,255,255,0) 100%
+  );
 }
 .skel-line { display: block; height: 12px; width: 100%; margin: 4px 0; }
 .skel-pill { display: inline-block; height: 14px; border-radius: 999px; }

@@ -6,10 +6,15 @@ export interface MeetingSummary {
   ended_at?: number;
   duration_ms?: number;
   status: MeetingStatus;
+  /** Auto-generated headline (transcript language). Falls back to the
+   *  date label in the UI when absent. */
+  title?: string | null;
   preview?: string;
   speaker_count: number;
   /** "Speaker 2 · Влад" etc. — joined names of who actually spoke. */
   speaker_names?: string;
+  /** Pinned sessions sort to a group at the very top with a gold title. */
+  pinned?: boolean;
 }
 
 export interface SpeakerDTO {
@@ -33,6 +38,8 @@ export interface MeetingDetail {
   started_at: number;
   duration_ms?: number;
   status: MeetingStatus;
+  title?: string | null;
+  summary?: string | null;
   speakers: SpeakerDTO[];
   segments: SegmentDTO[];
   expected_other_speakers?: number | null;
@@ -84,6 +91,21 @@ export async function restoreMeeting(id: string): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+export async function pinMeeting(id: string, pinned: boolean): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/${pinned ? "pin" : "unpin"}`, { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Set a custom title. Empty string clears it back to the auto/date label. */
+export async function renameMeeting(id: string, title: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/rename`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 export interface ArchivedMeeting {
   id: string;
   started_at: number;
@@ -103,6 +125,17 @@ export async function listArchive(): Promise<ArchivedMeeting[]> {
 export async function retranscribe(id: string): Promise<void> {
   const r = await fetch(`/api/meetings/${id}/retranscribe`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/// Returns the cached summary or generates one on the spot (the
+/// backend blocks on the Gemini call, so this request can take a few
+/// seconds the first time per meeting).
+export async function summarize(id: string): Promise<string> {
+  const r = await fetch(`/api/meetings/${id}/summarize`, { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  if (j.error || !j.summary) throw new Error(j.error || "no summary");
+  return j.summary as string;
 }
 
 export async function cancelTranscription(id: string): Promise<void> {
@@ -150,8 +183,12 @@ export async function startRecordingNow(): Promise<void> {
 }
 
 export interface Settings {
-  boost_mode: boolean;
   language?: "ru" | "en";
+  vocabulary?: string;
+  /** write-only: send a new Gemini key. Never returned by GET. */
+  gemini_key?: string;
+  /** read-only: whether a key is on disk. */
+  gemini_key_set?: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -176,6 +213,22 @@ export function audioSrc(id: string): string {
 
 export function videoSrc(id: string): string {
   return `/api/meetings/${id}/video`;
+}
+
+export function transcriptSrc(id: string): string {
+  return `/api/meetings/${id}/transcript.txt`;
+}
+
+export function transcriptMdSrc(id: string): string {
+  return `/api/meetings/${id}/transcript.md`;
+}
+
+export function transcriptJsonSrc(id: string): string {
+  return `/api/meetings/${id}/transcript.json`;
+}
+
+export function bundleSrc(id: string): string {
+  return `/api/meetings/${id}/bundle.zip`;
 }
 
 export interface UpdateStatus { available: boolean; version?: string }

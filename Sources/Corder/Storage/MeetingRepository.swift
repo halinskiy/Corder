@@ -42,9 +42,11 @@ struct MeetingRepository {
         let endedAt: Int64?
         let durationMs: Int64?
         let status: String
+        let title: String?
         let preview: String?
         let speakerCount: Int
         let speakerNames: String?
+        let pinnedAt: Int64?
     }
 
     func listMeetingSummaries() throws -> [SummaryRow] {
@@ -56,6 +58,8 @@ struct MeetingRepository {
                     m.ended_at,
                     m.duration_ms,
                     m.status,
+                    m.title,
+                    m.pinned_at,
                     (SELECT s.text
                        FROM segments s
                        WHERE s.meeting_id = m.id
@@ -78,7 +82,7 @@ struct MeetingRepository {
                        )) AS speaker_names
                 FROM meetings m
                 WHERE m.archived_at IS NULL
-                ORDER BY m.started_at DESC
+                ORDER BY (m.pinned_at IS NULL), m.pinned_at DESC, m.started_at DESC
             """)
             return rows.map { r in
                 SummaryRow(
@@ -87,9 +91,11 @@ struct MeetingRepository {
                     endedAt: r["ended_at"],
                     durationMs: r["duration_ms"],
                     status: r["status"] ?? "",
+                    title: r["title"],
                     preview: r["preview"],
                     speakerCount: r["speaker_count"] ?? 0,
-                    speakerNames: r["speaker_names"]
+                    speakerNames: r["speaker_names"],
+                    pinnedAt: r["pinned_at"]
                 )
             }
         }
@@ -110,6 +116,13 @@ struct MeetingRepository {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET archived_at = ? WHERE id = ?",
                            arguments: [archivedAt, meetingId])
+        }
+    }
+
+    func setPinned(meetingId: String, pinnedAt: Int64?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET pinned_at = ? WHERE id = ?",
+                           arguments: [pinnedAt, meetingId])
         }
     }
 
@@ -211,6 +224,32 @@ struct MeetingRepository {
         }
     }
 
+    /// Rows still marked 'recording' — i.e. the process died mid-capture.
+    /// `RecordingRecovery` inspects each one's audio on disk and either
+    /// salvages it (→ transcribing) or leaves it for `resetStuckMeetings`
+    /// to drop.
+    func meetingsInRecordingState() throws -> [Meeting] {
+        try dbq.read { db in
+            try Meeting.filter(Column("status") == "recording").fetchAll(db)
+        }
+    }
+
+    /// Ready, non-archived meetings that have a transcript but no title
+    /// yet. Used by the launch backfill so recordings made before the
+    /// auto-title feature get named without a full re-transcribe.
+    func meetingIdsNeedingTitle() throws -> [String] {
+        try dbq.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT m.id FROM meetings m
+                WHERE m.status = 'ready'
+                  AND m.archived_at IS NULL
+                  AND (m.title IS NULL OR TRIM(m.title) = '')
+                  AND EXISTS (SELECT 1 FROM segments s WHERE s.meeting_id = m.id)
+                ORDER BY m.started_at DESC
+            """).map { $0["id"] ?? "" }.filter { !$0.isEmpty }
+        }
+    }
+
     /// One-time cleanup for "ghost" speakers — rows in the speakers table
     /// that have no segments referencing them. They came from the older
     /// dual-track code path that unconditionally inserted a "Speaker 1"
@@ -262,6 +301,23 @@ struct MeetingRepository {
                     audio_hash = ?
                 WHERE id = ?
             """, arguments: [geminiRawTurns, audioHash, meetingId])
+        }
+    }
+
+    /// Targeted title write — same reason as setRawTurnsCache: the
+    /// pipeline's in-memory `meeting` copy can carry a stale status, so
+    /// we never round-trip the whole row just to set the title.
+    func setTitle(meetingId: String, title: String?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET title = ? WHERE id = ?",
+                           arguments: [title, meetingId])
+        }
+    }
+
+    func setSummary(meetingId: String, summary: String?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET summary = ? WHERE id = ?",
+                           arguments: [summary, meetingId])
         }
     }
 

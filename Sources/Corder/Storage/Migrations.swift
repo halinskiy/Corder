@@ -141,6 +141,45 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN archived_at INTEGER;")
         }
 
+        m.registerMigration("v9_title") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN title TEXT;")
+        }
+
+        m.registerMigration("v10_summary") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN summary TEXT;")
+        }
+
+        // Summaries generated before the "plain prose only" rule used a
+        // structured Markdown format. Clear them so they regenerate in
+        // the new format the next time the user opens the Summary tab.
+        m.registerMigration("v11_reset_summaries") { db in
+            try db.execute(sql: "UPDATE meetings SET summary = NULL;")
+        }
+
+        // Early auto-titles were one-word junk ("Го", "Э") from a weak
+        // prompt on thin transcripts. Clear them so the launch backfill
+        // regenerates with the stricter prompt (and skips untitleable
+        // ones, leaving the date label).
+        m.registerMigration("v12_reset_titles") { db in
+            try db.execute(sql: "UPDATE meetings SET title = NULL;")
+        }
+
+        // The strict-prompt titler (v12 era) over-corrected: it answered
+        // NONE for nearly everything, leaving real conversations on the
+        // date label, while a weaker intermediate prompt had stamped junk
+        // one-word titles ("Го", "Э", "L"). Clear again so the loosened
+        // prompt re-titles every transcript on the next launch.
+        m.registerMigration("v13_reset_titles_again") { db in
+            try db.execute(sql: "UPDATE meetings SET title = NULL;")
+        }
+
+        // Pinned sessions: a non-null timestamp = pinned (the value is
+        // when it was pinned, so the pinned group keeps a stable
+        // most-recently-pinned-first order).
+        m.registerMigration("v14_pin") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN pinned_at INTEGER;")
+        }
+
         return m
     }
 }

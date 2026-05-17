@@ -1,7 +1,7 @@
 import React from "react";
 import { Search } from "lucide-react";
-import { MeetingSummary, MeetingStatus, retranscribe } from "../api";
-import { formatDate, formatDuration, dateBucket } from "../format";
+import { MeetingSummary, MeetingStatus, retranscribe, pinMeeting, renameMeeting } from "../api";
+import { formatDate, formatClock, formatDuration, dateBucket } from "../format";
 import type { Lang, T } from "../i18n";
 
 function statusLabel(s: MeetingStatus, t: T): string {
@@ -33,6 +33,12 @@ interface Props {
   onQueryChange: (q: string) => void;
   onSelect: (id: string) => void;
   onDeleted: (id: string) => void;
+  /// Fired after a successful re-transcribe POST so the parent can tell
+  /// the open MeetingView to start polling for the new transcript.
+  onRetranscribed?: (id: string) => void;
+  /// Fired after pin/unpin so the parent re-fetches the list (the
+  /// pinned group reorders immediately instead of waiting for the poll).
+  onChanged?: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
   lang: Lang;
@@ -40,8 +46,21 @@ interface Props {
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSelect, onDeleted, onToast, t, lang }: Props) {
+export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
+  const [editing, setEditing] = React.useState<{ id: string; value: string } | null>(null);
+
+  const commitRename = async () => {
+    if (!editing) return;
+    const { id, value } = editing;
+    setEditing(null);
+    try {
+      await renameMeeting(id, value.trim());
+      onChanged?.();
+    } catch {
+      onToast(t.toast_settings_failed, "error");
+    }
+  };
 
   React.useEffect(() => {
     if (!menu) return;
@@ -67,14 +86,22 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
 
   const groups = React.useMemo(() => {
     const out: { label: string; items: MeetingSummary[] }[] = [];
+    // Pinned sessions float to their own group at the very top,
+    // regardless of date (server already orders them first).
+    const pinned = filtered.filter((m) => m.pinned);
+    if (pinned.length) out.push({ label: t.sidebar_pinned, items: pinned });
     for (const m of filtered) {
+      if (m.pinned) continue;
       const label = dateBucket(m.started_at, lang);
       const last = out[out.length - 1];
-      if (last && last.label === label) last.items.push(m);
-      else out.push({ label, items: [m] });
+      if (last && last.label === label && last.label !== t.sidebar_pinned) {
+        last.items.push(m);
+      } else {
+        out.push({ label, items: [m] });
+      }
     }
     return out;
-  }, [filtered, lang]);
+  }, [filtered, lang, t]);
 
   return (
     <aside className="sidebar">
@@ -110,10 +137,15 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
         {groups.map((g) => (
           <React.Fragment key={g.label}>
             <div className="sidebar-section-label">{g.label}</div>
-            {g.items.map((m) => (
+            {g.items.map((m) => {
+              const titled = m.title?.trim();
+              return (
               <div
                 key={m.id}
-                className={"meeting-item" + (m.id === activeId ? " active" : "")}
+                className={"meeting-item"
+                  + (m.id === activeId ? " active" : "")
+                  + (m.status === "failed" ? " failed" : "")
+                  + (m.pinned ? " pinned" : "")}
                 onClick={() => onSelect(m.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -121,22 +153,45 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
                 }}
               >
                 <div className="meeting-row">
-                  <div className="meeting-title">{formatDate(m.started_at, lang)}</div>
-                  {m.speaker_count > 0 && (
-                    <div className="meeting-people" title={t.participants(m.speaker_count)}>
-                      <span className="meeting-people-count">{m.speaker_count}</span>
-                      <UserFilledIcon />
-                    </div>
+                  {editing?.id === m.id ? (
+                    <input
+                      className="meeting-title-edit"
+                      autoFocus
+                      value={editing.value}
+                      placeholder={formatDate(m.started_at, lang)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditing({ id: m.id, value: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+                        else if (e.key === "Escape") { e.preventDefault(); setEditing(null); }
+                      }}
+                      onBlur={commitRename}
+                    />
+                  ) : (
+                    <>
+                      <div className="meeting-title">
+                        {titled || formatDate(m.started_at, lang)}
+                      </div>
+                      {m.pinned && <span className="pin-dot" aria-hidden />}
+                    </>
                   )}
                 </div>
                 <div className="meeting-meta">
                   <span className={`status-dot ${m.status}`} />
-                  <span>{formatDuration(m.duration_ms, lang)}</span>
+                  {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
+                  <span className="meeting-date">{formatClock(m.started_at)}</span>
                   {m.status !== "ready" && <span>· {statusLabel(m.status, t)}</span>}
+                  {m.speaker_count > 0 && (
+                    <span className="meeting-people" title={t.participants(m.speaker_count)}>
+                      <span className="meeting-people-count">{m.speaker_count}</span>
+                      <UserFilledIcon />
+                    </span>
+                  )}
                 </div>
                 {m.preview && <div className="meeting-preview">{m.preview}</div>}
               </div>
-            ))}
+              );
+            })}
           </React.Fragment>
         ))}
         <div className="sidebar-list-spacer" />
@@ -146,6 +201,24 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
           x={menu.x}
           y={menu.y}
           t={t}
+          pinned={!!meetings.find((m) => m.id === menu.meetingId)?.pinned}
+          onRename={() => {
+            const id = menu.meetingId;
+            const cur = meetings.find((m) => m.id === id)?.title?.trim() ?? "";
+            setMenu(null);
+            setEditing({ id, value: cur });
+          }}
+          onPin={async () => {
+            const id = menu.meetingId;
+            const isPinned = !!meetings.find((m) => m.id === id)?.pinned;
+            setMenu(null);
+            try {
+              await pinMeeting(id, !isPinned);
+              onChanged?.();
+            } catch {
+              onToast(t.toast_settings_failed, "error");
+            }
+          }}
           onDelete={() => {
             const id = menu.meetingId;
             setMenu(null);
@@ -155,7 +228,11 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
           onRetranscribe={async () => {
             const id = menu.meetingId;
             setMenu(null);
-            try { await retranscribe(id); onToast(t.toast_retranscribe_started, "success"); }
+            try {
+              await retranscribe(id);
+              onToast(t.toast_retranscribe_started, "success");
+              onRetranscribed?.(id);
+            }
             catch { onToast(t.toast_retranscribe_failed, "error"); }
           }}
         />
@@ -164,8 +241,10 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
   );
 }
 
-function ContextMenu({ x, y, onDelete, onRetranscribe, t }: {
-  x: number; y: number; onDelete: () => void; onRetranscribe: () => void; t: T;
+function ContextMenu({ x, y, pinned, onRename, onPin, onDelete, onRetranscribe, t }: {
+  x: number; y: number; pinned: boolean;
+  onRename: () => void; onPin: () => void; onDelete: () => void;
+  onRetranscribe: () => void; t: T;
 }) {
   return (
     <div
@@ -174,6 +253,10 @@ function ContextMenu({ x, y, onDelete, onRetranscribe, t }: {
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <button className="ctx-item" onClick={onRename}>{t.ctx_rename}</button>
+      <button className="ctx-item" onClick={onPin}>
+        {pinned ? t.ctx_unpin : t.ctx_pin}
+      </button>
       <button className="ctx-item" onClick={onRetranscribe}>{t.ctx_retranscribe}</button>
       <div className="ctx-sep" />
       <button className="ctx-item" onClick={onDelete}>{t.ctx_archive}</button>

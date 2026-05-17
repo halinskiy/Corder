@@ -6,8 +6,7 @@
 
 ## Prerequisites
 
-- macOS 14 (Sonoma) or newer. Apple Silicon strongly preferred —
-  WhisperKit on Intel is technically supported but slow.
+- macOS 14 (Sonoma) or newer. Apple Silicon strongly preferred.
 - Xcode 15+ (for the bundled SDK / Swift 6 compiler), or just the
   Command Line Tools if you don't need the IDE.
 - Node 20+ (for the Vite frontend).
@@ -25,13 +24,9 @@ scripts/bootstrap.sh        # materialises ~/.config/corder/{dropbox.json,gemini
 $EDITOR ~/.config/corder/gemini_key      # paste your Gemini API key
 ```
 
-Without `gemini_key`, the Gemini transcription provider (default) errors
-out and falls back to nothing useful. To run fully offline, switch
-provider to Whisper:
-
-```bash
-defaults write com.3mpq.Corder Corder.transcriptionProvider whisper
-```
+Without `gemini_key`, recording and playback still work fully — only
+transcription errors out (red toast). Gemini is the only provider;
+there is no offline/Whisper mode.
 
 ## Build & run
 
