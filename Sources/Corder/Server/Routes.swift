@@ -15,14 +15,26 @@ enum Routes {
         server.get["/api/meetings/:id/transcript.txt"] = { req in
             transcriptText(id: req.params[":id"] ?? "", repo: repo)
         }
+        server.get["/api/meetings/:id/transcript.md"] = { req in
+            transcriptExport(id: req.params[":id"] ?? "", repo: repo, kind: .md)
+        }
+        server.get["/api/meetings/:id/transcript.json"] = { req in
+            transcriptExport(id: req.params[":id"] ?? "", repo: repo, kind: .json)
+        }
         server.get["/api/meetings/:id/video"] = { req in
             serveMedia(id: req.params[":id"] ?? "", kind: .video, repo: repo, headers: req.headers)
         }
         server.get["/api/meetings/:id/audio"] = { req in
             serveMedia(id: req.params[":id"] ?? "", kind: .audio, repo: repo, headers: req.headers)
         }
+        server.get["/api/meetings/:id/bundle.zip"] = { req in
+            bundleZip(id: req.params[":id"] ?? "", repo: repo)
+        }
         server.post["/api/meetings/:id/speakers/:sid/rename"] = { req in
             renameSpeaker(req: req, repo: repo)
+        }
+        server.post["/api/meetings/:id/rename"] = { req in
+            renameMeeting(req: req, repo: repo)
         }
         server.post["/api/meetings/:id/retranscribe"] = { req in
             retranscribe(id: req.params[":id"] ?? "", repo: repo)
@@ -35,6 +47,9 @@ enum Routes {
         }
         server.get["/api/meetings/:id/last-error"] = { req in
             lastError(id: req.params[":id"] ?? "")
+        }
+        server.post["/api/meetings/:id/summarize"] = { req in
+            summarize(id: req.params[":id"] ?? "", repo: repo)
         }
         server.get["/api/recording/state"] = { _ in recordingState() }
         server.post["/api/recording/start"] = { _ in startRecordingNow() }
@@ -50,6 +65,12 @@ enum Routes {
         }
         server.post["/api/meetings/:id/restore"] = { req in
             restore(id: req.params[":id"] ?? "", repo: repo)
+        }
+        server.post["/api/meetings/:id/pin"] = { req in
+            setPin(id: req.params[":id"] ?? "", repo: repo, pinned: true)
+        }
+        server.post["/api/meetings/:id/unpin"] = { req in
+            setPin(id: req.params[":id"] ?? "", repo: repo, pinned: false)
         }
         server.get["/api/search"] = { req in
             let q = req.queryParams.first(where: { $0.0 == "q" })?.1 ?? ""
@@ -106,9 +127,11 @@ enum Routes {
                     ended_at: r.endedAt,
                     duration_ms: r.durationMs,
                     status: r.status,
+                    title: r.title,
                     preview: r.preview,
                     speaker_count: r.speakerCount,
-                    speaker_names: r.speakerNames
+                    speaker_names: r.speakerNames,
+                    pinned: r.pinnedAt != nil
                 )
             }
             return jsonResponse(summaries)
@@ -127,6 +150,8 @@ enum Routes {
             let dto = DTO.MeetingDetail(
                 id: m.id, started_at: m.startedAt, duration_ms: m.durationMs,
                 status: m.status.rawValue,
+                title: m.title,
+                summary: m.summary,
                 speakers: speakers.map {
                     DTO.SpeakerDTO(id: $0.id, label: $0.label, custom_name: $0.customName, color_hex: $0.colorHex)
                 },
@@ -152,6 +177,95 @@ enum Routes {
             return .raw(200, "OK", ["Content-Type": "text/plain; charset=utf-8"]) {
                 try $0.write([UInt8](text.utf8))
             }
+        } catch {
+            return .internalServerError
+        }
+    }
+
+    /// Bundles whatever exists locally (video, mixed audio, transcript)
+    /// into a single .zip. Shells out to /usr/bin/zip — ships with macOS,
+    /// no dependency. Blocks the Swifter worker like the other media
+    /// routes; the payload is small (a short meeting) to a few hundred MB.
+    private static func bundleZip(id: String, repo: MeetingRepository) -> HttpResponse {
+        guard let m = try? repo.meeting(id: id) else { return .notFound }
+
+        let fm = FileManager.default
+        let stage = fm.temporaryDirectory
+            .appendingPathComponent("corder-bundle-\(id)-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: stage) }
+        do { try fm.createDirectory(at: stage, withIntermediateDirectories: true) }
+        catch { return .internalServerError }
+
+        // Transcript
+        if let segs = try? repo.segments(forMeeting: id),
+           let spks = try? repo.speakers(forMeeting: id), !segs.isEmpty {
+            let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
+            try? text.data(using: .utf8)?
+                .write(to: stage.appendingPathComponent("transcript.txt"))
+        }
+        // Video
+        let videoURL = URL(fileURLWithPath: m.videoPath)
+        if fm.fileExists(atPath: videoURL.path) {
+            try? fm.copyItem(at: videoURL,
+                             to: stage.appendingPathComponent("video." + videoURL.pathExtension))
+        }
+        // Audio — prefer the mixed audio.wav (both sides), else stored path.
+        let mixURL = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav")
+        let audioURL = fm.fileExists(atPath: mixURL.path)
+            ? mixURL : URL(fileURLWithPath: m.audioPath)
+        if fm.fileExists(atPath: audioURL.path) {
+            try? fm.copyItem(at: audioURL,
+                             to: stage.appendingPathComponent("audio.wav"))
+        }
+
+        let entries = (try? fm.contentsOfDirectory(atPath: stage.path)) ?? []
+        guard !entries.isEmpty else { return .notFound }
+
+        let zipURL = fm.temporaryDirectory
+            .appendingPathComponent("corder-\(id)-\(UUID().uuidString).zip")
+        defer { try? fm.removeItem(at: zipURL) }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        proc.currentDirectoryURL = stage
+        proc.arguments = ["-j", "-q", "-r", zipURL.path, "."]
+        do { try proc.run(); proc.waitUntilExit() }
+        catch { return .internalServerError }
+        guard proc.terminationStatus == 0,
+              let data = try? Data(contentsOf: zipURL) else { return .internalServerError }
+
+        let bytes = [UInt8](data)
+        return .raw(200, "OK", [
+            "Content-Type": "application/zip",
+            "Content-Disposition": "attachment; filename=\"corder-\(id).zip\"",
+            "Content-Length": String(bytes.count)
+        ]) { try $0.write(bytes) }
+    }
+
+    private enum ExportKind { case md, json }
+    private static func transcriptExport(id: String, repo: MeetingRepository,
+                                         kind: ExportKind) -> HttpResponse {
+        do {
+            let segments = try repo.segments(forMeeting: id)
+            let speakers = try repo.speakers(forMeeting: id)
+            let m = try? repo.meeting(id: id)
+            let title = (m?.title?.trimmingCharacters(in: .whitespaces)).flatMap {
+                $0.isEmpty ? nil : $0
+            } ?? "Corder recording"
+            let (body, ctype, fname): (String, String, String)
+            switch kind {
+            case .md:
+                body = TranscriptFormatter.markdown(segments: segments, speakers: speakers, title: title)
+                ctype = "text/markdown; charset=utf-8"
+                fname = "\(id).md"
+            case .json:
+                body = TranscriptFormatter.json(segments: segments, speakers: speakers, title: title)
+                ctype = "application/json; charset=utf-8"
+                fname = "\(id).json"
+            }
+            return .raw(200, "OK", [
+                "Content-Type": ctype,
+                "Content-Disposition": "attachment; filename=\"corder-\(fname)\""
+            ]) { try $0.write([UInt8](body.utf8)) }
         } catch {
             return .internalServerError
         }
@@ -213,29 +327,51 @@ enum Routes {
         return .ok(.text("checking"))
     }
 
+    private static var geminiKeyPath: String {
+        ("~/.config/corder/gemini_key" as NSString).expandingTildeInPath
+    }
+
+    private static func currentSettings() -> DTO.Settings {
+        DTO.Settings(
+            language: AppLanguage.current,
+            vocabulary: AppVocabulary.current,
+            gemini_key: nil,        // never echo the key back
+            gemini_key_set: FileManager.default.fileExists(atPath: geminiKeyPath)
+        )
+    }
+
     private static func settingsGet() -> HttpResponse {
-        return jsonResponse(DTO.Settings(
-            boost_mode: BoostMode.isEnabled,
-            language: AppLanguage.current
-        ))
+        return jsonResponse(currentSettings())
     }
 
     private static func settingsSet(req: HttpRequest) -> HttpResponse {
         do {
             let body = Data(req.body)
             let parsed = try JSONDecoder().decode(DTO.Settings.self, from: body)
-            UserDefaults.standard.set(parsed.boost_mode, forKey: BoostMode.key)
             if let lang = parsed.language, lang == "ru" || lang == "en" {
                 UserDefaults.standard.set(lang, forKey: AppLanguage.key)
                 Task { @MainActor in
                     AppContext.shared.language = lang
                 }
             }
-            FileLogger.log("settings: boost_mode=\(parsed.boost_mode) language=\(parsed.language ?? "nil")")
-            return jsonResponse(DTO.Settings(
-                boost_mode: parsed.boost_mode,
-                language: AppLanguage.current
-            ))
+            if let vocab = parsed.vocabulary {
+                UserDefaults.standard.set(
+                    vocab.trimmingCharacters(in: .whitespacesAndNewlines),
+                    forKey: AppVocabulary.key)
+            }
+            if let key = parsed.gemini_key?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !key.isEmpty {
+                let path = geminiKeyPath
+                try? FileManager.default.createDirectory(
+                    atPath: (path as NSString).deletingLastPathComponent,
+                    withIntermediateDirectories: true)
+                try? key.write(toFile: path, atomically: true, encoding: .utf8)
+                // Owner-only — it's a secret.
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600], ofItemAtPath: path)
+            }
+            FileLogger.log("settings: language=\(parsed.language ?? "nil") vocab=\(parsed.vocabulary != nil) keySet=\(parsed.gemini_key != nil)")
+            return jsonResponse(currentSettings())
         } catch {
             return .badRequest(.text("\(error)"))
         }
@@ -258,6 +394,40 @@ enum Routes {
             TranscriptionPipeline.shared.enqueue(meetingId: id)
         }
         return .ok(.text("queued"))
+    }
+
+    /// On-demand summary. Returns the cached `summary` if present;
+    /// otherwise generates one from the transcript (blocking this
+    /// Swifter worker for the Gemini round-trip — same accepted pattern
+    /// as the Dropbox-hydrate path), stores it, and returns it.
+    private static func summarize(id: String, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        guard let m = try? repo.meeting(id: id) else { return .notFound }
+        if let cached = m.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !cached.isEmpty {
+            return jsonResponse(["summary": cached])
+        }
+        let segs = (try? repo.segments(forMeeting: id)) ?? []
+        guard !segs.isEmpty else {
+            return jsonResponse(["summary": "", "error": "no transcript"])
+        }
+        let spks = (try? repo.speakers(forMeeting: id)) ?? []
+        let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
+
+        let sema = DispatchSemaphore(value: 0)
+        var result: String?
+        Task {
+            result = await GeminiSummarizer.generate(transcript: text)
+            sema.signal()
+        }
+        sema.wait()
+
+        guard let summary = result, !summary.isEmpty else {
+            return jsonResponse(["summary": "", "error": "generation failed"])
+        }
+        try? repo.setSummary(meetingId: id, summary: summary)
+        FileLogger.log("summarize: generated summary for \(id) (\(summary.count) chars)")
+        return jsonResponse(["summary": summary])
     }
 
     private static func cancelTranscription(id: String) -> HttpResponse {
@@ -337,6 +507,17 @@ enum Routes {
         }
     }
 
+    private static func setPin(id: String, repo: MeetingRepository, pinned: Bool) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        do {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            try repo.setPinned(meetingId: id, pinnedAt: pinned ? now : nil)
+            return .ok(.text("ok"))
+        } catch {
+            return .internalServerError
+        }
+    }
+
     private static func listArchived(repo: MeetingRepository) -> HttpResponse {
         do {
             let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -365,6 +546,23 @@ enum Routes {
             let body = Data(req.body)
             let parsed = try JSONDecoder().decode(DTO.RenameRequest.self, from: body)
             try repo.renameSpeaker(speakerId: sid, customName: parsed.name)
+            return .ok(.text("ok"))
+        } catch {
+            return .badRequest(.text("\(error)"))
+        }
+    }
+
+    private static func renameMeeting(req: HttpRequest, repo: MeetingRepository) -> HttpResponse {
+        let id = req.params[":id"] ?? ""
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        do {
+            let body = Data(req.body)
+            let parsed = try JSONDecoder().decode(DTO.MeetingTitleRequest.self, from: body)
+            // Empty / whitespace clears the override so the UI falls back
+            // to the auto-title (or the date label when there's none).
+            let trimmed = parsed.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = (trimmed?.isEmpty ?? true) ? nil : trimmed
+            try repo.setTitle(meetingId: id, title: title)
             return .ok(.text("ok"))
         } catch {
             return .badRequest(.text("\(error)"))

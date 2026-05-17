@@ -59,15 +59,18 @@ final class CaptureEngine: NSObject {
     private var videoSessionStarted = false
     private var videoFramesAppended: Int64 = 0
 
-    // System audio captured by SCStream is mirrored into a standalone .wav so
-    // transcription does not depend on AVAssetWriter finalising the .mov.
+    // System audio now comes from a Core Audio process tap (see
+    // SystemAudioTap) instead of SCStream's `.audio` output. SCStream
+    // delivered silence on real calls because communication apps render
+    // through Voice-Processing I/O, which bypasses the system mix it
+    // taps. The tap's buffers are mirrored into a standalone .wav so
+    // transcription doesn't depend on AVAssetWriter finalising the .mov.
+    private let systemTap = SystemAudioTap()
     private var systemAudioFile: AVAudioFile?
     private var systemAudioFormat: AVAudioFormat?
-    // Diagnostic counter for SCStream's `.audio` output. If this stays at
-    // 0 across a recording, ScreenCaptureKit didn't deliver a single
-    // system-audio buffer — typically reproducible when output is on
-    // Bluetooth headphones (SCO mode), which is exactly the broken
-    // scenario users hit on Meet/Zoom calls.
+    // Diagnostic counter for the system-audio tap. If this stays at 0
+    // across a recording, the process tap delivered no frames (TCC
+    // denied, or genuinely nothing playing).
     private var systemFramesWritten: Int64 = 0
     private var loggedFirstSystemBuffer = false
 
@@ -227,24 +230,22 @@ final class CaptureEngine: NSObject {
             FileLogger.log("CaptureEngine.start: AVAssetWriter init failed: \(error). Continuing without video.")
         }
 
-        // 4. SCStream — try with audio first, retry without on failure.
-        // "Stream failed to start audio" happens with some Bluetooth/AirPods
-        // setups. We'd rather have a recording with mic-only than a hard fail.
-        var activeStream = SCStream(filter: filter, configuration: config, delegate: self)
+        // 4. SCStream for SCREEN (video) only. System audio is captured
+        //    separately by the Core Audio process tap below — SCStream's
+        //    audio tap returns silence on real calls (VPIO bypass), which
+        //    is the whole reason the tap exists. We still set
+        //    capturesAudio=false here so SCStream doesn't hold the
+        //    system-audio TCC indicator for a stream we don't read audio
+        //    from.
+        config.capturesAudio = false
+        let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
         try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
-        try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
-        FileLogger.log("CaptureEngine.start: SCStream configured (capturesAudio=\(config.capturesAudio))")
-
+        FileLogger.log("CaptureEngine.start: SCStream configured (screen-only; audio via process tap)")
         do {
             try await activeStream.startCapture()
-            FileLogger.log("CaptureEngine.start: SCStream.startCapture OK (with audio)")
+            FileLogger.log("CaptureEngine.start: SCStream.startCapture OK (screen)")
         } catch {
-            FileLogger.log("CaptureEngine.start: SCStream startCapture FAILED with audio: \(error). Retrying without system audio…")
-            config.capturesAudio = false
-            activeStream = SCStream(filter: filter, configuration: config, delegate: self)
-            try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
-            try await activeStream.startCapture()
-            FileLogger.log("CaptureEngine.start: SCStream.startCapture OK (video-only fallback). system.wav will be empty — only mic will be transcribed.")
+            FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing — audio tap + mic still record; no video.")
         }
         self.stream = activeStream
 
@@ -277,13 +278,31 @@ final class CaptureEngine: NSObject {
         try engine.start()
         self.audioEngine = engine
 
-        // 6. system.wav — opened lazily on first SCStream audio buffer (we need
-        // the actual AudioStreamBasicDescription from the buffer to create the file).
+        // 6. system.wav via the Core Audio process tap. Opened lazily
+        //    on the first tap buffer (we take the format from the tap).
+        //    Tap failure is non-fatal: mic still records, the meeting
+        //    just won't have the remote side (same outcome as the old
+        //    SCStream silent-audio case, but now it's the rare path).
         self.systemURL = systemURL
         self.systemAudioFile = nil
         self.systemAudioFormat = nil
         self.systemFramesWritten = 0
         self.loggedFirstSystemBuffer = false
+        systemTap.onAudio = { [weak self] pcm in
+            // IOProc queue. Feed the level meter here (it hops to main
+            // internally + is cheap), then hand the buffer to the
+            // main-actor writer — same pattern the old SCStream audio
+            // path used. AVAudioFile.write off a serial source is fine.
+            RecordingLevelMeter.shared.ingestSystem(pcm: pcm)
+            Task { @MainActor [weak self] in
+                self?.writeSystemAudioPCM(pcm)
+            }
+        }
+        do {
+            try systemTap.start()
+        } catch {
+            FileLogger.log("CaptureEngine.start: system audio tap failed: \(error.localizedDescription). Recording mic-only.")
+        }
 
         // 7. Mark recording state
         self.isRecording = true
@@ -308,12 +327,16 @@ final class CaptureEngine: NSObject {
         // session is "completed" but the registered handlers count
         // as live consumers of system audio in TCC's view.
         if let stream = stream {
-            try? stream.removeStreamOutput(self, type: .audio)
             try? stream.removeStreamOutput(self, type: .screen)
             do { try await stream.stopCapture(); FileLogger.log("CaptureEngine.stop: SCStream stopped") }
             catch { FileLogger.log("CaptureEngine.stop: SCStream.stopCapture error: \(error)") }
         }
         stream = nil
+
+        // Stop the system-audio process tap and tear down its private
+        // aggregate device. Done before closing systemAudioFile so no
+        // in-flight IOProc callback writes after the file is nil'd.
+        systemTap.stop()
 
         // Stop microphone — removeTap before stop, then reset() so
         // the engine fully relinquishes its grip on the input device
@@ -369,15 +392,6 @@ extension CaptureEngine: SCStreamOutput {
               CMSampleBufferGetNumSamples(sampleBuffer) > 0 else { return }
 
         switch type {
-        case .audio:
-            // Feed the level meter from the audio thread directly —
-            // peak() doesn't touch the main actor, so the floating HUD
-            // gets system-audio movement without waiting on the same
-            // hop the file write needs.
-            RecordingLevelMeter.shared.ingestSystem(sample: sampleBuffer)
-            Task { @MainActor [weak self] in
-                self?.writeSystemAudio(sampleBuffer)
-            }
         case .screen:
             // ScreenCaptureKit also emits "no-pixel" sample buffers (status =
             // .idle, .blank, .suspended) when the screen content hasn't
@@ -422,14 +436,14 @@ extension CaptureEngine: SCStreamOutput {
         }
     }
 
+    /// Tap-buffer sink, hopped to the main actor (mirrors the old
+    /// SCStream `.audio` → writeSystemAudio path). The tap's IOProc is a
+    /// single serial queue, so even with the hop the buffers stay
+    /// ordered.
     @MainActor
-    private func writeSystemAudio(_ buffer: CMSampleBuffer) {
-        guard let url = systemURL else { return }
-        // Lazy-open the file using the format from the first buffer we see.
+    private func writeSystemAudioPCM(_ pcm: AVAudioPCMBuffer) {
+        guard let url = systemURL, let format = systemTap.format else { return }
         if systemAudioFile == nil {
-            guard let formatDesc = CMSampleBufferGetFormatDescription(buffer),
-                  var asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)?.pointee,
-                  let format = AVAudioFormat(streamDescription: &asbd) else { return }
             do {
                 let file = try AVAudioFile(forWriting: url,
                                            settings: format.settings,
@@ -437,31 +451,20 @@ extension CaptureEngine: SCStreamOutput {
                                            interleaved: format.isInterleaved)
                 self.systemAudioFile = file
                 self.systemAudioFormat = format
-                FileLogger.log("CaptureEngine: opened system.wav (\(format.sampleRate) Hz, \(format.channelCount) ch)")
+                FileLogger.log("CaptureEngine: opened system.wav (\(format.sampleRate) Hz, \(format.channelCount) ch, via process tap)")
             } catch {
                 FileLogger.log("CaptureEngine: failed to open system.wav: \(error)")
                 return
             }
         }
-        guard let format = systemAudioFormat,
-              let file = systemAudioFile else { return }
-        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(buffer))
-        guard frames > 0,
-              let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
-        pcm.frameLength = frames
-        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
-            buffer, at: 0, frameCount: Int32(frames), into: pcm.mutableAudioBufferList)
-        guard status == noErr else {
-            FileLogger.log("CaptureEngine: CMSampleBufferCopy returned \(status)")
-            return
-        }
+        guard let file = systemAudioFile else { return }
         if !loggedFirstSystemBuffer {
             loggedFirstSystemBuffer = true
-            FileLogger.log("CaptureEngine: first system audio buffer arrived (frames=\(frames))")
+            FileLogger.log("CaptureEngine: first system audio buffer arrived (frames=\(pcm.frameLength))")
         }
         do {
             try file.write(from: pcm)
-            systemFramesWritten &+= Int64(frames)
+            systemFramesWritten &+= Int64(pcm.frameLength)
         } catch {
             FileLogger.log("CaptureEngine: system.wav write error: \(error)")
         }

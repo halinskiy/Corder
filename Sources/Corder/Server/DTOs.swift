@@ -7,12 +7,14 @@ enum DTO {
         let ended_at: Int64?
         let duration_ms: Int64?
         let status: String
+        let title: String?
         let preview: String?
         let speaker_count: Int
         /// Speaker labels + custom names, joined by " · ". Used by the
         /// sidebar's text filter so the user can find a meeting by who
         /// was on the call ("Vadim", "Влад", etc.) without opening it.
         let speaker_names: String?
+        let pinned: Bool
     }
 
     struct MeetingDetail: Codable {
@@ -20,6 +22,8 @@ enum DTO {
         let started_at: Int64
         let duration_ms: Int64?
         let status: String
+        let title: String?
+        let summary: String?
         let speakers: [SpeakerDTO]
         let segments: [SegmentDTO]
         let expected_other_speakers: Int?
@@ -35,8 +39,15 @@ enum DTO {
     }
 
     struct Settings: Codable {
-        let boost_mode: Bool
         let language: String?
+        /// Domain terms (names / jargon / acronyms) fed into the
+        /// transcription prompt to improve accuracy. Free-form text.
+        let vocabulary: String?
+        /// Write-only: POST a new Gemini API key here. Never echoed back
+        /// by GET (so the key isn't exposed to the page after it's set).
+        let gemini_key: String?
+        /// Read-only: GET reports whether a key is on disk, not the key.
+        let gemini_key_set: Bool?
     }
 
     struct SpeakerDTO: Codable {
@@ -57,6 +68,12 @@ enum DTO {
 
     struct RenameRequest: Codable {
         let name: String?
+    }
+
+    /// Meeting title override from the sidebar context-menu "Rename".
+    /// `nil`/empty clears it back to the auto/date label.
+    struct MeetingTitleRequest: Codable {
+        let title: String?
     }
 
     struct SearchHit: Codable {

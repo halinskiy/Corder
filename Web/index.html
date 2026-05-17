@@ -4,10 +4,166 @@
     <meta charset="utf-8" />
     <title>Corder</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Critical skeleton CSS, inlined so the pre-React skeleton below is
+      STYLED the instant WKWebView parses the HTML. The full stylesheet
+      is a render-blocking external file served by the embedded Swifter
+      server; until it arrives the skeleton divs have no size/colour and
+      the window is just blank white (exactly the "no skeleton on load"
+      report). These rules govern only that brief pre-load window — the
+      full stylesheet (loaded right after, equal specificity) overrides
+      them, and React replaces the whole #root subtree on mount.
+    -->
+    <style>
+      :root{--bg:#ffffff;--bg-elev:#f7f7f6;--border:#ececea}
+      .dark{--bg:#161615;--bg-elev:#1d1d1c;--border:#2c2c2a}
+      html,body{margin:0;height:100%;background:var(--bg);
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+        -webkit-font-smoothing:antialiased}
+      #root{height:100vh}
+      .app{display:grid;grid-template-columns:240px 1fr;height:100vh;
+        overflow:hidden;background:var(--bg)}
+      .sidebar{display:flex;flex-direction:column;overflow:hidden;
+        background:var(--bg-elev);border-right:1px solid var(--border)}
+      .sidebar-titlebar-pad{height:36px}
+      .sidebar-search{padding:4px 12px 12px}
+      .sidebar-list{flex:1;overflow:hidden}
+      .sidebar-skeleton{padding:4px 0}
+      .skeleton-item{padding:10px 16px}
+      .main{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+      .main-header{display:flex;align-items:center;gap:12px;padding:18px 20px;
+        min-height:64px;border-bottom:1px solid var(--border);background:var(--bg)}
+      .spacer{flex:1}
+      .detail{display:flex;flex-direction:column;flex:1;overflow:hidden}
+      .detail-tabs{display:grid;grid-template-columns:1fr 380px;
+        border-bottom:1px solid var(--border)}
+      .detail-tab-col{padding:18px 20px 0;display:flex;gap:24px}
+      .detail-body{display:grid;grid-template-columns:1fr 380px;flex:1;overflow:hidden}
+      .transcript-wrap{display:flex;flex-direction:column;overflow:hidden}
+      .transcript-toolbar{padding:20px 20px 12px;display:flex;align-items:center;gap:10px}
+      .meeting-skeleton-transcript{padding:16px 32px}
+      .skel-paragraph{margin-bottom:20px}
+      .skel-line,.skel-pill{background-color:#ececec;
+        background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,
+          rgba(255,255,255,.55) 50%,rgba(255,255,255,0) 100%);
+        background-size:200px 100%;background-repeat:no-repeat;border-radius:4px;
+        animation:corder-shimmer 1.4s linear infinite}
+      .dark .skel-line,.dark .skel-pill{background-color:#242422;
+        background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,
+          rgba(255,255,255,.07) 50%,rgba(255,255,255,0) 100%)}
+      .skel-line{display:block;height:12px;width:100%;margin:4px 0}
+      .skel-pill{display:inline-block;height:14px;border-radius:999px}
+      .skel-pill-sm{width:140px}
+      .skel-pill-tab{width:90px;height:16px}
+      .skel-line-input{width:100%;height:32px;border-radius:6px}
+      .skel-line-title{width:70%;height:13px}
+      .skel-line-meta{width:45%;height:10px;margin-top:6px}
+      .skel-line-preview{width:92%;height:11px;margin-top:8px}
+      .skel-line-meta-sm{width:30%;height:10px}
+      .skel-line-text{width:95%;height:12px;margin-top:8px}
+      .skel-line-text-short{width:70%}
+      @keyframes corder-shimmer{0%{background-position:-200px 0}
+        100%{background-position:calc(200px + 100%) 0}}
+    </style>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Pre-React skeleton: rendered by WKWebView the moment the HTML
+      parses, well before main.tsx evaluates and React mounts. Without
+      this, the user sees a blank white window for a few hundred ms
+      between window-open and first paint. React replaces this whole
+      subtree with its own skeleton (Sidebar's loaded=false branch +
+      MeetingSkeleton) as soon as it hydrates.
+    -->
+    <div id="root">
+      <div class="app">
+        <aside class="sidebar">
+          <div class="sidebar-titlebar-pad"></div>
+          <div class="sidebar-search">
+            <div class="search-field">
+              <span class="skel-line skel-line-input" style="height: 16px;"></span>
+            </div>
+          </div>
+          <div class="sidebar-list">
+            <div class="sidebar-skeleton" aria-hidden="true">
+              <div class="meeting-item skeleton-item">
+                <div class="skel-line skel-line-title"></div>
+                <div class="skel-line skel-line-meta"></div>
+                <div class="skel-line skel-line-preview"></div>
+              </div>
+              <div class="meeting-item skeleton-item">
+                <div class="skel-line skel-line-title"></div>
+                <div class="skel-line skel-line-meta"></div>
+                <div class="skel-line skel-line-preview"></div>
+              </div>
+              <div class="meeting-item skeleton-item">
+                <div class="skel-line skel-line-title"></div>
+                <div class="skel-line skel-line-meta"></div>
+                <div class="skel-line skel-line-preview"></div>
+              </div>
+              <div class="meeting-item skeleton-item">
+                <div class="skel-line skel-line-title"></div>
+                <div class="skel-line skel-line-meta"></div>
+                <div class="skel-line skel-line-preview"></div>
+              </div>
+              <div class="meeting-item skeleton-item">
+                <div class="skel-line skel-line-title"></div>
+                <div class="skel-line skel-line-meta"></div>
+                <div class="skel-line skel-line-preview"></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+        <main class="main">
+          <div class="main-header">
+            <div class="breadcrumb">
+              <span class="skel-pill skel-pill-sm"></span>
+            </div>
+            <div class="spacer"></div>
+          </div>
+          <div class="detail">
+            <div class="detail-tabs">
+              <div class="detail-tab-col detail-tab-col-left">
+                <span class="skel-pill skel-pill-tab"></span>
+              </div>
+              <div class="detail-tab-col detail-tab-col-right">
+                <span class="skel-pill skel-pill-tab"></span>
+              </div>
+            </div>
+            <div class="detail-body">
+              <div class="transcript-wrap">
+                <div class="transcript-toolbar">
+                  <span class="skel-line skel-line-input"></span>
+                </div>
+                <div class="meeting-skeleton-transcript">
+                  <div class="skel-paragraph">
+                    <div class="skel-line skel-line-meta-sm"></div>
+                    <div class="skel-line skel-line-text"></div>
+                    <div class="skel-line skel-line-text skel-line-text-short"></div>
+                  </div>
+                  <div class="skel-paragraph">
+                    <div class="skel-line skel-line-meta-sm"></div>
+                    <div class="skel-line skel-line-text"></div>
+                    <div class="skel-line skel-line-text skel-line-text-short"></div>
+                  </div>
+                  <div class="skel-paragraph">
+                    <div class="skel-line skel-line-meta-sm"></div>
+                    <div class="skel-line skel-line-text"></div>
+                    <div class="skel-line skel-line-text skel-line-text-short"></div>
+                  </div>
+                  <div class="skel-paragraph">
+                    <div class="skel-line skel-line-meta-sm"></div>
+                    <div class="skel-line skel-line-text"></div>
+                    <div class="skel-line skel-line-text skel-line-text-short"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

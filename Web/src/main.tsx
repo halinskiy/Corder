@@ -4,7 +4,23 @@ import { listMeetings, MeetingSummary, RecordingState, getRecordingState, getSet
 import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
 import { ArchiveView } from "./components/ArchiveView";
+import { ResizeHandle } from "./components/ResizeHandle";
 import { STRINGS, Lang, T } from "./i18n";
+import { initTheme } from "./theme";
+
+const SIDEBAR_DEFAULT = 240, SIDEBAR_MIN = 200, SIDEBAR_MAX = 480;
+const RIGHT_DEFAULT = 380, RIGHT_MIN = 300, RIGHT_MAX = 760;
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+function readNum(key: string, fallback: number): number {
+  try {
+    const v = parseFloat(localStorage.getItem(key) || "");
+    return Number.isFinite(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function Toast({ toast, leaving }: { toast: ToastState; leaving: boolean }) {
   // Two-phase mount: render with `.entering` (off-screen below), flip to the
@@ -81,9 +97,22 @@ function App() {
   const softDeletedRef = React.useRef<Set<string>>(softDeleted);
   React.useEffect(() => { softDeletedRef.current = softDeleted; }, [softDeleted]);
   const [recState, setRecState] = React.useState<RecordingState>({ active: false });
-  const [boostMode, setBoostModeState] = React.useState(false);
   const [lang, setLangState] = React.useState<Lang>("en");
   const t: T = STRINGS[lang];
+
+  // The native window posts this on show/close. While the Library
+  // window is hidden the page is alive but invisible — pausing the
+  // poll timers stops pointless background requests/CPU. Defaults to
+  // active so the very first open (event may fire before listeners
+  // attach) still polls.
+  const [windowActive, setWindowActive] = React.useState(true);
+  React.useEffect(() => {
+    const onActive = (e: Event) => {
+      setWindowActive(!!(e as CustomEvent).detail);
+    };
+    window.addEventListener("corder-window-active", onActive);
+    return () => window.removeEventListener("corder-window-active", onActive);
+  }, []);
 
   const refresh = React.useCallback(async () => {
     try {
@@ -113,20 +142,23 @@ function App() {
   // anything.
   const isActive = recState.active;
   React.useEffect(() => {
+    if (!windowActive) return;          // window hidden → stop polling
     const ms = isActive ? 1000 : 5000;
     const tick = async () => {
       try { setRecState(await getRecordingState()); } catch {}
     };
-    tick();
+    tick();                            // immediate refresh on (re)activate
     const t = setInterval(tick, ms);
     return () => clearInterval(t);
-  }, [isActive]);
+  }, [isActive, windowActive]);
 
   React.useEffect(() => {
+    if (!windowActive) return;
+    refresh();                         // immediate refresh on (re)activate
     const ms = isActive ? 5000 : 15000;
     const t = setInterval(refresh, ms);
     return () => clearInterval(t);
-  }, [refresh, isActive]);
+  }, [refresh, isActive, windowActive]);
 
   const dismissToast = React.useCallback(() => {
     if (toastTimer.current) { window.clearTimeout(toastTimer.current); toastTimer.current = null; }
@@ -162,32 +194,20 @@ function App() {
     (async () => {
       try {
         const s = await getSettings();
-        setBoostModeState(s.boost_mode);
         if (s.language === "ru" || s.language === "en") setLangState(s.language);
       } catch {}
     })();
   }, []);
 
-  const handleBoostModeChange = React.useCallback(async (next: boolean) => {
-    setBoostModeState(next);
-    try {
-      await setSettings({ boost_mode: next, language: lang });
-      showToast(next ? t.toast_boost_on : t.toast_boost_off, "success");
-    } catch {
-      setBoostModeState(!next);
-      showToast(t.toast_settings_failed, "error");
-    }
-  }, [showToast, lang, t]);
-
   const handleLangChange = React.useCallback(async (next: Lang) => {
     setLangState(next);
     try {
-      await setSettings({ boost_mode: boostMode, language: next });
+      await setSettings({ language: next });
     } catch {
       setLangState(lang);
       showToast(STRINGS[next].toast_settings_failed, "error");
     }
-  }, [boostMode, lang, showToast]);
+  }, [lang, showToast]);
 
   // Soft-archive with a 5-second Undo window. The meeting is hidden from the
   // UI immediately (optimistic) and the real archive request is fired right
@@ -236,10 +256,32 @@ function App() {
     [meetings, softDeleted]
   );
 
+  const [sidebarW, setSidebarW] = React.useState(() =>
+    clamp(readNum("corder.sidebarW", SIDEBAR_DEFAULT), SIDEBAR_MIN, SIDEBAR_MAX)
+  );
+  const [rightW, setRightW] = React.useState(() =>
+    clamp(readNum("corder.rightW", RIGHT_DEFAULT), RIGHT_MIN, RIGHT_MAX)
+  );
+  React.useEffect(() => {
+    try { localStorage.setItem("corder.sidebarW", String(sidebarW)); } catch {}
+  }, [sidebarW]);
+  React.useEffect(() => {
+    try { localStorage.setItem("corder.rightW", String(rightW)); } catch {}
+  }, [rightW]);
+
   const [archiveOpen, setArchiveOpen] = React.useState(false);
+  // Bumped when the currently-open meeting is re-transcribed from the
+  // sidebar, so MeetingView knows to start polling for the new result.
+  const [retranscribeNonce, setRetranscribeNonce] = React.useState(0);
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={{
+        ["--sidebar-w" as string]: `${sidebarW}px`,
+        ["--right-w" as string]: `${rightW}px`,
+      } as React.CSSProperties}
+    >
       <Sidebar
         meetings={visibleMeetings}
         loaded={meetingsLoaded}
@@ -248,9 +290,16 @@ function App() {
         onQueryChange={setQuery}
         onSelect={setActiveId}
         onDeleted={handleArchived}
+        onRetranscribed={(id) => { if (id === activeId) setRetranscribeNonce((n) => n + 1); }}
+        onChanged={refresh}
         onToast={showToast}
         t={t}
         lang={lang}
+      />
+      <ResizeHandle
+        className="resizer-sidebar"
+        onDrag={(dx) => setSidebarW((w) => clamp(w + dx, SIDEBAR_MIN, SIDEBAR_MAX))}
+        onReset={() => setSidebarW(SIDEBAR_DEFAULT)}
       />
       <main className="main">
         {activeId ? (
@@ -262,10 +311,11 @@ function App() {
             onToast={showToast}
             recordingState={recState}
             onRecordingStopped={() => { setRecState({ active: false }); refresh(); }}
-            boostMode={boostMode}
-            onBoostModeChange={handleBoostModeChange}
+            reloadSignal={retranscribeNonce}
             lang={lang}
             onLangChange={handleLangChange}
+            onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
+            onResetSplit={() => setRightW(RIGHT_DEFAULT)}
             t={t}
           />
         ) : (
@@ -294,4 +344,5 @@ function App() {
   );
 }
 
+initTheme();
 createRoot(document.getElementById("root")!).render(<App />);

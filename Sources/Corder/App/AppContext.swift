@@ -35,13 +35,6 @@ final class AppContext: ObservableObject {
         didSet { UserDefaults.standard.set(sourceMode.rawValue, forKey: "Corder.sourceMode") }
     }
 
-    /// Global "Boost" mode. When ON, every subsequent transcription is
-    /// automatically polished via Gemini Flash after Whisper finishes — there's
-    /// no per-meeting "Boost now" action. Persisted across launches.
-    @Published var boostMode: Bool = UserDefaults.standard.bool(forKey: BoostMode.key) {
-        didSet { UserDefaults.standard.set(boostMode, forKey: BoostMode.key) }
-    }
-
     /// Interface language for the Library window AND the menu-bar popover.
     /// "ru" / "en". Defaults to "en".
     @Published var language: String = UserDefaults.standard.string(forKey: AppLanguage.key) ?? "en" {
@@ -55,12 +48,15 @@ enum AppLanguage {
     static var current: String { UserDefaults.standard.string(forKey: key) ?? "en" }
 }
 
-/// Thread-safe accessor for the persisted boost flag, so non-MainActor code
-/// (transcription pipeline detached tasks, request handlers) can read the
-/// setting without hopping to MainActor. UserDefaults itself is thread-safe.
-enum BoostMode {
-    static let key = "Corder.boostMode"
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: key) }
+/// Thread-safe accessor for the user's custom vocabulary (domain terms).
+/// Read from the transcription pipeline (non-MainActor) to bias Gemini
+/// toward correct spellings of names / jargon / acronyms.
+enum AppVocabulary {
+    static let key = "Corder.vocabulary"
+    static var current: String {
+        (UserDefaults.standard.string(forKey: key) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 enum SourceMode: String {

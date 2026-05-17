@@ -34,18 +34,16 @@ processed for transcription with built-in diarisation, then deleted by
 Google after the request completes. The pinned billing tier (Tier 1 /
 paid) explicitly opts the project out of training-data reuse.
 
-Switching to the **Whisper (local) provider** keeps everything on-device:
-WhisperKit runs on the Apple Neural Engine, FluidAudio diarises locally,
-no network traffic at all. There is no UI toggle — set it via:
+Gemini is the **only** transcription provider. There is no local /
+on-device fallback and no provider toggle — if a recording is
+transcribed, its audio went to Google's File API. A meeting that is
+never transcribed (recording kept, transcription cancelled or failed)
+never leaves the machine.
 
-```
-defaults write com.3mpq.Corder Corder.transcriptionProvider whisper
-```
-
-Boost mode (optional, off by default) does send already-transcribed text
-to Gemini for polishing, regardless of which provider produced it. If
-you want zero network egress, leave Boost off and use the Whisper
-provider.
+The Gemini API key is read at runtime only — from the `GEMINI_API_KEY`
+environment variable or `~/.config/corder/gemini_key` (mode 0600). It
+is never compiled into the binary and never committed, so neither the
+public source nor a distributed `.app` carries it.
 
 Dropbox archival, when configured, uploads `audio.wav` to a folder under
 the user's own Dropbox app token. Local copies are deleted after upload.

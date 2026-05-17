@@ -8,6 +8,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         FileLogger.log("AppDelegate: applicationDidFinishLaunching")
+        // Salvage recordings interrupted by a crash BEFORE the cleanup
+        // below deletes them: any with usable audio on disk are flipped
+        // to 'transcribing' (and picked up by the auto-resume pass), so
+        // a crash mid-meeting no longer loses the recording.
+        RecordingRecovery.run(repo: AppContext.shared.repo)
         // Recover from prior crashes: drop orphan recording rows and flip
         // bare 'recording' state to failed. Transcribing rows are recovered
         // separately below — they get re-enqueued, not failed.
@@ -35,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Scrub Whisper hallucinations ("Субтитры сделал DimaTorzok", etc.) from
         // any pre-existing transcripts so the user sees a clean library on launch.
         TranscriptionPipeline.purgeKnownHallucinations(repo: AppContext.shared.repo)
+        // Name recordings made before the auto-title feature (or whose
+        // title pass failed) — generates titles in the background so the
+        // sidebar stops showing bare dates for old transcripts.
+        TranscriptionPipeline.backfillTitles(repo: AppContext.shared.repo)
         // Hard-delete archived meetings older than 7 days (DB row + local
         // recording dir + Dropbox files). Runs once per launch; missing
         // a launch just means the entries linger one extra day, which is

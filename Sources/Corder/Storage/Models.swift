@@ -27,6 +27,15 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     var geminiRawTurns: String? = nil
     var audioHash: String? = nil
     var archivedAt: Int64? = nil
+    /// Auto-generated short headline (3-6 words, transcript language).
+    /// nil until the post-transcription title pass fills it.
+    var title: String? = nil
+    /// Generated meeting summary (Markdown, transcript language). nil
+    /// until the user opens the Summary tab (generated on demand).
+    var summary: String? = nil
+    /// Non-nil = pinned; value is when it was pinned (stable order
+    /// within the pinned group).
+    var pinnedAt: Int64? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -44,6 +53,9 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case geminiRawTurns = "gemini_raw_turns"
         case audioHash = "audio_hash"
         case archivedAt = "archived_at"
+        case title
+        case summary
+        case pinnedAt = "pinned_at"
     }
 }
 

@@ -4,6 +4,11 @@ import { RecordingBanner } from "./RecordingBanner";
 import { RecordingPlaceholder } from "./RecordingPlaceholder";
 import { TranscribingBanner } from "./TranscribingBanner";
 import { SpeakersClarifyBanner } from "./SpeakersClarifyBanner";
+import { SummaryPane } from "./SummaryPane";
+
+// Temporarily hidden on request — the summary block stays built and
+// wired, just not shown for now. Flip to re-enable.
+const SHOW_SUMMARY = false;
 import { EmptyDeleteBanner } from "./EmptyDeleteBanner";
 import type { T } from "../i18n";
 
@@ -128,6 +133,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   return (
     <div className="transcript" ref={containerRef}>
+      {SHOW_SUMMARY && <SummaryPane detail={detail} t={t} />}
       {clarifyOpen && (
         // Mounted/unmounted directly. We tried wrapping it in a max-height
         // collapsible and a grid-rows collapsible — both leaked the banner's
@@ -138,9 +144,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
         // the gap goes away because the element goes away.
         <SpeakersClarifyBanner
           meetingId={detail.id}
-          currentOthers={
-            detail.expected_other_speakers ?? Math.max(0, detail.speakers.length - 1)
-          }
+          pickedOthers={detail.expected_other_speakers ?? null}
           onChanged={onClarifyChosen}
           onDismiss={onClarifyDismiss}
           onToast={onToast}
@@ -221,7 +225,7 @@ function highlight(text: string, q: string): React.ReactNode {
     const idx = lower.indexOf(q, i);
     if (idx < 0) { out.push(text.slice(i)); break; }
     if (idx > i) out.push(text.slice(i, idx));
-    out.push(<mark key={idx} style={{ background: "#cdebd9", color: "inherit", padding: 0 }}>{text.slice(idx, idx + q.length)}</mark>);
+    out.push(<mark key={idx} className="tp-hl">{text.slice(idx, idx + q.length)}</mark>);
     i = idx + q.length;
   }
   return out;

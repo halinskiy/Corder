@@ -3,8 +3,8 @@ import CoreAudio
 import Foundation
 
 /// Watches the system for the start of a videoconference call. When
-/// it detects one, asks the user via `MeetingInvitePanel` whether to
-/// start recording.
+/// it detects one, asks the user via the menu-bar popover
+/// (`MenuBarController.showInviteOffer`) whether to start recording.
 ///
 /// Two signals combined keep the detector quiet:
 ///   1. A known meeting app is running (Zoom / Teams / Meet / Slack / …).
@@ -97,7 +97,7 @@ final class MeetingDetector {
             offeredFor.insert(pending)
         }
         pendingInviteFor = nil
-        MeetingInvitePanel.shared.hide(animated: false)
+        MenuBarController.shared?.cancelInviteOffer()
     }
 
     private func tick() {
@@ -121,16 +121,18 @@ final class MeetingDetector {
 
         let hasMeetingAppRunning = Self.knownApps.contains(where: { runningBundles.contains($0.bundle) })
         let now = Date()
-        if hasMeetingAppRunning {
-            let busy = Self.isInputDeviceClaimedByOtherProcess()
-            if busy {
-                if inputBusySince == nil { inputBusySince = now }
-            } else {
-                inputBusySince = nil
-            }
+        let micBusy = hasMeetingAppRunning && Self.isInputDeviceClaimedByOtherProcess()
+        if micBusy {
+            if inputBusySince == nil { inputBusySince = now }
         } else {
-            // No candidate app → don't even ask CoreAudio. Reset the
-            // busy-edge so a future genuine call still triggers.
+            // Mic just went idle → this voice session ended. Clear the
+            // "already offered" set so the NEXT session (mic released
+            // then re-claimed — e.g. the user dismissed with "Not now",
+            // stopped talking, then started a new call/recording) gets
+            // a fresh offer. Previously `offeredFor` only cleared when
+            // the app fully quit, so a second session in the same app
+            // never re-prompted.
+            if inputBusySince != nil { offeredFor.removeAll() }
             inputBusySince = nil
         }
 
@@ -157,7 +159,7 @@ final class MeetingDetector {
         offeredFor.insert(match.bundle)
         pendingInviteFor = match.bundle
         FileLogger.log("MeetingDetector: offering record for \(match.name)")
-        MeetingInvitePanel.shared.show(
+        MenuBarController.shared?.showInviteOffer(
             appName: match.name,
             onAccept: { [weak self] in
                 self?.pendingInviteFor = nil

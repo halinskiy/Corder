@@ -1,32 +1,9 @@
 import SwiftUI
 
-/// Strings used by the menu-bar popover. Keyed by feature; resolved at view
-/// render time against `AppContext.language`, so flipping the toggle in the
-/// Library window updates the popover on the next runloop tick.
-fileprivate enum L {
-    static func t(_ key: String, lang: String) -> String {
-        let dict = lang == "ru" ? ru : en
-        return dict[key] ?? en[key] ?? key
-    }
-    private static let en: [String: String] = [
-        "idle": "Not recording",
-        "recording": "Recording",
-        "saving": "Saving…",
-        "start": "Start recording",
-        "stop": "Stop recording",
-        "open_library": "Open library",
-        "quit": "Quit",
-    ]
-    private static let ru: [String: String] = [
-        "idle": "Запись не идёт",
-        "recording": "Идёт запись",
-        "saving": "Сохраняем…",
-        "start": "Начать запись",
-        "stop": "Остановить запись",
-        "open_library": "Открыть библиотеку",
-        "quit": "Выйти",
-    ]
-}
+// Localized strings now live in `Shared/Localizations.swift` (the shared
+// `L` enum). The menu-bar popover and the meeting-invite panel both
+// resolve via the same table so adding a string in one place wires it
+// up everywhere.
 
 struct PopoverContentView: View {
     @ObservedObject var ctx: AppContext = .shared
@@ -207,7 +184,10 @@ private struct RecordingStatus: View {
 
 // MARK: - Flat IBM/Airbnb-style button
 
-private struct FlatButtonStyle: ButtonStyle {
+// Internal (not private) so the menu-bar invite popover can reuse the
+// exact same button vocabulary — the invite must read as the same
+// component family as the main menu, not a lookalike.
+struct FlatButtonStyle: ButtonStyle {
     enum Role { case primary, secondary, danger }
     let role: Role
 

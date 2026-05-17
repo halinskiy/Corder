@@ -26,11 +26,19 @@ trust boundary is the macOS user account.
 | GET    | `/api/meetings/:id`                     | `MeetingDetail`                    |
 | DELETE | `/api/meetings/:id`                     | `200 OK`. Hard delete + Dropbox cleanup. |
 | GET    | `/api/meetings/:id/transcript.txt`      | Plain text transcript.             |
+| GET    | `/api/meetings/:id/transcript.md`       | Markdown transcript (title + speaker-grouped). |
+| GET    | `/api/meetings/:id/transcript.json`     | JSON transcript (segments + speakers). |
 | GET    | `/api/meetings/:id/audio`               | `audio.wav` (Range supported).     |
-| GET    | `/api/meetings/:id/video`               | Reserved (videos are not currently produced). |
+| GET    | `/api/meetings/:id/video`               | `video.mov` when present (Range supported). |
+| GET    | `/api/meetings/:id/bundle.zip`          | ZIP of audio + video + transcript.* |
+| POST   | `/api/meetings/:id/rename`              | Body `{title: string|null}`. Empty/`null` clears to the auto/date label. |
 | POST   | `/api/meetings/:id/retranscribe`        | Optimistically flips status to `transcribing`, clears segments, enqueues pipeline. |
 | POST   | `/api/meetings/:id/cancel-transcription`| Cancels in-flight pipeline task; flips status to `failed`. |
+| POST   | `/api/meetings/:id/summarize`           | Returns `{summary}` (cached or generated on demand). |
 | POST   | `/api/meetings/:id/expected-speakers`   | Body `{count: int|null}`. `null` = auto, `0` = "just me", positive = pin. |
+| POST   | `/api/meetings/:id/pin` · `/unpin`      | Pin/unpin; pinned sort to a top group. |
+| POST   | `/api/meetings/:id/archive` · `/restore`| Soft-archive / un-archive (7-day bin). |
+| GET    | `/api/archive`                          | `{items: ArchivedMeeting[]}` with `purge_at`. |
 | GET    | `/api/meetings/:id/last-error`          | `{error: string|null}` — last quota / billing / parse error. |
 | POST   | `/api/meetings/:id/speakers/:sid/rename`| Body `{name: string|null}`.        |
 
@@ -87,16 +95,17 @@ to `MainActor`.
 
 ```ts
 Settings {
-  boost_mode: boolean;
   language?: "ru" | "en";
-  transcription_provider?: "whisper" | "gemini-flash";
+  vocabulary?: string;       // domain terms fed into the transcription prompt
+  gemini_key?: string;       // write-only: POST to set; never echoed back by GET
+  gemini_key_set?: boolean;  // read-only: whether a key is on disk
 }
 ```
 
-The provider toggle has no UI right now (default is `gemini-flash`).
-Power users flip it via `defaults write com.3mpq.Corder
-Corder.transcriptionProvider whisper`. The DTO field exists so the
-endpoint can stay forward-compatible with a future toggle.
+Gemini is the only provider — there is no provider toggle. The key is
+write-only over this endpoint and is stored at
+`~/.config/corder/gemini_key` (mode 0600); GET only reports whether one
+is set.
 
 ## Search
 

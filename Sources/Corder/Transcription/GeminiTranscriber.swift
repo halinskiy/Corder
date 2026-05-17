@@ -74,7 +74,14 @@ enum GeminiTranscriber {
     /// past that and the JSON returns truncated mid-segment, killing the
     /// parser. 9 minutes / chunk gives ~50–55 k tokens of segment JSON in
     /// the worst dense-talk case, leaving headroom.
-    private static let maxSecondsPerChunk: Double = 9 * 60
+    // 5 min, down from 9. Long dense (Russian) chunks routinely blew
+    // past Gemini's output budget and came back as truncated JSON,
+    // which kicked off the recursive halve-and-retry cascade (each
+    // retry a fresh 20-70s round-trip — that's the "Transcribing for 6
+    // minutes" symptom). At 5 min the model almost always finishes the
+    // JSON in one shot, so the split path becomes a rare fallback
+    // instead of the common case.
+    private static let maxSecondsPerChunk: Double = 5 * 60
 
     /// Below this savings ratio (compressed/original) the VAD pre-pass
     /// is a wash — extra disk I/O without meaningful API savings — and
@@ -95,7 +102,20 @@ enum GeminiTranscriber {
     ///
     /// Throws `GError.quotaOrBilling` for 402 / 429 / RESOURCE_EXHAUSTED,
     /// `GError.network` for connectivity drops.
-    static func transcribe(audioURL: URL, mode: TranscribeMode = .diarize) async throws -> [Turn] {
+    /// `singlePass` forces the whole (VAD-compressed) file through a
+    /// single Gemini call, bypassing the length-based chunking. Chunking
+    /// renumbers speakers independently per chunk ("Speaker 1" in chunk
+    /// 0 ≠ "Speaker 1" in chunk 1), which is fine for the call path
+    /// (mic=.single, system collapses) but wrecks in-person diarization
+    /// of a single mic: the same person flips between Speaker 1/2/3
+    /// across chunk boundaries. One pass = one globally-consistent label
+    /// space. The cost is exposure to output-token truncation on very
+    /// long meetings — mitigated by `salvageSegments` recovering every
+    /// complete segment from a truncated array.
+    static func transcribe(audioURL: URL,
+                            mode: TranscribeMode = .diarize,
+                            singlePass: Bool = false,
+                            expectedSpeakers: Int? = nil) async throws -> [Turn] {
         guard let key = apiKey else { throw GError.missingAPIKey }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw GError.parse("audio file missing at \(audioURL.path)")
@@ -168,10 +188,13 @@ enum GeminiTranscriber {
 
         let rawTurns: [Turn]
         do {
-            if workDuration <= maxSecondsPerChunk {
-                rawTurns = try await transcribeSingle(audioURL: workURL, apiKey: key, offsetMs: 0, mode: mode)
+            if singlePass || workDuration <= maxSecondsPerChunk {
+                if singlePass && workDuration > maxSecondsPerChunk {
+                    FileLogger.log("GeminiTranscriber: singlePass — sending \(Int(workDuration))s in ONE call (consistent diarization labels)")
+                }
+                rawTurns = try await transcribeSingle(audioURL: workURL, apiKey: key, offsetMs: 0, mode: mode, expectedSpeakers: expectedSpeakers)
             } else {
-                rawTurns = try await transcribeChunked(audioURL: workURL, durationSec: workDuration, apiKey: key, mode: mode)
+                rawTurns = try await transcribeChunked(audioURL: workURL, durationSec: workDuration, apiKey: key, mode: mode, expectedSpeakers: expectedSpeakers)
             }
         } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
             throw GError.network("No internet — try again when you're online.")
@@ -190,7 +213,7 @@ enum GeminiTranscriber {
     /// Single upload + generate pass. `offsetMs` is added to every turn's
     /// timestamps — used by the chunked path to shift sub-recordings back
     /// onto the original timeline.
-    private static func transcribeSingle(audioURL: URL, apiKey: String, offsetMs: Int64, mode: TranscribeMode) async throws -> [Turn] {
+    private static func transcribeSingle(audioURL: URL, apiKey: String, offsetMs: Int64, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
         FileLogger.log("GeminiTranscriber: uploading \(audioURL.lastPathComponent)…")
         let fileURI = try await uploadFile(audioURL: audioURL, apiKey: apiKey)
         FileLogger.log("GeminiTranscriber: file uri=\(fileURI)")
@@ -203,7 +226,7 @@ enum GeminiTranscriber {
         }
 
         try await waitForActive(fileURI: fileURI, apiKey: apiKey)
-        let turns = try await generate(fileURI: fileURI, apiKey: apiKey, mode: mode)
+        let turns = try await generate(fileURI: fileURI, apiKey: apiKey, mode: mode, expectedSpeakers: expectedSpeakers)
         FileLogger.log("GeminiTranscriber: produced \(turns.count) turns from \(audioURL.lastPathComponent)")
         guard offsetMs != 0 else { return turns }
         return turns.map {
@@ -229,7 +252,7 @@ enum GeminiTranscriber {
     /// THAT chunk in half and retry. Recursion keeps halving until
     /// either success or `minSecondsPerChunk` — at which point we
     /// surface the parse error to the pipeline.
-    private static func transcribeChunked(audioURL: URL, durationSec: Double, apiKey: String, mode: TranscribeMode) async throws -> [Turn] {
+    private static func transcribeChunked(audioURL: URL, durationSec: Double, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
         let chunkDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("corder-chunks-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: chunkDir, withIntermediateDirectories: true)
@@ -244,7 +267,7 @@ enum GeminiTranscriber {
             try Task.checkCancellation()
             FileLogger.log("GeminiTranscriber: chunk \(i + 1)/\(chunks.count) (offset \(chunk.offsetMs)ms)…")
             let turns = try await transcribeChunkWithSplit(
-                audioURL: chunk.url, offsetMs: chunk.offsetMs, apiKey: apiKey, depth: 0, mode: mode)
+                audioURL: chunk.url, offsetMs: chunk.offsetMs, apiKey: apiKey, depth: 0, mode: mode, expectedSpeakers: expectedSpeakers)
             all.append(contentsOf: turns)
         }
         FileLogger.log("GeminiTranscriber: stitched \(all.count) turns from \(chunks.count) chunks")
@@ -256,9 +279,9 @@ enum GeminiTranscriber {
     /// looping forever.
     private static let maxSplitDepth = 3
     private static let minSecondsPerSplit: Double = 60   // 1 min floor
-    private static func transcribeChunkWithSplit(audioURL: URL, offsetMs: Int64, apiKey: String, depth: Int, mode: TranscribeMode) async throws -> [Turn] {
+    private static func transcribeChunkWithSplit(audioURL: URL, offsetMs: Int64, apiKey: String, depth: Int, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
         do {
-            return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey, offsetMs: offsetMs, mode: mode)
+            return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey, offsetMs: offsetMs, mode: mode, expectedSpeakers: expectedSpeakers)
         } catch let err as GError {
             // Only retry on the truncation pattern; quota / billing /
             // network errors should fail fast and propagate.
@@ -277,7 +300,7 @@ enum GeminiTranscriber {
                 try Task.checkCancellation()
                 FileLogger.log("GeminiTranscriber: split \(i + 1)/\(halves.count) (depth \(depth + 1))…")
                 let turns = try await transcribeChunkWithSplit(
-                    audioURL: h.url, offsetMs: offsetMs + h.offsetMs, apiKey: apiKey, depth: depth + 1, mode: mode)
+                    audioURL: h.url, offsetMs: offsetMs + h.offsetMs, apiKey: apiKey, depth: depth + 1, mode: mode, expectedSpeakers: expectedSpeakers)
                 out.append(contentsOf: turns)
             }
             return out
@@ -440,7 +463,7 @@ enum GeminiTranscriber {
 
     // MARK: - Generation
 
-    private static func generate(fileURI: String, apiKey: String, mode: TranscribeMode) async throws -> [Turn] {
+    private static func generate(fileURI: String, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
         let url = URL(string: "\(endpoint)/models/\(model):generateContent?key=\(apiKey)")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -458,9 +481,21 @@ enum GeminiTranscriber {
             - This audio is one person speaking — always label them "Speaker 1". Never invent additional speakers.
             """
         case .diarize:
-            speakerRule = """
+            var rule = """
             - Identify each distinct speaker and label them in arrival order: "Speaker 1", "Speaker 2", "Speaker 3", and so on. Reuse the same label every time the same person speaks.
             """
+            // User-confirmed headcount from the clarify banner. The
+            // model tends to UNDER-count similar voices on a single
+            // shared room mic; a soft target nudges it to listen for
+            // the speaker it merged, without hard-forcing splits where
+            // there genuinely is only one voice.
+            if let n = expectedSpeakers, n >= 1 {
+                rule += """
+
+            - This recording has approximately \(n) distinct speaker\(n == 1 ? "" : "s"). Listen carefully for voice, cadence and vocabulary differences and try to distinguish all \(n); do not collapse two different people into one label just because they sound similar. If you are certain there are fewer, use fewer — but actively look for the \(n).
+            """
+            }
+            speakerRule = rule
         }
         let system = """
         You are a meeting transcription system. Listen to the audio and produce a verbatim transcript.
@@ -470,24 +505,33 @@ enum GeminiTranscriber {
         - Drop only obvious filler / stutters (uh, um, ну, э-э) when they carry no meaning.
         - One segment per natural speech turn. Aim for 3-15 seconds per segment.
         - CRITICAL: If a stretch of audio contains no clearly intelligible speech — silence, breathing, mouse clicks, keyboard, music, traffic noise, fan hum, microphone bumps — output NO segment for that stretch. Do NOT invent text. Do NOT fill silence with poetry, weather, geography, viticulture, song lyrics, or anything else. Better to output an empty segments array than to hallucinate.
-        - Output STRICT JSON only — no markdown, no prose around it.
+        - Output STRICT minified JSON only — a single line, no markdown, no prose, no extra whitespace or newlines around or inside it.
 
-        Output schema:
-        {
-          "segments": [
-            {
-              "speaker": "Speaker 1",
-              "start_ms": 0,
-              "end_ms": 4200,
-              "text": "..."
-            }
-          ]
-        }
+        Use these SHORT keys exactly (this keeps the response compact so
+        long meetings don't get truncated):
+          s = speaker label, a = start_ms, b = end_ms, t = text
+
+        Output schema (minified, one line):
+        {"segments":[{"s":"Speaker 1","a":0,"b":4200,"t":"..."}]}
+        """
+
+        // User-supplied domain terms (names, product names, acronyms,
+        // jargon). The single biggest accuracy lever for technical calls —
+        // spell these exactly when heard. Appended only when non-empty so
+        // the cache key / output is unchanged for users who don't set it.
+        let vocab = AppVocabulary.current
+        let systemFull = vocab.isEmpty ? system : system + """
+
+
+        Domain vocabulary — these terms appear in this conversation;
+        transcribe them with exactly this spelling/capitalisation when you
+        hear them (do not invent them when you don't):
+        \(vocab)
         """
 
         let body: [String: Any] = [
             "systemInstruction": [
-                "parts": [["text": system]]
+                "parts": [["text": systemFull]]
             ],
             "contents": [[
                 "role": "user",
@@ -501,6 +545,13 @@ enum GeminiTranscriber {
             ]],
             "generationConfig": [
                 "temperature": 0.1,
+                // Transcription is schema-constrained extraction, not a
+                // reasoning task. Gemini 2.5 Flash bills thinking tokens
+                // at the output rate ($2.50/1M) and on a long meeting the
+                // reasoning pass can dwarf the actual transcript — pure
+                // cost with no accuracy gain. Off = cheaper and faster,
+                // same output. (Same fix as GeminiTitler.)
+                "thinkingConfig": ["thinkingBudget": 0],
                 // 65 536 is Gemini 2.5 Flash's documented output ceiling.
                 // For hour-long meetings the JSON segment list can hit ~50k
                 // tokens; the previous 32 768 cap truncated mid-segment and
@@ -526,26 +577,112 @@ enum GeminiTranscriber {
               let parts = content["parts"] as? [[String: Any]] else {
             throw GError.parse("unexpected response shape: \(String(data: data, encoding: .utf8)?.prefix(220) ?? "")")
         }
+        // Why the response can come back truncated: the model ran out of
+        // output budget mid-array. We log it explicitly so the salvage
+        // line below isn't a mystery in the logs, and so a recurring
+        // MAX_TOKENS is visibly the signal to shrink the chunk further.
+        if let reason = first["finishReason"] as? String, reason != "STOP" {
+            FileLogger.log("GeminiTranscriber: finishReason=\(reason) (non-STOP — expect truncated/partial JSON, salvage will run)")
+        }
         let raw = parts.compactMap { $0["text"] as? String }.joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty,
-              let payloadData = raw.data(using: .utf8),
-              let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-              let segs = payload["segments"] as? [[String: Any]] else {
+        guard !raw.isEmpty else {
+            throw GError.parse("empty model output")
+        }
+        let segs: [[String: Any]]
+        if let payloadData = raw.data(using: .utf8),
+           let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+           let parsed = payload["segments"] as? [[String: Any]] {
+            // Happy path — the model returned well-formed JSON.
+            segs = parsed
+        } else if let salvaged = Self.salvageSegments(from: raw), !salvaged.isEmpty {
+            // Truncated / trailing-garbage JSON (the model hit its
+            // output budget mid-array). Rather than throwing — which
+            // triggers the expensive recursive re-chunk — recover every
+            // *complete* segment object that did make it through. We
+            // lose at most the final partial sentence, not the whole
+            // chunk.
+            FileLogger.log("GeminiTranscriber: JSON truncated — salvaged \(salvaged.count) complete segments")
+            segs = salvaged
+        } else {
             throw GError.parse("no segments in JSON: \(raw.prefix(220))")
         }
 
         var out: [Turn] = []
         out.reserveCapacity(segs.count)
         for s in segs {
-            let speaker = (s["speaker"] as? String)?.trimmingCharacters(in: .whitespaces) ?? "Speaker 1"
-            let start = Self.intValue(s["start_ms"]) ?? 0
-            let end = Self.intValue(s["end_ms"]) ?? start
-            let text = (s["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            // Compact keys (s/a/b/t) are what the prompt asks for; the
+            // long forms are accepted as a defensive fallback in case
+            // the model ignores the short schema on a given call.
+            let speaker = ((s["s"] as? String) ?? (s["speaker"] as? String))?
+                .trimmingCharacters(in: .whitespaces) ?? "Speaker 1"
+            let start = Self.intValue(s["a"] ?? s["start_ms"]) ?? 0
+            let end = Self.intValue(s["b"] ?? s["end_ms"]) ?? start
+            let text = ((s["t"] as? String) ?? (s["text"] as? String))?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !text.isEmpty else { continue }
             out.append(Turn(speakerLabel: speaker, startMs: Int64(start), endMs: Int64(end), text: text))
         }
         return out
+    }
+
+    /// Recover complete segment objects from a truncated / malformed
+    /// `{"segments":[ … ]}` blob. Gemini, when it runs out of output
+    /// budget, stops mid-array — sometimes mid-object, sometimes mid-
+    /// string — so `JSONSerialization` rejects the whole thing. We walk
+    /// the array brace-by-brace (string-state aware so braces inside
+    /// `"text"` don't fool us) and individually parse each balanced
+    /// `{ … }`. The first object that doesn't balance is where the
+    /// truncation hit; everything before it is intact and usable.
+    private static func salvageSegments(from raw: String) -> [[String: Any]]? {
+        guard let segRange = raw.range(of: "\"segments\"") else { return nil }
+        guard let arrayStart = raw[segRange.upperBound...].firstIndex(of: "[") else { return nil }
+
+        var objects: [[String: Any]] = []
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var objStart: String.Index?
+
+        var i = raw.index(after: arrayStart)
+        while i < raw.endIndex {
+            let c = raw[i]
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if c == "\\" {
+                    escaped = true
+                } else if c == "\"" {
+                    inString = false
+                }
+            } else {
+                switch c {
+                case "\"":
+                    inString = true
+                case "{":
+                    if depth == 0 { objStart = i }
+                    depth += 1
+                case "}":
+                    depth -= 1
+                    if depth == 0, let start = objStart {
+                        let objStr = String(raw[start...i])
+                        if let d = objStr.data(using: .utf8),
+                           let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
+                            objects.append(obj)
+                        }
+                        objStart = nil
+                    }
+                case "]":
+                    // Clean end of the array — stop here.
+                    if depth == 0 { return objects.isEmpty ? nil : objects }
+                default:
+                    break
+                }
+            }
+            i = raw.index(after: i)
+        }
+        // Ran off the end (truncated) — return whatever balanced.
+        return objects.isEmpty ? nil : objects
     }
 
     private static func intValue(_ any: Any?) -> Int? {
