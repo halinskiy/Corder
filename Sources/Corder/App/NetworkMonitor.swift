@@ -46,8 +46,8 @@ final class NetworkMonitor {
         if online {
             FileLogger.log("NetworkMonitor: back online")
             NotificationsService.post(
-                title: "Internet restored",
-                body: "Retrying any meetings that failed while offline."
+                title: L.notif("notif_net_restored_title"),
+                body: L.notif("notif_net_restored_body")
             )
             Task { await retryNetworkFailedMeetings() }
         } else {
@@ -56,8 +56,8 @@ final class NetworkMonitor {
             // a brief Wi-Fi flicker shouldn't spawn notifications.
             if case .recording = AppContext.shared.recordingState {
                 NotificationsService.post(
-                    title: "No internet",
-                    body: "Recording continues locally. Transcription will need network when you stop."
+                    title: L.notif("notif_net_lost_title"),
+                    body: L.notif("notif_net_lost_body")
                 )
             }
         }

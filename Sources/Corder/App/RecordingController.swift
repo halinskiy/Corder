@@ -12,7 +12,7 @@ final class RecordingController {
     ///
     /// `expectedOtherSpeakers` lets the caller seed the meeting with a
     /// known speaker count *before* transcription runs. The auto-detect
-    /// path (MeetingDetector → `MeetingInvitePanel.shared.show`) passes
+    /// path (MeetingDetector → `MenuBarController.showInviteOffer`) passes
     /// 1 because the vast majority of calls it catches are 1:1 — that
     /// keeps Gemini's over-counting (12-min audio sometimes diarized
     /// into 5 buckets for a single interlocutor) from showing up as a
@@ -43,6 +43,19 @@ final class RecordingController {
             return
         }
 
+        // Disk-space preflight. A disk-full mid-recording is the
+        // highest-severity failure (crash → zero-byte file). Refuse to
+        // start under ~500 MB free instead of recording into a wall.
+        if let free = Self.freeDiskBytes(), free < 500 * 1024 * 1024 {
+            let mb = free / (1024 * 1024)
+            present(error: "Мало места на диске (\(mb) МБ). Освободи место — запись не начата, чтобы не потерять её при заполнении диска.")
+            return
+        }
+
+        // Per-recording session: zero the level meter so the post-stop
+        // silence check reflects THIS recording only.
+        RecordingLevelMeter.shared.reset()
+
         let id = UUID().uuidString.lowercased()
         let dir = AppPaths.recordingDir(for: id)
         let videoPath = dir.appendingPathComponent("video.mov").path
@@ -60,8 +73,21 @@ final class RecordingController {
 
         do {
             try AppContext.shared.repo.insertMeeting(meeting)
+            // Show the "Starting recording…" spinner inside the same
+            // menu-bar popover the invite uses, so the user gets visible
+            // feedback during the SCStream + AVAudioEngine warm-up
+            // (~200-400 ms) on BOTH the manual Start and auto-detect
+            // paths. The auto-detect path just closed the invite from
+            // the same anchor, so invite → loading → blob reads as one
+            // continuous element.
+            MenuBarController.shared?.showLoadingState()
             try await AppContext.shared.capture.start(meetingId: id, source: source)
             AppContext.shared.recordingState = .recording(meetingId: id, startedAt: Date())
+            // Capture is live — drop the loading popover. The floating
+            // blob springs in from a tiny transparent dot (its own
+            // entry animation), so the loading state never "morphs"
+            // into it; it simply hands off.
+            MenuBarController.shared?.finishLoadingState()
             // Float Granola-style recording pill over every space so the
             // user always knows capture is alive (and can stop without
             // chasing the menu bar).
@@ -69,6 +95,9 @@ final class RecordingController {
             FileLogger.log("RecordingController: started \(id)")
         } catch {
             FileLogger.log("RecordingController: start failed for \(id): \(error)")
+            // Tear down the loading popover so the user isn't left
+            // staring at a spinner that never resolves.
+            MenuBarController.shared?.finishLoadingState()
             present(error: "Не удалось начать запись: \(error.localizedDescription)")
             try? AppContext.shared.repo.deleteMeeting(id: id)
             AppContext.shared.recordingState = .idle
@@ -78,8 +107,29 @@ final class RecordingController {
     func stopRecording() async {
         guard case .recording(let id, let startedAt) = AppContext.shared.recordingState else { return }
         AppContext.shared.recordingState = .stopping
+        // Snapshot the silence verdict BEFORE hide(): when the floating
+        // HUD is suppressed (Library window open — the normal "record a
+        // call I'm watching" case) `hide()` takes its `window == nil`
+        // branch and SYNCHRONOUSLY calls `RecordingLevelMeter.reset()`,
+        // which zeroes sessionMax. Reading `capturedSilence` after that
+        // always reported silence and fired a false "No audio captured"
+        // alarm on perfectly good recordings. sessionMax already holds
+        // the whole session's peak by now, so reading here is accurate.
+        let capturedSilence = RecordingLevelMeter.shared.capturedSilence
+        let maxMic = RecordingLevelMeter.shared.sessionMaxMic
+        let maxSys = RecordingLevelMeter.shared.sessionMaxSystem
         RecordingHUDPanel.shared.hide()
         await AppContext.shared.capture.stop()
+
+        // Tell the user *now* if nothing was actually captured (mic muted,
+        // wrong input, permission silently lost) instead of letting them
+        // discover an empty transcript after the meeting.
+        if capturedSilence {
+            FileLogger.log("stopRecording: \(id) captured silence (maxMic=\(maxMic) maxSys=\(maxSys))")
+            NotificationsService.post(
+                title: L.notif("notif_silent_title"),
+                body: L.notif("notif_silent_body"))
+        }
 
         let endedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
         let durationMs = Int64(Date().timeIntervalSince(startedAt) * 1000)
@@ -91,8 +141,10 @@ final class RecordingController {
                 meeting.status = .transcribing
                 try AppContext.shared.repo.updateMeeting(meeting)
             }
-            NotificationsService.post(title: "Запись сохранена",
-                                      body: "Расшифровка \(durationMs / 1000)с…")
+            NotificationsService.post(
+                title: L.notif("notif_saved_title"),
+                body: L.notif("notif_saved_body")
+                    .replacingOccurrences(of: "{s}", with: "\(durationMs / 1000)"))
         } catch {
             present(error: "Не удалось сохранить запись: \(error.localizedDescription)")
         }
@@ -106,9 +158,24 @@ final class RecordingController {
         FileLogger.log("stopRecording: scheduling transcription for \(id)")
         Task { @MainActor in
             await TranscriptionPipeline.shared.enqueue(meetingId: id).value
-            NotificationsService.post(title: "Расшифровка готова",
-                                      body: "Открой библиотеку чтобы посмотреть.")
+            NotificationsService.post(
+                title: L.notif("notif_ready_title"),
+                body: L.notif("notif_ready_body"))
         }
+    }
+
+    /// Free space on the volume holding the recordings dir, in bytes.
+    private static func freeDiskBytes() -> Int64? {
+        let url = AppPaths.recordingDir(for: "probe").deletingLastPathComponent()
+        let vals = try? url.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        if let v = vals?.volumeAvailableCapacityForImportantUsage { return v }
+        // Fallback for volumes that don't report the "important usage" key.
+        if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: url.path),
+           let free = attrs[.systemFreeSize] as? NSNumber {
+            return free.int64Value
+        }
+        return nil
     }
 
     private func present(error: String) {

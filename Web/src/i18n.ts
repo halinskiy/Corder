@@ -19,6 +19,53 @@ interface Strings {
   participants: (n: number) => string;
 
   tab_transcript: string;
+  tab_summary: string;
+  tab_settings: string;
+  settings_draft_note: string;
+  settings_sec_notifications: string;
+  settings_notifications: string;
+  settings_notifications_desc: string;
+  settings_sec_capture: string;
+  settings_video: string;
+  settings_video_desc: string;
+  settings_system_audio: string;
+  settings_system_audio_desc: string;
+  settings_mic: string;
+  settings_mic_desc: string;
+  settings_sec_transcription: string;
+  settings_autotranscribe: string;
+  settings_autotranscribe_desc: string;
+  settings_autotitle: string;
+  settings_autotitle_desc: string;
+  settings_pro_note: string;
+  settings_sec_soon: string;
+  settings_ext_title: string;
+  settings_ext_desc: string;
+  settings_mobile_title: string;
+  settings_mobile_desc: string;
+  settings_tg_title: string;
+  settings_tg_desc: string;
+  settings_integrations_title: string;
+  settings_integrations_desc: string;
+  settings_calendar_title: string;
+  settings_calendar_desc: string;
+  settings_sec_recognition: string;
+  settings_vocab_placeholder: string;
+  settings_vocab_hint: string;
+  settings_sec_api: string;
+  settings_key_set: string;
+  settings_key_placeholder: string;
+  settings_key_hint: string;
+  settings_key_hint_set: string;
+  settings_save: string;
+  settings_saved: string;
+  settings_sec_privacy: string;
+  settings_privacy_body: string;
+  settings_ext_badge_soon: string;
+  settings_ext_cta: string;
+  summary_generating: string;
+  summary_failed: string;
+  summary_retry: string;
   transcript_search: string;
   transcript_empty_failed: string;
   transcript_empty_recording: string;
@@ -30,10 +77,27 @@ interface Strings {
   btn_boost: string;
   btn_boost_title: string;
   btn_lang_title: string;
+  btn_theme_title: string;
+  theme_light: string;
+  theme_dark: string;
 
   audio_card_title: string;
   timeline_title: string;
   download_audio_title: string;
+  download_title: string;
+  download_body: string;
+  download_video: string;
+  download_audio: string;
+  download_transcript: string;
+  download_markdown: string;
+  download_json: string;
+  download_all: string;
+  profile_title: string;
+  profile_name: string;
+  profile_sub: string;
+  profile_account: string;
+  profile_signout: string;
+  profile_soon: string;
 
   rec_label: string;
   rec_stop: string;
@@ -50,6 +114,10 @@ interface Strings {
 
   ctx_retranscribe: string;
   ctx_archive: string;
+  ctx_pin: string;
+  ctx_unpin: string;
+  ctx_rename: string;
+  sidebar_pinned: string;
 
   speaker_self: string;
   speaker_rename_title: string;
@@ -106,6 +174,53 @@ const ru: Strings = {
   },
 
   tab_transcript: "Транскрипт",
+  tab_summary: "Саммари",
+  tab_settings: "Настройки",
+  settings_draft_note: "Черновик, настройки дорабатываются.",
+  settings_sec_notifications: "Уведомления",
+  settings_notifications: "Системные уведомления",
+  settings_notifications_desc: "Сообщать о начале записи, готовности расшифровки и потере сети.",
+  settings_sec_capture: "Захват",
+  settings_video: "Запись видео экрана",
+  settings_video_desc: "Сохранять видео того, что было на экране во время встречи.",
+  settings_system_audio: "Системный звук",
+  settings_system_audio_desc: "Захватывать звук собеседников (звонки, видеоконференции).",
+  settings_mic: "Микрофон",
+  settings_mic_desc: "Записывать ваш голос с микрофона.",
+  settings_sec_transcription: "Расшифровка",
+  settings_autotranscribe: "Авторасшифровка",
+  settings_autotranscribe_desc: "Расшифровывать запись автоматически после остановки.",
+  settings_autotitle: "Автозаголовок",
+  settings_autotitle_desc: "Генерировать короткий заголовок встречи из расшифровки.",
+  settings_pro_note: "Возможности Pro в этой сборке отключены.",
+  settings_sec_soon: "Скоро",
+  settings_ext_title: "Расширение для браузера",
+  settings_ext_desc: "Расшифровка звонков во вкладке браузера: Google Meet, Zoom, без приложения.",
+  settings_mobile_title: "Приложение на телефон",
+  settings_mobile_desc: "Запись и расшифровка с телефона: встречи, разговоры, заметки на ходу.",
+  settings_tg_title: "Телеграм-бот",
+  settings_tg_desc: "Голосовые боту: Corder сохранит и расшифрует их вместе с остальными.",
+  settings_integrations_title: "Интеграции",
+  settings_integrations_desc: "Slack, Notion, CRM: выгрузка расшифровок и саммари в рабочие инструменты.",
+  settings_calendar_title: "Автодетект по календарю",
+  settings_calendar_desc: "Старт записи по событию календаря, без ручного запуска.",
+  settings_sec_recognition: "Распознавание",
+  settings_vocab_placeholder: "Имена, термины, аббревиатуры: Logics7, Грослицкий, NestJS…",
+  settings_vocab_hint: "Эти слова модель будет писать точно так, как заданы. Сильнее всего влияет на точность на технических созвонах.",
+  settings_sec_api: "Gemini API-ключ",
+  settings_key_set: "Ключ задан",
+  settings_key_placeholder: "Вставь ключ Gemini API",
+  settings_key_hint: "Свой ключ — расшифровка идёт на твой счёт Google, не через общий. Хранится локально (~/.config/corder/gemini_key, 0600).",
+  settings_key_hint_set: "Ключ сохранён локально. Вставь новый, чтобы заменить.",
+  settings_save: "Сохранить",
+  settings_saved: "Сохранено",
+  settings_sec_privacy: "Приватность",
+  settings_privacy_body: "Записи, расшифровки, база и ключ хранятся только на этом компьютере. Диаризация (разделение спикеров) — на устройстве. Для расшифровки аудио отправляется в Google Gemini API; ознакомься с условиями Gemini по обработке данных. Телеметрии и аналитики нет. Проверка обновлений обращается к серверу обновлений. Архивация в Dropbox — только если ты сам её настроил. Ничего не публикуется и не шарится по ссылке.",
+  settings_ext_badge_soon: "Скоро",
+  settings_ext_cta: "Скоро будет доступно",
+  summary_generating: "Генерируем саммари…",
+  summary_failed: "Не удалось сгенерировать саммари",
+  summary_retry: "Повторить",
   transcript_search: "Поиск по транскрипту…",
   transcript_empty_failed: "Расшифровка не удалась.",
   transcript_empty_recording: "Идёт запись…",
@@ -113,14 +228,31 @@ const ru: Strings = {
 
   btn_copy: "Копировать",
   btn_retranscribe: "Расшифровать заново",
-  btn_archive: "В архив",
+  btn_archive: "Архив",
   btn_boost: "Усилить",
   btn_boost_title: "Когда включён, каждая следующая расшифровка автоматически улучшается через Gemini Flash",
   btn_lang_title: "Сменить язык интерфейса",
+  btn_theme_title: "Переключить светлую/тёмную тему",
+  theme_light: "Светлая",
+  theme_dark: "Тёмная",
 
   audio_card_title: "Запись",
   timeline_title: "Таймлайн",
   download_audio_title: "Скачать аудиозапись",
+  download_title: "Скачать",
+  download_body: "Что сохранить из этой записи.",
+  download_video: "Видео",
+  download_audio: "Аудио",
+  download_transcript: "Транскрипт",
+  download_markdown: "Транскрипт в Markdown",
+  download_json: "Транскрипт в JSON",
+  download_all: "Всё одним архивом",
+  profile_title: "Профиль",
+  profile_name: "Аккаунт Corder",
+  profile_sub: "Локальный профиль",
+  profile_account: "Настройки аккаунта",
+  profile_signout: "Выйти",
+  profile_soon: "Скоро",
 
   rec_label: "Идёт запись",
   rec_stop: "Остановить запись",
@@ -137,6 +269,10 @@ const ru: Strings = {
 
   ctx_retranscribe: "Расшифровать заново",
   ctx_archive: "В архив",
+  ctx_pin: "Закрепить",
+  ctx_unpin: "Открепить",
+  ctx_rename: "Переименовать",
+  sidebar_pinned: "Закреплённые",
 
   speaker_self: "Я",
   speaker_rename_title: "Кликни чтобы переименовать",
@@ -194,6 +330,53 @@ const en: Strings = {
   participants: (n) => `${n} participant${n === 1 ? "" : "s"}`,
 
   tab_transcript: "Transcript",
+  tab_summary: "Summary",
+  tab_settings: "Settings",
+  settings_draft_note: "Draft. Settings still in progress.",
+  settings_sec_notifications: "Notifications",
+  settings_notifications: "System notifications",
+  settings_notifications_desc: "Notify on recording start, transcript ready, and network loss.",
+  settings_sec_capture: "Capture",
+  settings_video: "Screen video recording",
+  settings_video_desc: "Save a video of what was on screen during the meeting.",
+  settings_system_audio: "System audio",
+  settings_system_audio_desc: "Capture the other side's audio (calls, video conferences).",
+  settings_mic: "Microphone",
+  settings_mic_desc: "Record your own voice from the microphone.",
+  settings_sec_transcription: "Transcription",
+  settings_autotranscribe: "Auto-transcribe",
+  settings_autotranscribe_desc: "Transcribe the recording automatically after you stop.",
+  settings_autotitle: "Auto-title",
+  settings_autotitle_desc: "Generate a short meeting title from the transcript.",
+  settings_pro_note: "Pro features are disabled in this build.",
+  settings_sec_soon: "Coming soon",
+  settings_ext_title: "Browser extension",
+  settings_ext_desc: "Transcribe calls inside a browser tab: Google Meet, Zoom, no app.",
+  settings_mobile_title: "Mobile app",
+  settings_mobile_desc: "Record and transcribe from your phone: meetings, talks, notes on the go.",
+  settings_tg_title: "Telegram bot",
+  settings_tg_desc: "Send voice messages to the bot. Corder saves and transcribes them.",
+  settings_integrations_title: "Integrations",
+  settings_integrations_desc: "Slack, Notion, CRM: push transcripts and summaries into your tools.",
+  settings_calendar_title: "Calendar auto-detect",
+  settings_calendar_desc: "Start recording from a calendar event, no manual trigger.",
+  settings_sec_recognition: "Recognition",
+  settings_vocab_placeholder: "Names, terms, acronyms: Logics7, Hrolitsky, NestJS…",
+  settings_vocab_hint: "The model spells these exactly as written. The single biggest accuracy lever on technical calls.",
+  settings_sec_api: "Gemini API key",
+  settings_key_set: "Key is set",
+  settings_key_placeholder: "Paste your Gemini API key",
+  settings_key_hint: "Your own key — transcription is billed to your Google account, not a shared one. Stored locally (~/.config/corder/gemini_key, 0600).",
+  settings_key_hint_set: "Key stored locally. Paste a new one to replace it.",
+  settings_save: "Save",
+  settings_saved: "Saved",
+  settings_sec_privacy: "Privacy",
+  settings_privacy_body: "Recordings, transcripts, the database and your key stay only on this Mac. Diarization (speaker separation) runs on-device. For transcription, audio is sent to the Google Gemini API; review Gemini's data terms. No telemetry, no analytics. Update checks contact the update server. Dropbox archival happens only if you set it up. Nothing is published or shared by link.",
+  settings_ext_badge_soon: "Soon",
+  settings_ext_cta: "Available soon",
+  summary_generating: "Generating summary…",
+  summary_failed: "Couldn't generate the summary",
+  summary_retry: "Retry",
   transcript_search: "Search the transcript…",
   transcript_empty_failed: "Transcription failed.",
   transcript_empty_recording: "Recording…",
@@ -205,10 +388,27 @@ const en: Strings = {
   btn_boost: "Boost",
   btn_boost_title: "When on, every next transcription is auto-polished via Gemini Flash",
   btn_lang_title: "Change interface language",
+  btn_theme_title: "Toggle light/dark theme",
+  theme_light: "Light",
+  theme_dark: "Dark",
 
   audio_card_title: "Recording",
   timeline_title: "Timeline",
   download_audio_title: "Download audio",
+  download_title: "Download",
+  download_body: "What to save from this recording.",
+  download_video: "Video",
+  download_audio: "Audio",
+  download_transcript: "Transcript",
+  download_markdown: "Transcript as Markdown",
+  download_json: "Transcript as JSON",
+  download_all: "Everything as one archive",
+  profile_title: "Profile",
+  profile_name: "Corder account",
+  profile_sub: "Local profile",
+  profile_account: "Account settings",
+  profile_signout: "Sign out",
+  profile_soon: "Soon",
 
   rec_label: "Recording",
   rec_stop: "Stop recording",
@@ -225,6 +425,10 @@ const en: Strings = {
 
   ctx_retranscribe: "Re-transcribe",
   ctx_archive: "Archive",
+  ctx_pin: "Pin",
+  ctx_unpin: "Unpin",
+  ctx_rename: "Rename",
+  sidebar_pinned: "Pinned",
 
   speaker_self: "I",
   speaker_rename_title: "Click to rename",

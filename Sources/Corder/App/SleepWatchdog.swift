@@ -75,7 +75,7 @@ final class SleepWatchdog {
         Task { @MainActor in
             await RecordingController.shared.stopRecording()
             NotificationsService.post(
-                title: "Запись остановлена",
+                title: L.notif("notif_stopped_title"),
                 body: message
             )
         }

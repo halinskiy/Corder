@@ -5,10 +5,14 @@ import type { T } from "../i18n";
 
 interface Props {
   meetingId: string;
-  /// Number of "other" speakers currently associated with this meeting —
-  /// either what the user picked previously, or what the diarizer counted
-  /// automatically when they never picked. Used to mark one pill as active.
-  currentOthers: number;
+  /// The PERSISTED user choice (`expected_other_speakers`), or null if
+  /// the user has never picked. We deliberately do NOT fall back to the
+  /// diarizer's auto-count here — a pre-highlighted guess nudges the
+  /// user toward whatever the model decided. null = no pill active.
+  /// Once the user picks, the backend stores it and this prop carries
+  /// it back so the choice stays highlighted across the retranscribe
+  /// remount.
+  pickedOthers: number | null;
   onChanged: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   /// Called when the user dismisses the banner with the X button. The parent
@@ -32,11 +36,16 @@ const OPTIONS: Array<{ othersValue: number; label: string }> = [
 /// auto-diarizer over-counted speakers and we'd like the user to confirm
 /// the real number. Same outline-card visual language; instead of a timer
 /// or live spinner it carries a single question and a row of pills.
-export function SpeakersClarifyBanner({ meetingId, currentOthers, onChanged, onToast, onDismiss, t }: Props) {
+export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onToast, onDismiss, t }: Props) {
   const [busy, setBusy] = React.useState(false);
+  // Optimistic local echo so the pill lights up instantly on click,
+  // before the retranscribe round-trip refreshes `pickedOthers`.
+  const [optimistic, setOptimistic] = React.useState<number | null>(null);
+  const picked = optimistic ?? pickedOthers;
 
   const select = async (count: number) => {
     if (busy) return;
+    setOptimistic(count);
     setBusy(true);
     try {
       await setExpectedSpeakers(meetingId, count);
@@ -70,18 +79,16 @@ export function SpeakersClarifyBanner({ meetingId, currentOthers, onChanged, onT
       </div>
       <div className="clarify-actions">
         {OPTIONS.map((opt) => {
-          // The "4+" pill represents 3 or more other speakers — clamp the
-          // active match to it so e.g. 5-speaker meetings still highlight
-          // the right bucket.
-          const matches =
-            opt.othersValue === 3
-              ? currentOthers >= 3
-              : opt.othersValue === currentOthers;
+          // Active only reflects the user's own click in this session,
+          // never a pre-filled guess. "4+" stays the bucket for 3+.
+          const isActive =
+            picked !== null &&
+            (opt.othersValue === 3 ? picked >= 3 : picked === opt.othersValue);
           return (
             <button
               key={opt.othersValue}
-              className={"clarify-btn" + (matches ? " active" : "")}
-              onClick={() => { if (!matches) select(opt.othersValue); }}
+              className={"clarify-btn" + (isActive ? " active" : "")}
+              onClick={() => { if (!isActive) select(opt.othersValue); }}
               disabled={busy}
             >
               {opt.label === "just_me" ? t.clarify_just_me : opt.label}

@@ -3,14 +3,23 @@ import PackageDescription
 
 let package = Package(
     name: "Corder",
-    platforms: [.macOS(.v14)],
+    // 14.2 is the floor for the Core Audio process-tap API
+    // (AudioHardwareCreateProcessTap + CATapDescription) used for
+    // capturing call audio that SCStream can't see.
+    platforms: [.macOS("14.2")],
     products: [
         .executable(name: "Corder", targets: ["Corder"])
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0"),
         .package(url: "https://github.com/httpswift/swifter.git", from: "1.5.0"),
-        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.4")
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.4"),
+        // On-device speaker diarization (pyannote community-1 + WeSpeaker
+        // + VBx, Core ML). Replaces Gemini's unreliable single-mic
+        // diarization. No transitive deps, no binary framework to
+        // re-sign; models auto-download (~130 MB once) to
+        // ~/Library/Application Support/FluidAudio/Models/.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.14.5")
     ],
     targets: [
         .executableTarget(
@@ -18,7 +27,8 @@ let package = Package(
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Swifter", package: "swifter"),
-                .product(name: "Sparkle", package: "Sparkle")
+                .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "FluidAudio", package: "FluidAudio")
             ],
             resources: [
                 .copy("Resources/web")

@@ -24,8 +24,11 @@ talks to the one provider you opted into (Gemini).
 - **Caches the raw transcript** by audio MD5 — so re-mapping speakers
   (e.g. after the clarify banner pins a count) and re-transcribes
   after a Dropbox archive don't re-bill the Gemini File API.
-- **Polishes (optional)** — toggle Boost in the Library; every new
-  transcript is auto-cleaned segment-by-segment via Gemini 2.5 Pro.
+- **Rename & pin** — right-click a session to rename or pin it (pinned
+  sessions float to a group at the top, marked with a gold dot); the
+  header title is click-to-edit too.
+- **Exports** — download any recording as video, audio, transcript
+  (TXT / Markdown / JSON) or a single ZIP bundle.
 - **Archives (optional)** — if you fill in `~/.config/corder/dropbox.json`,
   each recording's `mix.wav` (plus its mic + system tracks) is uploaded
   after transcription and the local copies are deleted. Playback streams
@@ -67,7 +70,7 @@ First launch:
 1. macOS prompts for **Screen Recording**, then **Microphone**. Allow both.
 2. Click the menu-bar icon → **Open Library**.
 3. Paste your Gemini API key into `~/.config/corder/gemini_key`. Without
-   it, transcription fails with a red toast (Boost too).
+   it, recording still works fully — only transcription fails (red toast).
 
 ## Configuration
 
@@ -80,9 +83,10 @@ are copied by `scripts/bootstrap.sh`; fill them in by hand.
 └── gemini_key       # one-line API key
 ```
 
-Without these the app still runs — Boost simply errors and Dropbox
-archival silently skips. Read [`docs/SECURITY.md`](docs/SECURITY.md)
-for how to obtain the keys safely.
+Without these the app still runs — recording and playback work; only
+transcription needs the Gemini key, and Dropbox archival silently
+skips. Read [`docs/SECURITY.md`](docs/SECURITY.md) for how to obtain
+the keys safely.
 
 ## Documentation
 

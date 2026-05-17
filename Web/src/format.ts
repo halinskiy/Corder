@@ -18,6 +18,13 @@ export function formatDuration(ms?: number, lang: Lang = "ru"): string {
   return `${m}${mUnit} ${s.toString().padStart(2, "0")}${sUnit}`;
 }
 
+/// Just the clock time, `HH:MM`. Shown in the sidebar meta line after
+/// the duration ("how long" · "when"). Language-agnostic.
+export function formatClock(ms: number): string {
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function formatDate(ms: number, lang: Lang = "ru"): string {
   const d = new Date(ms);
   const now = new Date();

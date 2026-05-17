@@ -36,6 +36,15 @@ final class RecordingLevelMeter: ObservableObject {
     private static let publishHz: CFTimeInterval = 1.0 / 30.0
     private static let historyPushHz: CFTimeInterval = 1.0 / 12.0  // 12 fps shift
 
+    /// Loudest raw peak seen this recording session (pre-throttle, so the
+    /// 30 Hz publish gate can't hide a brief signal). Used post-stop to
+    /// tell the user immediately if the track is effectively silent.
+    private(set) var sessionMaxMic: Float = 0
+    private(set) var sessionMaxSystem: Float = 0
+    /// True when neither track ever rose above a near-silence floor
+    /// (≈ -48 dBFS) — i.e. nothing was actually captured.
+    var capturedSilence: Bool { max(sessionMaxMic, sessionMaxSystem) < 0.004 }
+
     func reset() {
         micLevel = 0
         systemLevel = 0
@@ -43,6 +52,8 @@ final class RecordingLevelMeter: ObservableObject {
         lastPublishMic = 0
         lastPublishSys = 0
         lastHistoryPush = 0
+        sessionMaxMic = 0
+        sessionMaxSystem = 0
     }
 
     /// Called from CaptureEngine's mic tap. Always invoked on the audio
@@ -60,8 +71,16 @@ final class RecordingLevelMeter: ObservableObject {
         Task { @MainActor in self.applySystem(peak: peak) }
     }
 
+    /// System audio now arrives as AVAudioPCMBuffer from the Core Audio
+    /// process tap (not SCStream's CMSampleBuffer). Same envelope path.
+    nonisolated func ingestSystem(pcm: AVAudioPCMBuffer) {
+        let peak = Self.peak(of: pcm)
+        Task { @MainActor in self.applySystem(peak: peak) }
+    }
+
     @MainActor
     private func applyMic(peak: Float) {
+        if peak > sessionMaxMic { sessionMaxMic = peak }
         let now = CACurrentMediaTime()
         // perceptual: sqrt makes quiet speech (≈0.05 raw) read as a
         // visible bar (≈0.22 mapped) without hard-clipping loud bursts.
@@ -74,6 +93,7 @@ final class RecordingLevelMeter: ObservableObject {
 
     @MainActor
     private func applySystem(peak: Float) {
+        if peak > sessionMaxSystem { sessionMaxSystem = peak }
         let now = CACurrentMediaTime()
         let mapped = min(1, sqrt(max(0, peak) * 3))
         guard now - lastPublishSys >= Self.publishHz else { return }

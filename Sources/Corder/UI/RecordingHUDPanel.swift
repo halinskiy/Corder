@@ -13,9 +13,22 @@ final class RecordingHUDPanel {
     private init() {}
 
     private var window: NSPanel?
+    /// Drives the blob's reverse spring on stop. Owned here, observed
+    /// by the hosted `RecordingHUDView`. `hide()` flips `dismissing`
+    /// true so the blob shrinks back to a transparent dot before the
+    /// panel is actually orderOut'd.
+    private let presentation = HUDPresentation()
     /// Strong ref so the delegate isn't deallocated while the panel
     /// is on screen — NSPanel.delegate is `weak`.
     private var delegate: HUDWindowDelegate?
+    /// Local event monitor that forces `.pointingHand` whenever the
+    /// cursor sits over the floating panel. Required because the panel
+    /// is `.nonactivatingPanel` — macOS reads cursor preference from
+    /// the window UNDER the floating panel for non-key windows, which
+    /// means our addCursorRect / push() are silently ignored. The
+    /// local monitor runs on every mouseMoved event in our process and
+    /// can override that decision by `.set()`-ing on each tick.
+    private var cursorMonitor: Any?
     /// True while a recording is in progress and we'd otherwise want the
     /// floating HUD on screen. Tracked separately from the actual window
     /// presence so the Library-suppression toggle can re-show it on
@@ -27,8 +40,8 @@ final class RecordingHUDPanel {
     /// the user switches focus away from the Library.
     private var librarySuppressed: Bool = false
 
-    /// Total panel size. The blob itself only occupies ~60 % of this;
-    /// the rest is breathing room for the radial glow + the hover
+    /// Total panel size. The blob itself only occupies ~40 % of this;
+    /// the rest is breathing room for the contact shadow + the hover
     /// scale-up so neither ever clips at the panel boundary.
     private static let windowSize: CGFloat = 110
 
@@ -48,8 +61,11 @@ final class RecordingHUDPanel {
         // otherwise have AppKit's drag handler reset it. addCursorRect
         // (declared inside the subclass's resetCursorRects) is the
         // documented AppKit mechanism for view-level cursor declarations.
+        // Fresh entry each time: clear any leftover dismiss flag so the
+        // blob springs IN (onAppear) rather than starting collapsed.
+        presentation.dismissing = false
         let hostingView = HUDHostingView(rootView:
-            RecordingHUDView(onTap: {
+            RecordingHUDView(presentation: presentation, onTap: {
                 Task { @MainActor in
                     await RecordingController.shared.stopRecording()
                 }
@@ -72,13 +88,16 @@ final class RecordingHUDPanel {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false                       // we draw our own glow
-        // Native AppKit drag — reliable, no jitter, no conflict with
-        // the SwiftUI tap gesture used for stop. We previously drove
-        // drag from a SwiftUI DragGesture(minimumDistance: 0) so the
-        // blob could deform against pointer velocity, but the tap/drag
-        // threshold made the panel feel jumpy and the inertia effect
-        // wasn't worth that price.
-        panel.isMovableByWindowBackground = true
+        // `isMovableByWindowBackground` was `true` for drag, but AppKit's
+        // drag-vs-click recognition added ~500ms of latency to the Stop
+        // tap (mouseDown → AppKit waits for movement / timeout →
+        // mouseUp → SwiftUI tap gesture). Stop has to feel instant, so
+        // we disable AppKit drag entirely. The panel still has a
+        // persisted origin (`Corder.HUDOrigin.x/y`); if drag becomes
+        // important again, reintroduce it via a manual mouseDragged
+        // override that only calls `performDrag` after the cursor
+        // actually moves a few px.
+        panel.isMovableByWindowBackground = false
         panel.level = .floating
         // Float over every Space + persist when the user switches Spaces.
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
@@ -107,17 +126,44 @@ final class RecordingHUDPanel {
 
         panel.orderFrontRegardless()
         window = panel
+
+        installCursorMonitor()
     }
 
     func hide() {
         wantsVisible = false
-        if let panel = window {
-            saveOrigin(panel.frame.origin)
+        guard let panel = window else {
+            RecordingLevelMeter.shared.reset()
+            return
         }
-        window?.orderOut(nil)
-        window = nil
-        delegate = nil
-        RecordingLevelMeter.shared.reset()
+        saveOrigin(panel.frame.origin)
+        // Reverse the entry spring: tell the view to collapse back to a
+        // tiny transparent dot, then tear the panel down once that
+        // animation has had time to land (matches the spring-in the
+        // user asked for — "так же уходит когда запись останавливаю").
+        presentation.dismissing = true
+        window = nil          // re-entrancy guard; `panel` keeps it alive
+        removeCursorMonitor()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            panel.orderOut(nil)
+            self?.delegate = nil
+            RecordingLevelMeter.shared.reset()
+        }
+    }
+
+    /// No-op stubs left over from an earlier experiment that tried to
+    /// force `.pointingHand` over the floating panel via a process-
+    /// wide mouseMoved monitor. That approach didn't work for
+    /// `.nonactivatingPanel` (WindowServer ignores our `.set()` on
+    /// those), so we accept the system arrow on the floating blob
+    /// for now. The inline blob in LibraryWindow still gets the
+    /// pointing-hand cursor through `addCursorRect`.
+    private func installCursorMonitor() { /* intentionally empty */ }
+    private func removeCursorMonitor() {
+        if let m = cursorMonitor {
+            NSEvent.removeMonitor(m)
+            cursorMonitor = nil
+        }
     }
 
     /// Called by `LibraryWindow` when its window becomes / resigns key.
@@ -186,12 +232,20 @@ final class RecordingHUDPanel {
 /// but cheap to defend against).
 final class HUDHostingView<Content: View>: NSHostingView<Content> {
     private var trackingArea: NSTrackingArea?
-    /// Tracks whether we've pushed `.pointingHand` onto the cursor
-    /// stack so mouseExited can pop exactly once. The push/pop pair
-    /// beats `addCursorRect` on .nonactivatingPanel windows where
-    /// AppKit's window-drag handler keeps resetting the cursor on
-    /// every mouseMoved tick.
-    private var pushedCursor = false
+    /// `true` while we've pushed `.pointingHand` onto AppKit's cursor
+    /// stack. mouseEntered pushes once, mouseExited pops once — both
+    /// gated by this flag so duplicate events (tracking-area + window-
+    /// level forwarding both fire mouseEntered) don't stack up.
+    private var pushedPointingHand = false
+    /// Drag state. We re-implement window drag manually here instead
+    /// of using `isMovableByWindowBackground` because AppKit's built-in
+    /// drag handler holds the click for ~500 ms while it decides
+    /// drag-vs-tap, which made the Stop tap on the recording HUD feel
+    /// unresponsive. By driving drag from `mouseDragged` after a small
+    /// pixel threshold, taps fire immediately on mouseUp and drag only
+    /// kicks in when the user actually moves the pointer.
+    private var mouseDownLocation: NSPoint?
+    private var dragInitiated = false
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
@@ -207,10 +261,16 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let area = trackingArea { removeTrackingArea(area) }
+        // Single permanent tracking area, .inVisibleRect keeps it in
+        // sync with our bounds automatically. Recreating it on every
+        // layout pass used to synthesise mouseExited at ~1 Hz and pop
+        // our cursor, so we install once and trust super not to wipe
+        // it (we double-check via `contains` just in case).
+        if let area = trackingArea, trackingAreas.contains(area) { return }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.activeAlways, .inVisibleRect, .cursorUpdate, .mouseEnteredAndExited, .mouseMoved],
+            options: [.activeAlways, .inVisibleRect,
+                      .mouseEnteredAndExited],
             owner: self,
             userInfo: nil
         )
@@ -218,27 +278,72 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
         trackingArea = area
     }
 
+    /// `.push()` instead of `.set()`. WKWebView is a sibling subview
+    /// at the same screen coordinates and its CSS-driven cursor
+    /// handler calls `.set()` on every mouseMoved tick — that
+    /// trampled our `pointingHand.set()` and reverted the cursor to
+    /// the system arrow. `push()` adds pointingHand to AppKit's
+    /// cursor stack which AppKit treats as authoritative until we
+    /// `pop()`; subsequent `.set()` calls from any other view are
+    /// ignored for the duration of the hover.
     override func mouseEntered(with event: NSEvent) {
-        if !pushedCursor {
+        if !pushedPointingHand {
+            pushedPointingHand = true
             NSCursor.pointingHand.push()
-            pushedCursor = true
         }
+        // CRITICAL: forward to super so SwiftUI's internal hover
+        // pipeline (driving `.onContinuousHover` → `hovering` →
+        // scale-effect) keeps receiving the event. Without this, the
+        // cursor worked but the blob never scaled on hover.
+        super.mouseEntered(with: event)
     }
     override func mouseExited(with event: NSEvent) {
-        if pushedCursor {
+        if pushedPointingHand {
+            pushedPointingHand = false
             NSCursor.pop()
-            pushedCursor = false
         }
+        super.mouseExited(with: event)
     }
-    override func mouseMoved(with event: NSEvent) {
-        // Drag handler resets the system cursor on every move while the
-        // panel is .nonactivatingPanel + isMovableByWindowBackground;
-        // re-set ours so the pointer doesn't flicker back to the arrow
-        // between push() and the next AppKit reset.
-        NSCursor.pointingHand.set()
+    /// Manual drag handover for the floating recording HUD. We do
+    /// nothing on mouseDown except remember where it landed — letting
+    /// the click reach SwiftUI's tap gesture cleanly on mouseUp.
+    /// `mouseDragged` then kicks AppKit's drag handler once the cursor
+    /// has moved past the threshold, which transfers control to AppKit
+    /// (consuming the rest of the mouseDragged + mouseUp events). The
+    /// `ScreenClampingPanel` check scopes this to the floating panel —
+    /// the inline blob hosted inside `LibraryWindow` has its own drag
+    /// (the page's `.main-header` strip) and shouldn't grab drags here.
+    override func mouseDown(with event: NSEvent) {
+        if window is ScreenClampingPanel {
+            mouseDownLocation = NSEvent.mouseLocation
+            dragInitiated = false
+        }
+        super.mouseDown(with: event)
     }
-    override func cursorUpdate(with event: NSEvent) {
-        NSCursor.pointingHand.set()
+    override func mouseDragged(with event: NSEvent) {
+        if !dragInitiated,
+           let start = mouseDownLocation,
+           let panel = window as? ScreenClampingPanel {
+            let current = NSEvent.mouseLocation
+            let dx = current.x - start.x
+            let dy = current.y - start.y
+            // 4 px threshold — small enough that "click then nudge"
+            // doesn't trigger drag, large enough that finger jitter on
+            // a trackpad doesn't either.
+            if (dx * dx + dy * dy) >= 16 {
+                dragInitiated = true
+                panel.performDrag(with: event)
+                return
+            }
+        }
+        super.mouseDragged(with: event)
+    }
+    override func mouseUp(with event: NSEvent) {
+        mouseDownLocation = nil
+        // dragInitiated stays as-is until next mouseDown — AppKit's
+        // drag handler consumed the mouseUp if drag was active, so
+        // this branch only runs on a real click.
+        super.mouseUp(with: event)
     }
 }
 
@@ -290,11 +395,25 @@ private final class HUDWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
+/// Shared presentation flag so the panel can ask the SwiftUI view to
+/// play its reverse spring before the host window is torn down. The
+/// inline Library blob creates its own instance and never flips
+/// `dismissing` — it's persistent, so it only ever springs in.
+@MainActor
+final class HUDPresentation: ObservableObject {
+    @Published var dismissing = false
+}
+
 /// Liquid Blob HUD body. Pulls the live level from RecordingLevelMeter,
 /// renders a Canvas-based morphing shape, exposes a click-anywhere
 /// stop. Drag is handled by the host window (`isMovableByWindowBackground`
 /// on the floating panel; not applicable inside the Library window).
 struct RecordingHUDView: View {
+
+    /// Drives spring-in (onAppear) and spring-out (panel sets
+    /// `dismissing`). The Library embedding passes a private instance
+    /// that never dismisses.
+    @ObservedObject var presentation: HUDPresentation = HUDPresentation()
 
     /// Called when the user clicks the blob. Caller decides what that
     /// means — the floating HUD wires it to stop-recording; the Library
@@ -321,6 +440,13 @@ struct RecordingHUDView: View {
     /// notification arrives — without that, the blob would render as
     /// frozen-then-jump on first appearance.
     @State private var visible = true
+    /// Ambient idle motion — gentle position drift + slow hue / brightness
+    /// shimmer, driven by SwiftUI's animation system (NOT TimelineView)
+    /// so the resting blob feels alive without burning a per-frame
+    /// view recompute. Four independent periods make the cycle look
+    /// organic rather than mechanically clocked.
+    @State private var idleHueShift: Double = -6
+    @State private var idleBrightness: Double = -0.02
     var body: some View {
         let level = max(meter.micLevel, meter.systemLevel)
         // Peak over the last ~0.5 s ring buffer, scaled so a normal
@@ -348,36 +474,89 @@ struct RecordingHUDView: View {
         // when nothing meaningful is changing on screen:
         //   • Recording:     30 Hz — fast enough to track voice ticks.
         //   • Idle, hovered: 20 Hz — gentle "I'm awake" breathe.
-        //   • Idle, resting: TimelineView paused outright (static
-        //     circle). Previously a 6 Hz idle tick still cost the full
-        //     SwiftUI ViewGraph + NSHostingView layout pass every
-        //     frame, which showed up as ~10 % background CPU on M-series
-        //     just for the inline Library blob doing nothing.
-        // `paused: !visible` extends this to also halt while the host
-        // window is occluded (minimised, hidden behind a fullscreen
-        // app, etc.).
-        let animating = isRecording || hovering
+        //   • Idle, resting:  5 Hz — minimum tick rate that still
+        //     reads as "alive" (subtle drift + shape wobble) without
+        //     pulling the ~10% background CPU the original 6 Hz path
+        //     burned. The reduction comes from the smaller per-tick
+        //     work: we feed BlobShape an `act` of 0.04 (just enough
+        //     to wake the baseline wobble) instead of full audio-
+        //     reactive activity, so the path computation is cheap.
+        // `paused: !visible` halts everything while the host window
+        // is occluded (minimised, behind a fullscreen app, etc.).
+        // Only the recording / hover states drive a per-frame
+        // TimelineView. The resting green blob does NOT: a low-Hz idle
+        // tick reads as choppy "lag", and a high-Hz one burns CPU. Its
+        // "alive" motion instead comes entirely from the cheap,
+        // display-rate-smooth SwiftUI ambient animations applied below
+        // (drift + hue + brightness) over a perfectly static, perfectly
+        // round shape. Net: idle is calm + buttery, deformation is
+        // reserved for when there's actual audio to react to.
+        // The blob animates whenever it's actually on screen — idle
+        // included. The earlier "idle = paused, static" version froze
+        // the shape (and, with a stale level, froze it mid-bulge). At
+        // rest we run a low, near-circular wobble: activity 0 + level 0
+        // means BlobShape only applies its 0.15-amplitude baseline
+        // breathing — the blob gently circles and keeps relaxing back
+        // toward round, never spiking. 20 Hz keeps it buttery (the
+        // choppy reading before was the old 5 Hz tick, not the motion
+        // itself). `paused: !visible` still hard-stops it when the host
+        // window is occluded, so there's no background CPU burn.
         let fps: Double = isRecording ? 30 : 20
-        TimelineView(.animation(minimumInterval: 1.0 / fps, paused: !visible || !animating)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            blobLayer(time: t, level: level, activity: shapeActivity,
-                      palette: palette)
+        Group {
+            TimelineView(.animation(minimumInterval: 1.0 / fps,
+                                    paused: !visible)) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                blobLayer(time: t,
+                          level: isRecording ? level : 0,
+                          activity: isRecording ? shapeActivity : 0,
+                          palette: palette)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Entry animation: blob "leaks out" from a tiny dot in the
         // centre. Spring keeps it organic — no hard endpoint snap.
-        .scaleEffect((appeared ? 1.0 : 0.05) * (hovering ? 1.08 : 1.0))
+        .scaleEffect((appeared ? 1.0 : 0.05) * (hovering ? 1.18 : 1.0))
         .opacity(appeared ? 1.0 : 0.0)
+        // Ambient idle shimmer — colour only, NO positional drift. The
+        // blob must stay anchored in place; the "movement" the user
+        // wants is the shape gently flexing while it rotates (that's the
+        // BlobShape baseline wobble driven by the timeline), not the
+        // whole thing sliding around. Keep the faint hue/brightness
+        // breathing (±6°, ±0.04) — that reads as alive without moving.
+        .hueRotation(.degrees(idleHueShift))
+        .brightness(idleBrightness)
         .animation(.spring(response: 0.55, dampingFraction: 0.72), value: appeared)
         .animation(.easeOut(duration: 0.22), value: hovering)
         // Fast palette change on recording-state transitions. Scoped to
         // `isRecording` so nothing else animates with it.
         .animation(.easeInOut(duration: 0.10), value: isRecording)
-        .onAppear { appeared = true }
-        // Hover state for the gentle scale-up only. The cursor is
-        // owned by HUDHostingView (NSTrackingArea push/pop). Don't
-        // touch NSCursor here — racing against the AppKit drag handler
-        // is what kept the pointer stuck on the arrow before.
+        // Panel-driven exit: reuse the very same scale/opacity spring as
+        // the entry, just run backwards — the blob shrinks to a tiny
+        // transparent dot. The panel waits ~0.45 s (spring settle) before
+        // orderOut, so this fully plays before the window disappears.
+        .onChange(of: presentation.dismissing) { _, dismissing in
+            if dismissing { appeared = false }
+        }
+        .onAppear {
+            appeared = true
+            // Start the ambient loops after the entry spring lands so
+            // they don't fight the leak-from-a-dot scale animation.
+            // Four different periods keep the cycle visibly irregular —
+            // the blob never lines up with itself, which is what makes
+            // the motion feel "alive" instead of "looping".
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                withAnimation(.easeInOut(duration: 5.5).repeatForever(autoreverses: true)) {
+                    idleHueShift = 6
+                }
+                withAnimation(.easeInOut(duration: 3.9).repeatForever(autoreverses: true)) {
+                    idleBrightness = 0.04
+                }
+            }
+        }
+        // SwiftUI hover drives only the scale-up. The cursor is fully
+        // owned by HUDHostingView's push/pop on AppKit's cursor stack
+        // — pushing wins against WKWebView's per-mouseMoved `.set()`
+        // that the SwiftUI-side `.set()` couldn't outpace.
         .onContinuousHover { phase in
             switch phase {
             case .active: if !hovering { hovering = true }
@@ -420,7 +599,8 @@ struct RecordingHUDView: View {
     @ViewBuilder
     private func blobLayer(time: TimeInterval, level: Float, activity: CGFloat,
                            palette: BlobPalette) -> some View {
-        BlobShape(time: time, level: CGFloat(level), activity: activity)
+        let lvl = CGFloat(level)
+        BlobShape(time: time, level: lvl, activity: activity)
             .fill(
                 RadialGradient(
                     colors: palette.fillStops,
@@ -430,7 +610,7 @@ struct RecordingHUDView: View {
                 )
             )
             .overlay(
-                BlobShape(time: time, level: CGFloat(level), activity: activity)
+                BlobShape(time: time, level: lvl, activity: activity)
                     .stroke(
                         LinearGradient(
                             colors: [
@@ -444,10 +624,20 @@ struct RecordingHUDView: View {
                     )
             )
             .frame(width: 43, height: 43)
-            .shadow(color: palette.glowOuter.opacity(0.55),
-                    radius: 14 + 8 * CGFloat(level), x: 0, y: 4)
-            .shadow(color: palette.glowInner.opacity(0.35),
-                    radius: 5, x: 0, y: 2)
+        // The blob's original soft brand-coloured glow. The
+        // backdrop-blur "frosted lens" experiment put a dark veil over
+        // the blob (NSVisualEffectView `.hudWindow` darkened it) — the
+        // user rejected that; we're back to a clean opaque blob with
+        // just this multi-layer bloom (wide faint halo → mid → tight
+        // core). Breathes up with audio level.
+        .shadow(color: palette.glowOuter.opacity(0.22),
+                radius: 44 + 18 * lvl, x: 0, y: 8)
+        .shadow(color: palette.glowOuter.opacity(0.40),
+                radius: 26 + 14 * lvl, x: 0, y: 6)
+        .shadow(color: palette.glowOuter.opacity(0.48),
+                radius: 13 + 8 * lvl, x: 0, y: 4)
+        .shadow(color: palette.glowInner.opacity(0.32),
+                radius: 5, x: 0, y: 2)
     }
 
 }
@@ -457,6 +647,10 @@ struct RecordingHUDView: View {
 /// ~80 ms; no value interpolation, no crossfade.
 private struct BlobPalette {
     let fillStops: [Color]
+    /// Soft brand-coloured glow the blob has always carried (the
+    /// multi-layer bloom in `blobLayer`). Kept separate from the
+    /// frosted-lens fill so the ambient glow reads as the blob's own
+    /// light, not a hard drop shadow.
     let glowOuter: Color
     let glowInner: Color
 
@@ -597,20 +791,62 @@ private struct BlobShape: Shape {
             // syllable causes a visible twitch, not just a slow inflate.
             let jitterPhase1 = time * 7.5 + Double(i) * 1.13
             let jitterPhase2 = time * 13.1 + Double(i) * 2.37
-            let jitterAmp = (0.08 + 1.0 * Double(level)) * Double(act)
-            let jitter = (sin(jitterPhase1) * 0.07 + sin(jitterPhase2) * 0.05) * jitterAmp
+            let jitterAmp = (0.08 + 0.9 * Double(level)) * Double(act)
+            let jitter = (sin(jitterPhase1) * 0.06 + sin(jitterPhase2) * 0.04) * jitterAmp
             let wobble = baseWobble + jitter
 
             // Audio level pushes the radius outward. Phase rotates
             // per-point so loud audio bulges different sides at
-            // different times rather than uniformly inflating. Multiplier
-            // was 0.55 — bumped to 1.0 so deformation tracks volume
-            // visibly, the way the user wants it to read as "this
-            // blob is reacting to me".
+            // different times rather than uniformly inflating.
+            // Gated by `act`: at rest (act≈0) this is exactly zero even
+            // if `level` carries a stale value from a just-finished
+            // recording — otherwise a paused idle frame freezes the blob
+            // mid-bulge ("застыл в растёкшемся состоянии").
             let levelPhase = sin(time * 2.1 + Double(i) * 1.2)
-            let levelBoost = Double(level) * 1.0 * (0.5 + 0.5 * levelPhase)
+            let levelBoost = Double(level) * 0.9 * (0.55 + 0.45 * levelPhase) * Double(act)
 
-            let r = baseRadius * (baseR + CGFloat(wobble) + CGFloat(levelBoost))
+            // Directional "audio tongue": a single localised edge that
+            // lunges OUT hard when sound hits, instead of the whole blob
+            // inflating uniformly. The pull is centred on a slowly
+            // sweeping angle and falls off (gaussian) with angular
+            // distance, so the silhouette grows a living, stretching
+            // grань that tracks volume — exactly the "an edge pulls on
+            // the beat" read the user wanted. Driven by `level`
+            // directly (not gated by `act`): `level` is already ~0 in
+            // silence, so the tongue only appears when there's actual
+            // sound, and its reach scales with how loud it is.
+            let pointAngle = Double(i) / Double(pointCount) * 2 * .pi
+            let tongueDir = time * 0.85
+            var dAng = abs((pointAngle - tongueDir)
+                .truncatingRemainder(dividingBy: 2 * .pi))
+            if dAng > .pi { dAng = 2 * .pi - dAng }
+            // σ ≈ 0.5 rad (~30°) — a focused lobe, not a soft swell.
+            let tongueFalloff = exp(-(dAng * dAng) / (2 * 0.5 * 0.5))
+            // Lift mid-levels (pow < 1) so normal speech — not just
+            // shouting — moves the edge. Reach kept modest (×1.0) so it
+            // reads as "an edge leans out on the beat", not a spike
+            // lashing out — the previous ×2.4 was way too violent.
+            let levelLifted = pow(max(0, Double(level)), 0.8)
+            // Also gated by `act` so the resting blob can never grow a
+            // tongue from a stale level — only a live recording with
+            // real speech activity does.
+            let tongue = levelLifted * 1.0 * tongueFalloff * Double(act)
+
+            // Idle "breath bulge": even with zero audio, one side leans
+            // gently out and the lobe slowly travels around the rim, so
+            // the resting blob reads as alive instead of a frozen circle.
+            // Always on (NOT gated by act/level), tiny (~3.5% radius),
+            // slow — "a side just barely wants to break out, regularly".
+            let idleDir = time * 0.55
+            var dIdle = abs((pointAngle - idleDir)
+                .truncatingRemainder(dividingBy: 2 * .pi))
+            if dIdle > .pi { dIdle = 2 * .pi - dIdle }
+            let idleLobe = exp(-(dIdle * dIdle) / (2 * 0.8 * 0.8))
+            let idlePulse = (0.5 + 0.5 * sin(time * 1.3)) * 0.035 * idleLobe
+
+            let r = baseRadius * (baseR + CGFloat(wobble)
+                                  + CGFloat(levelBoost) + CGFloat(tongue)
+                                  + CGFloat(idlePulse))
             let px = center.x + CGFloat(cos(angle)) * r
             let py = center.y + CGFloat(sin(angle)) * r
             points.append(CGPoint(x: px, y: py))
