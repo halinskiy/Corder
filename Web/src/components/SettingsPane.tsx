@@ -1,71 +1,61 @@
 import React from "react";
-import { Blocks, CalendarClock } from "lucide-react";
-import { getSettings, setSettings } from "../api";
+import { createPortal } from "react-dom";
+import { X, Search } from "lucide-react";
+import {
+  getSettings, setSettings, getInstalledApps, appIconSrc,
+  type Settings, type InstalledApp,
+} from "../api";
 import type { T } from "../i18n";
 
-/// Real brand marks (official logo geometry) so the promos read as the
-/// actual integrations, not generic glyphs.
-function GoogleLogo() {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
-    </svg>
-  );
-}
-
-function AppleLogo() {
-  return (
-    <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden>
-      <path fill="currentColor" d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-    </svg>
-  );
-}
-
-function TelegramLogo() {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-      <path fill="#29A9EB" d="M12 0a12 12 0 1 0 0 24 12 12 0 0 0 0-24z" />
-      <path fill="#fff" d="M5.49 11.78c3.5-1.52 5.83-2.53 7-3.02 3.33-1.39 4.02-1.63 4.47-1.64.1 0 .32.02.46.14.12.1.15.22.17.32.01.09.03.28.02.43-.17 1.83-.93 6.28-1.31 8.33-.16.87-.48 1.16-.78 1.19-.66.06-1.16-.44-1.8-.86-1-.66-1.57-1.07-2.54-1.71-1.12-.74-.4-1.15.25-1.81.17-.17 3.04-2.79 3.1-3.03.01-.03.01-.14-.06-.2-.07-.06-.17-.04-.25-.02-.1.02-1.79 1.14-5.03 3.34-.48.33-.91.49-1.29.48-.43-.01-1.24-.24-1.85-.44-.75-.24-1.34-.37-1.29-.79.03-.21.33-.43.9-.65z" />
-    </svg>
-  );
-}
-
-/// First-pass Settings page (right column, next to "Recording"). This
-/// is a visual draft: toggles are local state only and not yet wired to
-/// the backend — we'll make them functional in a later pass. Everything
-/// Corder does is on by default; Pro-only capabilities aren't offered.
-export function SettingsPane({
-  t,
-  onToast,
-}: {
-  t: T;
-  onToast: (msg: string, kind?: "success" | "error") => void;
-}) {
-  const [vocab, setVocab] = React.useState("");
-  const [vocabDirty, setVocabDirty] = React.useState(false);
+/// Settings page (right column, next to "Recording"). Toggles are
+/// REAL: loaded from and persisted to /api/settings. Each change posts
+/// only the changed field (debounced ~400 ms); the backend treats an
+/// absent field as "unchanged" so a stale tab can't clobber the rest.
+/// Audio (mic + system) deliberately has NO toggle — a transcription
+/// recorder must capture audio, it's intrinsic; and mic/system stay
+/// coupled because the dual-track pipeline assumes both exist. Video
+/// IS optional.
+export function SettingsPane({ t }: { t: T }) {
+  const [s, setS] = React.useState<Settings | null>(null);
+  const [apps, setApps] = React.useState<InstalledApp[]>([]);
+  const pending = React.useRef<Settings>({});
+  const timer = React.useRef<number | null>(null);
 
   React.useEffect(() => {
-    getSettings()
-      .then((s) => {
-        setVocab(s.vocabulary ?? "");
-      })
-      .catch(() => {});
+    let alive = true;
+    getSettings().then((v) => { if (alive) setS(v); }).catch(() => {});
+    // Installed-apps list powers the picker AND resolves bundle ids to
+    // friendly names/icons in the rows. Best-effort: on failure the
+    // rows just fall back to showing the raw bundle id.
+    getInstalledApps().then((a) => { if (alive) setApps(a); }).catch(() => {});
+    return () => { alive = false; };
   }, []);
 
-  const saveVocab = async () => {
-    if (!vocabDirty) return;
-    try {
-      const s = await setSettings({ vocabulary: vocab });
-      setVocab(s.vocabulary ?? "");
-      setVocabDirty(false);
-      onToast(t.settings_saved, "success");
-    } catch {
-      onToast(t.toast_settings_failed, "error");
-    }
-  };
+  // Optimistic local update + debounced POST of ONLY the changed
+  // fields. The backend leaves omitted fields untouched.
+  const patch = React.useCallback((p: Settings) => {
+    setS((cur) => (cur ? { ...cur, ...p } : cur));
+    pending.current = { ...pending.current, ...p };
+    if (timer.current != null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const body = pending.current;
+      pending.current = {};
+      timer.current = null;
+      setSettings(body).then((fresh) => setS(fresh)).catch(() => {});
+    }, 400);
+  }, []);
+
+  // Re-pull settings (hotkey: the POST response's record_hotkey_ok can
+  // be stale because the Carbon re-register is async on the main run
+  // loop — a short refetch gets the authoritative value).
+  const refetch = React.useCallback(() => {
+    getSettings().then(setS).catch(() => {});
+  }, []);
+
+  const loaded = s != null;
+  // Every toggle defaults ON until the real value loads (matches the
+  // backend default, so no flicker to "off" then back).
+  const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
 
   return (
     <div className="settings-pane">
@@ -73,87 +63,73 @@ export function SettingsPane({
         <Toggle
           label={t.settings_notifications}
           desc={t.settings_notifications_desc}
-          defaultOn
+          checked={on("notifications")}
+          disabled={!loaded}
+          onChange={(v) => patch({ notifications: v })}
         />
       </Section>
 
       <Section title={t.settings_sec_capture}>
-        <Toggle label={t.settings_video} desc={t.settings_video_desc} defaultOn />
         <Toggle
-          label={t.settings_system_audio}
-          desc={t.settings_system_audio_desc}
-          defaultOn
+          label={t.settings_video}
+          desc={t.settings_video_desc}
+          checked={on("capture_video")}
+          disabled={!loaded}
+          onChange={(v) => patch({ capture_video: v })}
         />
-        <Toggle label={t.settings_mic} desc={t.settings_mic_desc} defaultOn />
       </Section>
 
       <Section title={t.settings_sec_transcription}>
         <Toggle
           label={t.settings_autotranscribe}
           desc={t.settings_autotranscribe_desc}
-          defaultOn
+          checked={on("auto_transcribe")}
+          disabled={!loaded}
+          onChange={(v) => patch({ auto_transcribe: v })}
         />
         <Toggle
           label={t.settings_autotitle}
           desc={t.settings_autotitle_desc}
-          defaultOn
+          checked={on("auto_title")}
+          disabled={!loaded}
+          onChange={(v) => patch({ auto_title: v })}
+        />
+      </Section>
+
+      <Section title={t.settings_sec_shortcut}>
+        <HotkeyRow
+          label={s?.record_hotkey_label ?? "⌘⇧F"}
+          conflict={s?.record_hotkey_conflict ?? null}
+          ok={s?.record_hotkey_ok ?? true}
+          disabled={!loaded}
+          onSet={(code, mods) => {
+            patch({ record_hotkey_code: code, record_hotkey_mods: mods });
+            window.setTimeout(refetch, 450);
+          }}
+          t={t}
         />
       </Section>
 
       <div className="settings-section">
-        <div className="settings-section-title">{t.settings_sec_recognition}</div>
-        <div className="settings-field">
-          <textarea
-            className="settings-textarea"
-            rows={3}
-            placeholder={t.settings_vocab_placeholder}
-            value={vocab}
-            onChange={(e) => { setVocab(e.target.value); setVocabDirty(true); }}
-            onBlur={saveVocab}
-          />
-          <div className="settings-field-hint">{t.settings_vocab_hint}</div>
-        </div>
-      </div>
-
-      <div className="settings-section">
-        <div className="settings-section-title">{t.settings_sec_privacy}</div>
-        <div className="settings-privacy">{t.settings_privacy_body}</div>
-      </div>
-
-      <div className="settings-section">
-        <div className="settings-section-title">{t.settings_sec_soon}</div>
-        <div className="settings-ext-list">
-          <PromoCard
-            logo={<GoogleLogo />}
-            title={t.settings_ext_title}
-            desc={t.settings_ext_desc}
-            badge={t.settings_ext_badge_soon}
-          />
-          <PromoCard
-            logo={<AppleLogo />}
-            title={t.settings_mobile_title}
-            desc={t.settings_mobile_desc}
-            badge={t.settings_ext_badge_soon}
-          />
-          <PromoCard
-            logo={<TelegramLogo />}
-            title={t.settings_tg_title}
-            desc={t.settings_tg_desc}
-            badge={t.settings_ext_badge_soon}
-          />
-          <PromoCard
-            logo={<Blocks size={20} strokeWidth={1.75} />}
-            title={t.settings_integrations_title}
-            desc={t.settings_integrations_desc}
-            badge={t.settings_ext_badge_soon}
-          />
-          <PromoCard
-            logo={<CalendarClock size={20} strokeWidth={1.75} />}
-            title={t.settings_calendar_title}
-            desc={t.settings_calendar_desc}
-            badge={t.settings_ext_badge_soon}
-          />
-        </div>
+        <div className="settings-section-title">{t.settings_sec_autodetect}</div>
+        <AppListEditor
+          title={t.settings_whitelist}
+          desc={t.settings_whitelist_desc}
+          items={s?.meeting_whitelist ?? []}
+          apps={apps}
+          disabled={!loaded}
+          onChange={(next) => patch({ meeting_whitelist: next })}
+          t={t}
+        />
+        <AppListEditor
+          title={t.settings_blacklist}
+          desc={t.settings_blacklist_desc}
+          items={s?.meeting_blacklist ?? []}
+          apps={apps}
+          disabled={!loaded}
+          onChange={(next) => patch({ meeting_blacklist: next })}
+          t={t}
+        />
       </div>
 
       <div className="settings-pro-note">{t.settings_pro_note}</div>
@@ -161,30 +137,251 @@ export function SettingsPane({
   );
 }
 
-/// Dormant "coming soon" promo (extension / mobile / Telegram bot).
-/// Real brand logo, full-width text, an inert grey SOON chip — no
-/// dead CTA button (it only squeezed the text into a thin column).
-function PromoCard({
-  logo, title, desc, badge,
+/// One app list (whitelist or blacklist). No bundle-id typing: the
+/// user picks from installed apps via a searchable dropdown — apps
+/// Corder recently saw on the mic float to the top. Rows show the app
+/// icon + friendly name (bundle id is the tooltip). Built only from
+/// existing tokens/components — consistency first.
+function AppListEditor({
+  title, desc, items, apps, disabled, onChange, t,
 }: {
-  logo: React.ReactNode;
   title: string;
   desc: string;
-  badge: string;
+  items: string[];
+  apps: InstalledApp[];
+  disabled?: boolean;
+  onChange: (next: string[]) => void;
+  t: T;
 }) {
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const addRef = React.useRef<HTMLButtonElement | null>(null);
+  const popRef = React.useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
+
+  const place = React.useCallback(() => {
+    const r = addRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: r.left, width: r.width });
+  }, []);
+
+  const nameFor = (b: string) => apps.find((a) => a.bundle === b)?.name ?? b;
+  const add = (b: string) => {
+    if (!items.includes(b)) onChange([...items, b]);
+    setOpen(false);
+    setQ("");
+  };
+  const remove = (b: string) => onChange(items.filter((x) => x !== b));
+
+  // Picker is PORTALLED to <body> and fixed-positioned at the button's
+  // rect — the settings list is `overflow:hidden` and stacked under
+  // sibling cards, so an in-flow dropdown got clipped / hidden. Anchored
+  // like ProfileMenu; repositions on scroll/resize; outside-click/Esc.
+  React.useEffect(() => {
+    if (!open) return;
+    place();
+    const onDoc = (e: MouseEvent) => {
+      const tgt = e.target as Node;
+      if (!popRef.current?.contains(tgt) && !addRef.current?.contains(tgt)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const id = window.setTimeout(
+      () => window.addEventListener("mousedown", onDoc), 0);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    // capture:true so it also catches scrolls inside the settings pane.
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, place]);
+
+  const ql = q.trim().toLowerCase();
+  const choices = apps
+    .filter((a) => !items.includes(a.bundle))
+    .filter((a) =>
+      !ql ||
+      a.name.toLowerCase().includes(ql) ||
+      a.bundle.toLowerCase().includes(ql)
+    );
+
   return (
-    <div className="promo" aria-disabled>
-      <div className="promo-head">
-        <div className="promo-logo">{logo}</div>
-        <div className="promo-title-row">
-          <span className="promo-title">{title}</span>
-          <span className="promo-soon">{badge}</span>
+    <div className="applist-block">
+      <div className="settings-row-label">{title}</div>
+      <div className="settings-row-desc">{desc}</div>
+      <div className="applist">
+        {items.length === 0 && (
+          <div className="applist-empty">{t.settings_list_empty}</div>
+        )}
+        {items.map((b) => (
+          <div className="applist-row" key={b}>
+            <img
+              className="applist-ico"
+              src={appIconSrc(b)}
+              alt=""
+              aria-hidden
+              onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+            />
+            <span className="applist-name" title={b}>{nameFor(b)}</span>
+            <button
+              type="button"
+              className="applist-x"
+              disabled={disabled}
+              aria-label={t.settings_list_remove}
+              title={t.settings_list_remove}
+              onClick={() => remove(b)}
+            >
+              <X size={14} strokeWidth={2.2} />
+            </button>
+          </div>
+        ))}
+        <div className="applist-add-row">
+          <button
+            ref={addRef}
+            type="button"
+            className="clarify-btn accent bigbtn-full"
+            disabled={disabled}
+            onClick={() => setOpen((v) => !v)}
+          >
+            + {t.settings_list_add}
+          </button>
         </div>
       </div>
-      <div className="promo-desc">{desc}</div>
+      {open && pos && createPortal(
+        <div
+          ref={popRef}
+          className="apick"
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+        >
+          <div className="apick-head">
+            <div className="search-field">
+              <Search size={14} strokeWidth={2} />
+              <input
+                autoFocus
+                type="search"
+                value={q}
+                placeholder={t.settings_pick_search}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="apick-list">
+            {choices.length === 0 && (
+              <div className="apick-none">{t.settings_pick_none}</div>
+            )}
+            {choices.map((a) => (
+              <button
+                type="button"
+                className="apick-item"
+                key={a.bundle}
+                onClick={() => add(a.bundle)}
+              >
+                <img
+                  className="applist-ico"
+                  src={appIconSrc(a.bundle)}
+                  alt=""
+                  aria-hidden
+                  onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                />
+                <span className="apick-name">{a.name}</span>
+                {a.recent && (
+                  <span className="apick-recent">{t.settings_pick_recent}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
+
+// JS KeyboardEvent.code → Carbon virtual key code. Enough for global
+// hotkeys (letters, digits, F-keys, a few specials). The backend
+// formats the label and checks system-shortcut conflicts from the same
+// numbers, so this is the single mapping point.
+const JS_TO_CARBON: Record<string, number> = {
+  KeyA: 0, KeyS: 1, KeyD: 2, KeyF: 3, KeyH: 4, KeyG: 5, KeyZ: 6, KeyX: 7,
+  KeyC: 8, KeyV: 9, KeyB: 11, KeyQ: 12, KeyW: 13, KeyE: 14, KeyR: 15,
+  KeyY: 16, KeyT: 17, KeyO: 31, KeyU: 32, KeyI: 34, KeyP: 35, KeyL: 37,
+  KeyJ: 38, KeyK: 40, KeyN: 45, KeyM: 46,
+  Digit1: 18, Digit2: 19, Digit3: 20, Digit4: 21, Digit6: 22, Digit5: 23,
+  Digit9: 25, Digit7: 26, Digit8: 28, Digit0: 29,
+  F1: 122, F2: 120, F3: 99, F4: 118, F5: 96, F6: 97, F7: 98, F8: 100,
+  F9: 101, F10: 109, F11: 103, F12: 111,
+  Space: 49, Enter: 36, Tab: 48, Escape: 53,
+  ArrowLeft: 123, ArrowRight: 124, ArrowDown: 125, ArrowUp: 126,
+};
+
+/// Global record-hotkey control. Click to capture, then press the
+/// combo. Surfaces a warning when it clashes with a known macOS system
+/// shortcut, or when the OS refused the binding (something else owns
+/// it). Reuses the existing settings-row layout.
+function HotkeyRow({
+  label, conflict, ok, disabled, onSet, t,
+}: {
+  label: string;
+  conflict: string | null;
+  ok: boolean;
+  disabled?: boolean;
+  onSet: (code: number, mods: number) => void;
+  t: T;
+}) {
+  const [capturing, setCapturing] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!capturing) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
+      if (e.key === "Escape") { setCapturing(false); return; }
+      const code = JS_TO_CARBON[e.code];
+      if (code == null) return; // unsupported key — keep waiting
+      // Carbon mask: cmd 256 | shift 512 | option 2048 | ctrl 4096.
+      let mods = 0;
+      if (e.metaKey) mods |= 256;
+      if (e.shiftKey) mods |= 512;
+      if (e.altKey) mods |= 2048;
+      if (e.ctrlKey) mods |= 4096;
+      // A global hotkey needs a strong modifier (⌘/⌃/⌥) — ⇧-only or a
+      // bare key would fire while typing anywhere.
+      if ((mods & (256 | 4096 | 2048)) === 0) return;
+      setCapturing(false);
+      onSet(code, mods);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [capturing, onSet]);
+
+  return (
+    <div className="hk-block" aria-label={t.settings_shortcut_label}>
+      <div className="settings-row-label">{t.settings_shortcut_label}</div>
+      <div className="settings-row-desc">{t.settings_shortcut_desc}</div>
+      {conflict && (
+        <div className="hk-warn">{t.settings_shortcut_conflict(conflict)}</div>
+      )}
+      {!conflict && !ok && (
+        <div className="hk-warn">{t.settings_shortcut_unbound}</div>
+      )}
+      <button
+        type="button"
+        className={"clarify-btn bigbtn-full hk-capbtn" + (capturing ? " capturing" : "")}
+        disabled={disabled}
+        onClick={() => setCapturing((v) => !v)}
+      >
+        {capturing ? t.settings_shortcut_press : label}
+      </button>
+    </div>
+  );
+}
+
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -195,33 +392,38 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/// Controlled + persisted. The whole row is the hit target
+/// (hover-highlights like a sidebar session; click anywhere toggles).
+/// `disabled` is true until settings load, so it can't post a stale
+/// default before the real value arrives.
 function Toggle({
-  label, desc, defaultOn,
+  label, desc, checked, disabled, onChange,
 }: {
   label: string;
   desc: string;
-  defaultOn: boolean;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
 }) {
-  const [on, setOn] = React.useState(defaultOn);
-  // The whole row is the hit target (hover-highlights like a sidebar
-  // session; click anywhere toggles). The switch is purely visual.
+  const flip = () => { if (!disabled) onChange(!checked); };
   return (
     <div
-      className="settings-row"
+      className={"settings-row" + (disabled ? " is-loading" : "")}
       role="switch"
-      aria-checked={on}
+      aria-checked={checked}
+      aria-disabled={disabled}
       aria-label={label}
-      tabIndex={0}
-      onClick={() => setOn((v) => !v)}
+      tabIndex={disabled ? -1 : 0}
+      onClick={flip}
       onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") { e.preventDefault(); setOn((v) => !v); }
+        if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
       }}
     >
       <div className="settings-row-text">
         <div className="settings-row-label">{label}</div>
         <div className="settings-row-desc">{desc}</div>
       </div>
-      <span className={"set-switch" + (on ? " on" : "")} aria-hidden>
+      <span className={"set-switch" + (checked ? " on" : "")} aria-hidden>
         <span className="set-switch-thumb" />
       </span>
     </div>

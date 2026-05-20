@@ -40,6 +40,10 @@ enum NotificationsService {
     /// app's UNUserNotificationCenterDelegate when the user clicks; the only
     /// supported action right now is `openLibrary`.
     static func post(title: String, body: String, action: Action = .openLibrary) {
+        // Central kill-switch: the Settings "Notifications" toggle gates
+        // every post site at the source (RecordingController, SleepWatchdog,
+        // NetworkMonitor, …) so no call site can leak past it.
+        guard AppSettings.notificationsEnabled else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

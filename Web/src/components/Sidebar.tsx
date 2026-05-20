@@ -1,7 +1,8 @@
 import React from "react";
 import { Search } from "lucide-react";
 import { MeetingSummary, MeetingStatus, retranscribe, pinMeeting, renameMeeting } from "../api";
-import { formatDate, formatClock, formatDuration, dateBucket } from "../format";
+import { OverlayScrollbar } from "./OverlayScrollbar";
+import { formatDate, formatDuration, dateBucket } from "../format";
 import type { Lang, T } from "../i18n";
 
 function statusLabel(s: MeetingStatus, t: T): string {
@@ -22,6 +23,16 @@ function UserFilledIcon() {
   );
 }
 
+function PlayingIcon() {
+  return (
+    <span className="meeting-playing" title="Playing" aria-hidden>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <path d="M8 5.5v13c0 .8.9 1.3 1.6.9l10.2-6.5a1 1 0 0 0 0-1.8L9.6 4.6C8.9 4.2 8 4.7 8 5.5z" />
+      </svg>
+    </span>
+  );
+}
+
 interface Props {
   meetings: MeetingSummary[];
   /// False during the very first /api/meetings fetch — drives the
@@ -29,6 +40,9 @@ interface Props {
   /// first response arrives.
   loaded: boolean;
   activeId: string | null;
+  /// Meeting whose audio is currently playing — gets a red play glyph
+  /// next to its title so it's obvious where the sound comes from.
+  playingId?: string | null;
   query: string;
   onQueryChange: (q: string) => void;
   onSelect: (id: string) => void;
@@ -46,9 +60,11 @@ interface Props {
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
+export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; value: string } | null>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const sidebarRef = React.useRef<HTMLElement>(null);
 
   const commitRename = async () => {
     if (!editing) return;
@@ -104,7 +120,7 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
   }, [filtered, lang, t]);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" ref={sidebarRef}>
       <div className="sidebar-titlebar-pad" />
       <div className="sidebar-search">
         <div className="search-field">
@@ -117,7 +133,7 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
           />
         </div>
       </div>
-      <div className="sidebar-list">
+      <div className="sidebar-list ovsb-scroll" ref={listRef}>
         {!loaded && (
           <div className="sidebar-skeleton" aria-hidden>
             {Array.from({ length: 5 }).map((_, i) => (
@@ -168,18 +184,15 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
                       onBlur={commitRename}
                     />
                   ) : (
-                    <>
-                      <div className="meeting-title">
-                        {titled || formatDate(m.started_at, lang)}
-                      </div>
-                      {m.pinned && <span className="pin-dot" aria-hidden />}
-                    </>
+                    <div className="meeting-title">
+                      {titled || formatDate(m.started_at, lang)}
+                    </div>
                   )}
+                  {m.id === playingId && <PlayingIcon />}
                 </div>
                 <div className="meeting-meta">
                   <span className={`status-dot ${m.status}`} />
                   {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
-                  <span className="meeting-date">{formatClock(m.started_at)}</span>
                   {m.status !== "ready" && <span>· {statusLabel(m.status, t)}</span>}
                   {m.speaker_count > 0 && (
                     <span className="meeting-people" title={t.participants(m.speaker_count)}>
@@ -196,6 +209,7 @@ export function Sidebar({ meetings, loaded, activeId, query, onQueryChange, onSe
         ))}
         <div className="sidebar-list-spacer" />
       </div>
+      <OverlayScrollbar scrollRef={listRef} dividerRef={sidebarRef} name="corder-sb-list" />
       {menu && (
         <ContextMenu
           x={menu.x}

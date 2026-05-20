@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import Swifter
+import AppKit
 
 enum Routes {
     static func register(server: HttpServer, repo: MeetingRepository) {
@@ -56,6 +57,10 @@ enum Routes {
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
+        server.get["/api/installed-apps"] = { _ in installedAppsGet() }
+        server.get["/api/app-icon/:bundle"] = { req in
+            appIcon(bundle: req.params[":bundle"] ?? "")
+        }
         server.delete["/api/meetings/:id"] = { req in
             deleteMeeting(id: req.params[":id"] ?? "", repo: repo)
         }
@@ -82,8 +87,43 @@ enum Routes {
 
     // MARK: static
 
+    /// Web-assets root, resolved from `Bundle.main` — NOT the
+    /// SwiftPM-generated `Bundle.module`.
+    ///
+    /// `Bundle.module`'s accessor calls `fatalError` when it can't find
+    /// `Corder_Corder.bundle`. Its candidate list is baked at compile
+    /// time and includes the dev machine's `.build/release/` path, so a
+    /// miss is invisible locally but a HARD CRASH on any other Mac — the
+    /// friend's "open Library → SIGTRAP" was exactly this: the first
+    /// HTTP request from the WKWebView hit `Bundle.module` init →
+    /// assertionFailure. In a packaged .app the resource bundle lives at
+    /// `Contents/Resources/Corder_Corder.bundle` (put there by
+    /// build-app.sh), which `Bundle.main.resourceURL` points straight
+    /// at. Resolve from there; on a genuine miss serve a clean 404
+    /// instead of trapping the whole process.
+    private static let webRootURL: URL? = {
+        let fm = FileManager.default
+        var candidates: [URL] = []
+        if let res = Bundle.main.resourceURL {
+            candidates.append(res.appendingPathComponent("Corder_Corder.bundle"))
+        }
+        candidates.append(Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Resources/Corder_Corder.bundle"))
+        if let exeDir = Bundle.main.executableURL?.deletingLastPathComponent() {
+            candidates.append(exeDir.appendingPathComponent("Corder_Corder.bundle"))
+        }
+        for bundle in candidates {
+            let web = bundle.appendingPathComponent("web", isDirectory: true)
+            if fm.fileExists(atPath: web.appendingPathComponent("index.html").path) {
+                return web
+            }
+        }
+        FileLogger.log("Routes: web assets not found in any Bundle.main candidate — serving 404 (resource bundle missing from .app)")
+        return nil
+    }()
+
     private static func serveIndex() -> HttpResponse {
-        guard let url = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "web"),
+        guard let url = webRootURL?.appendingPathComponent("index.html"),
               let data = try? Data(contentsOf: url) else {
             return .notFound
         }
@@ -93,7 +133,7 @@ enum Routes {
     }
 
     private static func serveAsset(path: String) -> HttpResponse {
-        let webRoot = Bundle.module.bundleURL.appendingPathComponent("web", isDirectory: true)
+        guard let webRoot = webRootURL else { return .notFound }
         let target = webRoot.appendingPathComponent("assets").appendingPathComponent(path)
         guard let data = try? Data(contentsOf: target) else { return .notFound }
         let mime = mimeType(for: target.pathExtension)
@@ -331,17 +371,148 @@ enum Routes {
         ("~/.config/corder/gemini_key" as NSString).expandingTildeInPath
     }
 
+    private static let kbNames: [Int: String] = [
+        0:"A",1:"S",2:"D",3:"F",4:"H",5:"G",6:"Z",7:"X",8:"C",9:"V",
+        11:"B",12:"Q",13:"W",14:"E",15:"R",16:"Y",17:"T",
+        18:"1",19:"2",20:"3",21:"4",22:"6",23:"5",25:"9",26:"7",28:"8",29:"0",
+        31:"O",32:"U",34:"I",35:"P",37:"L",38:"J",40:"K",45:"N",46:"M",
+        36:"↩",48:"⇥",49:"Space",53:"Esc",
+        122:"F1",120:"F2",99:"F3",118:"F4",96:"F5",97:"F6",98:"F7",100:"F8",
+        101:"F9",109:"F10",103:"F11",111:"F12",
+        123:"←",124:"→",125:"↓",126:"↑",
+    ]
+
+    /// Carbon mods mask + key code → "⌃⌥⇧⌘F"-style label.
+    private static func hotkeyLabel(code: Int, mods: Int) -> String {
+        var s = ""
+        if mods & 4096 != 0 { s += "⌃" }
+        if mods & 2048 != 0 { s += "⌥" }
+        if mods & 512  != 0 { s += "⇧" }
+        if mods & 256  != 0 { s += "⌘" }
+        s += kbNames[code] ?? "Key\(code)"
+        return s
+    }
+
+    /// Curated table of well-known macOS *system* shortcuts. We can't
+    /// detect a clashing third-party app (no OS API for that) — the UI
+    /// says so — but the stock ones are stable and worth warning about.
+    private static func hotkeyConflict(code: Int, mods: Int) -> String? {
+        switch (mods, code) {
+        case (256, 49):   return "Spotlight (⌘Space)"
+        case (4096, 49):  return "Input source (⌃Space)"
+        case (768, 20):   return "Screenshot (⌘⇧3)"
+        case (768, 21):   return "Screenshot (⌘⇧4)"
+        case (768, 23):   return "Screenshot (⌘⇧5)"
+        case (256, 48):   return "App switcher (⌘⇥)"
+        case (4096, 126): return "Mission Control (⌃↑)"
+        case (4096, 123): return "Move a space left (⌃←)"
+        case (4096, 124): return "Move a space right (⌃→)"
+        case (4352, 12):  return "Lock screen (⌃⌘Q)"
+        default:          return nil
+        }
+    }
+
     private static func currentSettings() -> DTO.Settings {
         DTO.Settings(
             language: AppLanguage.current,
             vocabulary: AppVocabulary.current,
             gemini_key: nil,        // never echo the key back
-            gemini_key_set: FileManager.default.fileExists(atPath: geminiKeyPath)
+            gemini_key_set: FileManager.default.fileExists(atPath: geminiKeyPath),
+            notifications: AppSettings.notificationsEnabled,
+            capture_video: AppSettings.captureVideo,
+            capture_audio: AppSettings.captureAudio,
+            auto_transcribe: AppSettings.autoTranscribe,
+            auto_title: AppSettings.autoTitle,
+            meeting_whitelist: AppSettings.meetingWhitelist,
+            meeting_blacklist: AppSettings.meetingBlacklist,
+            detected_mic_apps: MicAppsSnapshot.read(),
+            record_hotkey_code: AppSettings.recordHotkeyKeyCode,
+            record_hotkey_mods: AppSettings.recordHotkeyModifiers,
+            record_hotkey_label: hotkeyLabel(
+                code: AppSettings.recordHotkeyKeyCode,
+                mods: AppSettings.recordHotkeyModifiers),
+            record_hotkey_conflict: hotkeyConflict(
+                code: AppSettings.recordHotkeyKeyCode,
+                mods: AppSettings.recordHotkeyModifiers),
+            record_hotkey_ok: HotkeyStatusSnapshot.read()
         )
     }
 
     private static func settingsGet() -> HttpResponse {
         return jsonResponse(currentSettings())
+    }
+
+    /// Installed apps for the Settings picker. Scans the usual app
+    /// roots, reads each bundle's id + display name, dedups, and floats
+    /// apps Corder recently saw on the mic to the top. Best-effort and
+    /// off-main (Swifter thread) — purely UI sugar, never blocks core.
+    private static func installedAppsGet() -> HttpResponse {
+        let fm = FileManager.default
+        let roots = [
+            "/Applications",
+            "/Applications/Utilities",
+            "/System/Applications",
+            "/System/Applications/Utilities",
+            (NSHomeDirectory() as NSString).appendingPathComponent("Applications"),
+        ]
+        var byBundle: [String: String] = [:]   // bundle → display name
+        for root in roots {
+            guard let entries = try? fm.contentsOfDirectory(atPath: root) else { continue }
+            for e in entries where e.hasSuffix(".app") {
+                let url = URL(fileURLWithPath: root).appendingPathComponent(e)
+                guard let b = Bundle(url: url),
+                      let id = b.bundleIdentifier, !id.isEmpty else { continue }
+                if byBundle[id] != nil { continue }
+                let info = b.infoDictionary
+                let name = (info?["CFBundleDisplayName"] as? String)
+                    ?? (info?["CFBundleName"] as? String)
+                    ?? (e as NSString).deletingPathExtension
+                byBundle[id] = name
+            }
+        }
+        let recent = Set(MicAppsSnapshot.read())
+        let apps = byBundle
+            .map { DTO.InstalledApp(bundle: $0.key, name: $0.value,
+                                    recent: recent.contains($0.key)) }
+            .sorted {
+                if $0.recent != $1.recent { return $0.recent && !$1.recent }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        return jsonResponse(apps)
+    }
+
+    /// 64-pt PNG icon for one bundle id, for the picker / list rows.
+    /// Browser-cacheable; 404 when the app isn't resolvable.
+    private static func appIcon(bundle: String) -> HttpResponse {
+        guard !bundle.isEmpty,
+              let appURL = NSWorkspace.shared
+                .urlForApplication(withBundleIdentifier: bundle)
+        else { return .notFound }
+        return autoreleasepool { () -> HttpResponse in
+            // Rasterise to a fixed 64 px bitmap. (icon.tiffRepresentation
+            // hands back the full multi-resolution icon — up to 1024 px,
+            // ~1.4 MB each — far too heavy for a list of rows.)
+            let px = 64
+            let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+            guard let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0)
+            else { return .notFound }
+            rep.size = NSSize(width: px, height: px)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            icon.draw(in: NSRect(x: 0, y: 0, width: px, height: px),
+                      from: .zero, operation: .copy, fraction: 1.0)
+            NSGraphicsContext.restoreGraphicsState()
+            guard let png = rep.representation(using: .png, properties: [:])
+            else { return .notFound }
+            return .raw(200, "OK", [
+                "Content-Type": "image/png",
+                "Cache-Control": "max-age=86400",
+            ]) { try $0.write(png) }
+        }
     }
 
     private static func settingsSet(req: HttpRequest) -> HttpResponse {
@@ -370,7 +541,29 @@ enum Routes {
                 try? FileManager.default.setAttributes(
                     [.posixPermissions: 0o600], ofItemAtPath: path)
             }
-            FileLogger.log("settings: language=\(parsed.language ?? "nil") vocab=\(parsed.vocabulary != nil) keySet=\(parsed.gemini_key != nil)")
+            // Functional toggles + app lists. Absent field ⇒ unchanged
+            // (a stale frontend can never silently flip a new toggle).
+            if let v = parsed.notifications    { AppSettings.setNotifications(v) }
+            if let v = parsed.capture_video    { AppSettings.setCaptureVideo(v) }
+            if let v = parsed.capture_audio    { AppSettings.setCaptureAudio(v) }
+            if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }
+            if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
+            if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
+            if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
+            if let c = parsed.record_hotkey_code, let m = parsed.record_hotkey_mods {
+                AppSettings.setRecordHotkey(code: c, mods: m)
+                // Carbon registration must happen on the main run loop.
+                // record_hotkey_ok in this response may still reflect
+                // the previous binding (the re-register is async); the
+                // client re-fetches shortly to get the authoritative
+                // value. The conflict label is computed synchronously
+                // from the table so it's already correct here.
+                Task { @MainActor in
+                    HotkeyManager.shared.register(
+                        keyCode: UInt32(c), modifiers: UInt32(m))
+                }
+            }
+            FileLogger.log("settings: language=\(parsed.language ?? "nil") vocab=\(parsed.vocabulary != nil) keySet=\(parsed.gemini_key != nil) toggles[n=\(parsed.notifications.map(String.init) ?? "-"),v=\(parsed.capture_video.map(String.init) ?? "-"),a=\(parsed.capture_audio.map(String.init) ?? "-"),at=\(parsed.auto_transcribe.map(String.init) ?? "-"),ti=\(parsed.auto_title.map(String.init) ?? "-")] wl=\(parsed.meeting_whitelist?.count ?? -1) bl=\(parsed.meeting_blacklist?.count ?? -1)")
             return jsonResponse(currentSettings())
         } catch {
             return .badRequest(.text("\(error)"))

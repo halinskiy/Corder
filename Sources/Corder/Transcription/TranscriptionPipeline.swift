@@ -109,7 +109,51 @@ final class TranscriptionPipeline {
             //    before this code shipped.
             let dir = AppPaths.recordingDir(for: meetingId)
             let micURL = URL(fileURLWithPath: meeting.audioPath)
-            let systemURL = dir.appendingPathComponent("system.wav")
+            // System track has TWO possible sources, with opposite
+            // failure modes:
+            //  • system.wav     — Core Audio process tap. Captures
+            //    real-call/VPIO audio, but is SILENT when the output
+            //    route is Bluetooth (AirPods / BT headset).
+            //  • system_sck.wav — ScreenCaptureKit audio. Survives BT
+            //    output, but is silent on VPIO calls.
+            // Choose between the two system tracks by ACTUAL speech
+            // energy, not a binary "tap fully silent" gate. The old gate
+            // only swapped to SCK when the tap had ZERO voiced windows —
+            // but on a Bluetooth output route the Core-Audio tap records
+            // a faint, attenuated bleed (not true silence), so the gate
+            // never tripped and the user got the garbled tap while the
+            // clean SCK backup was thrown away. Now: on a BT route (flag
+            // persisted at record time) the SCK track is authoritative
+            // whenever it has real speech; otherwise SCK wins only when
+            // it has materially MORE voiced speech than the tap — so a
+            // real VPIO call (SCK digitally silent) still keeps the tap.
+            // Near-tie / read-error → tap (historical default, never
+            // regresses a good non-BT capture).
+            let tapSystemURL = dir.appendingPathComponent("system.wav")
+            let sckSystemURL = dir.appendingPathComponent("system_sck.wav")
+            let systemURL: URL = {
+                let tapExists = FileManager.default.fileExists(atPath: tapSystemURL.path)
+                let sckExists = FileManager.default.fileExists(atPath: sckSystemURL.path)
+                guard sckExists else { return tapSystemURL }
+                guard tapExists else {
+                    FileLogger.log("transcribe(): no tap system.wav — using system_sck.wav")
+                    return sckSystemURL
+                }
+                guard let tap = VoiceActivityDetector.voicedEnergy(audioURL: tapSystemURL),
+                      let sck = VoiceActivityDetector.voicedEnergy(audioURL: sckSystemURL)
+                else { return tapSystemURL }
+                let btAtStart = meeting.outputBluetoothAtStart ?? false
+                let sckHasSpeech = sck.voicedMs >= 1500
+                if btAtStart && sckHasSpeech {
+                    FileLogger.log("transcribe(): BT output at record start → system_sck.wav (tap voiced=\(tap.voicedMs)ms rms=\(tap.meanRMS) | sck voiced=\(sck.voicedMs)ms rms=\(sck.meanRMS))")
+                    return sckSystemURL
+                }
+                if sckHasSpeech && sck.voicedMs >= max(tap.voicedMs, 1) * 3 / 2 + 500 {
+                    FileLogger.log("transcribe(): system_sck.wav dominates (\(sck.voicedMs)ms vs tap \(tap.voicedMs)ms) → using it")
+                    return sckSystemURL
+                }
+                return tapSystemURL
+            }()
             let mixURL = dir.appendingPathComponent("audio.wav")
 
             let micExists = FileManager.default.fileExists(atPath: micURL.path)
@@ -189,7 +233,14 @@ final class TranscriptionPipeline {
                 // Gemini-diarized turns.
                 let mh = (try? Self.md5OfFile(at: micURL)) ?? ""
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
-                cacheKey = "inperson:v2:\(ex):\(mh)"
+                // v3: truncated Gemini chunks now force a split instead
+                // of salvaging a partial, so the raw turn set (and its
+                // timestamps) differ from any v2 cache.
+                // v10: the system-track chooser may now select a
+                // different raw audio source than the old "tap silent"
+                // gate did, so any v9-cached turns can be stale — bump
+                // to force a clean re-transcribe.
+                cacheKey = "inperson:v10:\(ex):\(mh)"
             } else if canDualTrack {
                 // v2 + the other-speaker count: system.wav is now
                 // diarized on-device with numSpeakers = expectedOther,
@@ -197,7 +248,7 @@ final class TranscriptionPipeline {
                 let mh = (try? Self.md5OfFile(at: micURL)) ?? ""
                 let sh = (try? Self.md5OfFile(at: systemURL)) ?? ""
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
-                cacheKey = "dual:v2:\(ex):\(mh):\(sh)"
+                cacheKey = "dual:v10:\(ex):\(mh):\(sh)"
             } else {
                 if !FileManager.default.fileExists(atPath: mixURL.path),
                    let remote = meeting.dropboxAudioPath {
@@ -207,11 +258,20 @@ final class TranscriptionPipeline {
                 cacheKey = "mix:" + ((try? Self.md5OfFile(at: mixURL)) ?? "")
             }
 
-            var userTurns: [GeminiTranscriber.Turn] = []
-            var otherTurns: [GeminiTranscriber.Turn] = []
+            // RAW Gemini text turns (the only thing a Gemini call buys).
+            // WHEN/WHO is re-derived on-device from these every run, so a
+            // cached raw set means timing can be fixed/iterated with ZERO
+            // Gemini calls — and any cached meeting recovers for free.
+            var rawUserTurns: [GeminiTranscriber.Turn] = []
+            var rawOtherTurns: [GeminiTranscriber.Turn] = []
             var legacyTurns: [GeminiTranscriber.Turn] = []
+            // Last-derived finals from cache: only used as a no-regression
+            // fallback when the source wavs are gone so on-device
+            // re-derivation is impossible.
+            var cachedFinalUser: [GeminiTranscriber.Turn] = []
+            var cachedFinalOther: [GeminiTranscriber.Turn] = []
             var cachedUserLabel: String? = nil
-            var cacheHit = false
+            var haveRaw = false                 // raw cached → no Gemini
             var usingDualTrack = canDualTrack
 
             if let cachedJSON = meeting.geminiRawTurns,
@@ -221,75 +281,56 @@ final class TranscriptionPipeline {
                let data = cachedJSON.data(using: .utf8),
                let bundle = try? JSONDecoder().decode(CachedTranscript.self, from: data) {
                 if bundle.isDualTrack {
-                    userTurns = bundle.userTurns ?? []
-                    otherTurns = bundle.otherTurns ?? []
-                    cacheHit = !userTurns.isEmpty || !otherTurns.isEmpty
+                    // New records carry rawUser/rawOther explicitly. Older
+                    // v9 records only stored the FINAL (timed) turns — but
+                    // relabel/alignByTokens never touch `.text`, so those
+                    // finals' text+order ARE the raw Gemini turns. Either
+                    // way the cached times are discarded: we re-derive
+                    // WHEN/WHO on-device below.
+                    rawUserTurns  = bundle.rawUserTurns  ?? bundle.userTurns  ?? []
+                    rawOtherTurns = bundle.rawOtherTurns ?? bundle.otherTurns ?? []
+                    cachedFinalUser  = bundle.userTurns  ?? []
+                    cachedFinalOther = bundle.otherTurns ?? []
+                    haveRaw = !rawUserTurns.isEmpty || !rawOtherTurns.isEmpty
                     usingDualTrack = true
                 } else if let legacy = bundle.turns, !legacy.isEmpty {
                     legacyTurns = legacy
                     cachedUserLabel = bundle.userLabel
-                    cacheHit = true
+                    haveRaw = true
                     usingDualTrack = false
                 }
             }
 
-            if cacheHit {
-                if usingDualTrack {
-                    FileLogger.log("transcribe(): cache hit — \(userTurns.count) user turns + \(otherTurns.count) other turns, skipping Gemini API")
-                } else {
-                    FileLogger.log("transcribe(): cache hit — \(legacyTurns.count) legacy turns, skipping Gemini API")
-                }
+            if haveRaw {
+                FileLogger.log("transcribe(): cache hit (raw turns) — re-deriving timing on-device, no Gemini")
             } else if canDualTrack || micOnly {
-                // call-vs-in-person was already decided above
-                // (`systemSilent`, reused here so the cache key and the
-                // path can't disagree):
-                //  • real call  → mic = you (.single), system = others
-                //  • in-person  → everyone on the mic, diarize it
+                // call-vs-in-person decided above via `systemSilent`.
                 if !systemSilent {
-                    // Real call. mic.wav is you (single, no diarization
-                    // needed — it's one person by construction).
-                    // system.wav is the remote side: diarize-first
-                    // (FluidAudio decides WHO with a hard speaker count,
-                    // Gemini .single decides WHAT). The remote count is
-                    // expectedOtherSpeakers exactly — "you" are on mic,
-                    // not in system.wav.
-                    FileLogger.log("transcribe(): dual-track — mic .single + system diarize-first")
+                    // Real call. mic.wav = you, system.wav = remote. Only
+                    // the Gemini .single text is fetched here (WHAT);
+                    // WHEN/WHO is the on-device re-derive step below.
+                    FileLogger.log("transcribe(): dual-track — Gemini .single on mic + system (raw text only)")
                     do {
-                        async let micPart = GeminiTranscriber.transcribe(audioURL: micURL, mode: .single)
-                        async let sysPart = diarizeFirst(
-                            wavURL: systemURL,
-                            numSpeakers: meeting.expectedOtherSpeakers,
-                            singlePass: false,
-                            meetingId: meetingId)
+                        async let micPart = geminiRawTurns(wavURL: micURL, meetingId: meetingId)
+                        async let sysPart = geminiRawTurns(wavURL: systemURL, meetingId: meetingId)
                         let (u, o) = try await (micPart, sysPart)
-                        userTurns = u
-                        otherTurns = o
+                        rawUserTurns = u
+                        rawOtherTurns = o
                     } catch let err as GeminiTranscriber.GError {
                         TranscriptionErrors.record(meetingId: meetingId,
                                                    message: err.localizedDescription)
                         throw err
                     }
-                    FileLogger.log("transcribe(): dual-track done — \(userTurns.count) user / \(otherTurns.count) other")
+                    usingDualTrack = true
                 } else {
-                    // In-person: everyone (incl. the device owner) is on
-                    // the one mic. Diarize-first over mic.wav — FluidAudio
-                    // gives globally-stable labels with the room headcount
-                    // as a hard constraint (total = expectedOtherSpeakers
-                    // + 1, since the clarify banner stores total−1). No
-                    // dedicated "you" track, so every turn goes through
-                    // the "other" bucket and mapInPersonTurns numbers
-                    // them Speaker 1, 2, ….
+                    // In-person: everyone on the one mic. One Gemini
+                    // .single pass over mic.wav for the text; the room
+                    // headcount drives the on-device diarizer below.
                     let why = micOnly ? "no system.wav (mic-only)" : "system.wav has no speech"
-                    let roomSize = meeting.expectedOtherSpeakers.map { $0 + 1 }
-                    FileLogger.log("transcribe(): \(why) — in-person diarize-first on mic.wav (rooms=\(roomSize.map(String.init) ?? "auto"))")
-                    usingDualTrack = true   // map via mapDualTrackTurns
-                    otherTurns = try await diarizeFirst(
-                        wavURL: micURL,
-                        numSpeakers: roomSize,
-                        singlePass: true,
-                        meetingId: meetingId)
-                    userTurns = []
-                    FileLogger.log("transcribe(): in-person done — \(otherTurns.count) turns from mic.wav")
+                    FileLogger.log("transcribe(): \(why) — in-person Gemini .single on mic.wav (raw text only)")
+                    usingDualTrack = true
+                    rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
+                    rawUserTurns = []
                 }
             } else {
                 FileLogger.log("transcribe(): legacy single-stream (no mic+system on disk) — falling back to mix")
@@ -300,6 +341,55 @@ final class TranscriptionPipeline {
                                                message: err.localizedDescription)
                     throw err
                 }
+                usingDualTrack = false
+            }
+
+            try Task.checkCancellation()
+
+            // Re-derive WHEN/WHO from the raw Gemini text using the
+            // on-device forced-aligner + diarizer over the FULL
+            // uncompressed wav. Free + deterministic, so it runs every
+            // time — that's what lets the timing logic be fixed without
+            // ever re-spending a Gemini call. Legacy single-stream keeps
+            // Gemini's own diarization (no diarize-first), so it skips
+            // this and uses legacyTurns as-is.
+            var userTurns: [GeminiTranscriber.Turn] = []
+            var otherTurns: [GeminiTranscriber.Turn] = []
+            if usingDualTrack {
+                let roomSize = meeting.expectedOtherSpeakers.map { $0 + 1 }
+                // Immutable copy — captured by the parallel `async let`s
+                // (a captured `var` is a Swift 6 concurrency error).
+                let geminiFallback = !haveRaw
+                if systemSilent {
+                    // In-person: every turn through the "other" bucket.
+                    otherTurns = try await applyTiming(
+                        rawTurns: rawOtherTurns, wavURL: micURL,
+                        numSpeakers: roomSize, singlePass: true,
+                        allowGeminiFallback: geminiFallback, meetingId: meetingId)
+                    if otherTurns.isEmpty { otherTurns = cachedFinalOther }
+                    userTurns = []
+                } else {
+                    // Immutable copies — the parallel `async let`s
+                    // capture these (a captured `var` is a Swift 6
+                    // concurrency error).
+                    let rawU = rawUserTurns
+                    let rawO = rawOtherTurns
+                    let expectedOther = meeting.expectedOtherSpeakers
+                    async let uT = applyTiming(
+                        rawTurns: rawU, wavURL: micURL,
+                        numSpeakers: 1, singlePass: false,
+                        allowGeminiFallback: geminiFallback, meetingId: meetingId)
+                    async let oT = applyTiming(
+                        rawTurns: rawO, wavURL: systemURL,
+                        numSpeakers: expectedOther, singlePass: false,
+                        allowGeminiFallback: geminiFallback, meetingId: meetingId)
+                    var (u, o) = try await (uT, oT)
+                    if u.isEmpty { u = cachedFinalUser }
+                    if o.isEmpty { o = cachedFinalOther }
+                    userTurns = u
+                    otherTurns = o
+                }
+                FileLogger.log("transcribe(): timing re-derived — \(userTurns.count) user / \(otherTurns.count) other")
             }
 
             try Task.checkCancellation()
@@ -348,27 +438,32 @@ final class TranscriptionPipeline {
                 )
             }
 
-            // Persist cache only after a successful map. Use the
-            // targeted setRawTurnsCache helper rather than updateMeeting:
-            // the local `meeting` copy still has status=.transcribing
-            // (set above on line 80) while mapping just flipped the DB
-            // to .ready, and round-tripping the stale local copy through
-            // updateMeeting would silently revert that.
-            if !cacheHit {
+            // Persist ALWAYS (not just on a miss): a cache HIT still
+            // re-writes the bundle so old v9 records gain the explicit
+            // raw* fields (migration) and the freshly re-derived finals
+            // are kept as the no-audio fallback. Use the targeted
+            // setRawTurnsCache helper rather than updateMeeting: the
+            // local `meeting` copy still has status=.transcribing while
+            // mapping just flipped the DB to .ready, and round-tripping
+            // the stale local copy through updateMeeting would revert it.
+            do {
                 let bundle: CachedTranscript
                 if usingDualTrack {
                     bundle = CachedTranscript(userLabel: nil, turns: nil,
-                                              userTurns: userTurns, otherTurns: otherTurns)
+                                              userTurns: userTurns, otherTurns: otherTurns,
+                                              rawUserTurns: rawUserTurns,
+                                              rawOtherTurns: rawOtherTurns)
                 } else {
                     bundle = CachedTranscript(userLabel: chosenUserLabel, turns: legacyTurns,
-                                              userTurns: nil, otherTurns: nil)
+                                              userTurns: nil, otherTurns: nil,
+                                              rawUserTurns: nil, rawOtherTurns: nil)
                 }
                 if let raw = try? JSONEncoder().encode(bundle),
                    let json = String(data: raw, encoding: .utf8) {
                     try? repo.setRawTurnsCache(meetingId: meetingId,
                                                geminiRawTurns: json,
                                                audioHash: cacheKey)
-                    FileLogger.log("transcribe(): cached \(usingDualTrack ? "dual-track" : "legacy") turns + audio_hash")
+                    FileLogger.log("transcribe(): cached raw+final turns + audio_hash")
                 }
             }
 
@@ -383,7 +478,8 @@ final class TranscriptionPipeline {
             //      yet, so a re-transcribe of an already-named meeting
             //      doesn't re-bill or churn the name. Targeted write so
             //      it can't clobber status.
-            if meeting.status == .ready,
+            if AppSettings.autoTitle,
+               meeting.status == .ready,
                (meeting.title?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
                 let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
                 let spks = (try? repo.speakers(forMeeting: meetingId)) ?? []
@@ -574,8 +670,70 @@ final class TranscriptionPipeline {
     /// guesswork — because each input was a single source. The
     /// `expectedOtherSpeakers == 0` ("Just me") clarify still works:
     /// we just drop everything from system.wav onto the user.
+    /// Cross-track acoustic-echo filter. When the user records without
+    /// headphones, whatever plays out the speakers (a call's far end, a
+    /// video) is captured CLEAN by the Core-Audio process tap
+    /// (`system.wav`) AND a second, degraded time by the microphone
+    /// (`mic.wav`) as speaker→mic bleed. Both get transcribed, so every
+    /// sentence appears twice — once as "Speaker 2", once as "you" —
+    /// the duplicated transcript the user hit while testing with a
+    /// video. The tap is the true source; the mic copy is a delayed,
+    /// lower-quality echo. So drop any mic turn whose words are largely
+    /// contained in the system speech around the same time.
+    ///
+    /// Conservative by construction so it never fires in a real
+    /// headphone meeting (where the mic has none of the system audio):
+    /// only multi-word mic turns are judged, only against substantial
+    /// nearby system speech, and only dropped at ≥66 % word coverage.
+    /// Short backchannels ("да", "ну понятно") are always kept, so
+    /// genuine overlapping conversation is unaffected.
+    private static func echoFiltered(
+        userTurns: [GeminiTranscriber.Turn],
+        otherTurns: [GeminiTranscriber.Turn]
+    ) -> [GeminiTranscriber.Turn] {
+        guard !userTurns.isEmpty, !otherTurns.isEmpty else { return userTurns }
+
+        func words(_ s: String) -> [String] {
+            s.lowercased()
+                .split { !CharacterSet.alphanumerics.contains($0.unicodeScalars.first!) }
+                .map(String.init)
+        }
+
+        let others = otherTurns.map {
+            (start: $0.startMs, end: $0.endMs, w: Set(words($0.text)))
+        }
+        // Generous slack: acoustic delay is tiny, but Gemini's turn
+        // boundaries are coarse and the two tracks segment independently.
+        let slackMs: Int64 = 4000
+
+        var kept: [GeminiTranscriber.Turn] = []
+        var dropped = 0
+        for u in userTurns {
+            let uw = Set(words(u.text))
+            // Too short to attribute confidently → always keep.
+            guard uw.count >= 5 else { kept.append(u); continue }
+
+            var nearby = Set<String>()
+            for o in others where u.startMs <= o.end + slackMs && o.start <= u.endMs + slackMs {
+                nearby.formUnion(o.w)
+            }
+            guard nearby.count >= 5 else { kept.append(u); continue }
+
+            let common = uw.filter { nearby.contains($0) }.count
+            if Double(common) / Double(uw.count) >= 0.66 {
+                dropped += 1
+            } else {
+                kept.append(u)
+            }
+        }
+        if dropped > 0 {
+            FileLogger.log("mapDual: echo-filter dropped \(dropped)/\(userTurns.count) mic turns (speaker→mic bleed of system audio)")
+        }
+        return kept
+    }
+
     private func mapDualTrackTurns(meetingId: String, meeting: Meeting,
-                                   userTurns: [GeminiTranscriber.Turn],
+                                   userTurns rawUserTurns: [GeminiTranscriber.Turn],
                                    otherTurns: [GeminiTranscriber.Turn],
                                    inPerson: Bool = false,
                                    repo: MeetingRepository) throws {
@@ -597,6 +755,15 @@ final class TranscriptionPipeline {
                                  turns: otherTurns, repo: repo)
             return
         }
+
+        // Strip speaker→mic echo BEFORE anything keys off the mic track.
+        // If the whole mic was just bleed of the system audio this comes
+        // back empty, so `userHasContent` is false and no ghost
+        // "Speaker 1 / you" row is created (which would also skew the
+        // clarify banner). The rest of the function is unchanged — it
+        // just sees the cleaned mic turns under the same name.
+        let userTurns = Self.echoFiltered(userTurns: rawUserTurns,
+                                          otherTurns: otherTurns)
 
         let userSpeakerId = "\(meetingId)-you"
         let collapseAll = (meeting.expectedOtherSpeakers == 0)
@@ -821,32 +988,62 @@ final class TranscriptionPipeline {
     /// error), we drop back to Gemini's own `.diarize` so a meeting
     /// never hard-fails worse than the pre-FluidAudio behaviour. A
     /// Gemini ASR/quota/network error is a real failure and propagates.
-    private func diarizeFirst(wavURL: URL,
-                              numSpeakers: Int?,
-                              singlePass: Bool,
-                              meetingId: String) async throws -> [GeminiTranscriber.Turn] {
-        // ASR is ALWAYS chunked (singlePass:false). singlePass existed
-        // only to keep Gemini's own diarization labels consistent across
-        // chunk boundaries — but FluidAudio owns the labels now, so the
-        // `.single` ASR pass doesn't care. Chunking is what keeps a long
-        // in-person recording (e.g. 7 min → one 374 s call) from
-        // timing out mid-generate and hard-failing the whole meeting
-        // (the "Transcription failed" the user kept hitting). singlePass
-        // is still honoured for the no-FluidAudio `.diarize` fallback.
-        async let asrTask = GeminiTranscriber.transcribe(
-            audioURL: wavURL, mode: .single, singlePass: false)
+    /// The expensive half: the Gemini `.single` ASR call. Returns
+    /// Gemini's raw text turns — its own per-chunk timestamps ride on the
+    /// struct but are NOT trusted (`applyTiming` overwrites them). This is
+    /// the ONLY part that costs a network/quota round-trip, so it's
+    /// cached and skipped on every subsequent run. ASR is always chunked
+    /// so a long recording can't time out mid-generate and hard-fail.
+    private func geminiRawTurns(wavURL: URL,
+                                meetingId: String) async throws -> [GeminiTranscriber.Turn] {
+        do {
+            return try await GeminiTranscriber.transcribe(
+                audioURL: wavURL, mode: .single, singlePass: false)
+        } catch let err as GeminiTranscriber.GError {
+            TranscriptionErrors.record(meetingId: meetingId,
+                                       message: err.localizedDescription)
+            throw err
+        }
+    }
+
+    /// The free, deterministic half: lay Gemini's raw text onto a real
+    /// timeline using the on-device speaker diarizer over the FULL
+    /// uncompressed wav. Re-runnable offline on every transcribe — that's
+    /// what lets the timing logic be fixed/iterated without ever
+    /// re-spending a Gemini call, and what recovers any cached meeting
+    /// for free.
+    ///
+    /// Step 2: known-good PROPORTIONAL placement (`relabel`) — the
+    /// validated v8 behaviour the karaoke highlight tracks correctly.
+    /// The on-device forced-aligner (`alignByTokens`) is being reworked
+    /// (Step 3) and is intentionally not wired here yet.
+    ///
+    /// Returns `[]` when on-device diarization is unavailable and a
+    /// Gemini fallback isn't allowed (cache-hit re-derive must stay
+    /// offline) — the caller then keeps the last-derived cached finals
+    /// so timing never regresses. On a true miss (`allowGeminiFallback`)
+    /// it falls back to a Gemini `.diarize` pass exactly like before.
+    private func applyTiming(rawTurns: [GeminiTranscriber.Turn],
+                             wavURL: URL,
+                             numSpeakers: Int?,
+                             singlePass: Bool,
+                             allowGeminiFallback: Bool,
+                             meetingId: String) async throws -> [GeminiTranscriber.Turn] {
+        guard !rawTurns.isEmpty else { return [] }
 
         var diarSegs: [DiarizedSegment] = []
         do {
             diarSegs = try await SpeakerDiarizer.shared.diarize(
                 wavURL: wavURL, numSpeakers: numSpeakers)
         } catch {
-            FileLogger.log("diarizeFirst: on-device diarization unavailable (\(error)) — Gemini .diarize fallback")
+            FileLogger.log("applyTiming: on-device diarization unavailable (\(error))")
         }
 
         if diarSegs.isEmpty {
-            // No usable diarization → discard the .single ASR and let
-            // Gemini both transcribe AND label in one call (old path).
+            guard allowGeminiFallback else {
+                FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — no on-device diarization, offline re-derive → caller keeps cached finals")
+                return []
+            }
             do {
                 return try await GeminiTranscriber.transcribe(
                     audioURL: wavURL, mode: .diarize,
@@ -858,48 +1055,230 @@ final class TranscriptionPipeline {
             }
         }
 
-        let asrTurns: [GeminiTranscriber.Turn]
-        do {
-            asrTurns = try await asrTask
-        } catch let err as GeminiTranscriber.GError {
-            TranscriptionErrors.record(meetingId: meetingId,
-                                       message: err.localizedDescription)
-            throw err
+        // Forced-alignment when on-device ASR is available; fall back to
+        // the proven proportional placement when it isn't. Both are pure
+        // and deterministic, so this re-runs free on every load.
+        let tokens = (try? await ForcedAligner.shared.align(wavURL: wavURL)) ?? []
+        let result: [GeminiTranscriber.Turn]
+        if tokens.isEmpty {
+            result = Self.relabel(asr: rawTurns, using: diarSegs)
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — \(rawTurns.count) turns, PROPORTIONAL placement across \(Set(diarSegs.map(\.speakerId)).count) speakers")
+        } else {
+            result = Self.alignByTokens(asr: rawTurns, tokens: tokens, diar: diarSegs)
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — \(rawTurns.count) turns, FORCED-ALIGNED on \(tokens.count) tokens across \(Set(diarSegs.map(\.speakerId)).count) speakers")
         }
-        let relabeled = Self.relabel(asr: asrTurns, using: diarSegs)
-        FileLogger.log("diarizeFirst: \(wavURL.lastPathComponent) — \(asrTurns.count) ASR turns relabeled across \(Set(diarSegs.map(\.speakerId)).count) on-device speakers")
-        return relabeled
+        return result
     }
 
-    /// Assign each ASR text turn the diarized speaker it overlaps most
-    /// in time. ASR and diarization are on the SAME original timeline
-    /// (GeminiTranscriber projects its VAD-compressed timestamps back to
-    /// the input file's frame; FluidAudio sees the same file), so a
-    /// plain interval-overlap match is correct. A turn with no overlap
-    /// (ASR segment inside a stretch the diarizer dropped) takes the
-    /// nearest segment by start time so it still gets a stable label.
+    /// Diarize-first time assignment. Gemini's per-chunk timestamps over
+    /// the VAD-compressed track are unreliable on dense speech — turns
+    /// overlap, balloon to 40 s+, sum PAST the recording length, and the
+    /// karaoke highlight drifts right off the audio. FluidAudio diarizes
+    /// the FULL, uncompressed file, so ITS timeline is the ground truth
+    /// for WHEN. We therefore discard Gemini's timestamps entirely and
+    /// lay the ASR text turns end-to-end onto the concatenation of
+    /// diarized speech spans, proportional to each turn's text length (a
+    /// steady proxy for spoken duration — Gemini's own duration is the
+    /// exact thing we don't trust). Every turn then lands on a real,
+    /// monotonic, non-overlapping interval inside actual diarized speech,
+    /// labelled by the FluidAudio speaker at that time. Net: the
+    /// highlight tracks the audio, the timeline can't exceed 100 %, and
+    /// the tail can't collapse. The dual-track routing (mic=you /
+    /// system=others, merge by start-ms) is unchanged — only the
+    /// start-ms SOURCE moves from "Gemini-projected (broken)" to
+    /// "FluidAudio".
     static func relabel(asr: [GeminiTranscriber.Turn],
                         using diar: [DiarizedSegment]) -> [GeminiTranscriber.Turn] {
-        guard !diar.isEmpty else { return asr }
-        return asr.map { turn in
-            var best = ""
-            var bestOverlap: Int64 = 0
-            for d in diar {
-                let lo = max(turn.startMs, d.startMs)
-                let hi = min(turn.endMs, d.endMs)
-                let ov = hi - lo
-                if ov > bestOverlap { bestOverlap = ov; best = d.speakerId }
+        guard !diar.isEmpty, !asr.isEmpty else { return asr }
+        let segs = diar.sorted { $0.startMs < $1.startMs }
+        let totalDiar = segs.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) }
+        guard totalDiar > 0 else { return asr }
+
+        // Offset within the concatenated diarized speech (gaps = silence,
+        // no turn is ever placed there) → real ms + the FluidAudio
+        // speaker whose span covers it.
+        func locate(_ offset: Int64) -> (ms: Int64, speaker: String) {
+            var acc: Int64 = 0
+            for s in segs {
+                let dur = max(0, s.endMs - s.startMs)
+                if offset < acc + dur {
+                    return (s.startMs + min(max(0, offset - acc), dur), s.speakerId)
+                }
+                acc += dur
             }
-            if best.isEmpty {
-                best = diar.min(by: {
-                    abs($0.startMs - turn.startMs) < abs($1.startMs - turn.startMs)
-                })?.speakerId ?? "Speaker 1"
-            }
-            return GeminiTranscriber.Turn(speakerLabel: best,
-                                          startMs: turn.startMs,
-                                          endMs: turn.endMs,
-                                          text: turn.text)
+            let last = segs[segs.count - 1]
+            return (last.endMs, last.speakerId)
         }
+
+        let weights = asr.map { max(Int64(1), Int64($0.text.count)) }
+        let totalWeight = weights.reduce(Int64(0), +)
+        guard totalWeight > 0 else { return asr }
+
+        var out: [GeminiTranscriber.Turn] = []
+        out.reserveCapacity(asr.count)
+        var cum: Int64 = 0
+        for (i, turn) in asr.enumerated() {
+            let oStart = Int64(Double(cum) / Double(totalWeight) * Double(totalDiar))
+            cum += weights[i]
+            let oEnd = Int64(Double(cum) / Double(totalWeight) * Double(totalDiar))
+            let (sMs, spk) = locate(oStart)
+            let (eMsRaw, _) = locate(max(oStart, oEnd))
+            out.append(GeminiTranscriber.Turn(speakerLabel: spk,
+                                              startMs: sMs,
+                                              endMs: max(sMs, eMsRaw),
+                                              text: turn.text))
+        }
+        return out
+    }
+
+    /// Forced-alignment time assignment. `tokens` are on-device ASR
+    /// (Parakeet TDT v3) tokens with REAL acoustic times on the FULL
+    /// uncompressed file timeline. Gemini's text and Parakeet's tokens
+    /// are DIFFERENT transcripts of the same audio (Gemini ran on the
+    /// VAD-compressed track, may drop/merge chunks, different wording,
+    /// RU/EN code-switch), so the old single global char-proportional
+    /// `scale` drifted progressively and the `lastEnd` clamp compounded
+    /// it. Instead we find sparse, high-confidence ANCHOR words that are
+    /// unique in BOTH streams, force their order monotone (LIS), and
+    /// proportionally place turns BETWEEN adjacent anchors — resetting
+    /// the proportion constant at every anchor so error can never
+    /// accumulate past one span. Regions with no anchors degrade
+    /// seamlessly to bounded proportional placement (== `relabel`
+    /// locally), so this is never worse than the proportional floor.
+    /// Pure value-in/value-out: re-derivable offline for free.
+    static func alignByTokens(asr: [GeminiTranscriber.Turn],
+                              tokens: [TimedToken],
+                              diar: [DiarizedSegment]) -> [GeminiTranscriber.Turn] {
+        guard !asr.isEmpty else { return [] }
+        // No acoustic timeline → the proportional placement is the
+        // validated floor; never do worse than it.
+        guard !tokens.isEmpty else { return relabel(asr: asr, using: diar) }
+
+        func norm(_ s: String) -> String {
+            String(String.UnicodeScalarView(
+                s.lowercased().unicodeScalars.filter {
+                    CharacterSet.alphanumerics.contains($0)
+                }))
+        }
+
+        // ── Gemini word stream in normalised-char space. Each turn owns
+        //    [turnStartChar, turnEndChar); a word carries its global
+        //    char offset so an anchor word pins an exact char position.
+        struct GWord { let norm: String; let charPos: Int }
+        var gWords: [GWord] = []
+        var turnStartChar: [Int] = []
+        var turnEndChar: [Int] = []
+        var gCursor = 0
+        for turn in asr {
+            turnStartChar.append(gCursor)
+            for raw in turn.text.split(whereSeparator: { $0.isWhitespace }) {
+                let n = norm(String(raw))
+                if !n.isEmpty { gWords.append(GWord(norm: n, charPos: gCursor)) }
+                // Whitespace contributes 0; only normalised chars advance
+                // the timeline so the proportion matches `relabel`.
+                gCursor += n.count
+            }
+            turnEndChar.append(gCursor)
+        }
+        let totalChars = gCursor
+        guard totalChars > 0 else { return relabel(asr: asr, using: diar) }
+
+        // ── Parakeet token stream: normalised text → its real start ms.
+        struct PWord { let norm: String; let startMs: Int64 }
+        let pWords: [PWord] = tokens.map {
+            PWord(norm: norm($0.text), startMs: $0.startMs)
+        }
+
+        // ── Anchor candidates: terms (≥4 normalised chars) that occur
+        //    EXACTLY once in each stream. Uniqueness is the rejection
+        //    rule — ambiguous repeats are exactly what mis-jumped before.
+        var gCount: [String: Int] = [:]
+        var pCount: [String: Int] = [:]
+        for w in gWords where w.norm.count >= 4 { gCount[w.norm, default: 0] += 1 }
+        for w in pWords where w.norm.count >= 4 { pCount[w.norm, default: 0] += 1 }
+        var gPos: [String: Int] = [:]
+        var pMs: [String: Int64] = [:]
+        for w in gWords where gCount[w.norm] == 1 { gPos[w.norm] = w.charPos }
+        for w in pWords where pCount[w.norm] == 1 { pMs[w.norm] = w.startMs }
+
+        var cands: [(charPos: Int, ms: Int64)] = []
+        for (term, c) in gPos {
+            if let m = pMs[term], pCount[term] == 1 { cands.append((c, m)) }
+        }
+        cands.sort { $0.charPos < $1.charPos }
+
+        // ── Strict-increasing-ms LIS over char-sorted candidates: drops
+        //    any unique-but-misplaced match that contradicts its
+        //    neighbours, so survivors are guaranteed monotone in BOTH
+        //    axes (no drift, no backward jump).
+        let kept: [(charPos: Int, ms: Int64)] = {
+            guard !cands.isEmpty else { return [] }
+            var tails: [Int] = []          // indices into cands; ms increasing
+            var prev = [Int](repeating: -1, count: cands.count)
+            for i in 0..<cands.count {
+                var lo = 0, hi = tails.count
+                while lo < hi {
+                    let mid = (lo + hi) / 2
+                    if cands[tails[mid]].ms < cands[i].ms { lo = mid + 1 }
+                    else { hi = mid }
+                }
+                if lo > 0 { prev[i] = tails[lo - 1] }
+                if lo == tails.count { tails.append(i) } else { tails[lo] = i }
+            }
+            var seq: [(charPos: Int, ms: Int64)] = []
+            var k = tails.isEmpty ? -1 : tails[tails.count - 1]
+            while k >= 0 { seq.append(cands[k]); k = prev[k] }
+            return seq.reversed()
+        }()
+
+        // ── Bound every interpolation by real acoustic endpoints so no
+        //    region ever extrapolates unbounded.
+        let tailMs = tokens[tokens.count - 1].endMs
+        var anchors: [(charPos: Int, ms: Int64)] = [(0, tokens[0].startMs)]
+        anchors.append(contentsOf: kept)
+        anchors.append((totalChars, tailMs))
+
+        // Position (in normalised chars) → ms, by locating the bounding
+        // anchor pair and interpolating proportionally WITHIN it. This is
+        // `relabel`'s proportional math with the constant reset per span.
+        func msAtChar(_ pos: Int) -> Int64 {
+            let p = min(max(pos, 0), totalChars)
+            var aIdx = anchors.count - 2
+            for i in 0..<(anchors.count - 1) where p < anchors[i + 1].charPos {
+                aIdx = i; break
+            }
+            let a = anchors[aIdx], b = anchors[aIdx + 1]
+            let cSpan = b.charPos - a.charPos
+            let tSpan = b.ms - a.ms
+            guard cSpan > 0, tSpan > 0 else { return a.ms }
+            let frac = Double(p - a.charPos) / Double(cSpan)
+            return a.ms + Int64(frac * Double(tSpan))
+        }
+
+        func speaker(at ms: Int64) -> String {
+            for d in diar where ms >= d.startMs && ms < d.endMs { return d.speakerId }
+            return diar.min(by: { abs($0.startMs - ms) < abs($1.startMs - ms) })?
+                .speakerId ?? (diar.first?.speakerId ?? "Speaker 1")
+        }
+
+        var out: [GeminiTranscriber.Turn] = []
+        out.reserveCapacity(asr.count)
+        var lastEnd: Int64 = tokens[0].startMs
+        for (i, turn) in asr.enumerated() {
+            let rs = msAtChar(turnStartChar[i])
+            let re = msAtChar(turnEndChar[i])
+            // Clamp to `lastEnd`/`tailMs`: monotone, non-overlapping,
+            // in-bounds. Carry `end` (not `start`) — the historical bug
+            // carried `start`, which let the next turn overlap this
+            // turn's body.
+            let start = min(max(lastEnd, min(rs, re)), tailMs)
+            let end = min(max(start, max(rs, re)), tailMs)
+            lastEnd = end
+            out.append(GeminiTranscriber.Turn(
+                speakerLabel: diar.isEmpty ? turn.speakerLabel : speaker(at: start),
+                startMs: start, endMs: end, text: turn.text))
+        }
+        return out
     }
 
     /// On-disk shape of the raw-transcription cache.
@@ -914,16 +1293,31 @@ final class TranscriptionPipeline {
     ///     side (Speaker 1, Speaker 2…). No channel-gate guesswork.
     ///
     /// `JSONDecoder` ignores unknown keys and tolerates missing optional
-    /// ones, so a single struct handles both formats at decode time.
+    /// ones, so a single struct handles every format at decode time.
+    ///
+    /// `rawUserTurns`/`rawOtherTurns` are Gemini's text BEFORE timing.
+    /// WHEN/WHO is re-derived on-device from them every run, so iterating
+    /// the timing logic never re-spends a Gemini call. Older v9 records
+    /// lack them; their `userTurns`/`otherTurns` text+order still IS the
+    /// raw Gemini output (relabel never touched `.text`), so the reader
+    /// migrates transparently. `userTurns`/`otherTurns` are now the
+    /// last-derived finals, kept only as a no-audio fallback.
     private struct CachedTranscript: Codable {
         // Legacy — single-stream output.
         let userLabel: String?
         let turns: [GeminiTranscriber.Turn]?
-        // Dual-track — separately transcribed mic + system.
+        // Dual-track — last-derived FINAL (timed) turns.
         let userTurns: [GeminiTranscriber.Turn]?
         let otherTurns: [GeminiTranscriber.Turn]?
+        // Dual-track — RAW Gemini text turns (pre-timing). Source of
+        // truth for re-derivation; absent on pre-migration records.
+        var rawUserTurns: [GeminiTranscriber.Turn]? = nil
+        var rawOtherTurns: [GeminiTranscriber.Turn]? = nil
 
-        var isDualTrack: Bool { userTurns != nil || otherTurns != nil }
+        var isDualTrack: Bool {
+            userTurns != nil || otherTurns != nil
+                || rawUserTurns != nil || rawOtherTurns != nil
+        }
     }
 
     /// Distinct hues for the "other" speakers. Picked for high contrast
@@ -993,6 +1387,7 @@ final class TranscriptionPipeline {
     /// background, sequentially with a small gap so we don't burst the
     /// Gemini API. Best-effort: each failure is skipped, not retried.
     static func backfillTitles(repo: MeetingRepository) {
+        guard AppSettings.autoTitle else { return }
         Task.detached(priority: .utility) {
             let ids = (try? repo.meetingIdsNeedingTitle()) ?? []
             guard !ids.isEmpty else { return }

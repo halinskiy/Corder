@@ -119,9 +119,40 @@ final class MeetingDetector {
         )
         offeredFor = offeredFor.filter { runningBundles.contains($0) }
 
-        let hasMeetingAppRunning = Self.knownApps.contains(where: { runningBundles.contains($0.bundle) })
+        // Per-process mic ownership when the API is available (macOS
+        // 14.4+); `nil` ⇒ fall back to the old coarse heuristic.
+        let micOwners = Self.bundlesRunningInput()
+        // Surface every mic owner to the Settings picker so the user can
+        // white/blacklist an app by tapping it (no bundle-id typing).
+        if let owners = micOwners { MicAppsSnapshot.update(Array(owners)) }
+
+        // Effective offer set = built-in known apps + the user's
+        // whitelist, minus anything the user blacklisted. Blacklist wins
+        // over everything — even a known app actively on the mic.
+        let blacklist = Set(AppSettings.meetingBlacklist)
+        var effectiveApps: [(bundle: String, name: String)] =
+            Self.knownApps.filter { !blacklist.contains($0.bundle) }
+        for b in AppSettings.meetingWhitelist
+        where !blacklist.contains(b) && !effectiveApps.contains(where: { $0.bundle == b }) {
+            let name = NSWorkspace.shared.runningApplications
+                .first(where: { $0.bundleIdentifier == b })?.localizedName ?? b
+            effectiveApps.append((bundle: b, name: name))
+        }
+
         let now = Date()
-        let micBusy = hasMeetingAppRunning && Self.isInputDeviceClaimedByOtherProcess()
+        // Precise path: a candidate meeting app must ITSELF be the
+        // process holding the mic. Loom/OBS/QuickTime/Terminal recording
+        // while Zoom merely sits open in the background no longer trips
+        // an offer. Fallback path keeps the original device-global gate.
+        let micBusy: Bool
+        if let owners = micOwners {
+            micBusy = effectiveApps.contains {
+                runningBundles.contains($0.bundle) && owners.contains($0.bundle)
+            }
+        } else {
+            let anyRunning = effectiveApps.contains { runningBundles.contains($0.bundle) }
+            micBusy = anyRunning && Self.isInputDeviceClaimedByOtherProcess()
+        }
         if micBusy {
             if inputBusySince == nil { inputBusySince = now }
         } else {
@@ -145,7 +176,13 @@ final class MeetingDetector {
               lastTriggerMicBusyEdge != since
         else { return }
 
-        guard let match = Self.knownApps.first(where: { runningBundles.contains($0.bundle) }),
+        // When per-process info is available the offered app must be the
+        // one actually on the mic; without it, first running candidate
+        // (original behaviour). Blacklist already excluded above.
+        guard let match = effectiveApps.first(where: {
+                  runningBundles.contains($0.bundle)
+                  && (micOwners?.contains($0.bundle) ?? true)
+              }),
               !offeredFor.contains(match.bundle)
         else {
             // No interesting candidate this edge. Mark the edge consumed
@@ -205,5 +242,64 @@ final class MeetingDetector {
         )
         let s2 = AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &running)
         return s2 == noErr && running != 0
+    }
+
+    /// Bundle ids of every process Core Audio reports as actively
+    /// running INPUT (microphone) right now. `nil` means the
+    /// per-process API is unavailable or errored — the caller then
+    /// falls back to the coarse device-global check + "any meeting app
+    /// running" heuristic. macOS 14.4+ matches the process-tap path we
+    /// already depend on for system-audio capture (`SystemAudioTap`).
+    ///
+    /// This is what lets the detector tell *who* owns the mic: a
+    /// background Zoom while Loom / OBS / Terminal / QuickTime is the
+    /// real recorder no longer mis-fires an offer, because none of
+    /// those is a known meeting app that's *itself* on the input.
+    private static func bundlesRunningInput() -> Set<String>? {
+        guard #available(macOS 14.4, *) else { return nil }
+
+        var listAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject),
+                &listAddr, 0, nil, &size) == noErr,
+              size > 0 else { return nil }
+
+        let count = Int(size) / MemoryLayout<AudioObjectID>.size
+        var procs = [AudioObjectID](repeating: AudioObjectID(kAudioObjectUnknown),
+                                    count: count)
+        guard AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &listAddr, 0, nil, &size, &procs) == noErr else { return nil }
+
+        var owners = Set<String>()
+        for proc in procs where proc != AudioObjectID(kAudioObjectUnknown) {
+            var running: UInt32 = 0
+            var rSize = UInt32(MemoryLayout<UInt32>.size)
+            var rAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioProcessPropertyIsRunningInput,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            guard AudioObjectGetPropertyData(proc, &rAddr, 0, nil, &rSize, &running) == noErr,
+                  running != 0 else { continue }
+
+            var cf: CFString = "" as CFString
+            var bSize = UInt32(MemoryLayout<CFString>.size)
+            var bAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioProcessPropertyBundleID,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            let st = withUnsafeMutablePointer(to: &cf) { ptr -> OSStatus in
+                AudioObjectGetPropertyData(proc, &bAddr, 0, nil, &bSize, ptr)
+            }
+            if st == noErr {
+                let bundle = cf as String
+                if !bundle.isEmpty { owners.insert(bundle) }
+            }
+        }
+        return owners
     }
 }

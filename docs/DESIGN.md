@@ -192,6 +192,33 @@ Three banner cards share the same outline-card visual language
 - **EmptyDeleteBanner** — for `status === ready` empty / `status ===
   failed`. Reuses the clarify card outline. Failed variant adds a
   Re-transcribe (white outline) above the destructive Delete (red).
+  The "not transcribed yet" variant adds a Transcribe (white outline)
+  above the Delete so the user can transcribe on demand when
+  auto-transcribe is off.
+
+### Popups (`.modal-pop`)
+
+Sits in the `.donate-overlay` blurred backdrop and reads like an
+enlarged inline banner — the same outline-card visual language as
+the cards above so popups feel like the same product, not like a
+stock OS alert.
+
+- 12 px radius, 1 px `--border-strong`, `0 10px 32px rgba(0,0,0,.14)`
+  shadow (subtle — the heavier 24/64 shadow on the older
+  `.donate-card` read as generic platform chrome).
+- Width per-instance: Archive 560 px, Download 380 px.
+- Title — `.modal-pop-title`, 18/300 (mirrors `.clarify-body`, the
+  banner heading).
+- Subtitle — `.modal-pop-note`, 14/1.55 muted (segment-paragraph
+  character, tightened to the title via negative margin-top).
+- Close X — `.modal-pop-close`, top-right, borderless, hover bg only.
+- Actions — `.clarify-btn` / `.clarify-btn.danger` (inline-flex with
+  gap, icon+label centred).
+
+Used by **ArchiveView** and **DownloadMenu**. The Donate modal keeps
+its own `.donate-card` shell because its content is a 3-up amount
+grid with very different geometry. Don't introduce a third modal
+style — extend `.modal-pop` instead.
 
 ### Toasts
 

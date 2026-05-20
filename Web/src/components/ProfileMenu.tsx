@@ -1,5 +1,6 @@
 import React from "react";
 import { User, Settings, LogOut } from "lucide-react";
+import { IntegrationsCategory } from "./Integrations";
 import type { T } from "../i18n";
 
 /// Avatar button + dropdown. The menu is rendered fixed and anchored to
@@ -90,6 +91,8 @@ export function ProfileMenu({
           <button className="profile-pop-item" onClick={soon} role="menuitem">
             <LogOut size={15} strokeWidth={2} /> {t.profile_signout}
           </button>
+          <div className="profile-pop-sep" />
+          <IntegrationsCategory t={t} onActivate={soon} />
         </div>
       )}
     </>

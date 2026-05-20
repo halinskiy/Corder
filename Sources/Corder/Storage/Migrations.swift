@@ -179,6 +179,9 @@ enum Migrations {
         m.registerMigration("v14_pin") { db in
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN pinned_at INTEGER;")
         }
+        m.registerMigration("v15_bt_route") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN output_bluetooth_at_start INTEGER;")
+        }
 
         return m
     }

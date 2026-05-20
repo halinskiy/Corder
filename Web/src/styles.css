@@ -80,22 +80,93 @@
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-/* While the theme wipe is running, freeze element CSS transitions so
-   colour-transitioning bits (timeline card, bars) don't double-animate
-   under the View Transition and flicker. The VT itself is a
-   pseudo-element animation and is unaffected by this. */
+/* The single biggest source of theme-wipe flicker: WebKit composites
+   any element on its OWN GPU layer LIVE, above the ::view-transition
+   snapshot — so it is NOT revealed by the circular clip but pops to the
+   new theme instantly (content "flickers": timeline bars, the player's
+   played-progress fill, the search icon/placeholder, transcript lines
+   near the frosted search bar whose backdrop re-samples the live new
+   theme). Per-element fixes are whack-a-mole. The robust cure is to
+   strip every layer-PROMOTING property for the wipe so the ENTIRE UI
+   folds into the one root snapshot and is revealed uniformly by the one
+   circle. theme-anim is added BEFORE the old snapshot is captured and
+   removed only on transition.finished, so both snapshots AND the live
+   DOM are promotion-free for the whole wipe — fully consistent. Only
+   layout-neutral promoters are stripped (NOT transform/position, which
+   move things): backdrop-filter (the worst offender — it also samples
+   live content behind it), will-change, isolation, running animations,
+   and transitions. They snap back under the fully-grown new-theme
+   circle at the end, where it's imperceptible. The VT pseudo-elements
+   live outside the normal tree so `*` never touches them. */
 html.theme-anim *,
 html.theme-anim *::before,
 html.theme-anim *::after {
   transition: none !important;
+  animation: none !important;
+  will-change: auto !important;
+  isolation: auto !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
-/* View Transitions API: kill the default cross-fade so only the
-   cursor-origin clip-path circle (driven from theme.ts) plays. */
-::view-transition-old(root),
+/* View Transitions API. The radial reveal is animated by JS WAAPI on
+   `::view-transition-new(root)` (WebKit's ACCELERATED VT path — a CSS
+   @keyframes on clip-path:circle() is NOT compositor-accelerated in
+   WebKit and re-rasterises the whole-page snapshot every frame: severe
+   jank). The first-frame flash the WAAPI path used to have is killed by
+   pre-clipping the new snapshot to a zero circle in CSS, so frame 0 is
+   already hidden and the WAAPI animation just expands from that exact
+   state. Origin/radius come from CSS vars set on :root before
+   startViewTransition. Elements WebKit composites on their OWN layer (or
+   replaced elements like <video>) are NOT folded into the root snapshot:
+   left live they pop instantly to the new theme (flicker), hidden they
+   vanish (proven empirically), and a per-element `view-transition-name`
+   makes them a SEPARATE group that animates on its OWN timeline,
+   visibly out of sync with the circular wipe. The only way to ride the
+   single root circle is to actually BE in the root snapshot — which is
+   why the `html.theme-anim *` rule above strips ALL layer-promoting
+   properties for the wipe (the primary cure for content flicker). The
+   only things that still can't be in the root snapshot are genuine
+   replaced/own-layer leftovers, handled individually:
+   • timeline card — no own layer, no name → folds into root, wiped by
+     the same circle (its old layer-less "row flicker" is killed by the
+     `html.theme-anim *{transition:none}` rule above);
+   • screen-video card — a replaced <video> can NEVER be in the root
+     snapshot, so it is made theme-INDEPENDENT (neutral grey chrome) AND
+     given a `view-transition-name`: identical old/new snapshots ⇒ zero
+     visible change and zero desync, the name purely captures it as a
+     stable group to kill the live-layer blink at the wipe's edges;
+   • overlay-scrollbar thumbs — same recipe: colour already
+     theme-independent + a `view-transition-name` set PER INSTANCE in
+     OverlayScrollbar (the shared class can't carry it — a duplicate
+     name aborts the whole transition); identical snapshots, the name
+     only suppresses the live-layer blink at the wipe's start/end.
+   The root rules below only target `(root)`. */
+::view-transition-old(root) { animation: none; z-index: 1; }
 ::view-transition-new(root) {
+  z-index: 2;
   animation: none;
-  mix-blend-mode: normal;
+  clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%));
+}
+
+/* The video card can't ride the root circle (replaced <video> + a few
+   theme-dependent inner bits: scrim, play/fullscreen buttons), so its
+   named group cross-fades on its own. Default UA timing fires it
+   instantly — visually jarring as "the video changes by itself ahead
+   of everything". Instead HOLD the old snapshot through the whole root
+   wipe, then cross-fade to the new appearance — just enough to take the
+   edge off the "video changes by itself" jump without being a
+   noticeable separate animation. 0.2s total = 70% hold (~0.14s) +
+   0.06s fade. These pseudo animations keep the VT (and theme-anim)
+   alive for that 0.2s — negligible; the <video> frame freezes only for
+   that blink-short window. */
+@keyframes corder-vc-hold-out { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes corder-vc-hold-in  { 0%,70% { opacity: 0; } 100% { opacity: 1; } }
+::view-transition-old(corder-video-card) {
+  animation: corder-vc-hold-out 200ms ease both;
+}
+::view-transition-new(corder-video-card) {
+  animation: corder-vc-hold-in 200ms ease both;
 }
 
 * { box-sizing: border-box; }
@@ -181,9 +252,13 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   position: fixed;
   z-index: 90;
   width: 232px;
+  /* Same shell as the Transcription-failed / promo blocks: plain --bg
+     with a single strong outline. Keeps the floating elevation shadow
+     (it's a menu, not an inline card) but the border/radius match the
+     block family for consistency. */
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
   padding: 8px;
   animation: donate-fade 140ms ease;
@@ -243,6 +318,37 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 }
 .profile-pop-item:hover { background: var(--bg-hover); }
 .profile-pop-item svg { color: var(--fg-muted); flex-shrink: 0; }
+/* Integrations category in the profile popover (moved out of Settings'
+   "Coming soon"). Compact logo + title + inert SOON chip. */
+/* Matches `.settings-section-title` exactly (same section-label
+   convention) — just positioned for the popover. */
+.profile-pop-cat {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: 4px 10px 6px;
+}
+.profile-pop-int-logo {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+/* Brand marks keep their own fills; the Apple glyph uses currentColor
+   so give it the real foreground, not the muted icon tint. */
+.profile-pop-int-logo svg { color: var(--fg); }
+.profile-pop-int-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* SOON chip reuses the shared `.promo-soon` (no second chip style). */
 button:active { background: var(--bg-active); }
 button:disabled { opacity: 0.4; cursor: default; }
 button.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
@@ -291,6 +397,28 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 ::-webkit-scrollbar-thumb:hover { background: #b8b8b4; }
 
+/* Custom overlay scrollbar (OverlayScrollbar.tsx). Containers that opt
+   in carry `.ovsb-scroll` and lose their native bar entirely; the
+   shared component draws `.ovsb-thumb` centred ON the divider line —
+   the one thing a native WebKit scrollbar physically cannot do. */
+.ovsb-scroll { scrollbar-width: none; }
+.ovsb-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+/* Opaque, exactly the old native thumb colours (incl. no dark
+   override → light/whitish on the dark theme, as before). The earlier
+   translucent --border-strong read as invisible on dark. */
+.ovsb-thumb {
+  position: fixed;
+  z-index: 50;
+  border-radius: 4px;
+  background: #d8d8d4;
+  transition: background 140ms ease;
+}
+.ovsb-thumb:hover,
+.ovsb-thumb.dragging { background: #b8b8b4; }
+/* view-transition-name is set per instance via the `name` prop in
+   OverlayScrollbar (NOT here) — the class is shared by the sidebar and
+   transcript panes and a duplicate name aborts the whole transition. */
+
 /* App layout */
 .app {
   display: grid;
@@ -310,17 +438,13 @@ input[type="text"]:focus, input[type="search"]:focus {
      instead of stretching the sidebar past the grid row's edge — see the
      long comment on `.transcript-wrap` for the same fix on the main pane. */
   min-height: 0;
-  /* ONE divider line, exactly at the sidebar's right edge.
-     History: the old gradient drew the hairline 4 px IN from the edge
-     (so a space-reserving scrollbar could overlap it). With a solid
-     fill that left two visible verticals — the hairline at -4 px AND
-     the grey→white seam at the true edge — i.e. the "2 lines + gap"
-     the user reported. A solid fill + a single 1 px inset shadow at
-     the very edge collapses it to ONE crisp divider at the real
-     sidebar/main boundary; the scrollbar sits immediately inside it,
-     no white sliver, no double line. */
+  /* Single clean divider: the --bg-elev (sidebar) vs --bg (main) colour
+     seam at the grid boundary. Unlike the white-on-white transcript
+     pane, the sidebar has this intrinsic seam, so a painted hairline
+     here would read as a SECOND vertical next to it. Centring the
+     native 7 px scrollbar exactly on this seam needs a custom overlay
+     scrollbar (WebKit pins the native bar inside the scroll box). */
   background: var(--bg-elev);
-  box-shadow: inset -1px 0 0 var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -491,14 +615,8 @@ input[type="text"]:focus, input[type="search"]:focus {
 .sidebar-list {
   flex: 1;
   min-height: 0;
-  /* Symmetric 8 px padding (restored): the scrollbar must NOT overlap
-     the cards. The earlier "remove right padding" attempt made the
-     scrollbar climb onto the session cards — worse. The white gap is
-     fixed at the source instead: the sidebar fill is now solid to the
-     edge (see `.sidebar` background), so there's no white strip for
-     the scrollbar to float in. */
   overflow-y: auto;
-  padding: 4px 8px 0;
+  padding: 4px 0 0 8px;
   /* Stop the scrollbar 16 px before the bottom of the sidebar so the
      scroll track doesn't run up against the sidebar's bottom edge. */
   margin-bottom: 16px;
@@ -518,6 +636,9 @@ input[type="text"]:focus, input[type="search"]:focus {
   text-transform: uppercase;
   color: var(--fg-dim);
   padding: 12px 8px 6px;
+  /* Same right inset as the cards so the label (and the divider line
+     on `.meeting-item + &`) stops before the edge scrollbar. */
+  margin-right: 9px;
 }
 /* Visual break between date buckets (TODAY / YESTERDAY / N DAYS AGO …):
    a hairline plus extra top breathing room on every label that isn't the
@@ -529,6 +650,9 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .meeting-item {
   padding: 10px 10px;
+  /* Keep the card (and its hover/active fill) clear of the 7 px
+     scrollbar now riding the sidebar's right edge. */
+  margin-right: 9px;
   border-radius: 6px;
   cursor: pointer;
   display: flex;
@@ -564,6 +688,16 @@ input[type="text"]:focus, input[type="search"]:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  /* Fill the row so the title ellipsis-truncates and the playing
+     glyph sits flush right after it (not pushed to the far edge). */
+  flex: 1;
+}
+/* Red play glyph on the session whose audio is currently playing. */
+.meeting-playing {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: #d04a3e;
 }
 /* Inline rename field — sits in place of the title, same metrics so
    the row doesn't jump when entering edit mode. */
@@ -637,19 +771,28 @@ input[type="text"]:focus, input[type="search"]:focus {
    "failed" label keep their default colour) so the row reads as
    "this thing is broken" without the whole entry shouting. */
 .meeting-item.failed .meeting-title { color: #d04a3e; }
-/* Pinned session — a small gold dot at the end of the title row
-   instead of recolouring the title (the title stays the normal
-   colour now). Gold tuned per theme so it reads warm on white and
-   on near-black, not muddy. */
-.pin-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+/* Pinned session: the existing status dot itself goes gold instead of
+   its normal green/red/amber. One indicator, not two — the dot is
+   already in the meta row, so reuse it rather than adding a second
+   marker. The per-status rules above are (0,2,0); listing the
+   variants under .meeting-item.pinned makes these (0,3,0) so they win
+   without !important. Gold tuned per theme so it reads warm on white
+   and on near-black, not muddy. */
+.meeting-item.pinned .status-dot,
+.meeting-item.pinned .status-dot.ready,
+.meeting-item.pinned .status-dot.recording,
+.meeting-item.pinned .status-dot.transcribing,
+.meeting-item.pinned .status-dot.failed {
   background: #b07d18;
-  flex-shrink: 0;
-  align-self: center;
+  animation: none;
 }
-.dark .pin-dot { background: #e3b950; }
+.dark .meeting-item.pinned .status-dot,
+.dark .meeting-item.pinned .status-dot.ready,
+.dark .meeting-item.pinned .status-dot.recording,
+.dark .meeting-item.pinned .status-dot.transcribing,
+.dark .meeting-item.pinned .status-dot.failed {
+  background: #e3b950;
+}
 
 /* Breadcrumb in the main pane when viewing a failed meeting — same
    muted red so the user knows the open record is the problem one. */
@@ -697,7 +840,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   -webkit-user-select: auto;
 }
 .breadcrumb {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--fg-muted);
   display: flex; align-items: center; gap: 8px;
 }
@@ -712,7 +855,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .breadcrumb-rename:hover { background: var(--bg-hover); }
 .breadcrumb-edit {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--fg);
   background: var(--bg);
@@ -730,7 +873,10 @@ input[type="text"]:focus, input[type="search"]:focus {
   align-items: center;
   gap: 6px;
 }
-.toolbar button svg { display: block; width: 14px; height: 14px; }
+/* Match the transcript-toolbar icon buttons (clarify/copy render their
+   lucide glyphs at 16) — the forced 14 here made header icons look
+   undersized inside the same button shell. */
+.toolbar button svg { display: block; width: 16px; height: 16px; }
 
 /* Empty state */
 .empty {
@@ -769,16 +915,16 @@ input[type="text"]:focus, input[type="search"]:focus {
   gap: 24px;
 }
 .detail-tab-col-left {
-  /* Hairline at 3-4 px from the right edge — same offset as the sidebar
-     divider, centred under the 7 px scrollbar of the transcript pane
-     below. */
+  /* 1 px hairline FLUSH to the right edge — must match
+     `.transcript-wrap` (the body column directly below, same grid
+     template) EXACTLY, or the divider bends where the tab row meets
+     the body. The old 3-4 px inset (for the native scrollbar) is gone:
+     the custom overlay scrollbar now centres on this box edge. */
   background: linear-gradient(to right,
     var(--bg) 0,
-    var(--bg) calc(100% - 4px),
-    var(--border) calc(100% - 4px),
-    var(--border) calc(100% - 3px),
-    var(--bg) calc(100% - 3px),
-    var(--bg) 100%);
+    var(--bg) calc(100% - 1px),
+    var(--border) calc(100% - 1px),
+    var(--border) 100%);
 }
 .detail-body {
   display: grid;
@@ -867,22 +1013,26 @@ body.resizing { cursor: col-resize; user-select: none; }
      the grid row instead of being scrolled into. */
   min-height: 0;
   min-width: 0;
-  /* Hairline at 3-4 px from the right edge — matches the sidebar divider
-     so the transcript scrollbar sits centred on the same line as the
-     sidebar one. */
+  /* 1 px hairline FLUSH to the right edge. The custom overlay
+     scrollbar centres its thumb on this box edge (like the sidebar
+     thumb centres on the sidebar/main seam), so the line must BE the
+     edge — the old 3-4 px inset left the thumb sitting to the right
+     of the line ("перелетел вправо"). */
   background: linear-gradient(to right,
     var(--bg) 0,
-    var(--bg) calc(100% - 4px),
-    var(--border) calc(100% - 4px),
-    var(--border) calc(100% - 3px),
-    var(--bg) calc(100% - 3px),
-    var(--bg) 100%);
+    var(--bg) calc(100% - 1px),
+    var(--border) calc(100% - 1px),
+    var(--border) 100%);
 }
 .transcript-toolbar {
   padding: 20px 20px 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* Same 6 px as the header `.toolbar` (lang↔theme spacing), so
+     clarify↔copy match it; a `.toolbar-sep` separates the search
+     field from the action buttons exactly like the header's
+     pre-profile divider. */
+  gap: 6px;
 }
 .transcript-toolbar .search-field { flex: 1; min-width: 0; }
 .transcript-toolbar .search-field input { width: 100%; }
@@ -977,6 +1127,29 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg);
 }
 .toolbar-icon-btn.active:hover { background: #f4f4f0; }
+/* The header Archive button is a labelled pill, not a round icon, but
+   it sits in the same row as the icon buttons. They use the muted
+   content colour (var(--fg-muted)); .ghost defaulted to full --fg,
+   which made Archive read as a brighter "white" odd-one-out. Match
+   the muted colour + the same hover-to-full-fg so the whole header
+   row is one family. */
+.main-header button.ghost { color: var(--fg-muted); }
+/* Header buttons rest MUTED (quiet, consistent) but light up clearly on
+   hover — the default #fafaf8 hover fill is invisible on white, which
+   read as "no hover". Use the app's own "engaged" fill (#f4f4f0) +
+   full-contrast content + strong border so a hovered header button is
+   unmistakably lit. Scoped to .main-header so other .toolbar-icon-btn
+   uses (download rows) keep their subtler hover. */
+.main-header .toolbar-icon-btn:hover,
+.main-header button.ghost:hover {
+  background: #f4f4f0;
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.dark .main-header .toolbar-icon-btn:hover,
+.dark .main-header button.ghost:hover {
+  background: var(--bg-active);
+}
 
 /* SpeakersClarifyBanner is conditionally rendered (no wrapper). A pure
    mount animation on the card itself avoids the phantom-gap problem we
@@ -1028,12 +1201,27 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* Vertical-stack variant (Re-transcribe + Delete in EmptyDeleteBanner). */
 .clarify-actions-stack { flex-direction: column; }
+/* `.clarify-btn` carries `flex: 1 1 72px` so it shares WIDTH in the
+   horizontal clarify row. In the column stack that same flex-grow
+   stretches each button to fill the card's HEIGHT — the huge
+   Re-transcribe / Archive Session blocks. Pin stacked buttons to
+   their content height instead. */
+.clarify-actions-stack .clarify-btn { flex: 0 0 auto; }
 .clarify-btn {
   /* Grow to share the row, but allow shrinking and wrapping: when the
      section narrows the pills drop onto their own rows instead of
      overflowing the card. */
   flex: 1 1 72px;
   min-width: 0;
+  /* inline-flex content so an optional icon (Archive's Restore /
+     Delete forever) sits centred next to the label — matches the
+     `.trans-stop` button's icon+text layout. Text-only callers
+     (EmptyDeleteBanner, SettingsPane bigbtn-full) are unaffected:
+     a single child centres just the same. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: transparent;
   color: var(--fg);
   border: 1px solid var(--border-strong);
@@ -1072,6 +1260,30 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: #B7443C;
 }
 .clarify-btn.danger:hover { background: #9e3a32; border-color: #9e3a32; }
+/* Accent (green) fill — primary affirmative big card button: the
+   "Transcribe now" action and every "+ Add" in Settings. Same shape as
+   .danger, brand accent instead of red. */
+.clarify-btn.accent {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.clarify-btn.accent:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+}
+.clarify-btn.accent:disabled { opacity: 0.5; }
+/* Full-width single big card button (Settings: hotkey capture, +Add).
+   Fixed height so the label swapping (combo ⇄ "Press a combo…") never
+   resizes it. */
+.bigbtn-full {
+  display: block;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Pill button used inside SpeakersClarifyBanner: 1 / 2 / 3+ / Auto. */
 .speakers-pill {
@@ -1208,11 +1420,21 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin: 20px 20px 0;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  /* Light surface, matches `--bg-elev` used elsewhere — reads as a
-     plain placeholder card, not a black "player off" hole. The real
-     video frame paints on top once the user hits play. */
-  background: var(--bg-elev);
+  /* THEME-INDEPENDENT chrome (intentional, localised exception to the
+     token system). The <video> is a replaced element WebKit never folds
+     into the root View-Transition snapshot — left in the root flow it
+     pops/blinks at the wipe's edges. The card is just a media
+     placeholder, not branded UI, so its chrome is neutral translucent
+     grey that reads identically on both themes. */
+  border: 1px solid rgba(127, 127, 127, 0.28);
+  background: rgba(127, 127, 127, 0.10);
+  /* Combined with the theme-independent chrome above: a named group's
+     old and new snapshots are now IDENTICAL, so it shows zero change
+     and zero desync — the name exists ONLY to capture the <video> as a
+     stable group and kill the live-layer blink at the wipe's
+     start/end (same trick as the overlay-scrollbar thumb). The frame
+     freezes for the wipe — fine for a deliberate, rare toggle. */
+  view-transition-name: corder-video-card;
 }
 /* When the video is present, the audio controls sit close to the
    video — tighter than they'd be as a first child, and tighter than
@@ -1241,6 +1463,33 @@ body.resizing { cursor: col-resize; user-select: none; }
   inset: 0;
   background: rgba(255, 255, 255, 0.72);
   pointer-events: none;
+}
+
+/* Ghost shimmer shown where the video will be until its first frame
+   decodes — so the Recording tab never shows an empty hole while the
+   <video> loads (it now stays mounted across tab switches, but a fresh
+   meeting still has to decode once). Same shimmer as the skeletons. */
+.screen-video-ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: #ececec;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%);
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  animation: corder-shimmer 1.4s linear infinite;
+}
+.dark .screen-video-ghost {
+  background-color: #242422;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.07) 50%,
+    rgba(255, 255, 255, 0) 100%);
 }
 
 /* Apple-style centred play affordance shown while audio is paused.
@@ -1369,12 +1618,20 @@ body.resizing { cursor: col-resize; user-select: none; }
   will-change: transform;
 }
 /* Fullscreen scrub bar: speech segments tinted per speaker, doubling
-   as a who-spoke-when map. Sits under the video at the video's width. */
+   as a who-spoke-when map. Positioned ABSOLUTELY just below the video,
+   deliberately OUT of `.video-fs-inner`'s flow: that box is the FLIP
+   target and must be exactly the video's rect so it morphs onto the
+   inline card (also just the video) with a uniform scale. With the bar
+   in-flow the FLIP box was video+14px+38px taller than the card →
+   non-uniform scale → the video landed crooked and snapped at the end
+   of the close. The bar fades in on its own (opacity) once open, so it
+   never needed to be part of the morph anyway. */
 .video-fs-scrub {
-  position: relative;
-  align-self: stretch;   /* match the video's width */
+  position: absolute;
+  left: 0;
+  right: 0;                /* span the video's width (inner == video) */
+  top: calc(100% + 14px);  /* the old column gap, now an offset */
   height: 38px;
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -1609,12 +1866,14 @@ body.resizing { cursor: col-resize; user-select: none; }
      as a whole, so the card never needs an inner scroll that hides
      speakers. */
   flex: 0 0 auto;
-  /* Own compositing layer. The card is a clipped box full of absolutely
-     positioned bars; without an explicit layer WebKit rasterises it
-     inconsistently into the View-Transition snapshot and the rows
-     flicker on theme switch. translateZ(0) pins a stable layer. */
-  transform: translateZ(0);
-  backface-visibility: hidden;
+  /* Deliberately NO own layer (no translateZ promotion) and NO
+     view-transition-name. A named group animates on its OWN timeline,
+     decoupled from the root circular wipe (reads as the card changing
+     theme "by itself", out of sync). With neither, the card folds into
+     the ROOT snapshot and is revealed by the exact same expanding
+     circle as the rest of the UI. The old "rows flicker without a
+     layer" is now moot — `html.theme-anim *{transition:none}` freezes
+     the inner colour transitions for the wipe. */
 }
 /* One row per speaker, all rendered — the right-panel scroll makes
    them reachable, so nothing is ever hidden. */
@@ -1806,7 +2065,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   -webkit-tap-highlight-color: transparent;
   transition: background 80ms ease;
 }
-.settings-row:hover { background: #ececea; }
+/* The settings card sits on white, so #ececea (fine on the grey
+   sidebar) reads as a heavy slab here. Use a much softer step so it
+   feels like the sidebar item hover does against ITS surface. */
+/* Lighter than --bg-active: these rows should feel as gentle as a
+   sidebar session hover, not a pressed state. Matches the .dark
+   override below (--bg-hover) so both themes use the soft tier. */
+.settings-row:hover { background: var(--bg-hover); }
 .settings-row:focus,
 .settings-row:focus-visible { outline: none; box-shadow: none; }
 .settings-row + .settings-row { border-top: 1px solid var(--border); }
@@ -1844,6 +2109,133 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .set-switch.on { background: var(--accent); }
 .set-switch.on .set-switch-thumb { transform: translateX(16px); }
+/* Toggle row while settings are still loading — non-interactive, no
+   hover lift, slightly dimmed so it doesn't look clickable yet. */
+.settings-row.is-loading { opacity: 0.55; pointer-events: none; }
+
+/* ── App white/black-list editor ─────────────────────────────────────
+   Built from the existing settings tokens/typography — no new visual
+   language (consistency is priority #1). */
+.applist-block { padding: 14px 0 6px; }
+.applist-block + .applist-block { border-top: 1px solid var(--border); margin-top: 6px; }
+.applist {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.applist-empty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.applist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+}
+.applist-row + .applist-row,
+.applist-add-row { border-top: 1px solid var(--border); }
+.applist-add-row { padding: 10px 12px; }
+.applist-ico {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  object-fit: contain;
+}
+.applist-name {
+  flex: 1;
+  min-width: 0;
+  margin-left: 10px;
+  font-size: 13px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.applist-x {
+  flex-shrink: 0;
+  margin-left: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  line-height: 0;
+}
+.applist-x:hover { background: var(--bg-hover); color: var(--fg); }
+/* Picker dropdown — PORTALLED to <body>, fixed-positioned inline at
+   the +Add button's rect (so the overflow:hidden settings list can't
+   clip it and it's never stacked under sibling cards). */
+/* Same popover shell + entrance as `.profile-pop` (border-strong,
+   radius 12, elevation shadow, donate-fade) so all floating menus
+   match. */
+.apick {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+  animation: donate-fade 140ms ease;
+}
+/* Reuses the shared `.search-field` component (same as the sidebar /
+   transcript search) — no bespoke search input. */
+.apick-head { padding: 8px; border-bottom: 1px solid var(--border); }
+.apick-list { max-height: 240px; overflow-y: auto; padding: 4px; }
+.apick-none { padding: 12px; font-size: 13px; color: var(--fg-muted); }
+.apick-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.apick-item:hover { background: var(--bg-hover); }
+.apick-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.apick-recent {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+/* ── Record-hotkey control ───────────────────────────────────────── */
+.hk-block { padding: 14px 0 4px; }
+/* Full-width card button at the bottom of the block; tabular digits +
+   nowrap so swapping combo ⇄ "Press a combo…" never resizes it. */
+.hk-capbtn {
+  margin-top: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hk-capbtn.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.hk-warn {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #c2410c;
+}
+.dark .hk-warn { color: #f59e6b; }
 .settings-pro-note {
   font-size: 12px;
   color: var(--fg-dim);
@@ -1859,13 +2251,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* "Coming soon" promo (extension / mobile / Telegram bot). Brand logo
    on the left, full-width text on the right, an inert grey SOON chip.
    No CTA button — it used to squeeze the text into a thin column. */
+/* Same shell as the recording / transcribing / failed banners:
+   plain --bg with a single strong outline, no filled grey slab. */
 .promo {
   display: flex;
   flex-direction: column;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  background: var(--bg-elev);
+  background: var(--bg);
 }
 /* Top row: logo, then title + SOON to its right. */
 .promo-head {
@@ -1873,17 +2267,26 @@ body.resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   gap: 12px;
 }
+/* No tile any more — the bare brand mark sits directly on the card.
+   The freed space goes into a bigger logo. */
 .promo-logo {
   flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  border-radius: 11px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  border: 1px solid var(--border);
   color: var(--fg);
+}
+.promo-logo svg {
+  width: 31px;
+  height: 31px;
+}
+/* The Apple mark is a glyph that fills less of its box than the
+   square brand logos, so keep it the larger of the set. */
+.promo-logo svg.promo-apple {
+  width: 36px;
+  height: 36px;
 }
 .promo-title-row {
   flex: 1;
@@ -2130,43 +2533,181 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .donate-dismiss:hover { color: var(--fg); }
 
-/* Archive: extends .donate-card so spacing tokens (title→body 4px,
-   body→content 20px, padding 26px 32px 22px) stay shared with the
-   BMC popup. We only widen the card and add max-height because
-   archive lists can be long, plus the absolutely-positioned close
-   button in the top-right corner that BMC doesn't have. */
-.archive-card {
-  width: 560px;
-  max-height: 70vh;
+/* Modal popup shell — sits in the `.donate-overlay` backdrop and reads
+   like an enlarged inline banner (same border-strong outline, same
+   `.clarify-body` 18/300 heading, same `.segment-paragraph`-style
+   15/1.55 body type). Replaces the heavier `.donate-card`/`.archive-
+   card` pairing whose 20-px radius + deep shadow read as a generic
+   stock popup. Width is set by the per-instance class so the shell
+   stays content-agnostic.
+
+   Shared by Archive (.archive-pop, 560 px wide list) and Download
+   (.download-pop, 380 px wide chooser). The BMC donation modal still
+   uses .donate-card on purpose — it carries different geometry (3-up
+   amount grid). */
+.modal-pop {
   position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 22px 26px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Subtle, not the previous 24-px / 64-blur shadow that read as a
+     generic platform alert. Just enough lift over the blurred backdrop
+     so the card pops without screaming "modal". */
+  box-shadow: 0 10px 32px rgba(0,0,0,0.14);
+  max-height: 78vh;
   overflow: hidden;
+  animation: modal-pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.archive-close {
+@keyframes modal-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.modal-pop-title {
+  /* Mirrors `.clarify-body` (the "This recording isn't transcribed
+     yet" heading the user pointed at as the right typographic
+     character). Light weight, generous leading, no letter-spacing
+     stunt — NOT the previous 18/600 letter-spaced look. */
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1.35;
+  color: var(--fg);
+  /* Leave room for the absolute close button so a long localised
+     title can't slide under it. */
+  padding-right: 28px;
+}
+.modal-pop-note {
+  /* Body type pointed at by the user — segment-paragraph leading/colour
+     at a slightly smaller size so it reads as a subtitle under the
+     heading without competing with the list/content below. */
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+  /* Tighten to the title — the parent's gap is sized for content
+     blocks, not for title→subtitle. */
+  margin-top: -6px;
+}
+.modal-pop-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 30px;
-  height: 30px;
-  padding: 0 !important;
-  border-radius: 50% !important;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid var(--border-strong);
+  transition: background 80ms ease, color 80ms ease;
+}
+.modal-pop-close:hover { background: var(--bg-hover); color: var(--fg); }
+
+/* ── Archive popup ───────────────────────────────────────────────── */
+.archive-pop { width: 560px; }
+.archive-pop-empty {
+  /* Sits in the title→body rhythm; muted, segment-paragraph-ish. */
+  padding: 4px 0 6px;
   color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.archive-pop-head {
+  /* Quiet "select all" row — the prior 11-px uppercase-tracked head
+     read as a database table column label; this reads as a row that
+     happens to control the others. Same grid as the data rows so the
+     checkbox aligns vertically. */
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 6px 26px 10px;
+  margin: 0 -26px;
   cursor: pointer;
-  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
 }
-.archive-close:hover {
-  background: var(--bg-hover);
+.archive-pop-list {
+  /* Bleed to the card edges so per-row hover bg paints all the way to
+     the rounded border. Lives between the head row above and the
+     actions below — those carry the top/bottom rules. */
+  overflow-y: auto;
+  margin: 0 -26px;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.archive-pop-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 12px 26px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 60ms ease;
+}
+.archive-pop-row:last-child { border-bottom: none; }
+.archive-pop-row:hover { background: var(--bg-hover); }
+.archive-pop-row.selected { background: var(--bg-active); }
+.archive-pop-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+.archive-pop-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+.archive-pop-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.3;
+}
+.archive-pop-name-title {
+  /* Segment-paragraph weight & size — the body text character the
+     user pointed at as "хороший для основного текста". */
+  font-size: 15px;
+  font-weight: 400;
   color: var(--fg);
-  border-color: #b8b8b4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* Download chooser — reuses .donate-card + .archive-card verbatim (same
-   width, padding, close button, title→body spacing) so it's pixel-
-   consistent with the Archive popup. Only the row list is download-
-   specific. */
+.archive-pop-name-meta {
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.archive-pop-purge {
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  align-self: start;
+  padding-top: 2px;
+}
+.archive-pop-actions {
+  /* `.clarify-actions` already does the horizontal layout; this just
+     gives the action row breathing room from the list edge above it. */
+  padding-top: 4px;
+}
+
+/* ── Download popup ──────────────────────────────────────────────── */
+.download-pop { width: 380px; }
 .download-list {
   display: flex;
   flex-direction: column;
@@ -2196,120 +2737,6 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg-muted);
 }
 .download-row:hover .download-row-icon { color: var(--accent); }
-
-.archive-empty {
-  padding: 18px 0;
-  text-align: center;
-  color: var(--fg-muted);
-  font-size: 14px;
-}
-/* List sits inside the card's padding rim; horizontal padding mirrors
-   donate-card so rows align with the title/body above them. Negative
-   side margin lets row hovers bleed to the card's rounded edge. */
-.archive-list {
-  overflow-y: auto;
-  margin: 0 -32px;
-  flex: 0 1 auto;
-  min-height: 0;
-}
-/* Archive rows are a 3-column grid: checkbox · title+meta · purge-in.
-   Vertical centring uses the first baseline (title row) so the purge-in
-   pill on the right lines up with the title text, not the midpoint of
-   the two-line stack. Without this the right column floats half a line
-   below the title, which read as "uneven" in the screenshot. */
-.archive-row {
-  display: grid;
-  grid-template-columns: 24px 1fr auto;
-  align-items: center;
-  padding: 14px 32px;
-  column-gap: 16px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--border);
-  transition: background 60ms ease;
-}
-.archive-row:last-child { border-bottom: none; }
-.archive-row:hover { background: var(--bg-hover); }
-.archive-row.selected { background: var(--bg-active); }
-/* Bleed to the card edges like .archive-list so its 32px padding lands
-   the checkbox/label on the same x as the list rows below (it used to
-   sit inside the card padding AND its own, doubly indented). */
-.archive-row-head {
-  margin: 0 -32px;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
-  cursor: default;
-  padding: 10px 32px;
-}
-.archive-row-head:hover { background: var(--bg-elev); }
-.archive-head-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-.archive-check {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-}
-.archive-check input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-  margin: 0;
-}
-.archive-cell-date {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  line-height: 1.25;
-}
-.archive-row-title {
-  font-size: 13.5px;
-  color: var(--fg);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.25;
-}
-.archive-row-meta {
-  font-size: 12.5px;
-  color: var(--fg-muted);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.25;
-}
-.archive-cell-purge {
-  font-size: 12.5px;
-  color: var(--fg-muted);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.25;
-  white-space: nowrap;
-  /* align with the title baseline rather than the cell midpoint */
-  align-self: start;
-  padding-top: 1px;
-}
-.archive-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  padding-top: 14px;
-  margin-top: 6px;
-  border-top: 1px solid var(--border);
-}
-.archive-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.archive-actions button svg { display: block; width: 14px; height: 14px; }
 
 /* ───────────────────────────── Skeleton placeholders ─────────────────────────── */
 /* Shown while the first /api/meetings or /api/meetings/:id fetch is

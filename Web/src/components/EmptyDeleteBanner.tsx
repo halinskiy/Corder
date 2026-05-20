@@ -45,15 +45,16 @@ export function EmptyDeleteBanner({ meetingId, onDeleted, failed, onRetranscribe
     <div className="trans-banner clarify-banner">
       <div className="clarify-text">
         <div className="clarify-body">
-          {failed ? t.transcript_empty_failed : t.empty_delete_question}
+          {failed ? t.transcript_empty_failed : t.transcript_not_transcribed}
         </div>
       </div>
       <div className="clarify-actions clarify-actions-stack">
-        {failed && (
-          <button className="clarify-btn" onClick={onRetry} disabled={busy}>
-            {t.btn_retranscribe}
-          </button>
-        )}
+        {/* Always offer to transcribe: `failed` = retry after an error,
+            otherwise the recording was kept un-transcribed (auto-
+            transcribe off) and this is the manual "do it now". */}
+        <button className="clarify-btn" onClick={onRetry} disabled={busy}>
+          {failed ? t.btn_retranscribe : t.btn_transcribe}
+        </button>
         <button className="clarify-btn danger" onClick={onDelete} disabled={busy}>
           {t.empty_archive_btn}
         </button>

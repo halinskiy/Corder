@@ -12,9 +12,11 @@
 #      This writes the private key into the macOS Keychain (item name
 #      "https://sparkle-project.org") and prints the public key.
 #      Paste the public key into Info.plist → SUPublicEDKey.
-#   3. Decide where appcast.xml lives. Default in this repo:
-#        https://halinskiy.github.io/Corder/appcast.xml
-#      Hosted from a `gh-pages` branch with `appcast.xml` + the release zip.
+#   3. appcast.xml host MUST match Info.plist → SUFeedURL (that is where
+#      the SHIPPED app actually looks). Currently:
+#        https://halinskiy.github.io/corder-updates/appcast.xml
+#      Hosted from the `corder-updates` repo `gh-pages` branch with
+#      `appcast.xml` + the release zip. Change one → change both.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,8 +53,10 @@ SIG="$( "$SPARKLE_BIN/sign_update" "$ZIP" )"
 
 # 5. Generate / update appcast.xml.
 APPCAST="$RELEASES_DIR/appcast.xml"
+# Repo MUST be the one whose gh-pages serves SUFeedURL (corder-updates),
+# so the appcast and the binaries it points at live together.
 "$SPARKLE_BIN/generate_appcast" "$RELEASES_DIR" \
-  --download-url-prefix "https://github.com/halinskiy/Corder/releases/download/v$VERSION/"
+  --download-url-prefix "https://github.com/halinskiy/corder-updates/releases/download/v$VERSION/"
 
 echo
 echo "✔ Release $VERSION ready in $RELEASES_DIR"

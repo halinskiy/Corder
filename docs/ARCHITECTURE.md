@@ -78,15 +78,30 @@ communicate via shared state in `AppContext`:
 App/                Entry point, app delegate, recording state machine
 ├ CorderApp.swift           NSApplication boot
 ├ AppDelegate.swift         lifecycle, menu, server start, prewarm,
-│                           purgeExpiredArchive() on launch (>7 d)
-├ AppContext.swift          shared state (singleton); BoostMode,
-│                           AppLanguage; TranscriptionErrors lock-protected map
+│                           purgeExpiredArchive() on launch (>7 d),
+│                           duplicate-instance kill, hotkey wiring
+├ AppContext.swift          shared state (singleton); AppSettings
+│                           UserDefaults-backed enum (sync, thread-safe);
+│                           BoostMode / AppLanguage / AppVocabulary;
+│                           TranscriptionErrors + MicAppsSnapshot +
+│                           HotkeyStatusSnapshot lock-protected mirrors
 ├ RecordingController.swift @MainActor state machine (idle/recording/
 │                           stopping); shows + hides RecordingHUDPanel;
-│                           orchestrates CaptureEngine + DB
+│                           orchestrates CaptureEngine + DB; produces
+│                           the playback `audio.wav` mix synchronously
+│                           on stop when auto-transcribe is OFF (the
+│                           normal `transcribe()` path never runs)
 ├ RecordingLevelMeter.swift ObservableObject fed by capture taps;
 │                           sqrt-scaled peak, 30 Hz publish, 12 Hz
 │                           rolling-history shift; drives HUD waveform
+├ HotkeyManager.swift       Carbon `RegisterEventHotKey` wrapper (no
+│                           Accessibility prompt). Default ⌘⇧F →
+│                           toggles record. Conflicts with OS-bound
+│                           combos are surfaced via the settings DTO.
+├ MeetingDetector.swift     per-process default-input owner detector
+│                           (kAudioProcessPropertyIsRunningInput);
+│                           respects whitelist/blacklist from AppSettings
+│                           and publishes MicAppsSnapshot for the UI
 ├ NetworkMonitor.swift      reachability for Gemini calls
 ├ Notifications.swift       UNUserNotificationCenter wrapper
 ├ SleepWatchdog.swift       wakes the audio engine on sleep events
@@ -94,9 +109,17 @@ App/                Entry point, app delegate, recording state machine
 └ UpdateController.swift    Sparkle 2 wrapper
 
 Capture/
-├ CaptureEngine.swift       SCStream wiring (system audio only),
-│                           AVAudioEngine.installTap on default input
-│                           for mic, level-meter ingest from both paths
+├ CaptureEngine.swift       SCStream wiring (.screen video +
+│                           .audio → system_sck.wav as the BT
+│                           backup), AVAudioEngine.installTap on
+│                           default input for mic, Core-Audio
+│                           process tap for system.wav (primary).
+│                           `tearingDown` flag latched at stop so a
+│                           late tap/SCK buffer can't reopen-truncate
+│                           the just-finished WAV.
+├ SystemAudioTap.swift      Core-Audio process tap + private
+│                           aggregate device; opens lazily on first
+│                           buffer, format taken from the tap
 └ PermissionsChecker.swift  TCC: screen + mic; opens System Settings
 
 Transcription/
@@ -130,7 +153,7 @@ Cloud/
 
 Storage/
 ├ Database.swift            DatabaseQueue factory + migrations.run
-├ Migrations.swift          v1 → v8_archive, append-only
+├ Migrations.swift          v1 → v15_bt_route, append-only
 ├ Models.swift              Meeting / Speaker / Segment + CodingKeys;
 │                           gemini_raw_turns, audio_hash, archived_at
 └ MeetingRepository.swift   GRDB read/write, FTS search, listMeetings

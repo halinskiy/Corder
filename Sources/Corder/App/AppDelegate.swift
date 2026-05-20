@@ -88,6 +88,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the system; when both are true and we haven't already offered,
         // pop the invite capsule asking whether to record.
         MeetingDetector.shared.start()
+
+        // Global record hotkey (default ⌘⇧F, user-customisable in
+        // Settings). Toggles like the menu-bar Start/Stop, including
+        // the manual-start handshake so MeetingDetector doesn't also
+        // pop an offer for the same session.
+        HotkeyManager.shared.onTrigger = {
+            switch AppContext.shared.recordingState {
+            case .idle:
+                MeetingDetector.shared.userStartedRecordingManually()
+                Task { await RecordingController.shared.startRecording(source: .fullDisplay) }
+            case .recording:
+                Task { await RecordingController.shared.stopRecording() }
+            case .stopping:
+                break
+            }
+        }
+        HotkeyManager.shared.register(
+            keyCode: UInt32(AppSettings.recordHotkeyKeyCode),
+            modifiers: UInt32(AppSettings.recordHotkeyModifiers))
     }
 
     /// Builds an Edit menu so standard shortcuts (⌘C, ⌘X, ⌘V, ⌘A, ⌘Z) have

@@ -447,6 +447,14 @@ struct RecordingHUDView: View {
     /// organic rather than mechanically clocked.
     @State private var idleHueShift: Double = -6
     @State private var idleBrightness: Double = -0.02
+    /// Wall-clock instant the recording ended (matching `timeline.date`'s
+    /// reference epoch). The persistent inline blob eases its audio-
+    /// reactive energy down from this point instead of snapping; `nil`
+    /// means "no relax in flight" (either recording, or fully settled).
+    @State private var stopAt: TimeInterval? = nil
+    /// Holds the 30 Hz tick through the relax settle so the 30→20 Hz
+    /// idle downgrade can't hitch mid-transition.
+    @State private var relaxing = false
     var body: some View {
         let level = max(meter.micLevel, meter.systemLevel)
         // Peak over the last ~0.5 s ring buffer, scaled so a normal
@@ -460,7 +468,6 @@ struct RecordingHUDView: View {
         // hexagon templates, no jitter. During a recording the audio
         // drives the shape directly.
         let isRecording = ctx.recordingState != .idle
-        let shapeActivity: CGFloat = isRecording ? audioActivity : 0
 
         // Palette is bound directly to recording state — red while a
         // recording is in flight (whether the blob is the floating HUD
@@ -501,14 +508,38 @@ struct RecordingHUDView: View {
         // choppy reading before was the old 5 Hz tick, not the motion
         // itself). `paused: !visible` still hard-stops it when the host
         // window is occluded, so there's no background CPU burn.
-        let fps: Double = isRecording ? 30 : 20
+        // The persistent inline blob (Library window) does NOT spring
+        // away on stop the way the floating HUD does — it stays on
+        // screen and transitions recording→idle in place. Hard-cutting
+        // level/activity to 0 the instant `recordingState` hit `.idle`
+        // snapped the bulged red shape to a round circle in a single
+        // frame, which read as the "странно дергается when it shrinks"
+        // the user saw (the floating HUD never showed it — it dismisses
+        // instead). Drive a relax envelope from the TimelineView clock
+        // (NOT a withAnimation @State — a per-frame TimelineView
+        // re-render reads the final value and clobbers the interpolation):
+        // on stop the audio-reactive energy eases 1→0 over `relax`
+        // seconds so the silhouette settles gently into the calm idle
+        // circle. Stay at 30 Hz until it has settled so the 30→20 Hz
+        // schedule change can't hitch mid-transition.
+        let relax: TimeInterval = 0.5
+        let fps: Double = (isRecording || relaxing) ? 30 : 20
         Group {
             TimelineView(.animation(minimumInterval: 1.0 / fps,
                                     paused: !visible)) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
+                let energy: CGFloat = {
+                    if isRecording { return 1 }
+                    guard let s = stopAt else { return 0 }
+                    let p = (t - s) / relax
+                    if p >= 1 { return 0 }
+                    // easeOut: quick initial give, long soft settle.
+                    let e = 1 - p
+                    return CGFloat(e * e)
+                }()
                 blobLayer(time: t,
-                          level: isRecording ? level : 0,
-                          activity: isRecording ? shapeActivity : 0,
+                          level: level * Float(energy),
+                          activity: audioActivity * energy,
                           palette: palette)
             }
         }
@@ -530,12 +561,71 @@ struct RecordingHUDView: View {
         // Fast palette change on recording-state transitions. Scoped to
         // `isRecording` so nothing else animates with it.
         .animation(.easeInOut(duration: 0.10), value: isRecording)
+        // Soft-fade the whole blob+glow into transparency BEFORE it
+        // reaches the host's rectangular bounds. The outer bloom radius
+        // (≈ 44–62 pt) is far larger than the breathing room around the
+        // 43 pt blob in the 110 pt host, so without this the glow gets
+        // hard-clipped at the window edge and reads as an ugly bright
+        // RECTANGLE around the blob (worse once the glow opacity was
+        // raised). A radial vignette whose clear point sits at the
+        // inscribed-circle radius guarantees every edge AND corner is
+        // fully transparent — the glow just dissolves like real light
+        // instead of hitting a box. Applied after the scale/animation
+        // modifiers and at the fixed host size, so hover scale-up can
+        // never push the soft edge back out to the rectangular border.
+        .mask(
+            GeometryReader { geo in
+                let r = min(geo.size.width, geo.size.height) / 2
+                RadialGradient(
+                    // Long concave ease, not "solid then cliff": the
+                    // blob body stays fully solid, then the glow's own
+                    // light dissolves so gradually it has no perceptible
+                    // boundary — yet it's exactly 0 by every edge/corner
+                    // (corners sit past endRadius → clamped to the final
+                    // clear stop). A short ramp here just swapped the
+                    // hard rectangle for an equally hard circle.
+                    gradient: Gradient(stops: [
+                        .init(color: .white, location: 0.00),
+                        .init(color: .white, location: 0.34),
+                        .init(color: .white.opacity(0.92), location: 0.50),
+                        .init(color: .white.opacity(0.74), location: 0.62),
+                        .init(color: .white.opacity(0.52), location: 0.72),
+                        .init(color: .white.opacity(0.32), location: 0.81),
+                        .init(color: .white.opacity(0.16), location: 0.89),
+                        .init(color: .white.opacity(0.06), location: 0.95),
+                        .init(color: .white.opacity(0),    location: 1.00)
+                    ]),
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: r
+                )
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
+        )
         // Panel-driven exit: reuse the very same scale/opacity spring as
         // the entry, just run backwards — the blob shrinks to a tiny
         // transparent dot. The panel waits ~0.45 s (spring settle) before
         // orderOut, so this fully plays before the window disappears.
         .onChange(of: presentation.dismissing) { _, dismissing in
             if dismissing { appeared = false }
+        }
+        // Inline-blob relax (see the TimelineView energy envelope above).
+        // `.stopping` keeps `isRecording` true, so the edge into the
+        // settle fires exactly once — on the real transition to `.idle`.
+        // The delayed clear releases the 30 Hz hold and pins energy to a
+        // hard 0 once the ease has fully landed.
+        .onChange(of: ctx.recordingState) { _, state in
+            if state != .idle {
+                stopAt = nil
+                relaxing = false
+            } else {
+                stopAt = Date().timeIntervalSinceReferenceDate
+                relaxing = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                    relaxing = false
+                    stopAt = nil
+                }
+            }
         }
         .onAppear {
             appeared = true

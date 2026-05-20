@@ -116,6 +116,55 @@ enum VoiceActivityDetector {
                         totalDurationMs: Int64(Double(frames) / sampleRate * 1000.0))
     }
 
+    /// Speech-energy summary used to CHOOSE between the two system
+    /// tracks (Core-Audio tap vs ScreenCaptureKit). On a Bluetooth
+    /// output route the tap captures a faint, attenuated bleed — not
+    /// true silence — so the old "tap definitely silent" gate never
+    /// tripped and the good SCK backup was discarded. Comparing voiced
+    /// time + mean voiced RMS lets us pick the track that actually has
+    /// the remote speech. `nil` on read error; (0, 0) on a silent file.
+    static func voicedEnergy(
+        audioURL: URL, config: Config = Config()
+    ) -> (voicedMs: Int64, meanRMS: Float)? {
+        guard let file = try? AVAudioFile(forReading: audioURL) else { return nil }
+        let format = file.processingFormat
+        let sampleRate = format.sampleRate
+        guard sampleRate > 0, file.length > 0 else { return (0, 0) }
+        let totalFrames = AVAudioFrameCount(file.length)
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format,
+                                         frameCapacity: totalFrames) else { return nil }
+        do { try file.read(into: buf, frameCount: totalFrames) } catch { return nil }
+        guard let channels = buf.floatChannelData else { return nil }
+
+        let frames = Int(buf.frameLength)
+        let channelCount = Int(format.channelCount)
+        let windowFrames = max(1, Int(Double(config.windowMs) * sampleRate / 1000.0))
+        let hopFrames = max(1, Int(Double(config.hopMs) * sampleRate / 1000.0))
+
+        var voicedWindows = 0
+        var voicedRmsSum: Float = 0
+        var pos = 0
+        while pos + windowFrames <= frames {
+            var sumSq: Float = 0
+            for ch in 0..<channelCount {
+                let data = channels[ch]
+                for i in 0..<windowFrames {
+                    let s = data[pos + i]
+                    sumSq += s * s
+                }
+            }
+            let rms = sqrtf(sumSq / Float(windowFrames * channelCount))
+            if rms >= config.rmsThreshold {
+                voicedWindows += 1
+                voicedRmsSum += rms
+            }
+            pos += hopFrames
+        }
+        let voicedMs = Int64(voicedWindows) * Int64(config.hopMs)
+        let mean = voicedWindows > 0 ? voicedRmsSum / Float(voicedWindows) : 0
+        return (voicedMs, mean)
+    }
+
     /// Take the voiced/silent bitmap and produce final [SpeechSegment].
     ///
     /// 1. Run-length encode into raw speech runs.
@@ -195,9 +244,20 @@ enum VoiceActivityDetector {
                 }
                 return slot.originalStartMs
             }
-            // Past the last slot — clamp to its original end.
+            // Past the last slot. Gemini's per-chunk timestamps bunch
+            // up near the end of a long file and routinely overshoot the
+            // final speech slot, so a whole closing exchange lands here.
+            // The old code clamped EVERY such turn onto the single
+            // instant `lastOriginalStart + duration` — the entire goodbye
+            // block collapsed onto one timestamp and clicking any of
+            // those lines seeked to the very end of the recording.
+            // Continue the last slot's 1:1 mapping instead: the tail
+            // turns keep their relative order and spacing and stay
+            // individually click-seekable. A small overshoot past the
+            // real audio end is harmless — the media element clamps an
+            // over-long currentTime to its duration.
             if let last = slots.last {
-                return last.originalStartMs + last.durationMs
+                return last.originalStartMs + (compressedMs - last.compressedStartMs)
             }
             return compressedMs
         }

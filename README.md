@@ -9,11 +9,13 @@ talks to the one provider you opted into (Gemini).
 
 ## What it does
 
-- **Records** — single click in the menu bar. Captures system audio
-  (via ScreenCaptureKit) and your microphone (via AVAudioEngine) onto
-  **separate** `.wav` tracks. The HUD pill floats over every Space
-  while you're recording, with a live waveform meter so you can tell
-  capture is actually working.
+- **Records** — single click in the menu bar, the global hotkey
+  (default ⌘⇧F, configurable in Settings), or the inline blob inside
+  the Library window. Captures system audio (Core-Audio process tap
+  + ScreenCaptureKit backup) and your microphone (via AVAudioEngine)
+  onto **separate** `.wav` tracks. The HUD pill floats over every
+  Space while you're recording, with a live waveform meter so you can
+  tell capture is actually working.
 - **Transcribes — dual-track** — `mic.wav` and `system.wav` go to
   Google's Gemini 2.5 Flash File API as **two separate calls** in
   parallel. The mic call is forced to a single speaker ("you"); the

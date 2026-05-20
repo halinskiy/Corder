@@ -79,6 +79,7 @@ SegmentDTO  { id, speaker_id, start_ms, end_ms, text, text_boost }
 | Method | Path                       | Body                                  |
 | ------ | -------------------------- | ------------------------------------- |
 | GET    | `/api/recording/state`     | `{active: bool, meeting_id?, started_at_ms?, stopping?}` |
+| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the global hotkey and the in-page inline blob. |
 | POST   | `/api/recording/stop`      | Triggers `RecordingController.stopRecording()`. |
 
 The frontend polls `/api/recording/state` once per second to drive the
@@ -99,13 +100,44 @@ Settings {
   vocabulary?: string;       // domain terms fed into the transcription prompt
   gemini_key?: string;       // write-only: POST to set; never echoed back by GET
   gemini_key_set?: boolean;  // read-only: whether a key is on disk
+  // Functional toggles. Absent on POST ⇒ unchanged. Default true.
+  notifications?: boolean;
+  capture_video?: boolean;   // screen video.mov (mic+system audio is always on)
+  capture_audio?: boolean;   // server-side master; not surfaced as a UI toggle
+  auto_transcribe?: boolean; // off ⇒ recording kept .ready, transcribe on demand
+  auto_title?: boolean;
+  meeting_whitelist?: string[]; // bundle ids: always offer to record
+  meeting_blacklist?: string[]; // bundle ids: never offer
+  detected_mic_apps?: string[]; // read-only: recent mic owners (UI picker)
+  // Global record hotkey. Write Carbon key code + Carbon mod mask
+  // (cmd 256 | shift 512 | option 2048 | ctrl 4096). Default ⌘⇧F.
+  record_hotkey_code?: number;
+  record_hotkey_mods?: number;
+  record_hotkey_label?: string;       // read-only e.g. "⇧⌘F"
+  record_hotkey_conflict?: string|null; // read-only: clashing macOS system shortcut
+  record_hotkey_ok?: boolean;         // read-only: OS accepted the binding
 }
+
+`GET /api/installed-apps` → `[{ bundle, name, recent }]` (apps for the
+auto-detect picker; `recent` = seen on the mic lately).
+`GET /api/app-icon/:bundle` → 64 px PNG icon for that bundle.
 ```
 
 Gemini is the only provider — there is no provider toggle. The key is
 write-only over this endpoint and is stored at
 `~/.config/corder/gemini_key` (mode 0600); GET only reports whether one
 is set.
+
+## Sparkle / Updater
+
+| Method | Path                  | Returns / Body                      |
+| ------ | --------------------- | ----------------------------------- |
+| GET    | `/api/update-status`  | `{state: "idle"|"checking"|"available"|"downloading"|"ready"|"error", target_version?, error?}` |
+| POST   | `/api/update-check`   | Forces an immediate Sparkle feed check; updates `update-status`. |
+
+The update pill in the title bar polls `/api/update-status`; clicking
+it calls `/api/update-check`. The feed URL itself lives in
+`Info.plist → SUFeedURL`.
 
 ## Search
 
