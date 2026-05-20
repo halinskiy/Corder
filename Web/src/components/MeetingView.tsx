@@ -1,5 +1,5 @@
 import React from "react";
-import { Copy, Archive as ArchiveIcon, Globe, Users, Moon, Sun, Search } from "lucide-react";
+import { Copy, Archive as ArchiveIcon, Globe, Users, Moon, Search } from "lucide-react";
 import { useTheme } from "../theme";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { UpdatePill } from "./UpdatePill";
@@ -43,7 +43,7 @@ function LangSwitch({ onToggle, t }: { onToggle: () => void; t: T }) {
 }
 
 function ThemeSwitch({ t }: { t: T }) {
-  const { isDark, toggle } = useTheme();
+  const { toggle } = useTheme();
   return (
     <button
       className="toolbar-icon-btn"
@@ -51,9 +51,7 @@ function ThemeSwitch({ t }: { t: T }) {
       title={t.btn_theme_title}
       aria-label={t.btn_theme_title}
     >
-      {isDark
-        ? <Moon size={16} strokeWidth={2} />
-        : <Sun size={16} strokeWidth={2} />}
+      <Moon size={16} strokeWidth={2} />
     </button>
   );
 }
@@ -114,10 +112,13 @@ interface Props {
   /// divider (negative dx = handle moved left = right panel widens).
   onResizeSplit: (dx: number) => void;
   onResetSplit: () => void;
+  /// Fired when this meeting's audio starts/stops so the sidebar can
+  /// mark which session the sound is coming from.
+  onPlayingChange?: (playing: boolean) => void;
   t: T;
 }
 
-export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, recordingState, onRecordingStopped, reloadSignal, lang, onLangChange, onResizeSplit, onResetSplit, t }: Props) {
+export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, recordingState, onRecordingStopped, reloadSignal, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
@@ -128,6 +129,28 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
   // looks over-segmented and the user hasn't already dismissed for this id.
   const [clarifyOpen, setClarifyOpen] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  // Report play/pause of this meeting's media (videoRef is the master
+  // clock element) up so the sidebar can flag the playing session.
+  // Re-attaches once `detail` loads (by then RightPanel is mounted and
+  // the ref is set); cleanup on meeting switch/unmount clears the flag.
+  React.useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !onPlayingChange) return;
+    const sync = () => onPlayingChange(!el.paused && !el.ended);
+    el.addEventListener("play", sync);
+    el.addEventListener("pause", sync);
+    el.addEventListener("ended", sync);
+    el.addEventListener("emptied", sync);
+    sync();
+    return () => {
+      el.removeEventListener("play", sync);
+      el.removeEventListener("pause", sync);
+      el.removeEventListener("ended", sync);
+      el.removeEventListener("emptied", sync);
+      onPlayingChange(false);
+    };
+  }, [onPlayingChange, detail?.id]);
 
   // Inline rename of the open meeting via the header breadcrumb title.
   // `null` = not editing; a string = the in-progress edit value.
@@ -334,8 +357,13 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
           <UpdatePill t={t} onToast={onToast} />
           <ThemeSwitch t={t} />
           <LangSwitch onToggle={() => onLangChange(lang === "ru" ? "en" : "ru")} t={t} />
-          <button className="ghost" onClick={onOpenArchive} title={t.archive_open_title}>
-            <ArchiveIcon size={16} strokeWidth={2} /> {t.btn_archive}
+          <button
+            className="toolbar-icon-btn"
+            onClick={onOpenArchive}
+            title={t.archive_open_title}
+            aria-label={t.btn_archive}
+          >
+            <ArchiveIcon size={16} strokeWidth={2} />
           </button>
           <span className="toolbar-sep" />
           <ProfileMenu onToast={onToast} t={t} />
@@ -378,6 +406,7 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              <span className="toolbar-sep" />
               {detail.status === "ready" && detail.segments.length > 0 && (
                 <button
                   className={"toolbar-icon-btn" + (clarifyOpen ? " active" : "")}
@@ -415,7 +444,11 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
               t={t}
             />
           </div>
-          {rightTab === "recording" ? (
+          {/* RightPanel stays MOUNTED across the Recording/Settings
+              tab switch (display toggled, not unmounted) so its
+              <video>/<audio> load exactly once instead of re-fetching
+              every time the user peeks at Settings and comes back. */}
+          <div style={{ display: rightTab === "recording" ? "contents" : "none" }}>
             <RightPanel
               detail={detail}
               videoRef={videoRef}
@@ -424,9 +457,8 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
               onSeek={onSeek}
               t={t}
             />
-          ) : (
-            <SettingsPane t={t} onToast={onToast} />
-          )}
+          </div>
+          {rightTab !== "recording" && <SettingsPane t={t} />}
         </div>
       </div>
     </>

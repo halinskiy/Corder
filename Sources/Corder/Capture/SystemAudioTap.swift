@@ -210,4 +210,34 @@ final class SystemAudioTap {
         guard status == noErr else { throw wrap(status) }
         return cf as String
     }
+
+    /// True when the system's default OUTPUT device is a Bluetooth
+    /// route (AirPods / BT headset). A Core Audio process tap captures
+    /// silence in that case — the audio is rendered to the BT device
+    /// the global tap can't see — so the remote side of a call never
+    /// makes it into system.wav. We use this only to warn the user;
+    /// it never blocks recording.
+    static func defaultOutputIsBluetooth() -> Bool {
+        var devAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var dev = AudioObjectID(kAudioObjectUnknown)
+        var devSize = UInt32(MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                         &devAddr, 0, nil, &devSize, &dev) == noErr,
+              dev != AudioObjectID(kAudioObjectUnknown) else { return false }
+
+        var trAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain)
+        var transport = UInt32(0)
+        var trSize = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(dev, &trAddr, 0, nil, &trSize, &transport) == noErr
+        else { return false }
+
+        return transport == kAudioDeviceTransportTypeBluetooth
+            || transport == kAudioDeviceTransportTypeBluetoothLE
+    }
 }

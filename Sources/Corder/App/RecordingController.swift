@@ -126,30 +126,107 @@ final class RecordingController {
         // discover an empty transcript after the meeting.
         if capturedSilence {
             FileLogger.log("stopRecording: \(id) captured silence (maxMic=\(maxMic) maxSys=\(maxSys))")
-            NotificationsService.post(
-                title: L.notif("notif_silent_title"),
-                body: L.notif("notif_silent_body"))
+            if AppSettings.notificationsEnabled {
+                NotificationsService.post(
+                    title: L.notif("notif_silent_title"),
+                    body: L.notif("notif_silent_body"))
+            }
+        } else if maxSys < 0.004 && AppContext.shared.capture.outputBluetoothAtStart {
+            // We DID record audio (not the total-silence case above), but
+            // the system track is empty while the output route was
+            // Bluetooth — the exact signature of the process-tap-on-BT
+            // failure. The user's own voice is fine; the remote side was
+            // silently lost. Tell them why and how to fix it.
+            FileLogger.log("stopRecording: \(id) system track silent on Bluetooth output — remote side not captured (maxMic=\(maxMic) maxSys=\(maxSys))")
+            if AppSettings.notificationsEnabled {
+                NotificationsService.post(
+                    title: L.notif("notif_bt_title"),
+                    body: L.notif("notif_bt_body"))
+            }
         }
 
         let endedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
         let durationMs = Int64(Date().timeIntervalSince(startedAt) * 1000)
 
+        // Auto-transcribe OFF: keep the recording but DON'T enqueue and
+        // DON'T mark it .transcribing (that would hang forever and
+        // resetStuckMeetings() would flip it to .failed next launch).
+        // Land it .ready with no segments — it's browsable and the user
+        // can produce a transcript on demand via the existing
+        // right-click → Re-transcribe (the manual affordance).
+        let autoTx = AppSettings.autoTranscribe
         do {
             if var meeting = try AppContext.shared.repo.meeting(id: id) {
                 meeting.endedAt = endedAtMs
                 meeting.durationMs = durationMs
-                meeting.status = .transcribing
+                meeting.status = autoTx ? .transcribing : .ready
+                // Snapshot the OUTPUT route now — the pipeline's
+                // system-track chooser needs to know this recording was
+                // on Bluetooth (faint tap) even if it transcribes later.
+                meeting.outputBluetoothAtStart =
+                    AppContext.shared.capture.outputBluetoothAtStart
                 try AppContext.shared.repo.updateMeeting(meeting)
             }
-            NotificationsService.post(
-                title: L.notif("notif_saved_title"),
-                body: L.notif("notif_saved_body")
-                    .replacingOccurrences(of: "{s}", with: "\(durationMs / 1000)"))
+            if AppSettings.notificationsEnabled {
+                NotificationsService.post(
+                    title: L.notif("notif_saved_title"),
+                    body: L.notif("notif_saved_body")
+                        .replacingOccurrences(of: "{s}", with: "\(durationMs / 1000)"))
+            }
         } catch {
             present(error: "Не удалось сохранить запись: \(error.localizedDescription)")
         }
 
         AppContext.shared.recordingState = .idle
+
+        guard autoTx else {
+            FileLogger.log("stopRecording: auto-transcribe OFF — \(id) saved un-transcribed (manual re-transcribe available)")
+            // The playback mix (audio.wav = mic + far end) is normally
+            // produced inside transcribe(). With auto-transcribe off
+            // that never runs, so the audio route falls back to
+            // mic.wav and the far end seems "not recorded" on playback
+            // even though system.wav captured it fine. Produce the mix
+            // now so an untranscribed recording is fully playable.
+            // On a Bluetooth route the tap (system.wav) is faint, so
+            // prefer the SCStream backup for an audible far end —
+            // mirrors the transcription chooser's intent.
+            let dir = AppPaths.recordingDir(for: id)
+            let micURL = dir.appendingPathComponent("mic.wav")
+            let mixURL = dir.appendingPathComponent("audio.wav")
+            let tapURL = dir.appendingPathComponent("system.wav")
+            let sckURL = dir.appendingPathComponent("system_sck.wav")
+            let fm = FileManager.default
+            if fm.fileExists(atPath: micURL.path),
+               !fm.fileExists(atPath: mixURL.path) {
+                // Pick the system track that ACTUALLY carries the far
+                // end by voiced energy — never the BT flag and never
+                // file size (system_sck.wav is 11 MB of pure zeros in
+                // every observed run; the Core-Audio tap is the track
+                // that really records, even on Bluetooth). Mirrors the
+                // TranscriptionPipeline chooser. Off the main actor so a
+                // long recording's VAD scan doesn't stall the UI.
+                let chosen: URL? = await Task.detached(priority: .utility) {
+                    () -> URL? in
+                    let f = FileManager.default
+                    let tapV = f.fileExists(atPath: tapURL.path)
+                        ? (VoiceActivityDetector.voicedEnergy(audioURL: tapURL)?.voicedMs ?? -1)
+                        : -1
+                    let sckV = f.fileExists(atPath: sckURL.path)
+                        ? (VoiceActivityDetector.voicedEnergy(audioURL: sckURL)?.voicedMs ?? -1)
+                        : -1
+                    if max(tapV, sckV) <= 0 { return nil }
+                    return sckV > tapV ? sckURL : tapURL
+                }.value
+                do {
+                    try await AudioMixer.produceWhisperInput(
+                        systemURL: chosen, micURL: micURL, outputURL: mixURL)
+                    FileLogger.log("stopRecording: produced playback mix audio.wav (mic\(chosen.map { "+\($0.lastPathComponent)" } ?? " only")) for un-transcribed \(id)")
+                } catch {
+                    FileLogger.log("stopRecording: playback mix failed (\(error)) for \(id) — playback falls back to mic.wav")
+                }
+            }
+            return
+        }
 
         // Kick off transcription. TranscriptionPipeline is @MainActor — running it
         // on the main actor (instead of a detached Task) keeps NSLog/FileLogger
@@ -158,9 +235,11 @@ final class RecordingController {
         FileLogger.log("stopRecording: scheduling transcription for \(id)")
         Task { @MainActor in
             await TranscriptionPipeline.shared.enqueue(meetingId: id).value
-            NotificationsService.post(
-                title: L.notif("notif_ready_title"),
-                body: L.notif("notif_ready_body"))
+            if AppSettings.notificationsEnabled {
+                NotificationsService.post(
+                    title: L.notif("notif_ready_title"),
+                    body: L.notif("notif_ready_body"))
+            }
         }
     }
 

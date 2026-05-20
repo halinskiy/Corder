@@ -80,6 +80,8 @@ function App() {
   // case and an empty-state in the latter.
   const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  // Meeting whose audio is currently playing → sidebar play marker.
+  const [playingId, setPlayingId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
   const [toast, setToast] = React.useState<ToastState | null>(null);
   const [toastLeaving, setToastLeaving] = React.useState(false);
@@ -286,6 +288,7 @@ function App() {
         meetings={visibleMeetings}
         loaded={meetingsLoaded}
         activeId={activeId}
+        playingId={playingId}
         query={query}
         onQueryChange={setQuery}
         onSelect={setActiveId}
@@ -316,6 +319,7 @@ function App() {
             onLangChange={handleLangChange}
             onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
             onResetSplit={() => setRightW(RIGHT_DEFAULT)}
+            onPlayingChange={(playing) => setPlayingId(playing ? activeId : null)}
             t={t}
           />
         ) : (

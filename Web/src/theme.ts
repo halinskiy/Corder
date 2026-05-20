@@ -80,10 +80,6 @@ export function useTheme() {
         return;
       }
 
-      // Freeze element CSS transitions for the duration of the wipe so
-      // colour-animated bits (timeline card/bars) don't flicker under it.
-      document.documentElement.classList.add("theme-anim");
-
       const x = e.clientX;
       const y = e.clientY;
       const endRadius = Math.hypot(
@@ -91,15 +87,35 @@ export function useTheme() {
         Math.max(y, window.innerHeight - y)
       );
 
+      // CSS pre-clips `::view-transition-new(root)` to `circle(0 at
+      // --vt-x --vt-y)`, so the very first composited frame is already
+      // hidden (no flash). These vars feed that static initial clip.
+      const root = document.documentElement;
+      root.style.setProperty("--vt-x", `${x}px`);
+      root.style.setProperty("--vt-y", `${y}px`);
+      root.style.setProperty("--vt-r", `${endRadius}px`);
+
+      // Freeze element CSS transitions for the duration of the wipe so
+      // colour-animated bits (timeline card/bars) don't flicker under it.
+      root.classList.add("theme-anim");
+
       const transition = start(commit);
-      transition.finished
-        .catch(() => {})
-        .finally(() => {
-          document.documentElement.classList.remove("theme-anim");
-        });
+      // WAAPI on the VT pseudo = WebKit's ACCELERATED path (a CSS
+      // @keyframes on clip-path:circle() is main-thread re-raster every
+      // frame — severe jank). `fill: "forwards"` is LOAD-BEARING: with
+      // the default fill the animation's effect is dropped the instant
+      // it ends, so clip-path snaps back to the CSS resting value
+      // (circle(0) — fully hidden). WebKit resolves `transition.finished`
+      // (which tears down the snapshots) a few frames LATER, so for
+      // those frames `::view-transition-new(root)` is invisible and the
+      // opaque old snapshot underneath shows through — a backward
+      // "snap to old then jump to new" flicker at the END of the wipe.
+      // Holding the end state (circle(R), fully revealed) until the
+      // pseudo is destroyed removes that gap. Frame-0 flash is still
+      // guarded by the CSS circle(0) pre-clip; this guards the tail.
       transition.ready
         .then(() => {
-          document.documentElement.animate(
+          root.animate(
             {
               clipPath: [
                 `circle(0px at ${x}px ${y}px)`,
@@ -109,11 +125,17 @@ export function useTheme() {
             {
               duration: 700,
               easing: "ease-in-out",
+              fill: "forwards",
               pseudoElement: "::view-transition-new(root)",
             }
           );
         })
         .catch(() => {});
+      transition.finished
+        .catch(() => {})
+        .finally(() => {
+          root.classList.remove("theme-anim");
+        });
     },
     [isDark]
   );

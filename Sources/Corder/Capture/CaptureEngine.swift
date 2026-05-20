@@ -33,6 +33,18 @@ final class CaptureEngine: NSObject {
     weak var delegate: CaptureEngineDelegate?
 
     private(set) var isRecording = false
+    /// Set true the instant `stop()` begins, before the async teardown.
+    /// The system-audio writers open their AVAudioFile LAZILY on the
+    /// first buffer (a nil file means "not opened yet"). After stop,
+    /// `systemAudioFile`/`sckAudioFile` are also nil'd — so a late
+    /// buffer whose main-actor `Task` lands AFTER stop would see nil
+    /// and *re-create* the file with `AVAudioFile(forWriting:)`, which
+    /// TRUNCATES the just-written recording to an empty file (root
+    /// cause of the "473088 frames captured yet system.wav is 0 bytes"
+    /// total loss). This flag disambiguates "not opened yet" from
+    /// "closed after stop": once set, late buffers are dropped, never
+    /// reopened.
+    private var tearingDown = false
     private(set) var startedAt: Date?
     private(set) var meetingId: String?
     private(set) var videoURL: URL?
@@ -73,9 +85,40 @@ final class CaptureEngine: NSObject {
     // denied, or genuinely nothing playing).
     private var systemFramesWritten: Int64 = 0
     private var loggedFirstSystemBuffer = false
+    /// Snapshot of whether the default OUTPUT was Bluetooth when this
+    /// recording started. The process tap captures silence on a BT
+    /// route, so if system.wav ends up silent AND this is true, the
+    /// remote side was lost to the BT limitation — RecordingController
+    /// reads this post-stop to warn the user specifically. Survives
+    /// stop() (cleared only on the next start()).
+    private(set) var outputBluetoothAtStart = false
+
+    // Secondary system-audio capture via SCStream's `.audio` output,
+    // written to a SEPARATE system_sck.wav. This is a belt-and-braces
+    // backup for the Core Audio process tap: the tap captures silence
+    // on a Bluetooth output route (AirPods / BT headset — the common
+    // case), whereas SCStream's audio tap captures the system mix in
+    // that case. The two fail on opposite scenarios (SCStream is silent
+    // on VPIO/WebRTC calls; the tap is silent on BT output), so writing
+    // both and letting TranscriptionPipeline pick the non-silent track
+    // means a recording is only lost when BOTH fail. Strictly additive:
+    // the tap path (system.wav) is never touched, so worst case is
+    // today's behaviour with no regression. We deliberately do NOT feed
+    // RecordingLevelMeter from this path — the BT-warning heuristic in
+    // RecordingController keys off sessionMaxSystem reflecting the TAP
+    // only; mixing SCK levels in would mask the very failure we warn on.
+    private var sckSystemURL: URL?
+    private var sckAudioFile: AVAudioFile?
+    private var sckFramesWritten: Int64 = 0
+    private var loggedFirstSCKBuffer = false
 
     func start(meetingId: String, source: CaptureSource) async throws {
         FileLogger.log("CaptureEngine.start: meetingId=\(meetingId) source=\(source)")
+        tearingDown = false
+        outputBluetoothAtStart = SystemAudioTap.defaultOutputIsBluetooth()
+        if outputBluetoothAtStart {
+            FileLogger.log("CaptureEngine.start: default OUTPUT is Bluetooth — process tap may capture silence (remote side at risk)")
+        }
         // AVAudioEngine alone doesn't trigger the macOS Microphone TCC sheet.
         // We ask AVCaptureDevice explicitly — but a LSUIElement app has to be
         // .regular + active for the prompt to actually appear. Otherwise the
@@ -118,12 +161,14 @@ final class CaptureEngine: NSObject {
         let videoURL = dir.appendingPathComponent("video.mov")
         let micURL = dir.appendingPathComponent("mic.wav")
         let systemURL = dir.appendingPathComponent("system.wav")
+        let sckSystemURL = dir.appendingPathComponent("system_sck.wav")
         FileLogger.log("CaptureEngine.start: dir=\(dir.path)")
 
         // Remove any leftovers from a previous failed run
         try? FileManager.default.removeItem(at: videoURL)
         try? FileManager.default.removeItem(at: micURL)
         try? FileManager.default.removeItem(at: systemURL)
+        try? FileManager.default.removeItem(at: sckSystemURL)
 
         // 1. Build the SCContentFilter for the chosen source.
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -193,6 +238,15 @@ final class CaptureEngine: NSObject {
         //    doesn't blow up the writer. Failures here are non-fatal —
         //    audio capture continues, the frontend renders <audio> when
         //    the .mov is missing.
+        // User can turn screen-video recording off (audio-only). Skipping
+        // the writer is exactly the existing "init failed" path the rest
+        // of the engine already tolerates: videoWriter stays nil,
+        // writeVideo no-ops, the frontend renders <audio> via has_video.
+        // The `.screen` SCStream output is still registered below (it
+        // keeps the audio-clock pacing intact regardless).
+        if !AppSettings.captureVideo {
+            FileLogger.log("CaptureEngine.start: screen-video disabled in Settings — audio only")
+        } else {
         do {
             try? FileManager.default.removeItem(at: videoURL)
             let writer = try AVAssetWriter(url: videoURL, fileType: .mov)
@@ -229,18 +283,35 @@ final class CaptureEngine: NSObject {
         } catch {
             FileLogger.log("CaptureEngine.start: AVAssetWriter init failed: \(error). Continuing without video.")
         }
+        }   // end if AppSettings.captureVideo
 
-        // 4. SCStream for SCREEN (video) only. System audio is captured
-        //    separately by the Core Audio process tap below — SCStream's
-        //    audio tap returns silence on real calls (VPIO bypass), which
-        //    is the whole reason the tap exists. We still set
-        //    capturesAudio=false here so SCStream doesn't hold the
-        //    system-audio TCC indicator for a stream we don't read audio
-        //    from.
-        config.capturesAudio = false
+        // 4. SCStream for SCREEN (video) + a SECONDARY system-audio
+        //    track. The Core Audio process tap below is still the
+        //    primary system-audio source (it captures VPIO/WebRTC call
+        //    audio the SCStream mix misses). But the tap is silent when
+        //    the output route is Bluetooth — exactly when many users
+        //    record (AirPods). SCStream's audio tap captures the mix in
+        //    that case, so we keep `capturesAudio = true` and mirror its
+        //    `.audio` output into a SEPARATE system_sck.wav. The tap
+        //    path is untouched; TranscriptionPipeline prefers the tap
+        //    and only falls back to system_sck.wav when the tap track is
+        //    provably silent. Net: no regression, BT recordings saved.
+        config.capturesAudio = true
         let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
         try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
-        FileLogger.log("CaptureEngine.start: SCStream configured (screen-only; audio via process tap)")
+        do {
+            try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
+            self.sckSystemURL = sckSystemURL
+            self.sckAudioFile = nil
+            self.sckFramesWritten = 0
+            self.loggedFirstSCKBuffer = false
+            FileLogger.log("CaptureEngine.start: SCStream configured (screen + secondary system audio → system_sck.wav)")
+        } catch {
+            // Non-fatal: the process tap is still the primary path. We
+            // just lose the Bluetooth-output safety net for this run.
+            self.sckSystemURL = nil
+            FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
+        }
         do {
             try await activeStream.startCapture()
             FileLogger.log("CaptureEngine.start: SCStream.startCapture OK (screen)")
@@ -317,6 +388,11 @@ final class CaptureEngine: NSObject {
 
     func stop() async {
         guard isRecording, let id = meetingId else { return }
+        // Latch teardown BEFORE the first await so any tap/SCK buffer
+        // whose main-actor Task is already queued (or fires during the
+        // async stopCapture) drops instead of reopening a truncated
+        // file. See `tearingDown`.
+        tearingDown = true
         FileLogger.log("CaptureEngine.stop: meetingId=\(id)")
 
         // Stop SCStream. Order matters: detach our outputs FIRST,
@@ -328,6 +404,9 @@ final class CaptureEngine: NSObject {
         // as live consumers of system audio in TCC's view.
         if let stream = stream {
             try? stream.removeStreamOutput(self, type: .screen)
+            if sckSystemURL != nil {
+                try? stream.removeStreamOutput(self, type: .audio)
+            }
             do { try await stream.stopCapture(); FileLogger.log("CaptureEngine.stop: SCStream stopped") }
             catch { FileLogger.log("CaptureEngine.stop: SCStream.stopCapture error: \(error)") }
         }
@@ -352,6 +431,13 @@ final class CaptureEngine: NSObject {
         // Close system audio file so it's safe to read for transcription.
         systemAudioFile = nil
         systemAudioFormat = nil
+
+        // Close the secondary SCStream-audio file (Bluetooth-output
+        // backup). Logged separately so the log shows which of the two
+        // system tracks actually carried signal this session.
+        FileLogger.log("CaptureEngine.stop: SCStream-audio frames captured = \(sckFramesWritten) (system_sck.wav; backup for BT-output runs)")
+        sckAudioFile = nil
+        sckSystemURL = nil
 
         // Finalise the video writer if we have one. finishWriting is async
         // and can take a moment to flush the trailer; we wait for it so
@@ -406,6 +492,13 @@ extension CaptureEngine: SCStreamOutput {
             Task { @MainActor [weak self] in
                 self?.writeVideo(sampleBuffer)
             }
+        case .audio:
+            // Secondary system-audio backup (see sckSystemURL doc). The
+            // CMSampleBuffer is CF-retained by the closure capture, so
+            // it stays valid across the main-actor hop.
+            Task { @MainActor [weak self] in
+                self?.writeSCKAudio(sampleBuffer)
+            }
         default:
             break
         }
@@ -444,6 +537,9 @@ extension CaptureEngine: SCStreamOutput {
     private func writeSystemAudioPCM(_ pcm: AVAudioPCMBuffer) {
         guard let url = systemURL, let format = systemTap.format else { return }
         if systemAudioFile == nil {
+            // nil + tearing down = file was already closed by stop().
+            // Reopening here truncates the finished recording — drop.
+            guard !tearingDown else { return }
             do {
                 let file = try AVAudioFile(forWriting: url,
                                            settings: format.settings,
@@ -467,6 +563,75 @@ extension CaptureEngine: SCStreamOutput {
             systemFramesWritten &+= Int64(pcm.frameLength)
         } catch {
             FileLogger.log("CaptureEngine: system.wav write error: \(error)")
+        }
+    }
+
+    /// SCStream `.audio` sink → system_sck.wav (Bluetooth-output backup
+    /// for the process tap). Mirrors writeSystemAudioPCM but takes the
+    /// format from the sample buffer (SCStream picks 48 k stereo float)
+    /// and copies via a retained block buffer. Intentionally does NOT
+    /// touch RecordingLevelMeter — see the sckSystemURL doc comment.
+    @MainActor
+    private func writeSCKAudio(_ sampleBuffer: CMSampleBuffer) {
+        guard let url = sckSystemURL else { return }
+        guard let fmtDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(fmtDesc),
+              let format = AVAudioFormat(streamDescription: asbdPtr) else { return }
+        let numSamples = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard numSamples > 0,
+              let pcm = AVAudioPCMBuffer(pcmFormat: format,
+                                         frameCapacity: AVAudioFrameCount(numSamples)) else { return }
+        pcm.frameLength = AVAudioFrameCount(numSamples)
+
+        // Fill the PCM buffer's AudioBufferList from the sample buffer.
+        // The retained block buffer is held until this function returns,
+        // which keeps the memory the ABL points at valid for write().
+        let abl = pcm.mutableAudioBufferList
+        let ablSize = MemoryLayout<AudioBufferList>.size
+            + (Int(abl.pointee.mNumberBuffers) - 1) * MemoryLayout<AudioBuffer>.size
+        var blockBuffer: CMBlockBuffer?
+        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: nil,
+            bufferListOut: abl,
+            bufferListSize: ablSize,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment,
+            blockBufferOut: &blockBuffer)
+        guard status == noErr, blockBuffer != nil else {
+            if !loggedFirstSCKBuffer {
+                FileLogger.log("CaptureEngine: SCK audio buffer-list extraction failed (\(status))")
+            }
+            return
+        }
+
+        if sckAudioFile == nil {
+            // Same teardown guard as the tap path — a late SCK buffer
+            // must not re-create (truncate) system_sck.wav after stop.
+            guard !tearingDown else { return }
+            do {
+                let file = try AVAudioFile(forWriting: url,
+                                           settings: format.settings,
+                                           commonFormat: format.commonFormat,
+                                           interleaved: format.isInterleaved)
+                self.sckAudioFile = file
+                FileLogger.log("CaptureEngine: opened system_sck.wav (\(format.sampleRate) Hz, \(format.channelCount) ch, via SCStream .audio)")
+            } catch {
+                FileLogger.log("CaptureEngine: failed to open system_sck.wav: \(error)")
+                return
+            }
+        }
+        guard let file = sckAudioFile else { return }
+        if !loggedFirstSCKBuffer {
+            loggedFirstSCKBuffer = true
+            FileLogger.log("CaptureEngine: first SCStream-audio buffer arrived (frames=\(numSamples))")
+        }
+        do {
+            try file.write(from: pcm)
+            sckFramesWritten &+= Int64(numSamples)
+        } catch {
+            FileLogger.log("CaptureEngine: system_sck.wav write error: \(error)")
         }
     }
 }

@@ -36,6 +36,12 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     /// Non-nil = pinned; value is when it was pinned (stable order
     /// within the pinned group).
     var pinnedAt: Int64? = nil
+    /// Whether the default OUTPUT route was Bluetooth when recording
+    /// started. Persisted (not read live) because the capture engine is
+    /// a singleton — a deferred / re-transcribe run would otherwise see
+    /// the *current* route. Drives the system-track chooser: on BT the
+    /// Core-Audio tap is faint, so the SCStream backup is authoritative.
+    var outputBluetoothAtStart: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -56,6 +62,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case title
         case summary
         case pinnedAt = "pinned_at"
+        case outputBluetoothAtStart = "output_bluetooth_at_start"
     }
 }
 

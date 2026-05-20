@@ -10,6 +10,7 @@ import { SummaryPane } from "./SummaryPane";
 // wired, just not shown for now. Flip to re-enable.
 const SHOW_SUMMARY = false;
 import { EmptyDeleteBanner } from "./EmptyDeleteBanner";
+import { OverlayScrollbar } from "./OverlayScrollbar";
 import type { T } from "../i18n";
 
 interface Props {
@@ -54,12 +55,23 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     return groups.filter((g) => g.segs.some((s) => s.text.toLowerCase().includes(q)));
   }, [groups, q]);
 
+  // The segment that is currently playing = the LAST one whose
+  // start_ms is at/before now. The old half-open test
+  // (`t >= start && t < end`) broke on click-to-seek: the click sends
+  // `start_ms / 1000` seconds, the round-trip back to ms lands a hair
+  // BELOW start_ms (float error), so the clicked segment failed
+  // `t >= start` while the previous one still passed `t < end` — the
+  // green highlight landed one line ABOVE the click. `Math.round`
+  // kills the epsilon; "last started" also keeps the highlight stable
+  // through the silent gaps between segments instead of vanishing.
   const activeSegmentId = React.useMemo(() => {
-    const t = currentTimeSec * 1000;
+    const tms = Math.round(currentTimeSec * 1000);
+    let active: number | null = null;
     for (const s of detail.segments) {
-      if (t >= s.start_ms && t < s.end_ms) return s.id;
+      if (s.start_ms <= tms) active = s.id;
+      else break;            // segments are monotonic by start_ms
     }
-    return null;
+    return active;
   }, [currentTimeSec, detail.segments]);
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -89,7 +101,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   if (detail.segments.length === 0) {
     return (
-      <div className="transcript" ref={containerRef}>
+      <div className="transcript ovsb-scroll" ref={containerRef}>
         {isLiveRecording ? (
           <RecordingBanner
             state={recordingState}
@@ -132,7 +144,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // its max-height in and out.
 
   return (
-    <div className="transcript" ref={containerRef}>
+    <div className="transcript ovsb-scroll" ref={containerRef}>
       {SHOW_SUMMARY && <SummaryPane detail={detail} t={t} />}
       {clarifyOpen && (
         // Mounted/unmounted directly. We tried wrapping it in a max-height
@@ -193,6 +205,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
         <div className="transcript-empty">{t.transcript_no_match(q)}</div>
       )}
       <div className="transcript-spacer" />
+      <OverlayScrollbar scrollRef={containerRef} name="corder-sb-transcript" />
     </div>
   );
 }

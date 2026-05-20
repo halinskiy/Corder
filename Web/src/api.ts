@@ -189,6 +189,25 @@ export interface Settings {
   gemini_key?: string;
   /** read-only: whether a key is on disk. */
   gemini_key_set?: boolean;
+  /** Functional toggles. Absent ⇒ unchanged on POST; default true. */
+  notifications?: boolean;
+  capture_video?: boolean;
+  /** mic+system are one switch server-side (dual-track invariant). */
+  capture_audio?: boolean;
+  auto_transcribe?: boolean;
+  auto_title?: boolean;
+  /** user-managed bundle ids for the call auto-detector. */
+  meeting_whitelist?: string[];
+  meeting_blacklist?: string[];
+  /** read-only: bundle ids recently seen owning the mic. */
+  detected_mic_apps?: string[];
+  /** global record hotkey: Carbon key code + Carbon modifier mask. */
+  record_hotkey_code?: number;
+  record_hotkey_mods?: number;
+  /** read-only: label, clashing macOS system shortcut (if any), bound? */
+  record_hotkey_label?: string;
+  record_hotkey_conflict?: string | null;
+  record_hotkey_ok?: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -205,6 +224,23 @@ export async function setSettings(s: Settings): Promise<Settings> {
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+export interface InstalledApp {
+  bundle: string;
+  name: string;
+  /** Corder has seen this app own the mic recently. */
+  recent: boolean;
+}
+
+export async function getInstalledApps(): Promise<InstalledApp[]> {
+  const r = await fetch("/api/installed-apps");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+export function appIconSrc(bundle: string): string {
+  return `/api/app-icon/${encodeURIComponent(bundle)}`;
 }
 
 export function audioSrc(id: string): string {

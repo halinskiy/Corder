@@ -60,11 +60,15 @@ function ScreenVideo({
   // the <video> element fires its `error` event so empty black boxes
   // never show up in the layout.
   const [failed, setFailed] = React.useState(false);
+  // False until the <video> has a paintable frame. Drives a ghost
+  // shimmer where the video will be, so switching back to the
+  // Recording tab never shows an empty hole during decode.
+  const [loaded, setLoaded] = React.useState(false);
   // Tracks whether the audio (master clock) is currently playing.
   // Drives the Apple-style centred play overlay: visible while paused,
   // hidden during playback so the video is unobstructed.
   const [paused, setPaused] = React.useState(true);
-  React.useEffect(() => { setFailed(false); }, [detail.id]);
+  React.useEffect(() => { setFailed(false); setLoaded(false); }, [detail.id]);
 
   React.useEffect(() => {
     const a = audioRef.current;
@@ -293,8 +297,10 @@ function ScreenVideo({
           preload="metadata"
           className="screen-video"
           onLoadedMetadata={onLoadedMetadata}
+          onLoadedData={() => setLoaded(true)}
           onError={() => setFailed(true)}
         />
+        {!loaded && !failed && <div className="screen-video-ghost" aria-hidden />}
         {paused && <div className="screen-video-scrim" aria-hidden />}
         {paused && (
           <div className="screen-video-play" aria-hidden>
@@ -357,9 +363,11 @@ function ScreenVideo({
                 )}
               </div>
             )}
-            {/* Scrubber sits directly UNDER the video as part of the
-                same column (it grows/shrinks with the FLIP together
-                with the video), at the video's width. */}
+            {/* Scrubber is absolutely positioned just under the video
+                (see .video-fs-scrub) — deliberately NOT part of the
+                FLIP box, so .video-fs-inner stays exactly the video's
+                rect and morphs onto the inline card without distortion.
+                It fades in on its own once the lightbox is open. */}
             <FsScrubber
               detail={detail}
               currentTimeSec={currentTimeSec}

@@ -74,14 +74,14 @@ enum GeminiTranscriber {
     /// past that and the JSON returns truncated mid-segment, killing the
     /// parser. 9 minutes / chunk gives ~50–55 k tokens of segment JSON in
     /// the worst dense-talk case, leaving headroom.
-    // 5 min, down from 9. Long dense (Russian) chunks routinely blew
-    // past Gemini's output budget and came back as truncated JSON,
-    // which kicked off the recursive halve-and-retry cascade (each
-    // retry a fresh 20-70s round-trip — that's the "Transcribing for 6
-    // minutes" symptom). At 5 min the model almost always finishes the
-    // JSON in one shot, so the split path becomes a rare fallback
-    // instead of the common case.
-    private static let maxSecondsPerChunk: Double = 5 * 60
+    // 3 min. 5 min STILL truncated on dense Russian dialogue (a real
+    // 23-min call hit MAX_TOKENS on a middle chunk and salvage dropped
+    // ~50 segments, corrupting the time projection). Truncation now
+    // forces a split rather than salvaging a partial, so a too-large
+    // chunk no longer loses speech — but starting at 3 min keeps the
+    // common case to one round-trip instead of paying 2-3 split
+    // retries on most calls.
+    private static let maxSecondsPerChunk: Double = 3 * 60
 
     /// Below this savings ratio (compressed/original) the VAD pre-pass
     /// is a wash — extra disk I/O without meaningful API savings — and
@@ -202,18 +202,42 @@ enum GeminiTranscriber {
 
         // No projection needed when we sent the original through.
         guard let proj = projection else { return rawTurns }
-        return rawTurns.map {
+        let projected = rawTurns.map {
             Turn(speakerLabel: $0.speakerLabel,
                  startMs: proj.toOriginal(compressedMs: $0.startMs),
                  endMs: proj.toOriginal(compressedMs: $0.endMs),
                  text: $0.text)
         }
+        // Gemini's per-chunk timestamps near the end of a long file
+        // bunch up and overshoot the last VAD slot, so the whole closing
+        // exchange projects to times PAST the real audio length. Left as
+        // is, the media element clamps every one of them to `duration`
+        // → the entire goodbye block seeks to the exact same instant
+        // (the user's "clicking any tail line jumps to the very end").
+        // Fix: clamp to the real duration, then walk backwards keeping
+        // each start STRICTLY less than the next. The overshooting tail
+        // gets compacted into the final seconds in its original order —
+        // every line lands on a distinct, monotonic, in-bounds time, so
+        // clicking it seeks near where it was actually said. Turns that
+        // were already in range are untouched (their start is already
+        // below the running bound).
+        let origDurationMs = Int64(durationSec * 1000)
+        var bound = origDurationMs
+        var out = projected
+        for i in stride(from: out.count - 1, through: 0, by: -1) {
+            let s = min(out[i].startMs, bound)
+            let e = max(s, min(out[i].endMs, origDurationMs))
+            out[i] = Turn(speakerLabel: out[i].speakerLabel,
+                          startMs: s, endMs: e, text: out[i].text)
+            bound = max(0, s - 1)
+        }
+        return out
     }
 
     /// Single upload + generate pass. `offsetMs` is added to every turn's
     /// timestamps — used by the chunked path to shift sub-recordings back
     /// onto the original timeline.
-    private static func transcribeSingle(audioURL: URL, apiKey: String, offsetMs: Int64, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
+    private static func transcribeSingle(audioURL: URL, apiKey: String, offsetMs: Int64, mode: TranscribeMode, expectedSpeakers: Int? = nil, salvageOnTruncation: Bool = true) async throws -> [Turn] {
         FileLogger.log("GeminiTranscriber: uploading \(audioURL.lastPathComponent)…")
         let fileURI = try await uploadFile(audioURL: audioURL, apiKey: apiKey)
         FileLogger.log("GeminiTranscriber: file uri=\(fileURI)")
@@ -226,7 +250,7 @@ enum GeminiTranscriber {
         }
 
         try await waitForActive(fileURI: fileURI, apiKey: apiKey)
-        let turns = try await generate(fileURI: fileURI, apiKey: apiKey, mode: mode, expectedSpeakers: expectedSpeakers)
+        let turns = try await generate(fileURI: fileURI, apiKey: apiKey, mode: mode, expectedSpeakers: expectedSpeakers, salvageOnTruncation: salvageOnTruncation)
         FileLogger.log("GeminiTranscriber: produced \(turns.count) turns from \(audioURL.lastPathComponent)")
         guard offsetMs != 0 else { return turns }
         return turns.map {
@@ -281,13 +305,21 @@ enum GeminiTranscriber {
     private static let minSecondsPerSplit: Double = 60   // 1 min floor
     private static func transcribeChunkWithSplit(audioURL: URL, offsetMs: Int64, apiKey: String, depth: Int, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
         do {
-            return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey, offsetMs: offsetMs, mode: mode, expectedSpeakers: expectedSpeakers)
+            // First attempt forbids salvage: a truncated response throws
+            // .parse so we split smaller instead of silently keeping a
+            // partial (which loses speech AND shifts the time projection).
+            return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey, offsetMs: offsetMs, mode: mode, expectedSpeakers: expectedSpeakers, salvageOnTruncation: false)
         } catch let err as GError {
             // Only retry on the truncation pattern; quota / billing /
             // network errors should fail fast and propagate.
             guard case .parse = err else { throw err }
             let dur = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
-            guard depth < maxSplitDepth, dur > minSecondsPerSplit * 2 else { throw err }
+            guard depth < maxSplitDepth, dur > minSecondsPerSplit * 2 else {
+                // Can't split any further — accept a salvaged partial
+                // for this floor slice (better than dropping it whole).
+                FileLogger.log("GeminiTranscriber: split floor (\(Int(dur))s, depth \(depth)) — retrying with salvage")
+                return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey, offsetMs: offsetMs, mode: mode, expectedSpeakers: expectedSpeakers, salvageOnTruncation: true)
+            }
 
             FileLogger.log("GeminiTranscriber: parse error on \(Int(dur))s chunk @ depth \(depth), splitting in half…")
             let halfDir = FileManager.default.temporaryDirectory
@@ -364,13 +396,23 @@ enum GeminiTranscriber {
     }
 
     static var apiKey: String? {
-        if let env = ProcessInfo.processInfo.environment["GEMINI_API_KEY"], !env.isEmpty {
-            return env
+        // Reject an un-edited placeholder (e.g. bootstrap.sh's
+        // "<paste-your-gemini-api-key-here>") as if no key were set:
+        // real keys are alphanumeric and never contain angle brackets,
+        // so a tester who didn't paste one gets the clear "configure
+        // your key" path instead of a confusing Gemini 400.
+        func clean(_ s: String) -> String? {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty || t.contains("<") || t.contains(">") { return nil }
+            return t
+        }
+        if let env = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
+           let k = clean(env) {
+            return k
         }
         let path = ("~/.config/corder/gemini_key" as NSString).expandingTildeInPath
         if let data = try? String(contentsOfFile: path, encoding: .utf8) {
-            let trimmed = data.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return trimmed }
+            return clean(data)
         }
         return nil
     }
@@ -463,7 +505,15 @@ enum GeminiTranscriber {
 
     // MARK: - Generation
 
-    private static func generate(fileURI: String, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
+    /// `salvageOnTruncation`: when false, a truncated / non-STOP
+    /// response throws `.parse` instead of returning the few segments
+    /// that arrived before the cut-off. The caller (`transcribeChunkWithSplit`)
+    /// uses that to trigger a halve-and-retry — a smaller slice fits
+    /// under the output-token budget and recovers the speech that
+    /// salvage would otherwise drop (which also corrupts the VAD→original
+    /// time projection, since the missing middle shifts every surviving
+    /// turn). Salvage is only allowed once we can't split any further.
+    private static func generate(fileURI: String, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil, salvageOnTruncation: Bool = true) async throws -> [Turn] {
         let url = URL(string: "\(endpoint)/models/\(model):generateContent?key=\(apiKey)")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -581,8 +631,9 @@ enum GeminiTranscriber {
         // output budget mid-array. We log it explicitly so the salvage
         // line below isn't a mystery in the logs, and so a recurring
         // MAX_TOKENS is visibly the signal to shrink the chunk further.
-        if let reason = first["finishReason"] as? String, reason != "STOP" {
-            FileLogger.log("GeminiTranscriber: finishReason=\(reason) (non-STOP — expect truncated/partial JSON, salvage will run)")
+        let truncated = (first["finishReason"] as? String).map { $0 != "STOP" } ?? false
+        if truncated {
+            FileLogger.log("GeminiTranscriber: finishReason=\(first["finishReason"] as? String ?? "?") (non-STOP — truncated/partial JSON)")
         }
         let raw = parts.compactMap { $0["text"] as? String }.joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -590,19 +641,28 @@ enum GeminiTranscriber {
             throw GError.parse("empty model output")
         }
         let segs: [[String: Any]]
-        if let payloadData = raw.data(using: .utf8),
+        if !truncated,
+           let payloadData = raw.data(using: .utf8),
            let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
            let parsed = payload["segments"] as? [[String: Any]] {
-            // Happy path — the model returned well-formed JSON.
+            // Happy path — STOP + well-formed JSON.
             segs = parsed
+        } else if !salvageOnTruncation {
+            // We can still split this slice smaller. Throwing .parse
+            // makes transcribeChunkWithSplit halve-and-retry: a shorter
+            // slice fits under the output-token budget, so we recover
+            // the speech salvage would silently drop. Dropping the
+            // middle of a chunk doesn't just lose words — it shifts
+            // every surviving turn off the VAD→original projection, so
+            // the transcript ends up both incomplete AND time-misaligned
+            // with the audio. Splitting fixes both.
+            throw GError.parse("truncated (finishReason non-STOP) — forcing split")
         } else if let salvaged = Self.salvageSegments(from: raw), !salvaged.isEmpty {
-            // Truncated / trailing-garbage JSON (the model hit its
-            // output budget mid-array). Rather than throwing — which
-            // triggers the expensive recursive re-chunk — recover every
-            // *complete* segment object that did make it through. We
-            // lose at most the final partial sentence, not the whole
-            // chunk.
-            FileLogger.log("GeminiTranscriber: JSON truncated — salvaged \(salvaged.count) complete segments")
+            // Last resort: we've split as far as we can (recursion floor)
+            // and the slice STILL overflows. Recover every *complete*
+            // segment object that made it through — partial transcript
+            // beats none. Only reached when salvageOnTruncation is true.
+            FileLogger.log("GeminiTranscriber: JSON truncated at split floor — salvaged \(salvaged.count) complete segments")
             segs = salvaged
         } else {
             throw GError.parse("no segments in JSON: \(raw.prefix(220))")

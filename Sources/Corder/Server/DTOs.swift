@@ -48,6 +48,45 @@ enum DTO {
         let gemini_key: String?
         /// Read-only: GET reports whether a key is on disk, not the key.
         let gemini_key_set: Bool?
+        /// Functional toggles. All optional so an older client that
+        /// omits a field never flips it — `settingsSet` treats absent
+        /// as "leave unchanged" (migration/compat guarantee). Defaults
+        /// live in `AppSettings` (every Bool → true).
+        let notifications: Bool?
+        let capture_video: Bool?
+        /// Mic + system are ONE switch on purpose: the dual-track
+        /// pipeline assumes both WAVs exist; splitting them would drop
+        /// into the legacy single-stream channel-gate path.
+        let capture_audio: Bool?
+        let auto_transcribe: Bool?
+        let auto_title: Bool?
+        /// User-managed bundle ids: always offer to record for these /
+        /// never offer for these. Consumed by `MeetingDetector`.
+        let meeting_whitelist: [String]?
+        let meeting_blacklist: [String]?
+        /// Read-only: bundle ids recently seen owning the mic, so the
+        /// UI can offer a tap-to-add picker (no bundle-id typing).
+        let detected_mic_apps: [String]?
+        /// Global record hotkey. Write: Carbon virtual key code + Carbon
+        /// modifier mask (cmd 256 | shift 512 | option 2048 | ctrl 4096).
+        let record_hotkey_code: Int?
+        let record_hotkey_mods: Int?
+        /// Read-only: human label (e.g. "⌘⇧F"), the name of a clashing
+        /// macOS *system* shortcut if any (nil = none known; third-party
+        /// app clashes are undetectable), and whether the OS actually
+        /// bound it.
+        let record_hotkey_label: String?
+        let record_hotkey_conflict: String?
+        let record_hotkey_ok: Bool?
+    }
+
+    /// One installed application, for the Settings app-picker (so the
+    /// user adds Zoom/Discord/their browser by tapping, not by typing a
+    /// bundle id). `recent` = Corder has seen it own the mic lately.
+    struct InstalledApp: Codable {
+        let bundle: String
+        let name: String
+        let recent: Bool
     }
 
     struct SpeakerDTO: Codable {

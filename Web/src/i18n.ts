@@ -37,6 +37,25 @@ interface Strings {
   settings_autotranscribe_desc: string;
   settings_autotitle: string;
   settings_autotitle_desc: string;
+  settings_sec_autodetect: string;
+  settings_whitelist: string;
+  settings_whitelist_desc: string;
+  settings_blacklist: string;
+  settings_blacklist_desc: string;
+  settings_list_add: string;
+  settings_list_add_ph: string;
+  settings_list_remove: string;
+  settings_list_empty: string;
+  settings_list_detected: string;
+  settings_pick_search: string;
+  settings_pick_none: string;
+  settings_pick_recent: string;
+  settings_sec_shortcut: string;
+  settings_shortcut_label: string;
+  settings_shortcut_desc: string;
+  settings_shortcut_press: string;
+  settings_shortcut_conflict: (name: string) => string;
+  settings_shortcut_unbound: string;
   settings_pro_note: string;
   settings_sec_soon: string;
   settings_ext_title: string;
@@ -73,6 +92,8 @@ interface Strings {
 
   btn_copy: string;
   btn_retranscribe: string;
+  btn_transcribe: string;
+  transcript_not_transcribed: string;
   btn_archive: string;
   btn_boost: string;
   btn_boost_title: string;
@@ -97,6 +118,7 @@ interface Strings {
   profile_sub: string;
   profile_account: string;
   profile_signout: string;
+  profile_integrations: string;
   profile_soon: string;
 
   rec_label: string;
@@ -192,6 +214,25 @@ const ru: Strings = {
   settings_autotranscribe_desc: "Расшифровывать запись автоматически после остановки.",
   settings_autotitle: "Автозаголовок",
   settings_autotitle_desc: "Генерировать короткий заголовок встречи из расшифровки.",
+  settings_sec_autodetect: "Автоопределение звонков",
+  settings_whitelist: "Всегда предлагать запись",
+  settings_whitelist_desc: "Приложения, для которых Corder всегда предлагает начать запись, когда они занимают микрофон.",
+  settings_blacklist: "Никогда не предлагать",
+  settings_blacklist_desc: "Приложения, которые Corder игнорирует, даже если они заняли микрофон (например Loom, OBS, Терминал).",
+  settings_list_add: "Добавить",
+  settings_list_add_ph: "Bundle ID, напр. us.zoom.xos",
+  settings_list_remove: "Убрать",
+  settings_list_empty: "Пусто",
+  settings_list_detected: "Недавно занимали микрофон — нажмите, чтобы добавить:",
+  settings_pick_search: "Поиск приложений…",
+  settings_pick_none: "Ничего не найдено",
+  settings_pick_recent: "был у микрофона",
+  settings_sec_shortcut: "Горячая клавиша",
+  settings_shortcut_label: "Старт/стоп записи",
+  settings_shortcut_desc: "Системный шорткат для быстрого запуска Corder.",
+  settings_shortcut_press: "Нажмите комбинацию…",
+  settings_shortcut_conflict: (name) => `Конфликт с системным шорткатом: ${name}. Выбери другую.`,
+  settings_shortcut_unbound: "Не удалось назначить — комбинацию уже занимает другое приложение. Выбери другую.",
   settings_pro_note: "Возможности Pro в этой сборке отключены.",
   settings_sec_soon: "Скоро",
   settings_ext_title: "Расширение для браузера",
@@ -228,6 +269,8 @@ const ru: Strings = {
 
   btn_copy: "Копировать",
   btn_retranscribe: "Расшифровать заново",
+  btn_transcribe: "Расшифровать",
+  transcript_not_transcribed: "Эта запись ещё не расшифрована.",
   btn_archive: "Архив",
   btn_boost: "Усилить",
   btn_boost_title: "Когда включён, каждая следующая расшифровка автоматически улучшается через Gemini Flash",
@@ -252,6 +295,7 @@ const ru: Strings = {
   profile_sub: "Локальный профиль",
   profile_account: "Настройки аккаунта",
   profile_signout: "Выйти",
+  profile_integrations: "Интеграции",
   profile_soon: "Скоро",
 
   rec_label: "Идёт запись",
@@ -348,6 +392,25 @@ const en: Strings = {
   settings_autotranscribe_desc: "Transcribe the recording automatically after you stop.",
   settings_autotitle: "Auto-title",
   settings_autotitle_desc: "Generate a short meeting title from the transcript.",
+  settings_sec_autodetect: "Call auto-detect",
+  settings_whitelist: "Always offer to record",
+  settings_whitelist_desc: "Apps Corder always offers to record when they take the microphone.",
+  settings_blacklist: "Never offer",
+  settings_blacklist_desc: "Apps Corder ignores even when they hold the microphone (e.g. Loom, OBS, Terminal).",
+  settings_list_add: "Add",
+  settings_list_add_ph: "Bundle ID, e.g. us.zoom.xos",
+  settings_list_remove: "Remove",
+  settings_list_empty: "Empty",
+  settings_list_detected: "Recently used your mic — tap to add:",
+  settings_pick_search: "Search apps…",
+  settings_pick_none: "No apps found",
+  settings_pick_recent: "used mic",
+  settings_sec_shortcut: "Shortcut",
+  settings_shortcut_label: "Start/stop recording",
+  settings_shortcut_desc: "A global shortcut to quickly start Corder.",
+  settings_shortcut_press: "Press a combo…",
+  settings_shortcut_conflict: (name) => `Conflicts with a system shortcut: ${name}. Pick another.`,
+  settings_shortcut_unbound: "Couldn't bind — another app already uses this combo. Pick another.",
   settings_pro_note: "Pro features are disabled in this build.",
   settings_sec_soon: "Coming soon",
   settings_ext_title: "Browser extension",
@@ -384,6 +447,8 @@ const en: Strings = {
 
   btn_copy: "Copy",
   btn_retranscribe: "Re-transcribe",
+  btn_transcribe: "Transcribe now",
+  transcript_not_transcribed: "This recording isn't transcribed yet.",
   btn_archive: "Archive",
   btn_boost: "Boost",
   btn_boost_title: "When on, every next transcription is auto-polished via Gemini Flash",
@@ -408,6 +473,7 @@ const en: Strings = {
   profile_sub: "Local profile",
   profile_account: "Account settings",
   profile_signout: "Sign out",
+  profile_integrations: "Integrations",
   profile_soon: "Soon",
 
   rec_label: "Recording",

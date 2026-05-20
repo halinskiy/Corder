@@ -59,6 +59,84 @@ enum AppVocabulary {
     }
 }
 
+/// Persisted user settings — same synchronous, thread-safe
+/// `UserDefaults` source-of-truth pattern as `AppLanguage` /
+/// `AppVocabulary`. Read off-main from the capture queues, the
+/// pipeline and `MeetingDetector`; written through `POST /api/settings`.
+/// Every Bool defaults to `true` so a fresh install — or an older
+/// client that never sends the key — keeps today's "everything on"
+/// behaviour (UserDefaults.bool would wrongly report `false` for an
+/// absent key, hence the explicit object(forKey:) nil check).
+enum AppSettings {
+    private static func flag(_ key: String) -> Bool {
+        UserDefaults.standard.object(forKey: key) == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: key)
+    }
+    private static func setFlag(_ key: String, _ value: Bool) {
+        UserDefaults.standard.set(value, forKey: key)
+    }
+    private static func int(_ key: String, _ def: Int) -> Int {
+        UserDefaults.standard.object(forKey: key) == nil
+            ? def
+            : UserDefaults.standard.integer(forKey: key)
+    }
+    private static func setInt(_ key: String, _ value: Int) {
+        UserDefaults.standard.set(value, forKey: key)
+    }
+    private static func list(_ key: String) -> [String] {
+        guard let data = UserDefaults.standard.string(forKey: key)?.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+        return arr
+    }
+    private static func setList(_ key: String, _ value: [String]) {
+        let cleaned = value
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if let data = try? JSONEncoder().encode(cleaned),
+           let json = String(data: data, encoding: .utf8) {
+            UserDefaults.standard.set(json, forKey: key)
+        }
+    }
+
+    private static let kNotifications  = "Corder.set.notifications"
+    private static let kCaptureVideo   = "Corder.set.captureVideo"
+    private static let kCaptureAudio   = "Corder.set.captureAudio"
+    private static let kAutoTranscribe = "Corder.set.autoTranscribe"
+    private static let kAutoTitle      = "Corder.set.autoTitle"
+    private static let kWhitelist      = "Corder.set.meetingWhitelist"
+    private static let kBlacklist      = "Corder.set.meetingBlacklist"
+
+    static var notificationsEnabled: Bool { flag(kNotifications) }
+    static var captureVideo: Bool          { flag(kCaptureVideo) }
+    static var captureAudio: Bool          { flag(kCaptureAudio) }
+    static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
+    static var autoTitle: Bool             { flag(kAutoTitle) }
+    static var meetingWhitelist: [String]  { list(kWhitelist) }
+    static var meetingBlacklist: [String]  { list(kBlacklist) }
+
+    static func setNotifications(_ v: Bool)  { setFlag(kNotifications, v) }
+    static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
+    static func setCaptureAudio(_ v: Bool)   { setFlag(kCaptureAudio, v) }
+    static func setAutoTranscribe(_ v: Bool) { setFlag(kAutoTranscribe, v) }
+    static func setAutoTitle(_ v: Bool)      { setFlag(kAutoTitle, v) }
+    static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
+    static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }
+
+    // Global record hotkey. Stored as a Carbon virtual key code + a
+    // Carbon modifier mask (cmdKey 256 | shiftKey 512 | optionKey 2048 |
+    // controlKey 4096). Default = ⌘⇧F (kVK_ANSI_F = 3, cmd|shift = 768)
+    // — not a stock macOS system shortcut, so it's a safe default.
+    private static let kRecCode = "Corder.set.recHotkeyCode"
+    private static let kRecMods = "Corder.set.recHotkeyMods"
+    static var recordHotkeyKeyCode: Int  { int(kRecCode, 3) }
+    static var recordHotkeyModifiers: Int { int(kRecMods, 768) }
+    static func setRecordHotkey(code: Int, mods: Int) {
+        setInt(kRecCode, code); setInt(kRecMods, mods)
+    }
+}
+
 enum SourceMode: String {
     case full   // full screen
     case window // pick a window each time
@@ -128,4 +206,40 @@ enum AvailableUpdateSnapshot {
         lock.lock(); defer { lock.unlock() }
         return current
     }
+}
+
+/// Bundle ids that have recently been seen owning the microphone,
+/// surfaced read-only to the Settings UI so the user can add an app to
+/// the white/blacklist by tapping it instead of typing a bundle id.
+/// Populated by `MeetingDetector` each tick; read by the Swifter
+/// `/api/settings` handler (off-actor), hence the lock mirror.
+enum MicAppsSnapshot {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var recent: [String] = []
+
+    static func update(_ bundles: [String]) {
+        lock.lock(); defer { lock.unlock() }
+        var seen = Set(recent)
+        for b in bundles where !b.isEmpty && !seen.contains(b) {
+            recent.append(b); seen.insert(b)
+        }
+        if recent.count > 40 { recent.removeFirst(recent.count - 40) }
+    }
+
+    static func read() -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return recent
+    }
+}
+
+/// Whether the last global-hotkey registration actually succeeded
+/// (Carbon `RegisterEventHotKey` returned noErr). Surfaced read-only to
+/// the Settings UI so it can warn "couldn't bind — another app may
+/// already use this combo". Lock mirror: written on the main actor by
+/// `HotkeyManager`, read off-actor by the Swifter `/api/settings`.
+enum HotkeyStatusSnapshot {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var ok = true
+    static func update(_ v: Bool) { lock.lock(); defer { lock.unlock() }; ok = v }
+    static func read() -> Bool { lock.lock(); defer { lock.unlock() }; return ok }
 }

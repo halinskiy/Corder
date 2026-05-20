@@ -3,9 +3,11 @@ import { X, Video, AudioLines, FileText, FileCode, FileJson, Package } from "luc
 import { audioSrc, videoSrc, transcriptSrc, transcriptMdSrc, transcriptJsonSrc, bundleSrc } from "../api";
 import type { T } from "../i18n";
 
-/// Download chooser. Same overlay/card language as Archive (so it
-/// inherits the backdrop blur). Each row is a real download link; the
-/// "everything" row hits the server-side zip endpoint.
+/// Download chooser. Shares the `.modal-pop` shell with Archive so the
+/// two popups read as one design system — outline card, clarify-body
+/// 18/300 heading, segment-paragraph 15-character body. Each row is a
+/// real download link; the "everything" row hits the server-side zip
+/// endpoint.
 export function DownloadMenu({
   meetingId,
   hasVideo,
@@ -37,21 +39,21 @@ export function DownloadMenu({
   return (
     <div className="donate-overlay" onClick={onClose}>
       <div
-        className="donate-card archive-card"
+        className="modal-pop download-pop"
         role="dialog"
         aria-label={t.download_title}
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          className="archive-close"
+          className="modal-pop-close"
           onClick={onClose}
           title={t.archive_close_title}
           aria-label={t.archive_close_title}
         >
           <X size={16} strokeWidth={2} />
         </button>
-        <div className="donate-card-title">{t.download_title}</div>
-        <div className="donate-card-body">{t.download_body}</div>
+        <div className="modal-pop-title">{t.download_title}</div>
+        <div className="modal-pop-note">{t.download_body}</div>
         <div className="download-list">
           {rows.filter((r) => r.show).map((r) => (
             <a
