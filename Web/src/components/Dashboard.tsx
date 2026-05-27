@@ -44,6 +44,12 @@ interface Props {
   hotkeyLabel: string;
   t: T;
   lang: Lang;
+  /// Forwarded into SettingsPane so the inline Language picker can
+  /// flip the app-wide locale (lifted into App-level state). Kept on
+  /// Dashboard's props rather than re-reading from a global because
+  /// every other surface (MeetingView, MainHeader) takes the same
+  /// handle for the same purpose — single source of truth.
+  onLangChange: (next: Lang) => void;
   /// Hooks into the same `--right-w` setter as MeetingView so dragging
   /// the divider on the Dashboard moves the same right-pane width.
   onResizeSplit: (dx: number) => void;
@@ -61,7 +67,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecording, onStop, hotkeyLabel, t, lang, onResizeSplit, onResetSplit, openSettingsNonce }: Props) {
+export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecording, onStop, hotkeyLabel, t, lang, onLangChange, onResizeSplit, onResetSplit, openSettingsNonce }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -344,7 +350,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
           )}
         </div>
         <div style={{ display: rightSection === "settings" ? "contents" : "none" }}>
-          <SettingsPane t={t} />
+          <SettingsPane t={t} lang={lang} onLangChange={onLangChange} />
         </div>
       </div>
     </div>

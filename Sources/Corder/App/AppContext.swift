@@ -109,6 +109,7 @@ enum AppSettings {
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
+    private static let kWhisperLocalVariant   = "Corder.set.whisperLocalVariant"
     private static let kTranscriptCleanup = "Corder.set.transcriptCleanup"
 
     static var notificationsEnabled: Bool { flag(kNotifications) }
@@ -168,6 +169,23 @@ enum AppSettings {
     /// again. UI doesn't surface this; ops / support flow only.
     static func clearTranscriptionProviderOverride() {
         UserDefaults.standard.removeObject(forKey: kTranscriptionProvider)
+    }
+
+    /// Active variant of the on-device Whisper Core ML model. The user
+    /// picks size vs accuracy in Settings (Tiny / Base / Small / Turbo);
+    /// the pipeline reads this when `transcriptionProvider == .whisperLocal`
+    /// and lazily downloads on first use if the picked variant isn't
+    /// already on disk. Default = `.turbo` to keep existing meetings
+    /// behaving exactly as before the multi-variant change.
+    static var whisperLocalVariant: LocalWhisperTranscriber.Variant {
+        if let raw = UserDefaults.standard.string(forKey: kWhisperLocalVariant),
+           let v = LocalWhisperTranscriber.Variant(rawValue: raw) {
+            return v
+        }
+        return LocalWhisperTranscriber.defaultVariant
+    }
+    static func setWhisperLocalVariant(_ v: LocalWhisperTranscriber.Variant) {
+        UserDefaults.standard.set(v.rawValue, forKey: kWhisperLocalVariant)
     }
 
     /// LLM polish toggle for Whisper transcripts. When ON (default for

@@ -1150,11 +1150,15 @@ final class TranscriptionPipeline {
             do {
                 // Same vocabulary lever as cloud Whisper, but
                 // LocalWhisperTranscriber tokenises the prompt itself
-                // (WhisperKit takes token IDs, not raw text).
-                try await LocalWhisperTranscriber.ensureModelReady()
+                // (WhisperKit takes token IDs, not raw text). Variant
+                // is the user's picked size (turbo/small/base/tiny);
+                // ensureModelReady downloads on demand if the picked
+                // variant isn't on disk yet.
+                let variant = AppSettings.whisperLocalVariant
+                try await LocalWhisperTranscriber.ensureModelReady(variant)
                 let prompt = AppVocabulary.current.nilIfEmpty
                 return try await LocalWhisperTranscriber.transcribe(
-                    audioURL: wavURL, mode: .single, initialPrompt: prompt)
+                    audioURL: wavURL, mode: .single, variant: variant, initialPrompt: prompt)
             } catch let err as LocalWhisperTranscriber.LocalWhisperError {
                 TranscriptionErrors.record(meetingId: meetingId,
                                            message: err.localizedDescription)

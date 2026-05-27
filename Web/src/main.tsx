@@ -462,8 +462,6 @@ function App() {
                     archiveOpen={archiveOpen}
                     onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
                     onOpenDashboard={() => setActiveId(null)}
-                    lang={lang}
-                    onLangChange={handleLangChange}
                     onToast={showToast}
                     t={t}
                   />
@@ -481,6 +479,7 @@ function App() {
                     hotkeyLabel={hotkeyLabel}
                     t={t}
                     lang={lang}
+                    onLangChange={handleLangChange}
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     openSettingsNonce={openSettingsNonce}

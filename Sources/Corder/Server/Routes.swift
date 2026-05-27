@@ -66,6 +66,14 @@ enum Routes {
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
+        // Whisper Local model download — kicks off a background fetch
+        // for the requested variant id (no body needed beyond `id`).
+        // The /api/settings GET is the single source of truth for
+        // progress / ready state; the React DownloadButton polls it
+        // every ~1 s while a fetch is in flight.
+        server.post["/api/whisper-local/download"] = { req in
+            whisperLocalDownload(req: req)
+        }
         server.get["/api/installed-apps"] = { _ in installedAppsGet() }
         server.get["/api/app-icon/:bundle"] = { req in
             appIcon(bundle: req.params[":bundle"] ?? "")
@@ -502,7 +510,34 @@ enum Routes {
             licence_key: AppSettings.licenceKey,
             is_pro: AppSettings.isPro,
             tier: AppSettings.userTier.rawValue,
-            onboarding_completed: AppSettings.onboardingCompleted
+            onboarding_completed: AppSettings.onboardingCompleted,
+            transcription_provider: {
+                // `"auto"` when no explicit override is stored, so the
+                // tier-driven default is in effect; otherwise echo the
+                // stored override verbatim (only well-formed values
+                // pass the setter, so this is safe).
+                if let raw = UserDefaults.standard.string(forKey: "Corder.set.transcriptionProvider"),
+                   TranscriptionProvider(rawValue: raw) != nil {
+                    return raw
+                }
+                return "auto"
+            }(),
+            whisper_local_model_ready: LocalWhisperTranscriber.isModelDownloaded(
+                AppSettings.whisperLocalVariant),
+            whisper_local_variant: AppSettings.whisperLocalVariant.rawValue,
+            whisper_local_models: {
+                let inflight = LocalWhisperTranscriber.allInflight()
+                return LocalWhisperTranscriber.Variant.allCases.map { v in
+                    DTO.WhisperLocalModelDTO(
+                        id: v.rawValue,
+                        label: v.label,
+                        size_label: v.sizeLabel,
+                        size_mb: v.sizeMB,
+                        ready: LocalWhisperTranscriber.isModelDownloaded(v),
+                        progress: inflight[v.rawValue])
+                }
+            }(),
+            apple_silicon: LocalWhisperTranscriber.isAvailable()
         )
     }
 
@@ -647,6 +682,30 @@ enum Routes {
             if let key = parsed.licence_key {
                 AppSettings.setLicenceKey(key)
             }
+            // ASR provider override. `"auto"` clears the override so
+            // the tier-driven default kicks back in (Free → whisperLocal,
+            // Pro/Max → whisper). Any of the three concrete `TranscriptionProvider`
+            // raw values pins the override; anything else is ignored
+            // (a stale client can't slip through a typo). The runtime
+            // pipeline reads `AppSettings.transcriptionProvider` on the
+            // NEXT transcribe call, so the swap takes effect immediately
+            // for the next meeting without restarting the app.
+            if let raw = parsed.transcription_provider {
+                if raw == "auto" {
+                    AppSettings.clearTranscriptionProviderOverride()
+                } else if let p = TranscriptionProvider(rawValue: raw) {
+                    AppSettings.setTranscriptionProvider(p)
+                }
+            }
+            // Whisper Local variant override (Tiny / Base / Small /
+            // Turbo). Stored separately from the provider so a user
+            // can have provider=whisperLocal AND pick which model
+            // size to use. Unknown ids are silently ignored — same
+            // pattern as `transcription_provider`.
+            if let raw = parsed.whisper_local_variant,
+               let v = LocalWhisperTranscriber.Variant(rawValue: raw) {
+                AppSettings.setWhisperLocalVariant(v)
+            }
             // Onboarding flag. Only `true` is meaningful as a payload —
             // we never want a stale client to silently revert "wizard
             // finished" back to false (would re-open the Welcome window
@@ -660,6 +719,42 @@ enum Routes {
         } catch {
             return .badRequest(.text("\(error)"))
         }
+    }
+
+    /// Body: `{ "id": "openai_whisper-large-v3_turbo" }`. Starts a
+    /// background WhisperKit download for the variant. Returns 202
+    /// immediately so the React DownloadButton doesn't have to hold a
+    /// 30-second connection open; progress is exposed through the
+    /// `/api/settings` poll (`whisper_local_models[].progress`).
+    /// Idempotent: requesting a variant that's already on disk
+    /// returns the current settings with `ready=true` and no work
+    /// done. If a download for the same variant is already in
+    /// flight, the duplicate call is a no-op (the existing task keeps
+    /// running and the new poll sees the same `progress`).
+    private static func whisperLocalDownload(req: HttpRequest) -> HttpResponse {
+        struct Body: Decodable { let id: String }
+        guard let body = try? JSONDecoder().decode(Body.self, from: Data(req.body)),
+              let variant = LocalWhisperTranscriber.Variant(rawValue: body.id) else {
+            return .badRequest(.text("missing or unknown variant id"))
+        }
+        if LocalWhisperTranscriber.isModelDownloaded(variant) {
+            return jsonResponse(currentSettings())
+        }
+        if LocalWhisperTranscriber.currentProgress(variant) != nil {
+            // Already downloading — let the existing task finish.
+            return jsonResponse(currentSettings())
+        }
+        // Fire-and-forget on the main actor (the downloader is
+        // @MainActor-scoped). Any error gets logged + clears the
+        // progress entry via the `defer` in `downloadOnly`.
+        Task { @MainActor in
+            do {
+                try await LocalWhisperTranscriber.downloadOnly(variant)
+            } catch {
+                FileLogger.log("LocalWhisper: download \(variant.rawValue) failed — \(error)")
+            }
+        }
+        return jsonResponse(currentSettings())
     }
 
     private static func retranscribe(id: String, repo: MeetingRepository) -> HttpResponse {

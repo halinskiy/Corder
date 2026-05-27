@@ -97,6 +97,31 @@ interface Strings {
   settings_mic_device_desc?: string;
   settings_mic_device_system?: string;
   settings_mic_device_empty?: string;
+  /// Transcription model (ASR provider) picker. Added late, so every
+  /// key is optional and falls back to the English literal at render
+  /// time when a locale hasn't translated it yet.
+  settings_asr_label?: string;
+  settings_asr_desc_free?: string;
+  settings_asr_desc_paid?: string;
+  /// Description under the Language picker block in Settings. Short
+  /// one-liner — same vertical layout as Microphone / Transcription
+  /// model. Fallback at call site is "Pick the interface language."
+  settings_language_desc?: string;
+  settings_asr_auto?: string;
+  settings_asr_local?: string;
+  settings_asr_cloud_whisper?: string;
+  settings_asr_gemini?: string;
+  settings_asr_locked_toast?: string;
+  settings_asr_suffix_ready?: string;
+  settings_asr_suffix_download?: string;
+  settings_asr_suffix_pro?: string;
+  settings_asr_intel_warn?: string;
+  /// CTA label on the "Download model" button under the Transcription
+  /// model picker. Suffix " · <size>" is appended at render time.
+  settings_asr_download_cta?: string;
+  /// In-progress label that replaces the CTA while a download is
+  /// running. " <percent>%" is appended at render time.
+  settings_asr_downloading?: string;
   settings_sec_shortcut: string;
   settings_shortcut_label: string;
   settings_shortcut_desc: string;
@@ -169,6 +194,10 @@ interface Strings {
   /// language" string and blow up popover width). Falls back to the
   /// English "Language" if a locale hasn't translated it yet.
   profile_language?: string;
+  /// "Get help" row in ProfileMenu — opens a mailto: handoff to the
+  /// support inbox. Optional so untranslated locales fall back to
+  /// the English literal via `t.profile_help || "Get help"`.
+  profile_help?: string;
   profile_signout: string;
   profile_pick_avatar: string;
   profile_integrations: string;
@@ -292,6 +321,17 @@ interface Strings {
   toast_archive_restored: (n: number) => string;
   toast_archive_deleted: (n: number) => string;
   confirm_delete_forever: (n: number) => string;
+
+  /// In-app rating banner (TranscriptPane). Surfaced after the user
+  /// has viewed 3+ transcripts; collects 1-5 stars + optional comment
+  /// + optional email. All keys are optional so untranslated locales
+  /// fall back to English via `pickStrings`.
+  rating_title?: string;
+  rating_comment_placeholder?: string;
+  rating_email_placeholder?: string;
+  rating_submit?: string;
+  rating_skip?: string;
+  rating_thanks?: string;
 }
 
 const ru: Strings = {
@@ -352,6 +392,21 @@ const ru: Strings = {
   settings_mic_device_desc: "Откуда записывать ваш голос. По умолчанию — системный микрофон, который выбран в Настройках macOS.",
   settings_mic_device_system: "Системный по умолчанию",
   settings_mic_device_empty: "Подключённых микрофонов не найдено",
+  settings_asr_label: "Модель транскрипции",
+  settings_asr_desc_free: "Локальный Whisper на твоём Mac: бесплатно, без интернета. Pro и Max разблокируют облачные модели.",
+  settings_asr_desc_paid: "Можно вручную выбрать другую.",
+  settings_language_desc: "Язык интерфейса приложения.",
+  settings_asr_auto: "Auto (рекомендуется)",
+  settings_asr_local: "Whisper Local (on-device)",
+  settings_asr_cloud_whisper: "Whisper Cloud (OpenAI)",
+  settings_asr_gemini: "Gemini 2.5 Flash",
+  settings_asr_locked_toast: "Обнови до Pro, чтобы использовать облачные модели",
+  settings_asr_suffix_ready: "готово",
+  settings_asr_suffix_download: "1.5 GB загрузки",
+  settings_asr_download_cta: "Скачать модель",
+  settings_asr_downloading: "Загрузка…",
+  settings_asr_suffix_pro: "Pro+",
+  settings_asr_intel_warn: "На Intel-Mac Local Whisper недоступен и расшифровка пойдёт по облаку.",
   settings_sec_shortcut: "Горячая клавиша",
   settings_shortcut_label: "Старт/стоп записи",
   settings_shortcut_desc: "Системный шорткат для быстрого запуска Corder.",
@@ -419,6 +474,7 @@ const ru: Strings = {
   profile_sub: "id #012103",
   profile_dashboard: "Дашборд",
   profile_account: "Settings",
+  profile_help: "Поддержка",
   profile_signout: "Выйти",
   profile_pick_avatar: "Сменить аватар",
   profile_integrations: "Интеграции",
@@ -524,6 +580,13 @@ const ru: Strings = {
   toast_archive_restored: (n) => `Восстановлено: ${n}`,
   toast_archive_deleted: (n) => `Удалено навсегда: ${n}`,
   confirm_delete_forever: (n) => `Удалить навсегда ${n} записей? Это действие нельзя отменить.`,
+
+  rating_title: "Как вам Corder?",
+  rating_comment_placeholder: "Что улучшить? (необязательно)",
+  rating_email_placeholder: "Email (необязательно)",
+  rating_submit: "Отправить",
+  rating_skip: "Пропустить",
+  rating_thanks: "Спасибо за фидбэк!",
 };
 
 const en: Strings = {
@@ -579,6 +642,21 @@ const en: Strings = {
   settings_mic_device_desc: "Select input device which records your voice",
   settings_mic_device_system: "Auto",
   settings_mic_device_empty: "No input devices found",
+  settings_asr_label: "Transcription model",
+  settings_asr_desc_free: "Local Whisper on your Mac: free, offline. Pro and Max unlock cloud models.",
+  settings_asr_desc_paid: "You can pin a different one.",
+  settings_language_desc: "Interface language for the app.",
+  settings_asr_auto: "Auto (recommended)",
+  settings_asr_local: "Whisper Local (on-device)",
+  settings_asr_cloud_whisper: "Whisper Cloud (OpenAI)",
+  settings_asr_gemini: "Gemini 2.5 Flash",
+  settings_asr_locked_toast: "Upgrade to Pro to use cloud models",
+  settings_asr_suffix_ready: "ready",
+  settings_asr_suffix_download: "1.5 GB download",
+  settings_asr_download_cta: "Download model",
+  settings_asr_downloading: "Downloading…",
+  settings_asr_suffix_pro: "Pro+",
+  settings_asr_intel_warn: "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud.",
   settings_sec_shortcut: "Shortcut",
   settings_shortcut_label: "Start/stop recording",
   settings_shortcut_desc: "A global shortcut to quickly start Corder.",
@@ -647,6 +725,7 @@ const en: Strings = {
   profile_dashboard: "Dashboard",
   profile_account: "Settings",
   profile_language: "Language",
+  profile_help: "Get help",
   profile_signout: "Sign out",
   profile_pick_avatar: "Change avatar",
   profile_integrations: "Integrations",
@@ -750,6 +829,13 @@ const en: Strings = {
   toast_archive_restored: (n) => `Restored: ${n}`,
   toast_archive_deleted: (n) => `Deleted forever: ${n}`,
   confirm_delete_forever: (n) => `Delete ${n} item${n === 1 ? "" : "s"} forever? This cannot be undone.`,
+
+  rating_title: "How is Corder treating you?",
+  rating_comment_placeholder: "What can we improve? (optional)",
+  rating_email_placeholder: "Email (optional)",
+  rating_submit: "Send",
+  rating_skip: "Skip",
+  rating_thanks: "Thanks for the feedback!",
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -883,6 +969,7 @@ const uk: Strings = {
   profile_sub: "id #012103",
   profile_dashboard: "Дашборд",
   profile_account: "Settings",
+  profile_help: "Підтримка",
   profile_signout: "Вийти",
   profile_pick_avatar: "Змінити аватар",
   profile_integrations: "Інтеграції",

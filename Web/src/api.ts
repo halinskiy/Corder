@@ -238,6 +238,52 @@ export interface Settings {
    *  AppDelegate uses this to decide whether to auto-open the wizard
    *  on launch. The wizard's final step flips it. */
   onboarding_completed?: boolean;
+  /** ASR provider override. `"auto"` = no override, use the tier
+   *  default (Free → whisperLocal, Pro/Max → whisper). The three
+   *  concrete values map 1:1 to the Swift `TranscriptionProvider`
+   *  rawValues. POST `"auto"` to clear the override. */
+  transcription_provider?: "auto" | "gemini" | "whisper" | "whisperLocal";
+  /** read-only: is the *currently picked* WhisperKit variant fully
+   *  downloaded? Convenience flag — per-variant state lives in
+   *  `whisper_local_models`. */
+  whisper_local_model_ready?: boolean;
+  /** Picked Whisper Local variant id (e.g. "openai_whisper-large-v3_turbo").
+   *  Persists across launches; POST the same field to switch. */
+  whisper_local_variant?: string;
+  /** Per-variant catalogue with ready/progress state. The picker
+   *  renders this directly; the DownloadButton under the picker reads
+   *  the currently picked entry to decide between idle / Download /
+   *  Progress states. */
+  whisper_local_models?: WhisperLocalModel[];
+  /** read-only: is this Mac Apple Silicon? WhisperKit's Core ML
+   *  artefacts are arm64-only; the picker still surfaces the option
+   *  on Intel but the pipeline falls back to cloud at runtime. */
+  apple_silicon?: boolean;
+}
+
+/** One installable WhisperKit variant the user can pick. */
+export interface WhisperLocalModel {
+  id: string;
+  label: string;
+  size_label: string;
+  size_mb: number;
+  ready: boolean;
+  /** 0.0–1.0 while WhisperKit is fetching this variant; absent when
+   *  no download is in flight. */
+  progress?: number | null;
+}
+
+/** Start an async download for a Whisper Local variant. Returns the
+ *  freshly-snapshot Settings (progress entry will be present on
+ *  subsequent polls). Idempotent: a variant already on disk no-ops. */
+export async function downloadWhisperLocal(id: string): Promise<Settings> {
+  const r = await fetch("/api/whisper-local/download", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
 }
 
 export interface AudioInputDevice {

@@ -28,11 +28,30 @@ export function LangPicker({
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
   const btnRef = React.useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = React.useState<{ top: number; right: number } | null>(null);
+  const popRef = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState<
+    { top: number; right: number; placement: "down" | "up" } | null
+  >(null);
 
+  /// Choose top + placement so the popover stays inside the viewport.
+  /// First open uses a conservative ~320 px estimate (~14 visible
+  /// rows for the LANGS list plus the search field + outer chrome);
+  /// the open-effect re-measures once mounted to snap to the actual
+  /// rendered height. Flips up only when the space ABOVE the trigger
+  /// is larger than the space below — same rule as SettingsSelect.
   const place = React.useCallback(() => {
     const r = btnRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+    if (!r) return;
+    const measured = popRef.current?.getBoundingClientRect().height;
+    const popH = measured && measured > 0 ? measured : 320;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - r.bottom - margin;
+    const spaceAbove = r.top - margin;
+    const placeUp = popH + 8 > spaceBelow && spaceAbove > spaceBelow;
+    const top = placeUp
+      ? Math.max(margin, r.top - popH - 8)
+      : r.bottom + 8;
+    setPos({ top, right: window.innerWidth - r.right, placement: placeUp ? "up" : "down" });
   }, []);
 
   /// Measure synchronously inside the click handler — see SortPicker
@@ -42,27 +61,30 @@ export function LangPicker({
   /// menu twitches when I open it".
   const toggle = React.useCallback(() => {
     setOpen((v) => {
-      if (!v) {
-        const r = btnRef.current?.getBoundingClientRect();
-        if (r) setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
-      }
+      if (!v) place();
       return !v;
     });
-  }, []);
+  }, [place]);
 
   React.useEffect(() => {
     if (!open) return;
     setQ("");
+    // Second-pass placement once the popover is in the DOM and its
+    // real height is measurable.
+    const raf = window.requestAnimationFrame(place);
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     const onDown = (e: MouseEvent) => {
       if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
     const id = window.setTimeout(() => window.addEventListener("mousedown", onDown), 0);
     return () => {
+      window.cancelAnimationFrame(raf);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
       window.clearTimeout(id);
       window.removeEventListener("mousedown", onDown);
     };
@@ -92,7 +114,8 @@ export function LangPicker({
       </button>
       {open && pos && createPortal(
         <div
-          className="profile-pop lang-picker-pop"
+          ref={popRef}
+          className={"profile-pop lang-picker-pop placement-" + pos.placement}
           role="menu"
           style={{ top: pos.top, right: pos.right }}
           onMouseDown={(e) => e.stopPropagation()}

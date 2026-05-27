@@ -111,6 +111,59 @@ enum DTO {
         /// once? AppDelegate uses this to decide whether to auto-open
         /// the wizard on launch. The wizard's final step flips it.
         let onboarding_completed: Bool?
+        /// ASR provider override. `"auto"` means "no override stored —
+        /// let `AppSettings.transcriptionProvider` pick by tier" (Free
+        /// → whisperLocal, Pro/Max → whisper). The three concrete
+        /// values map 1:1 to `TranscriptionProvider.rawValue`:
+        /// `"gemini"` / `"whisper"` / `"whisperLocal"`. POST `"auto"`
+        /// to clear the override; POST a concrete value to pin.
+        let transcription_provider: String?
+        /// Read-only: is the currently-active WhisperKit variant fully
+        /// downloaded (AudioEncoder.mlmodelc + TextDecoder.mlmodelc
+        /// both present)? Convenience flag retained for the
+        /// transcription-pipeline UI; per-variant state lives in
+        /// `whisper_local_models`.
+        let whisper_local_model_ready: Bool?
+        /// Picked Whisper Local variant id (`openai_whisper-large-v3_turbo` /
+        /// `openai_whisper-small` / `openai_whisper-base` /
+        /// `openai_whisper-tiny`). Echoed back unchanged; absent means
+        /// the server hasn't seen one yet and is using the default
+        /// (turbo).
+        let whisper_local_variant: String?
+        /// Per-variant catalogue with ready/downloading/progress state.
+        /// Frontend renders this directly as the SettingsSelect option
+        /// list AND the DownloadButton state under the picker.
+        let whisper_local_models: [WhisperLocalModelDTO]?
+        /// Read-only: is the current Mac an Apple Silicon device?
+        /// WhisperKit's Core ML kernels are arm64-only; on Intel the
+        /// picker still surfaces the option but warns the user it will
+        /// silently fall back to cloud.
+        let apple_silicon: Bool?
+    }
+
+    /// One installable WhisperKit variant. The frontend renders these
+    /// as the four options inside the Transcription model SettingsSelect
+    /// (label + size meta) AND as the source of truth for the
+    /// DownloadButton state under the picker. `progress` is `nil`
+    /// when the model isn't currently downloading.
+    struct WhisperLocalModelDTO: Codable {
+        /// Raw variant id (`openai_whisper-large-v3_turbo` etc.) — used
+        /// as the value in the SettingsSelect and the body of POST
+        /// `/api/whisper-local/download`.
+        let id: String
+        /// Display label shown in the picker ("Whisper Turbo").
+        let label: String
+        /// Human-readable size shown as the meta after the label
+        /// ("1.5 GB" / "480 MB").
+        let size_label: String
+        /// Integer MB — lets the frontend sort or render an exact byte
+        /// count if it wants to.
+        let size_mb: Int
+        /// True when the model's Core ML packages are fully on disk.
+        let ready: Bool
+        /// `0.0…1.0` while WhisperKit is fetching this variant. `nil`
+        /// when no download is in flight.
+        let progress: Double?
     }
 
     /// One discoverable microphone-class device. Mirrors

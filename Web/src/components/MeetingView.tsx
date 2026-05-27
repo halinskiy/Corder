@@ -379,8 +379,6 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
         archiveOpen={archiveOpen}
         onOpenSettings={onOpenSettings}
         onOpenDashboard={onOpenDashboard}
-        lang={lang}
-        onLangChange={onLangChange}
         onToast={onToast}
         t={t}
       />
@@ -507,7 +505,7 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
             />
           </div>
           <div style={{ display: rightTab === "settings" ? "contents" : "none" }}>
-            <SettingsPane t={t} />
+            <SettingsPane t={t} lang={lang} onLangChange={onLangChange} />
           </div>
           {/* IntegrationsPane mount disabled while the tab is
               hidden (see the comment in the tab strip above). */}
