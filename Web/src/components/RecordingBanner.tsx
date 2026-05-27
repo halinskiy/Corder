@@ -9,10 +9,13 @@ interface Props {
   t: T;
 }
 
-/// Status card pinned to the top of the sidebar while a recording is active —
-/// mirrors the IdleStatus / RecordingStatus blocks from the menu-bar popover so
-/// the user can see "RECORDING <timer>" and tap Stop without leaving the
-/// Library window.
+/// "Recording …" card pinned to the top of the meeting view. Shares
+/// the EXACT same `.trans-banner.clarify-banner` shell as every other
+/// status banner (Transcribing / Failed / Ready-when-you-are) so the
+/// surface keeps a single voice — same width, same padding, same
+/// typography — no layout pop between states. The blinking red dot
+/// lives inline next to the headline; the elapsed timer is the
+/// subtitle; Stop is a single `.clarify-btn.danger` button.
 export function RecordingBanner({ state, onStopped, onToast, t }: Props) {
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
@@ -38,18 +41,19 @@ export function RecordingBanner({ state, onStopped, onToast, t }: Props) {
   };
 
   return (
-    <div className="rec-banner">
-      <div className="rec-banner-row">
-        <span className={"rec-dot" + (blink ? " on" : "")} />
-        <div className="rec-text">
-          <div className="rec-label">{t.rec_label}</div>
-          <div className="rec-time">{m}:{s}</div>
+    <div className="trans-banner clarify-banner">
+      <div className="clarify-text">
+        <div className="clarify-body clarify-body-with-icon">
+          <span className={"rec-dot-inline" + (blink ? " on" : "")} aria-hidden />
+          <span>{t.rec_label}</span>
         </div>
+        <div className="dash-sub clarify-sub-mono">{m}:{s}</div>
       </div>
-      <button className="rec-stop" onClick={onStop} disabled={stopping}>
-        <span className="rec-stop-square" />
-        {t.rec_stop}
-      </button>
+      <div className="clarify-actions clarify-actions-stack">
+        <button className="clarify-btn danger" onClick={onStop} disabled={stopping}>
+          {t.rec_stop}
+        </button>
+      </div>
     </div>
   );
 }

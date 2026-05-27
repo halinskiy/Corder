@@ -297,6 +297,21 @@ final class CaptureEngine: NSObject {
         //    and only falls back to system_sck.wav when the tap track is
         //    provably silent. Net: no regression, BT recordings saved.
         config.capturesAudio = true
+        // The 2026-05-20 diagnostic agent matrix-proved that
+        // `excludesCurrentProcessAudio = true` + an active Core-Audio
+        // process tap deterministically zeros every PCM sample SCStream
+        // delivers (rms 0.00 across 6+ recordings, regardless of BT
+        // route). Apple docs say the property defaults to false, but
+        // empirically the deployed builds behaved like true — pinning
+        // it false explicitly restores the SCK audio path (m4 rms 0.072
+        // vs m5 0.000 in the isolated CLI matrix at /tmp/sck-test).
+        // The TranscriptionPipeline's voiced-energy chooser keeps SCK
+        // out of the way on non-BT runs (tap still wins on energy), so
+        // SCK now finally pulls its weight as the BT-output fallback
+        // it was always meant to be. Side-effect: SCK will capture
+        // Corder's own UI chimes; harmless because SCK only "wins" on
+        // BT-SCO calls where Corder isn't making noise anyway.
+        config.excludesCurrentProcessAudio = false
         let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
         try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
         do {
@@ -327,6 +342,20 @@ final class CaptureEngine: NSObject {
         self.micFile = nil
         self.micFramesWritten = 0
         let engine = AVAudioEngine()
+        // If the user has picked a specific input device in Settings,
+        // bind the engine's input AUHAL to that device BEFORE asking
+        // for the format — `outputFormat(forBus:)` queries the unit's
+        // currently bound device, so the order matters. When no UID
+        // is saved (fresh install / "System default" choice / device
+        // unplugged), we leave AVAudioEngine on the system default —
+        // identical to the pre-feature behaviour.
+        if let chosenUID = AppSettings.micDeviceUID {
+            if let resolvedID = AudioInputDevices.apply(uid: chosenUID, to: engine) {
+                FileLogger.log("CaptureEngine.start: mic device set to UID=\(chosenUID) (AudioDeviceID=\(resolvedID))")
+            } else {
+                FileLogger.log("CaptureEngine.start: saved mic UID=\(chosenUID) not found / apply failed — falling back to system default")
+            }
+        }
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) ch")

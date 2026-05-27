@@ -1,8 +1,7 @@
 import React from "react";
-import { Copy, Archive as ArchiveIcon, Globe, Users, Moon, Search } from "lucide-react";
-import { useTheme } from "../theme";
+import { Copy, Users, Search } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
-import { UpdatePill } from "./UpdatePill";
+import { MainHeader } from "./MainHeader";
 import type { Lang, T } from "../i18n";
 
 // We persist the *whichever* state the user last saw the banner in
@@ -28,34 +27,6 @@ function writeClarifyState(meetingId: string, state: "open" | "closed") {
     localStorage.setItem(CLARIFY_STATE_KEY, JSON.stringify(m));
   } catch {}
 }
-
-function LangSwitch({ onToggle, t }: { onToggle: () => void; t: T }) {
-  return (
-    <button
-      className="toolbar-icon-btn"
-      onClick={onToggle}
-      title={t.btn_lang_title}
-      aria-label={t.btn_lang_title}
-    >
-      <Globe size={16} strokeWidth={2} />
-    </button>
-  );
-}
-
-function ThemeSwitch({ t }: { t: T }) {
-  const { toggle } = useTheme();
-  return (
-    <button
-      className="toolbar-icon-btn"
-      onClick={toggle}
-      title={t.btn_theme_title}
-      aria-label={t.btn_theme_title}
-    >
-      <Moon size={16} strokeWidth={2} />
-    </button>
-  );
-}
-
 
 /// Clipboard via native bridge. WKWebView blocks both
 /// `navigator.clipboard.writeText` and `document.execCommand('copy')` in our
@@ -86,18 +57,38 @@ async function copyText(text: string): Promise<void> {
 }
 import { formatDate } from "../format";
 import { TranscriptPane } from "./TranscriptPane";
+import { SummaryPane } from "./SummaryPane";
 import { SettingsPane } from "./SettingsPane";
+// IntegrationsPane import removed while the Integrations tab is
+// hidden (see the tab strip below). Re-add when bringing it back.
 import { ResizeHandle } from "./ResizeHandle";
-import { ProfileMenu } from "./ProfileMenu";
 import { RightPanel } from "./RightPanel";
+// Header toolbar (UpdatePill / ProfileMenu / theme + lang switches)
+// lives in `MainHeader`; this file only renders the breadcrumb
+// content via the `breadcrumb` prop.
 
 interface Props {
+  /// Click on the `Recordings` breadcrumb returns the user to the
+  /// dashboard (parent clears activeId). Optional so the prop can be
+  /// dropped later without breaking the file.
+  onBackToDashboard?: () => void;
   meetingId: string;
   onDeleted: (id?: string) => void;
   /// Opens the global archive panel — toolbar's Archive button hands off
   /// to this. Archiving the *current* meeting happens via Sidebar's
   /// context menu or via the EmptyDeleteBanner on failed transcripts.
   onOpenArchive: () => void;
+  /// Mirrors `archiveOpen` from parent — drives the toolbar Archive
+  /// button's `.active` state so a second click leaves the archive
+  /// surface (toggle semantics replacing the old "< Library" back).
+  archiveOpen?: boolean;
+  /// Profile-menu "Settings" handoff — flips the right tab to Settings.
+  onOpenSettings: () => void;
+  /// Profile-menu "Dashboard" handoff — clears `activeId` upstream.
+  onOpenDashboard: () => void;
+  /// Bumped whenever the profile menu's Settings item is clicked. The
+  /// view watches changes (not value) and flips `rightTab = "settings"`.
+  openSettingsNonce: number;
   onToast: (msg: string, kind?: "success" | "error") => void;
   recordingState: RecordingState;
   onRecordingStopped: () => void;
@@ -118,12 +109,25 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, recordingState, onRecordingStopped, reloadSignal, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, t }: Props) {
+export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
-  const [rightTab, setRightTab] = React.useState<"recording" | "settings">("recording");
+  const [rightTab, setRightTab] = React.useState<"recording" | "settings" | "integrations">("recording");
+  // Profile-menu Settings handoff: bumping `openSettingsNonce` flips
+  // the right tab to settings. Skip the initial mount tick so the
+  // first render doesn't auto-open Settings on `openSettingsNonce = 0`.
+  const lastSettingsNonceRef = React.useRef(openSettingsNonce);
+  React.useEffect(() => {
+    if (openSettingsNonce !== lastSettingsNonceRef.current) {
+      lastSettingsNonceRef.current = openSettingsNonce;
+      setRightTab("settings");
+    }
+  }, [openSettingsNonce]);
+  // Left-column tab: Transcript (default) | Summary. Summary is rendered
+  // by `SummaryPane`, which lazily fetches `/summarize` on first open.
+  const [leftTab, setLeftTab] = React.useState<"transcript" | "summary">("transcript");
   // Speakers-clarify banner visibility — controlled here so the toolbar
   // icon button can toggle it. Auto-opens once per meeting if the diarizer
   // looks over-segmented and the user hasn't already dismissed for this id.
@@ -174,19 +178,29 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
     catch (e) { setError(String(e)); }
   }, [meetingId]);
 
-  // Show the skeleton immediately on first load — it IS the polished
-  // safety net; hiding it behind a 250 ms gate meant fast localhost
-  // fetches never showed it and opening the library felt like a blank
-  // jump. (Meeting switches keep the previous `detail`, so this branch
-  // only fires on the genuine first load — no strobing.)
+  // Show the skeleton on the very first load; on subsequent meeting
+  // switches we KEEP the previous detail visible until the new one
+  // arrives so the user doesn't see the layout strobe through a
+  // skeleton on every sidebar click.
   const [showLoading, setShowLoading] = React.useState(true);
   React.useEffect(() => {
-    setDetail(null);
+    // Reset only the UI bits that are scoped to a meeting (search
+    // input, clarify banner). DO NOT setDetail(null) — clearing it
+    // pops the skeleton on every click ("прогрузка всех элементов"
+    // bug). The previous detail stays on screen until `load()` swaps
+    // it for the new one; a stale 50-100 ms preview beats a blank
+    // skeleton flash.
     setSearch("");
     setClarifyOpen(false);
-    setShowLoading(true);
+    setTitleEdit(null);
     load();
   }, [load]);
+  // Hide the skeleton as soon as the first detail arrives. After
+  // that it stays hidden for the rest of this MeetingView's lifetime
+  // (subsequent switches keep the prior detail visible).
+  React.useEffect(() => {
+    if (detail) setShowLoading(false);
+  }, [detail]);
 
   // Decide whether the clarify banner is open on first paint. Priority:
   //   1. Persisted per-meeting state — whatever we left it as last time
@@ -325,50 +339,51 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
 
   return (
     <>
-      <div className="main-header">
-        <div className="breadcrumb">
-          <span>{t.breadcrumb_records}</span>
-          <span style={{ opacity: 0.4 }}>›</span>
-          {titleEdit !== null ? (
-            <input
-              className="breadcrumb-edit"
-              autoFocus
-              value={titleEdit}
-              placeholder={formatDate(detail.started_at, lang)}
-              onChange={(e) => setTitleEdit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); commitTitle(); }
-                else if (e.key === "Escape") { e.preventDefault(); setTitleEdit(null); }
-              }}
-              onBlur={commitTitle}
-            />
-          ) : (
+      <MainHeader
+        breadcrumb={(
+          <>
             <span
-              className={"breadcrumb-current breadcrumb-rename" + (detail.status === "failed" ? " failed" : "")}
-              title={t.ctx_rename}
-              onClick={() => setTitleEdit(detail.title?.trim() ?? "")}
+              className="breadcrumb-root"
+              onClick={onBackToDashboard}
+              role={onBackToDashboard ? "button" : undefined}
+              tabIndex={onBackToDashboard ? 0 : undefined}
             >
-              {detail.title?.trim() || formatDate(detail.started_at, lang)}
+              {t.breadcrumb_dashboard}
             </span>
-          )}
-        </div>
-        <div className="spacer" />
-        <div className="toolbar">
-          <UpdatePill t={t} onToast={onToast} />
-          <ThemeSwitch t={t} />
-          <LangSwitch onToggle={() => onLangChange(lang === "ru" ? "en" : "ru")} t={t} />
-          <button
-            className="toolbar-icon-btn"
-            onClick={onOpenArchive}
-            title={t.archive_open_title}
-            aria-label={t.btn_archive}
-          >
-            <ArchiveIcon size={16} strokeWidth={2} />
-          </button>
-          <span className="toolbar-sep" />
-          <ProfileMenu onToast={onToast} t={t} />
-        </div>
-      </div>
+            <span style={{ opacity: 0.4 }}>›</span>
+            {titleEdit !== null ? (
+              <input
+                className="breadcrumb-edit"
+                autoFocus
+                value={titleEdit}
+                placeholder={formatDate(detail.started_at, lang)}
+                onChange={(e) => setTitleEdit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitTitle(); }
+                  else if (e.key === "Escape") { e.preventDefault(); setTitleEdit(null); }
+                }}
+                onBlur={commitTitle}
+              />
+            ) : (
+              <span
+                className={"breadcrumb-current breadcrumb-rename" + (detail.status === "failed" ? " failed" : "")}
+                title={t.ctx_rename}
+                onClick={() => setTitleEdit(detail.title?.trim() ?? "")}
+              >
+                {detail.title?.trim() || formatDate(detail.started_at, lang)}
+              </span>
+            )}
+          </>
+        )}
+        onOpenArchive={onOpenArchive}
+        archiveOpen={archiveOpen}
+        onOpenSettings={onOpenSettings}
+        onOpenDashboard={onOpenDashboard}
+        lang={lang}
+        onLangChange={onLangChange}
+        onToast={onToast}
+        t={t}
+      />
       <div className="detail">
         <ResizeHandle
           className="resizer-split"
@@ -377,7 +392,18 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
         />
         <div className="detail-tabs">
           <div className="detail-tab-col detail-tab-col-left">
-            <span className="tab active">{t.tab_transcript}</span>
+            <span
+              className={"tab" + (leftTab === "transcript" ? " active" : "")}
+              onClick={() => setLeftTab("transcript")}
+            >
+              {t.tab_transcript}
+            </span>
+            <span
+              className={"tab" + (leftTab === "summary" ? " active" : "")}
+              onClick={() => setLeftTab("summary")}
+            >
+              {t.tab_summary}
+            </span>
           </div>
           <div className="detail-tab-col detail-tab-col-right">
             <span
@@ -392,10 +418,20 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
             >
               {t.tab_settings}
             </span>
+            {/* Integrations tab hidden for now — `IntegrationsPane`
+                kept around so wiring it back is a one-line toggle. */}
           </div>
         </div>
         <div className="detail-body">
-          <div className="transcript-wrap">
+          {/* Transcript and Summary share the left column. Like the
+              right-pane panels, both stay MOUNTED across left-tab
+              switches (display toggled, not unmounted) — TranscriptPane
+              keeps its scroll position, SummaryPane keeps its
+              already-fetched markdown without re-firing /summarize. */}
+          <div
+            className="transcript-wrap"
+            style={{ display: leftTab === "transcript" ? "flex" : "none" }}
+          >
             <div className="transcript-toolbar">
               <div className="search-field">
                 <Search size={14} strokeWidth={2} />
@@ -444,10 +480,22 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
               t={t}
             />
           </div>
-          {/* RightPanel stays MOUNTED across the Recording/Settings
-              tab switch (display toggled, not unmounted) so its
-              <video>/<audio> load exactly once instead of re-fetching
-              every time the user peeks at Settings and comes back. */}
+          {/* Summary occupies the SAME grid cell as `.transcript-wrap`
+              above — they're siblings inside `.detail-body` but only
+              one is `display: flex` at a time. Mount-stable so the
+              fetched markdown survives a flip back to Transcript. */}
+          <div
+            className="transcript-wrap summary-wrap-host"
+            style={{ display: leftTab === "summary" ? "flex" : "none" }}
+          >
+            <SummaryPane detail={detail} onToast={onToast} t={t} />
+          </div>
+          {/* All three right-pane panels stay MOUNTED across tab
+              switches (display toggled, not unmounted) — RightPanel
+              keeps its <video>/<audio> alive, SettingsPane keeps its
+              loaded toggle state (no more "loading" flash on every
+              switch back to Settings), Integrations is dirt cheap
+              either way. */}
           <div style={{ display: rightTab === "recording" ? "contents" : "none" }}>
             <RightPanel
               detail={detail}
@@ -458,7 +506,11 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, onToast, reco
               t={t}
             />
           </div>
-          {rightTab !== "recording" && <SettingsPane t={t} />}
+          <div style={{ display: rightTab === "settings" ? "contents" : "none" }}>
+            <SettingsPane t={t} />
+          </div>
+          {/* IntegrationsPane mount disabled while the tab is
+              hidden (see the comment in the tab strip above). */}
         </div>
       </div>
     </>

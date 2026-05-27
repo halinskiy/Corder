@@ -25,9 +25,6 @@ private final class DragView: NSView {
         window?.performDrag(with: event)
     }
     override var mouseDownCanMoveWindow: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        return super.hitTest(point)
-    }
 }
 
 /// Receives messages from JavaScript:
@@ -145,6 +142,74 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
 /// "Transcript as Markdown" (and every other download row) saved
 /// nothing. We intercept the response, force `.download`, and save
 /// through a standard NSSavePanel.
+/// Routes WKWebView's JavaScript dialogs (`alert`, `confirm`,
+/// `prompt`) to native NSAlerts attached to the library window.
+/// Without a UIDelegate, WKWebView silently swallows these calls —
+/// `confirm()` always returns false, which is what broke the
+/// archive's "Delete forever" button (the user's OK click never
+/// reached the JS handler, so nothing was deleted).
+private final class WebUIDelegate: NSObject, WKUIDelegate {
+    weak var window: NSWindow?
+    init(window: NSWindow?) { self.window = window }
+
+    func webView(_ webView: WKWebView,
+                 runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        if let w = window {
+            alert.beginSheetModal(for: w) { _ in completionHandler() }
+        } else {
+            alert.runModal()
+            completionHandler()
+        }
+    }
+
+    func webView(_ webView: WKWebView,
+                 runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        if let w = window {
+            alert.beginSheetModal(for: w) { resp in
+                completionHandler(resp == .alertFirstButtonReturn)
+            }
+        } else {
+            let resp = alert.runModal()
+            completionHandler(resp == .alertFirstButtonReturn)
+        }
+    }
+
+    func webView(_ webView: WKWebView,
+                 runJavaScriptTextInputPanelWithPrompt prompt: String,
+                 defaultText: String?,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (String?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = prompt
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        let tf = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 22))
+        tf.stringValue = defaultText ?? ""
+        alert.accessoryView = tf
+        if let w = window {
+            alert.beginSheetModal(for: w) { resp in
+                completionHandler(resp == .alertFirstButtonReturn ? tf.stringValue : nil)
+            }
+        } else {
+            let resp = alert.runModal()
+            completionHandler(resp == .alertFirstButtonReturn ? tf.stringValue : nil)
+        }
+    }
+}
+
 private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownloadDelegate {
     weak var window: NSWindow?
     init(window: NSWindow?) { self.window = window }
@@ -212,6 +277,7 @@ final class LibraryWindow: NSWindowController {
     private var webView: WKWebView!
     private var bridgeHandler: WebBridgeHandler?
     private var downloadDelegate: WebDownloadDelegate?
+    private var uiDelegate: WebUIDelegate?
 
     private init() {
         let win = NSWindow(
@@ -252,11 +318,25 @@ final class LibraryWindow: NSWindowController {
         cfg.userContentController.add(handler, name: "blobVisible")
         let bridgeJS = """
         (function() {
-          // Drag: mousedown on header background → window.performDrag in Swift.
+          // Drag: mousedown on the header (except over real controls)
+          // posts a message; Swift calls `performDrag` on the live
+          // event. `preventDefault()` on the SPAN targets stops
+          // WebKit from claiming the mousedown for its own text-cursor
+          // / selection routine — without it, clicking the
+          // `.breadcrumb-rename` title (which carries `cursor: text`)
+          // hands the mouse to WebKit's caret machinery and AppKit
+          // never gets the drag. We skip `preventDefault` for the
+          // header container itself so empty whitespace remains a
+          // first-class draggable region. Click-to-rename still
+          // fires: click is a synthetic mouseup→same-target event
+          // that `preventDefault` on mousedown does not cancel.
           document.addEventListener('mousedown', function(e) {
             const header = e.target.closest && e.target.closest('.main-header');
             if (!header) return;
             if (e.target.closest('button, input, select, textarea, a')) return;
+            if (e.target !== header) {
+              try { e.preventDefault(); } catch (_) {}
+            }
             window.webkit.messageHandlers.drag.postMessage('drag');
           }, true);
 
@@ -324,16 +404,56 @@ final class LibraryWindow: NSWindowController {
         wv.setValue(false, forKey: "drawsBackground")
         let dl = WebDownloadDelegate(window: win)
         wv.navigationDelegate = dl
+        // `window.confirm()` / `window.alert()` from the JS side are
+        // no-ops in WKWebView unless we provide a UIDelegate — `confirm`
+        // silently returns `false`, which is why the Archive's
+        // "Delete forever" button looked dead. UIDelegate translates
+        // them into native NSAlerts and feeds the user's choice back.
+        let ui = WebUIDelegate(window: win)
+        wv.uiDelegate = ui
+        self.uiDelegate = ui
         self.downloadDelegate = dl
         win.contentView?.addSubview(wv)
         self.webView = wv
 
-        // Drag strip at the very top of the window. Sits above the WKWebView so
-        // it gets the mouseDown first and can perform the window drag.
-        let dragView = DragView(frame: NSRect(x: 0, y: win.contentView!.bounds.height - 28,
-                                              width: win.contentView!.bounds.width, height: 28))
+        // Drag region for the header — full 64 pt of header height,
+        // covering left side + breadcrumb + gap up to the right
+        // toolbar (which is ~320 pt of buttons + margins). The right
+        // 320 pt are left untouched so WKWebView keeps handling
+        // toolbar button clicks natively. JS-bridge mousedown handler
+        // is still the secondary path for any pixel inside the
+        // right-side toolbar's empty gaps.
+        let toolbarReserve: CGFloat = 320
+        let contentH = win.contentView!.bounds.height
+        let contentW = win.contentView!.bounds.width
+        // 90 pt is the header's CSS min-height (64) plus comfortable
+        // overlap into the content area below. The previous 64 pt
+        // ran out at the header's bottom border + any line-height
+        // overshoot, leaving 1-5 pt where WebKit grabbed mousedown
+        // for text selection. 90 fully covers the header band; the
+        // content under the header has its own top padding well
+        // above 26 pt, so the overlap doesn't steal any real clicks.
+        let headerHeight: CGFloat = 90
+        let dragView = DragView(frame: NSRect(
+            x: 0,
+            y: contentH - headerHeight,
+            width: max(0, contentW - toolbarReserve),
+            height: headerHeight))
+        // width AND y track resize: width follows .width autoresize,
+        // and the top-anchor follows .minYMargin so the strip stays
+        // pinned to the window's top edge as the window grows.
         dragView.autoresizingMask = [.width, .minYMargin]
         win.contentView?.addSubview(dragView)
+
+        // Drag for the rest of the header (below the top 28-pt strip)
+        // is handled by the JS bridge: mousedown on `.main-header`
+        // background → postMessage('drag') → Swift `performDrag`.
+        // An earlier version used a native `NSEvent` local monitor
+        // that asked the page synchronously whether the cursor was
+        // on a clickable element; the RunLoop spin to wait for the
+        // JS reply turned out to fire too slowly and the monitor
+        // treated every click as a drag, breaking every button in
+        // the header. JS bridge is reliable enough on its own.
 
         // Same SwiftUI blob the floating HUD uses, embedded directly in
         // the bottom-right of the Library window. Reused — not a copy.
@@ -407,6 +527,22 @@ final class LibraryWindow: NSWindowController {
         guard webView.url != nil else { return }
         webView.evaluateJavaScript(
             "window.dispatchEvent(new CustomEvent('corder-window-active',{detail:\(active)}))",
+            completionHandler: nil)
+    }
+
+    /// Push an in-app toast into the Library window's React shell.
+    /// Mirrors the system Notification for events the user should see
+    /// even when the window is open and frontmost (a system toast
+    /// in that case ends up in Notification Center alone). Front-end
+    /// listens on `window.addEventListener('corder-toast', ...)` and
+    /// pipes through its existing toast queue.
+    func postToast(title: String, body: String, kind: String = "info") {
+        guard webView != nil, webView.url != nil else { return }
+        let payload = ["title": title, "body": body, "kind": kind]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript(
+            "window.dispatchEvent(new CustomEvent('corder-toast',{detail:\(json)}))",
             completionHandler: nil)
     }
 }

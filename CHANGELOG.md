@@ -11,6 +11,76 @@ behaviour, not internal refactors.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.10.0] — 2026-05-27
+
+### Added
+- Local Whisper via WhisperKit (large-v3-turbo, Core ML) as a third ASR provider — Apple Silicon only, $0/час after the one-time ~1.5 GB multilingual model download into `~/Library/Application Support/Corder/models/`. Falls back to Gemini transparently on Intel.
+- OpenAI gpt-4o-mini-transcribe as optional ASR provider (default remains Gemini).
+- LLM polish step (gpt-4o-mini) for Whisper transcripts — punctuation + typo cleanup, ~$0.005/час additional cost. Toggle in `AppSettings.transcriptCleanup`.
+- **Welcome-wizard на первом запуске**: двухшаговый онбординг —
+  карточки Microphone + Screen Recording (с deep-link в System
+  Settings и passive-preflight, без рекурсивных промптов) → шаг
+  Sign in (email + password ИЛИ Continue with Google). Окно
+  пинит фиксированный размер 380×516, без мерцания при смене
+  шага.
+- **Google OAuth через loopback**: системный браузер открывает
+  Google consent screen, `GoogleOAuth.signIn()` поднимает локальный
+  loopback-listener, обменивает code → token → userinfo, имя и
+  email кладутся в `AppSettings`.
+- **DemoSeeder**: при первом запуске в БД заливаются демонстрационные
+  встречи, чтобы Library не была пустой. Версия seed-rows трекается
+  и старые seeds подметаются при апдейте.
+- **Email backend на Cloudflare Worker** (`corder-api.empqwork.workers.dev`):
+  wizard fire-and-forget POST'ит provider/email/name на `/signup`,
+  Worker триггерит приветственное письмо через Resend.
+- **Header drag через JS bridge**: WKWebView перестаёт глотать
+  mousedown на пустых местах шапки — JS постит `drag` событие в
+  нативный handler, который вызывает `window.performDrag(with:)`.
+  Окно тянется за любую пустую часть header'а.
+- **Brand-mark squircle icon**: канонический иконконтент — белый
+  squircle с двумя чёрными вертикальными капсулами; регенерируется
+  из `~/corder-brand/` (исходники + скрипты).
+- **20 языков интерфейса** через `LangPicker`: globe-кнопка в шапке
+  открывает попап с поиском и SVG-флагами (npm `flag-icons`).
+  Полные переводы: en, uk, ru, de, fr, es, pt, it, pl, cs, tr, nl,
+  sv, id, vi, ja, ko, zh, hi, ar. Языки без полного словаря
+  фолбэкаются на English через `pickStrings(lang)`. Порядок в
+  пикере: en → uk → ru → по глобальной популярности.
+- **Дашборд** как landing-страница (`activeId === null`): Stats
+  левее, сортируемый Recent правее, ResizeHandle общий с
+  MeetingView. Селектор сортировки Recent (Самые длительные /
+  Недавние / Больше спикеров) сохраняется в localStorage.
+- **Auto-summary** (опционально, в Настройках): сразу после
+  транскрибации пайплайн вызывает Gemini и кладёт структурированное
+  Granola-style саммари в БД. Тогл — `Setting > Auto-summary`.
+- **Summary tab** с Granola-style structured-markdown рендерером
+  (`### разделы`, вложенные буллеты, **жирные** числа/решения) и
+  тулбаром Copy / Refresh / Search — пиксельно совпадает с
+  Transcript-тулбаром.
+- **Меню профиля**: 9 SVG-вариантов аватара в 3×3 пикере
+  (точка, два круга, полумесяц, ромб, скруглённый квадрат,
+  треугольник, плюс, кольцо+точка, четырёхлистник), имя
+  «Kostiantyn Halynskyi», id #012103, пункты Home → Dashboard,
+  Settings (кросс-сурфэйс), Sign out (красная). Аватар-вариант
+  сохраняется в localStorage.
+- **Mark-as-viewed**: непросмотренные записи в сайдбаре и Recent
+  отрисованы золотистым заголовком (миграция БД v16, колонка
+  `viewed_at`). Снимается автоматически при первом открытии
+  сессии в статусе `.ready`.
+- **Auto-archive коротких безмолвных записей**: если запись была
+  короче 60 секунд и не уловлено ни одного звука выше речевого
+  пола — Corder сразу переносит её в Архив (7-дневное удержание),
+  показывает in-window тост через WKWebView-bridge
+  (`corder-toast` CustomEvent) и системное уведомление.
+- **Popover silence warning**: если во время записи никто не
+  говорил > 10 минут — в meнюбар-попапе над кнопкой Stop появляется
+  янтарная карточка «Всё ещё идёт запись / Никто не говорил
+  10 минут».
 - Настройки реально работают: тумблеры (уведомления, видео экрана,
   авто-транскрипт, авто-название) сохраняются и читаются на бэкенде.
 - Глобальный шорткат записи (по умолчанию ⌘⇧F). Carbon

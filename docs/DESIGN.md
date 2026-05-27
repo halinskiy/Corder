@@ -33,9 +33,11 @@ seamlessly, unlock, leverage, cutting-edge, revolutionary, transform.
 --fg-muted      #6b6b68       secondary text, eyebrows
 --fg-dim        #a0a09c       meta (dates, sizes, version strings)
 
---accent         #1f7a4f      single brand colour: CTA, selected pills,
-                              toggle ON, Boost switch, link, ::selection
---accent-pressed #186439      hover/pressed state for accent
+--accent         #0e7c44      single brand colour (light): CTA, selected
+                              pills, toggle ON, link, ::selection.
+                              Dark theme: #1f9d59.
+--accent-pressed #0a5e34      hover/pressed state for accent (light).
+                              Dark theme: #178048.
 
 --danger        #b8443c       destructive only: Stop recording,
                               Delete session, error toast
@@ -260,8 +262,12 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 
 - Components live under `Web/src/components/`, single file per
   component, named exports.
-- All copy goes through `Web/src/i18n.ts`. Two locales: `ru`, `en`.
-  Never inline a string in JSX.
+- All copy goes through `Web/src/i18n.ts`. 20 locales listed in the
+  `LANGS` constant (picker order: **en → uk → ru → global popularity**).
+  Three locales are fully translated (`en`, `ru`, `uk`); the rest
+  resolve to English at runtime via `pickStrings(lang)`. Never inline
+  a string in JSX; when adding a key, populate at least the three
+  full locales and let `pickStrings` handle the rest until they ship.
 - API layer: `Web/src/api.ts`. One typed wrapper per endpoint.
 - Format helpers: `Web/src/format.ts` (durations, dates, buckets).
 - Global styles: `Web/src/styles.css`. Tokens at the top, components
@@ -274,13 +280,20 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 react           ^18.3.0      UI runtime
 react-dom       ^18.3.0
 lucide-react    ^1.14.0      icon set (use sparingly)
+flag-icons      ^7.x         CSS sprite of SVG country flags used by
+                             the LangPicker; emoji flags render poorly
+                             on Windows / Linux WebViews, so we
+                             ship SVGs instead. CSS sprite is the only
+                             part bundled (~94 KB gzipped CSS — the
+                             one big concession to our bundle budget).
 vite            ^5.4.0       dev server / bundler
 typescript      ^5.5.0       strict
 ```
 
 No state library, no router, no CSS-in-JS. Every additional dependency
-must justify its existence — the bundle is ~58 KB gzipped today, and
-that's the budget.
+must justify its existence — the JS bundle is ~58 KB gzipped today,
+and that's the budget (the flag-icons CSS sprite is tracked
+separately).
 
 ## What good looks like
 

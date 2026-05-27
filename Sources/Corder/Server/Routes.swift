@@ -8,6 +8,12 @@ enum Routes {
         server.get["/"] = { _ in serveIndex() }
         server.get["/index.html"] = { _ in serveIndex() }
         server.get["/assets/:path"] = { req in serveAsset(path: req.params[":path"] ?? "") }
+        // Vite-public assets land at the web root (avatar.jpg, icon.svg,
+        // etc.) — not under /assets/. Map them explicitly so the
+        // <img src="/avatar.jpg"> in ProfileMenu actually resolves.
+        server.get["/avatar.jpg"] = { _ in serveRoot(name: "avatar.jpg") }
+        server.get["/icon.svg"]   = { _ in serveRoot(name: "icon.svg") }
+        server.get["/favicon.ico"] = { _ in serveRoot(name: "favicon.ico") }
 
         server.get["/api/meetings"] = { _ in listMeetings(repo: repo) }
         server.get["/api/meetings/:id"] = { req in
@@ -50,7 +56,10 @@ enum Routes {
             lastError(id: req.params[":id"] ?? "")
         }
         server.post["/api/meetings/:id/summarize"] = { req in
-            summarize(id: req.params[":id"] ?? "", repo: repo)
+            // `?force=1` regenerates the summary even if the row has a
+            // cached one — used by the UI's "Regenerate" button.
+            let force = req.queryParams.contains(where: { $0.0 == "force" && $0.1 == "1" })
+            return summarize(id: req.params[":id"] ?? "", repo: repo, force: force)
         }
         server.get["/api/recording/state"] = { _ in recordingState() }
         server.post["/api/recording/start"] = { _ in startRecordingNow() }
@@ -83,6 +92,27 @@ enum Routes {
         }
         server.get["/api/update-status"] = { _ in updateStatus() }
         server.post["/api/update-check"] = { _ in updateCheck() }
+        server.post["/api/account/signout"] = { _ in accountSignOut() }
+    }
+
+    /// Drop local account state. No server session to invalidate yet;
+    /// this just clears the local UserDefaults keys the Welcome wizard
+    /// reads on next launch. After the call the React app reloads, the
+    /// menu-bar app sees `onboardingCompleted = false`, and the Welcome
+    /// wizard re-opens. Pre-existing recordings are NOT touched.
+    private static func accountSignOut() -> HttpResponse {
+        Task { @MainActor in
+            AppSettings.setLicenceKey(nil)
+            AppSettings.setUserName(nil)
+            AppSettings.setUserTier(.free)
+            AppSettings.setOnboardingCompleted(false)
+            AppSettings.setOnboardingStep(0)
+            FileLogger.log("AccountAPI: signed out, wizard will re-open on next launch")
+            // Re-present the Welcome wizard so the user can sign in
+            // again without restarting the app.
+            WelcomeWindowController.shared.presentManually()
+        }
+        return .ok(.text(#"{"ok":true}"#))
     }
 
     // MARK: static
@@ -140,6 +170,17 @@ enum Routes {
         return .raw(200, "OK", ["Content-Type": mime]) { try $0.write(data) }
     }
 
+    /// Serves a file from the WEB ROOT (not the `/assets/` subfolder).
+    /// Vite copies `Web/public/*` to the dist root, so the avatar /
+    /// icon / favicon end up here, not under `assets/`.
+    private static func serveRoot(name: String) -> HttpResponse {
+        guard let webRoot = webRootURL else { return .notFound }
+        let target = webRoot.appendingPathComponent(name)
+        guard let data = try? Data(contentsOf: target) else { return .notFound }
+        let mime = mimeType(for: target.pathExtension)
+        return .raw(200, "OK", ["Content-Type": mime]) { try $0.write(data) }
+    }
+
     private static func mimeType(for ext: String) -> String {
         switch ext.lowercased() {
         case "js": return "application/javascript; charset=utf-8"
@@ -147,6 +188,8 @@ enum Routes {
         case "json": return "application/json; charset=utf-8"
         case "svg": return "image/svg+xml"
         case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "ico": return "image/x-icon"
         case "woff2": return "font/woff2"
         default: return "application/octet-stream"
         }
@@ -171,7 +214,8 @@ enum Routes {
                     preview: r.preview,
                     speaker_count: r.speakerCount,
                     speaker_names: r.speakerNames,
-                    pinned: r.pinnedAt != nil
+                    pinned: r.pinnedAt != nil,
+                    viewed: r.viewedAt != nil
                 )
             }
             return jsonResponse(summaries)
@@ -183,6 +227,16 @@ enum Routes {
     private static func meetingDetail(id: String, repo: MeetingRepository) -> HttpResponse {
         do {
             guard let m = try repo.meeting(id: id) else { return .notFound }
+            // Mark the meeting as seen on first detail fetch. The repo
+            // is a no-op if `viewed_at` is already set — once seen,
+            // stays seen. We only stamp once the row is ready, so a
+            // still-recording / still-transcribing meeting doesn't get
+            // marked as seen prematurely (the user is "watching it
+            // load", not reading the result).
+            if m.status == .ready && m.viewedAt == nil {
+                let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+                try? repo.markViewedIfNew(meetingId: id, atMs: nowMs)
+            }
             let speakers = try repo.speakers(forMeeting: id)
             let segments = try repo.segments(forMeeting: id)
             let hasVideo = FileManager.default.fileExists(atPath: m.videoPath)
@@ -423,6 +477,7 @@ enum Routes {
             capture_audio: AppSettings.captureAudio,
             auto_transcribe: AppSettings.autoTranscribe,
             auto_title: AppSettings.autoTitle,
+            auto_summary: AppSettings.autoSummary,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
@@ -434,7 +489,20 @@ enum Routes {
             record_hotkey_conflict: hotkeyConflict(
                 code: AppSettings.recordHotkeyKeyCode,
                 mods: AppSettings.recordHotkeyModifiers),
-            record_hotkey_ok: HotkeyStatusSnapshot.read()
+            record_hotkey_ok: HotkeyStatusSnapshot.read(),
+            mic_device_uid: AppSettings.micDeviceUID,
+            audio_input_devices: AudioInputDevices.list().map {
+                DTO.AudioInputDeviceDTO(
+                    uid: $0.uid,
+                    name: $0.name,
+                    manufacturer: $0.manufacturer,
+                    transport: $0.transport,
+                    is_system_default: $0.isSystemDefault)
+            },
+            licence_key: AppSettings.licenceKey,
+            is_pro: AppSettings.isPro,
+            tier: AppSettings.userTier.rawValue,
+            onboarding_completed: AppSettings.onboardingCompleted
         )
     }
 
@@ -548,6 +616,7 @@ enum Routes {
             if let v = parsed.capture_audio    { AppSettings.setCaptureAudio(v) }
             if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
+            if let v = parsed.auto_summary     { AppSettings.setAutoSummary(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
             if let c = parsed.record_hotkey_code, let m = parsed.record_hotkey_mods {
@@ -562,6 +631,29 @@ enum Routes {
                     HotkeyManager.shared.register(
                         keyCode: UInt32(c), modifiers: UInt32(m))
                 }
+            }
+            // Mic device picker. Empty string = "system default", which
+            // we treat the same as `nil` (the setter normalises blank
+            // → removeObject). The selection applies to the NEXT
+            // recording; we don't hot-swap a live capture (would need
+            // a engine stop/start cycle while audio is mid-buffer).
+            if let uid = parsed.mic_device_uid {
+                AppSettings.setMicDeviceUID(uid)
+            }
+            // Licence key (the user pastes it into the Welcome wizard;
+            // Settings may also expose it later). Empty string clears
+            // the key and drops the user back to the Free tier; the
+            // setter normalises whitespace and absent-vs-empty itself.
+            if let key = parsed.licence_key {
+                AppSettings.setLicenceKey(key)
+            }
+            // Onboarding flag. Only `true` is meaningful as a payload —
+            // we never want a stale client to silently revert "wizard
+            // finished" back to false (would re-open the Welcome window
+            // on the next launch and confuse the user). True flips the
+            // flag; any other value is ignored.
+            if parsed.onboarding_completed == true {
+                AppSettings.setOnboardingCompleted(true)
             }
             FileLogger.log("settings: language=\(parsed.language ?? "nil") vocab=\(parsed.vocabulary != nil) keySet=\(parsed.gemini_key != nil) toggles[n=\(parsed.notifications.map(String.init) ?? "-"),v=\(parsed.capture_video.map(String.init) ?? "-"),a=\(parsed.capture_audio.map(String.init) ?? "-"),at=\(parsed.auto_transcribe.map(String.init) ?? "-"),ti=\(parsed.auto_title.map(String.init) ?? "-")] wl=\(parsed.meeting_whitelist?.count ?? -1) bl=\(parsed.meeting_blacklist?.count ?? -1)")
             return jsonResponse(currentSettings())
@@ -593,11 +685,16 @@ enum Routes {
     /// otherwise generates one from the transcript (blocking this
     /// Swifter worker for the Gemini round-trip — same accepted pattern
     /// as the Dropbox-hydrate path), stores it, and returns it.
-    private static func summarize(id: String, repo: MeetingRepository) -> HttpResponse {
+    private static func summarize(id: String, repo: MeetingRepository, force: Bool = false) -> HttpResponse {
         guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
         guard let m = try? repo.meeting(id: id) else { return .notFound }
-        if let cached = m.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !cached.isEmpty {
+        if !force,
+           let cached = m.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !cached.isEmpty,
+           isStructuredMarkdown(cached) {
+            // Pre-Granola summaries were plain prose without `###` /
+            // bullets — re-render those by falling through, so the new
+            // format replaces the old one on first open of the tab.
             return jsonResponse(["summary": cached])
         }
         let segs = (try? repo.segments(forMeeting: id)) ?? []
@@ -621,6 +718,18 @@ enum Routes {
         try? repo.setSummary(meetingId: id, summary: summary)
         FileLogger.log("summarize: generated summary for \(id) (\(summary.count) chars)")
         return jsonResponse(["summary": summary])
+    }
+
+    /// True iff the cached summary already uses the new Granola-style
+    /// structured Markdown (`### Heading` + `- ` bullets). Pre-Granola
+    /// summaries are plain prose — let them re-generate on first open.
+    private static func isStructuredMarkdown(_ s: String) -> Bool {
+        // Either an `### ` heading anywhere or at least one bullet line
+        // qualifies. We don't require both because a very short meeting
+        // might collapse to a single section.
+        if s.range(of: #"(^|\n)###\s"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"(^|\n)-\s"#, options: .regularExpression) != nil { return true }
+        return false
     }
 
     private static func cancelTranscription(id: String) -> HttpResponse {

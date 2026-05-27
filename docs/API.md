@@ -42,6 +42,14 @@ trust boundary is the macOS user account.
 | GET    | `/api/meetings/:id/last-error`          | `{error: string|null}` — last quota / billing / parse error. |
 | POST   | `/api/meetings/:id/speakers/:sid/rename`| Body `{name: string|null}`.        |
 
+`POST /api/meetings/:id/summarize` accepts an optional `?force=1`
+query parameter that bypasses the on-disk cache and re-asks Gemini
+for a fresh Granola-style structured-markdown summary. Without
+`force=1`, an existing summary is returned as-is (and the prompt
+isn't even loaded). The `auto_summary` setting in `/api/settings`
+controls whether the transcription pipeline runs `summarize`
+automatically as soon as the transcript is ready.
+
 ### `MeetingSummary`
 
 ```ts
@@ -51,9 +59,16 @@ trust boundary is the macOS user account.
   ended_at?: number;
   duration_ms?: number;
   status: "recording" | "transcribing" | "ready" | "failed";
+  title?: string | null;       // auto-generated headline
   preview?: string;            // first segment text (sidebar preview)
   speaker_count: number;       // unique speakers across segments
   speaker_names?: string;      // " · " join of names of who spoke
+  pinned?: boolean;
+  // False = user hasn't opened this meeting in `.ready` state yet.
+  // Drives the gold "unseen" title in the sidebar and Dashboard
+  // Recent. Stamped to true the first time the user fetches the
+  // detail endpoint on a ready row.
+  viewed?: boolean;
 }
 ```
 
@@ -65,9 +80,12 @@ trust boundary is the macOS user account.
   started_at: number;
   duration_ms?: number;
   status: MeetingStatus;
+  title?: string | null;
+  summary?: string | null;       // structured markdown (or legacy prose)
   speakers: SpeakerDTO[];
   segments: SegmentDTO[];
   expected_other_speakers?: number | null;
+  has_video?: boolean;
 }
 
 SpeakerDTO  { id, label, custom_name, color_hex }
@@ -96,7 +114,12 @@ to `MainActor`.
 
 ```ts
 Settings {
-  language?: "ru" | "en";
+  // ISO 639-1 code. The backend stores any string; the frontend
+  // LangPicker currently lists 20 locales (en, uk, ru, de, fr, es,
+  // pt, it, pl, cs, tr, nl, sv, id, vi, ja, ko, zh, hi, ar).
+  // Locales without a full translation table fall back to English
+  // in the UI; the server just persists whatever you send.
+  language?: string;
   vocabulary?: string;       // domain terms fed into the transcription prompt
   gemini_key?: string;       // write-only: POST to set; never echoed back by GET
   gemini_key_set?: boolean;  // read-only: whether a key is on disk
@@ -106,6 +129,10 @@ Settings {
   capture_audio?: boolean;   // server-side master; not surfaced as a UI toggle
   auto_transcribe?: boolean; // off ⇒ recording kept .ready, transcribe on demand
   auto_title?: boolean;
+  // When true (default), after auto-transcribe completes the pipeline
+  // also asks Gemini for a structured-markdown summary and persists it
+  // on the meeting row. Frontend Summary tab then renders cached.
+  auto_summary?: boolean;
   meeting_whitelist?: string[]; // bundle ids: always offer to record
   meeting_blacklist?: string[]; // bundle ids: never offer
   detected_mic_apps?: string[]; // read-only: recent mic owners (UI picker)

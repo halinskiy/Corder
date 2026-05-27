@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // bare 'recording' state to failed. Transcribing rows are recovered
         // separately below — they get re-enqueued, not failed.
         try? AppContext.shared.repo.resetStuckMeetings()
+        // First-launch seed — populates the Library with a handful
+        // of canned demo meetings so the dashboard isn't empty.
+        // Runs once per user (guarded by AppSettings.demoDataSeeded).
+        DemoSeeder.seedIfNeeded(repo: AppContext.shared.repo)
         // If a transcription was in flight when the previous process died
         // (forced quit, rebuild during dev, machine sleep), pick it up
         // again automatically. The audio files (mic.wav / system.wav) are
@@ -94,6 +98,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the manual-start handshake so MeetingDetector doesn't also
         // pop an offer for the same session.
         HotkeyManager.shared.onTrigger = {
+            // ⌘⇧F is the recording toggle — must respect the same
+            // onboarding gate as the popover Start button and the
+            // menu-bar Library item. If the wizard isn't finished
+            // yet, the hotkey re-focuses the wizard instead of
+            // starting a forbidden recording.
+            guard AppSettings.onboardingCompleted else {
+                Task { @MainActor in
+                    WelcomeWindowController.shared.presentManually()
+                }
+                return
+            }
             switch AppContext.shared.recordingState {
             case .idle:
                 MeetingDetector.shared.userStartedRecordingManually()
@@ -107,6 +122,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.register(
             keyCode: UInt32(AppSettings.recordHotkeyKeyCode),
             modifiers: UInt32(AppSettings.recordHotkeyModifiers))
+
+        // First-run wizard. Opens only when `AppSettings.onboardingCompleted`
+        // is false; the Done step on the final screen flips the flag. We
+        // defer past the menu-bar install so the wizard window doesn't
+        // race with the status item appearing on slow launches.
+        DispatchQueue.main.async {
+            WelcomeWindowController.shared.presentIfNeeded()
+        }
     }
 
     /// Builds an Edit menu so standard shortcuts (⌘C, ⌘X, ⌘V, ⌘A, ⌘Z) have
@@ -127,9 +150,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(NSMenuItem(title: "Скрыть Corder",
                                    action: #selector(NSApplication.hide(_:)),
                                    keyEquivalent: "h"))
-        appMenu.addItem(NSMenuItem(title: "Завершить Corder",
-                                   action: #selector(NSApplication.terminate(_:)),
-                                   keyEquivalent: "q"))
+        // ⌘Q is the normal Quit shortcut. We route it through our
+        // own selector instead of the stock `NSApplication.terminate`
+        // so that pressing ⌘Q while the menu-bar popover is open
+        // simply closes the popover (covers the "accidentally quit
+        // while inviting" case). Anywhere else ⌘Q quits normally.
+        let quitItem = NSMenuItem(title: "Завершить Corder",
+                                  action: #selector(AppDelegate.quitOrClosePopover(_:)),
+                                  keyEquivalent: "q")
+        quitItem.target = self
+        appMenu.addItem(quitItem)
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
@@ -168,7 +198,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// ⌘Q handler. If the menu-bar popover is open, close it
+    /// instead of terminating — Kostya was losing live recordings
+    /// to accidental ⌘Q hits while the invite or recording-state
+    /// popover was on screen. Outside of an open popover, ⌘Q
+    /// behaves as the normal "Quit Corder".
+    @objc func quitOrClosePopover(_ sender: Any?) {
+        if let mbc = MenuBarController.shared, mbc.isPopoverShown {
+            mbc.forceClosePopover()
+            return
+        }
+        NSApp.terminate(sender)
+    }
+
     fileprivate func openLibrary() {
+        // Locked until Welcome wizard finishes — redirect to the
+        // wizard so the user can't get to the Library (which would
+        // expose recording controls, transcripts, settings) while
+        // setup is incomplete.
+        guard AppSettings.onboardingCompleted else {
+            WelcomeWindowController.shared.presentManually()
+            return
+        }
         LibraryWindow.shared.show(serverURL: AppContext.shared.server.baseURL)
     }
 

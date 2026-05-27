@@ -1,23 +1,172 @@
 import React from "react";
-import { User, Settings, LogOut } from "lucide-react";
-import { IntegrationsCategory } from "./Integrations";
-import type { T } from "../i18n";
+import { Home, LogOut, Settings } from "lucide-react";
+import { LangPicker } from "./LangPicker";
+import type { Lang, T } from "../i18n";
+import { getSettings, signOut } from "../api";
 
-/// Avatar button + dropdown. The menu is rendered fixed and anchored to
-/// the button's rect so it floats above everything (the header lives in
-/// an `overflow:hidden` column). Light/dark via tokens. Click-outside
-/// and Esc close it.
+const AVATAR_COUNT = 9;
+const AVATAR_STORAGE_KEY = "corder.avatarVariant";
+
+/// Returns one of the 9 abstract glyph indices, persisted across
+/// launches. Falls back to a deterministic hash of `seed` if the
+/// user hasn't picked yet — so the first run always shows a stable
+/// glyph rather than a default placeholder.
+function readStoredVariant(seed: string): number {
+  try {
+    const raw = localStorage.getItem(AVATAR_STORAGE_KEY);
+    if (raw !== null) {
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n) && n >= 0 && n < AVATAR_COUNT) return n;
+    }
+  } catch {}
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  return Math.abs(hash) % AVATAR_COUNT;
+}
+
+/// One of 9 simple, bold glyphs on the accent green. All shapes are
+/// built from primitive SVG elements (<circle>, <rect>, <polygon>) +
+/// straight-line paths so they render reliably in WKWebView (the
+/// arc-only paths I tried first didn't paint on the tester's machine).
+function AvatarGlyph({ variant }: { variant: number }) {
+  /// Both width/height attributes AND an inline style are set on
+  /// the SVG. The attributes cover renderers that read SVG size
+  /// from the element; the inline `style` covers ones that only
+  /// honour CSS. Inline style beats any stylesheet, so cascade
+  /// order can't quietly drop the size declaration. We arrived at
+  /// this combo after the popover variant kept rendering at viewBox
+  /// natural size (40×40 tile in the corner of a 48 px round chip)
+  /// every time we let CSS classes own the dimensions.
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      width="100%"
+      height="100%"
+      preserveAspectRatio="xMidYMid meet"
+      className="avatar-svg"
+      style={{ display: "block", width: "100%", height: "100%" }}
+      aria-hidden
+    >
+      <rect width="40" height="40" fill="var(--accent)" />
+      <g fill="#fff">{glyphShape(variant)}</g>
+    </svg>
+  );
+}
+
+function glyphShape(variant: number): React.ReactNode {
+  switch (variant % AVATAR_COUNT) {
+    case 0:
+      // Single bold dot
+      return <circle cx="20" cy="20" r="10" />;
+    case 1:
+      // Two stacked dots — friend / dialogue glyph
+      return (
+        <>
+          <circle cx="20" cy="13" r="5.5" />
+          <circle cx="20" cy="27" r="5.5" />
+        </>
+      );
+    case 2:
+      // Half-moon (rectangle clipped by a circle isn't reliable in
+      // every renderer — use a polygon arc approximation drawn as
+      // a half-disc via two paths: a full circle minus a rect).
+      return (
+        <>
+          <circle cx="20" cy="20" r="11" />
+          <rect x="20" y="9" width="13" height="22" fill="var(--accent)" />
+        </>
+      );
+    case 3:
+      // Square — rotated 45° for a diamond. SVG transform = stable.
+      return <rect x="11" y="11" width="18" height="18" rx="2" transform="rotate(45 20 20)" />;
+    case 4:
+      // Soft rounded square
+      return <rect x="9" y="9" width="22" height="22" rx="5" />;
+    case 5:
+      // Triangle (equilateral, pointing up)
+      return <polygon points="20,8 31,30 9,30" />;
+    case 6:
+      // Bold diagonal bar — a single rounded rect rotated 45°. The
+      // rect is sized so that after rotation its endpoints stay well
+      // inside the 19-radius clip circle (overflow:hidden + 50%
+      // border-radius). Earlier length=34 put the corners ~17 px
+      // from centre, which sat ON the clip boundary and the tip
+      // read as "cut off" at the top of the avatar. height=28
+      // leaves ~4 px breathing room from the circle's edge.
+      return <rect x="17" y="6" width="6" height="28" rx="2" transform="rotate(45 20 20)" />;
+    case 7:
+      // Outer ring + inner dot — drawn as two concentric paths via
+      // a `stroke` ring (not even-odd, which is flaky in WebKit).
+      return (
+        <>
+          <circle cx="20" cy="20" r="11" fill="none" stroke="#fff" strokeWidth="3" />
+          <circle cx="20" cy="20" r="4" />
+        </>
+      );
+    case 8:
+    default:
+      // Four-petal flower / quatrefoil — four overlapping circles
+      return (
+        <>
+          <circle cx="20" cy="12" r="6" />
+          <circle cx="20" cy="28" r="6" />
+          <circle cx="12" cy="20" r="6" />
+          <circle cx="28" cy="20" r="6" />
+        </>
+      );
+  }
+}
+
+type Tier = "free" | "pro" | "max";
+
+/// Avatar button + dropdown. The menu is rendered fixed and anchored
+/// to the button's rect so it floats above everything (the header
+/// lives in an `overflow: hidden` column). Click-outside and Esc
+/// close it. The 9-variant glyph picker expands inline under the
+/// profile header.
 export function ProfileMenu({
-  onToast,
+  onOpenSettings,
+  onOpenDashboard,
+  lang,
+  onLangChange,
   t,
 }: {
-  onToast: (msg: string, kind?: "success" | "error") => void;
+  /// Kept in the signature for the parent's existing call site even
+  /// though we don't surface toasts here anymore (Sign-out used to
+  /// emit a "Soon" toast — gone with the Upgrade-to-Pro CTA). The
+  /// `_onToast` param-name silences `noUnusedParameters`.
+  onToast?: (msg: string, kind?: "success" | "error") => void;
+  onOpenSettings: () => void;
+  onOpenDashboard: () => void;
+  /// Required now that the LangPicker lives inside the profile
+  /// popover (moved out of MainHeader). The picker doesn't read these
+  /// itself — they're forwarded down so the same Globe-icon dropdown
+  /// the MainHeader used to host renders here unchanged.
+  lang: Lang;
+  onLangChange: (next: Lang) => void;
   t: T;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [imgOk, setImgOk] = React.useState(true);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [variant, setVariant] = React.useState(() => readStoredVariant(t.profile_name));
+  const [tier, setTier] = React.useState<Tier>("free");
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const [pos, setPos] = React.useState<{ top: number; right: number } | null>(null);
+
+  /// Pull the current tier from the backend so the badge label and
+  /// colour reflect reality (Free/Pro/Max). Refreshed every time the
+  /// popover opens — cheap enough, and lets a CLI `defaults write`
+  /// flip the badge without a page reload.
+  React.useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        const s = await getSettings();
+        const v = (s.tier ?? (s.is_pro ? "pro" : "free")) as Tier;
+        if (v === "free" || v === "pro" || v === "max") setTier(v);
+      } catch {}
+    })();
+  }, [open]);
 
   const place = React.useCallback(() => {
     const r = btnRef.current?.getBoundingClientRect();
@@ -33,7 +182,6 @@ export function ProfileMenu({
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", place);
-    // Defer so the opening click doesn't immediately close it.
     const id = window.setTimeout(
       () => window.addEventListener("mousedown", onDown), 0);
     return () => {
@@ -44,55 +192,123 @@ export function ProfileMenu({
     };
   }, [open, place]);
 
-  const soon = () => { onToast(t.profile_soon, "success"); setOpen(false); };
+  const pickVariant = (v: number) => {
+    setVariant(v);
+    try { localStorage.setItem(AVATAR_STORAGE_KEY, String(v)); } catch {}
+    setPickerOpen(false);
+  };
+
+  const goDashboard = () => { onOpenDashboard(); setOpen(false); setPickerOpen(false); };
+  const goSettings = () => { onOpenSettings(); setOpen(false); setPickerOpen(false); };
+
+  const tierLabel =
+    tier === "max" ? (t.profile_tier_max ?? "Max")
+    : tier === "pro" ? (t.profile_tier_pro ?? "Pro")
+    : (t.profile_tier_free ?? "Free");
 
   return (
     <>
       <button
         ref={btnRef}
-        className={"avatar-btn" + (imgOk ? "" : " is-empty")}
+        className="avatar-btn avatar-btn-svg"
         onClick={() => setOpen((v) => !v)}
         title={t.profile_title}
         aria-label={t.profile_title}
       >
-        {imgOk ? (
-          <img
-            className="avatar-img"
-            src="/avatar.jpg"
-            alt=""
-            onError={() => setImgOk(false)}
-          />
-        ) : (
-          <span className="avatar-fallback"><User size={16} strokeWidth={2} /></span>
-        )}
+        <AvatarGlyph variant={variant} />
       </button>
       {open && pos && (
         <div
           className="profile-pop"
           role="menu"
           style={{ top: pos.top, right: pos.right }}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="profile-pop-head">
-            <span className="avatar-img-lg">
-              {imgOk
-                ? <img src="/avatar.jpg" alt="" onError={() => setImgOk(false)} />
-                : <User size={20} strokeWidth={2} />}
-            </span>
+            <button
+              className="avatar-img-lg avatar-img-lg-svg avatar-pickable"
+              onClick={() => setPickerOpen((v) => !v)}
+              title={t.profile_pick_avatar}
+              aria-label={t.profile_pick_avatar}
+              aria-expanded={pickerOpen}
+            >
+              <AvatarGlyph variant={variant} />
+            </button>
             <div className="profile-pop-id">
               <div className="profile-pop-name">{t.profile_name}</div>
-              <div className="profile-pop-sub">{t.profile_sub}</div>
+              {/* Tier badge — Free / Pro / Max. Colour varies by tier:
+                  neutral grey for Free, gold for Pro, accent green for
+                  Max. The Upgrade-to-Pro CTA that used to sit at the
+                  bottom of this popover moved to the Sidebar's
+                  Upgrade-card (more discoverable, doesn't require
+                  opening the profile menu first). */}
+              <div className="profile-pop-sub">
+                <span className={`profile-tier-badge tier-${tier}`}>{tierLabel}</span>
+              </div>
             </div>
           </div>
+
+          {pickerOpen && (
+            <div className="avatar-picker" role="listbox">
+              {Array.from({ length: AVATAR_COUNT }).map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={"avatar-picker-cell" + (i === variant ? " is-active" : "")}
+                  onClick={() => pickVariant(i)}
+                  role="option"
+                  aria-selected={i === variant}
+                  title={t.profile_pick_avatar}
+                >
+                  <AvatarGlyph variant={i} />
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="profile-pop-sep" />
-          <button className="profile-pop-item" onClick={soon} role="menuitem">
+          <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
+            <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
+          </button>
+          {/* Language picker — moved out of MainHeader's toolbar. Same
+              portal-popover the toolbar used to host, just anchored to
+              this row instead of a top-bar button. Reads as a normal
+              profile-popover row: Globe icon + "Language" label, tap
+              opens the flag-list picker. */}
+          <LangPicker
+            lang={lang}
+            onChange={onLangChange}
+            t={t}
+            className="profile-pop-item"
+            label={<span>{t.profile_language ?? "Language"}</span>}
+          />
+
+          <button className="profile-pop-item" onClick={goSettings} role="menuitem">
             <Settings size={15} strokeWidth={2} /> {t.profile_account}
           </button>
-          <button className="profile-pop-item" onClick={soon} role="menuitem">
+
+          {/* Sign out — clears local account state (licence/email/name)
+              and re-opens the Welcome wizard so the user can sign in
+              again as someone else. There is no server-side session
+              to invalidate yet; this is purely a local-state reset. */}
+          <div className="profile-pop-sep" />
+          <button
+            className="profile-pop-item profile-pop-item-danger"
+            onClick={async () => {
+              setOpen(false);
+              try { await signOut(); } catch {}
+              // Hard reload so the AppDelegate sees a fresh
+              // `onboardingCompleted = false` and re-presents the
+              // Welcome wizard before the Library window comes back.
+              try {
+                (window as unknown as { location: Location }).location.reload();
+              } catch {}
+            }}
+            role="menuitem"
+          >
             <LogOut size={15} strokeWidth={2} /> {t.profile_signout}
           </button>
-          <div className="profile-pop-sep" />
-          <IntegrationsCategory t={t} onActivate={soon} />
         </div>
       )}
     </>

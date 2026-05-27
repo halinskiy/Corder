@@ -62,7 +62,11 @@ function GoogleCalendarLogo() {
 /// surfaces (was the SettingsPane "Coming soon" block). Compact rows —
 /// logo + title + an inert SOON chip — clicking just nudges with a
 /// "soon" toast (same as the other dormant profile items).
-export function IntegrationsCategory({
+/// Full pane variant of the Integrations list — sibling of SettingsPane
+/// in the detail right column. Each row is the same logo + title + SOON
+/// chip, just inside the `.settings-rows` framed card so it visually
+/// matches the toggle cards in the Settings tab.
+export function IntegrationsPane({
   t, onActivate,
 }: {
   t: T;
@@ -76,20 +80,18 @@ export function IntegrationsCategory({
     { logo: <GoogleCalendarLogo />, title: t.settings_calendar_title },
   ];
   return (
-    <>
-      <div className="profile-pop-cat">{t.profile_integrations}</div>
+    <div className="settings-pane">
       {items.map((it) => (
         <button
           key={it.title}
-          className="profile-pop-item profile-pop-int"
+          className="integrations-row"
           onClick={onActivate}
-          role="menuitem"
         >
-          <span className="profile-pop-int-logo">{it.logo}</span>
-          <span className="profile-pop-int-title">{it.title}</span>
+          <span className="integrations-row-logo">{it.logo}</span>
+          <span className="integrations-row-title">{it.title}</span>
           <span className="promo-soon">{t.settings_ext_badge_soon}</span>
         </button>
       ))}
-    </>
+    </div>
   );
 }

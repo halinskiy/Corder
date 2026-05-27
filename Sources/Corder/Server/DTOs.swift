@@ -15,6 +15,9 @@ enum DTO {
         /// was on the call ("Vadim", "Влад", etc.) without opening it.
         let speaker_names: String?
         let pinned: Bool
+        /// `false` = the user hasn't opened this meeting yet. Drives the
+        /// "unseen" accent on the title in the sidebar + Recent.
+        let viewed: Bool
     }
 
     struct MeetingDetail: Codable {
@@ -60,6 +63,9 @@ enum DTO {
         let capture_audio: Bool?
         let auto_transcribe: Bool?
         let auto_title: Bool?
+        /// Run `GeminiSummarizer` automatically once the transcript is
+        /// ready, so the Summary tab is pre-populated on first open.
+        let auto_summary: Bool?
         /// User-managed bundle ids: always offer to record for these /
         /// never offer for these. Consumed by `MeetingDetector`.
         let meeting_whitelist: [String]?
@@ -78,6 +84,46 @@ enum DTO {
         let record_hotkey_label: String?
         let record_hotkey_conflict: String?
         let record_hotkey_ok: Bool?
+        /// Preferred microphone input device. Stored as the stable
+        /// Core Audio UID (not the numeric AudioDeviceID, which the
+        /// OS re-issues on reboot/replug). `nil` / empty string =
+        /// "use system default" — the pre-feature behaviour.
+        let mic_device_uid: String?
+        /// Read-only: discovered input devices for the picker. Sorted
+        /// with the current system default first.
+        let audio_input_devices: [AudioInputDeviceDTO]?
+        /// Paddle-issued licence key (raw string the user pasted into
+        /// the Welcome wizard). Empty / nil = Free tier. The frontend
+        /// also reads `is_pro` for the derived state — keeping both
+        /// avoids re-implementing the format rule in TypeScript.
+        let licence_key: String?
+        /// Read-only: server-derived "this licence currently looks Pro"
+        /// flag. MVP rule lives in `AppSettings.isValidLicenceFormat`
+        /// (≥ 20 alphanumeric/dash/underscore).
+        let is_pro: Bool?
+        /// Read-only: current paid-tier ladder rung — `free` / `pro` /
+        /// `max`. Source of truth on the server, mirrors
+        /// `AppSettings.userTier`. The frontend reads this directly to
+        /// drive the tier badge + the Sidebar Upgrade card visibility;
+        /// `is_pro` is kept as the older boolean for backward-compat.
+        let tier: String?
+        /// Read-only: has the user finished the Welcome wizard at least
+        /// once? AppDelegate uses this to decide whether to auto-open
+        /// the wizard on launch. The wizard's final step flips it.
+        let onboarding_completed: Bool?
+    }
+
+    /// One discoverable microphone-class device. Mirrors
+    /// `AudioInputDevices.Info` so the frontend doesn't have to know
+    /// about Core Audio constants.
+    struct AudioInputDeviceDTO: Codable {
+        let uid: String
+        let name: String
+        let manufacturer: String?
+        /// "BuiltIn" / "USB" / "Bluetooth" / "Virtual" / "Aggregate" /
+        /// "Continuity" / etc. — used for an icon hint in the picker.
+        let transport: String?
+        let is_system_default: Bool
     }
 
     /// One installed application, for the Settings app-picker (so the

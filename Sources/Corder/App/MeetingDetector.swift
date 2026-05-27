@@ -38,6 +38,9 @@ final class MeetingDetector {
     /// re-trigger every tick.
     private var inputBusySince: Date?
     private var lastTriggerMicBusyEdge: Date?
+    /// Last `bundlesRunningInput` snapshot we logged. Field is only used
+    /// for the diagnostic log in `tick()`; not part of the decision.
+    private var lastLoggedOwners: Set<String> = []
 
     /// Bundle id → human-readable app name shown in the invite, in
     /// priority order. The first matching running app wins when
@@ -52,6 +55,14 @@ final class MeetingDetector {
         ("com.tinyspeck.slackmacgap",    "Slack"),
         ("com.hnc.Discord",              "Discord"),
         ("com.skype.skype",              "Skype"),
+        // Telegram on macOS ships under three bundle ids in the wild:
+        // ru.keepcoder.Telegram (the native app most users have),
+        // org.telegram.desktop (the cross-platform Telegram Desktop),
+        // ph.telegra.Telegraph (the Mac App Store "Telegram Lite"
+        // build). All three carry the same voice/video call surface.
+        ("ru.keepcoder.Telegram",        "Telegram"),
+        ("org.telegram.desktop",         "Telegram"),
+        ("ph.telegra.Telegraph",         "Telegram"),
         ("ru.yandex.desktop.yatelemost", "Я.Телемост"),
         // Browsers — sit at the bottom of the priority list. A dedicated
         // meeting app holding the mic always wins; the browser branch
@@ -101,6 +112,12 @@ final class MeetingDetector {
     }
 
     private func tick() {
+        // Skip the entire detector while the Welcome wizard is
+        // unfinished. Offering a recording before setup is locked
+        // would be misleading — the user can't accept (popover Start
+        // is gated) and the prompt would just nag.
+        guard AppSettings.onboardingCompleted else { return }
+
         // Don't poll during our own recording or the stopping handoff —
         // CaptureEngine is the process holding the mic right now, and we
         // already know about the meeting.
@@ -125,6 +142,17 @@ final class MeetingDetector {
         // Surface every mic owner to the Settings picker so the user can
         // white/blacklist an app by tapping it (no bundle-id typing).
         if let owners = micOwners { MicAppsSnapshot.update(Array(owners)) }
+        // One-shot diagnostic: log when the mic-owners set CHANGES so we
+        // can see what bundle ids the CoreAudio process list reports —
+        // Electron / Chromium apps (Discord, Telegram, Comet) own the
+        // mic via helper processes with bundle ids like
+        // `com.hnc.Discord.helper.Renderer`, NOT the main bundle, which
+        // breaks `owners.contains(app.bundle)` exact matching below.
+        if let owners = micOwners, owners != lastLoggedOwners {
+            lastLoggedOwners = owners
+            FileLogger.log(
+                "MeetingDetector: mic owners = [\(owners.sorted().joined(separator: ", "))]")
+        }
 
         // Effective offer set = built-in known apps + the user's
         // whitelist, minus anything the user blacklisted. Blacklist wins
@@ -144,10 +172,18 @@ final class MeetingDetector {
         // process holding the mic. Loom/OBS/QuickTime/Terminal recording
         // while Zoom merely sits open in the background no longer trips
         // an offer. Fallback path keeps the original device-global gate.
+        // Match rule: exact bundle id OR `<bundle>.<suffix>` — Electron
+        // and Chromium apps (Discord, Telegram, Comet, Chrome) hold the
+        // mic via helper processes whose bundle ids extend the main app
+        // bundle (`com.hnc.Discord.helper.Renderer` etc.). Exact-match
+        // missed every one of them.
+        let ownerMatchesApp: (String, Set<String>) -> Bool = { bundle, owners in
+            owners.contains(where: { $0 == bundle || $0.hasPrefix(bundle + ".") })
+        }
         let micBusy: Bool
         if let owners = micOwners {
             micBusy = effectiveApps.contains {
-                runningBundles.contains($0.bundle) && owners.contains($0.bundle)
+                runningBundles.contains($0.bundle) && ownerMatchesApp($0.bundle, owners)
             }
         } else {
             let anyRunning = effectiveApps.contains { runningBundles.contains($0.bundle) }
@@ -178,10 +214,11 @@ final class MeetingDetector {
 
         // When per-process info is available the offered app must be the
         // one actually on the mic; without it, first running candidate
-        // (original behaviour). Blacklist already excluded above.
-        guard let match = effectiveApps.first(where: {
-                  runningBundles.contains($0.bundle)
-                  && (micOwners?.contains($0.bundle) ?? true)
+        // (original behaviour). Same prefix-match rule as `micBusy`.
+        // Blacklist already excluded above.
+        guard let match = effectiveApps.first(where: { app in
+                  runningBundles.contains(app.bundle)
+                  && (micOwners.map { ownerMatchesApp(app.bundle, $0) } ?? true)
               }),
               !offeredFor.contains(match.bundle)
         else {

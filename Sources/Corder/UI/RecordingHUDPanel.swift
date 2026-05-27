@@ -213,7 +213,6 @@ final class RecordingHUDPanel {
         guard let screen = NSScreen.main else { return .zero }
         let f = screen.visibleFrame
         let w = panel.frame.width
-        let h = panel.frame.height
         // Bottom-right corner with a small breathing margin so the
         // glow never hits the screen edge.
         return NSPoint(x: f.maxX - w - 16, y: f.minY + 16)
@@ -421,6 +420,36 @@ struct RecordingHUDView: View {
     /// stop when recording).
     let onTap: () -> Void
 
+    /// When true, the blob renders as if a recording is in flight
+    /// (active morph through templates + audio-reactive amplitude)
+    /// but **keeps the silent-green palette**. Used by the Welcome
+    /// wizard's hero — "the app introducing itself" — without the
+    /// red recording-state strobe. Synthetic audio levels are
+    /// generated from the TimelineView clock so the morph keeps
+    /// moving even though no real audio is flowing.
+    var welcomeActive: Bool = false
+
+    /// Three-sine synthetic instantaneous level — gives the morph a
+    /// believable "voice" amplitude without real audio. Peaks ~ 0.35
+    /// so the shape deforms generously but never spikes into a star.
+    fileprivate static func syntheticLevel(t: TimeInterval) -> Float {
+        let a = sin(t * 1.6)               // base breath
+        let b = sin(t * 2.7 + 1.1) * 0.6   // syllable-rate ripple
+        let c = sin(t * 0.55 + 2.3) * 0.4  // slow envelope
+        let raw = (a + b + c) / 2.0
+        // Rectify + scale to 0…~0.35.
+        return Float(max(0, raw) * 0.35)
+    }
+
+    /// Slow-moving peak envelope (decoupled period from `syntheticLevel`)
+    /// — sits in 0.18…0.45 so `audioActivity = clamp((peak - 0.05) * 6)`
+    /// stays in the 0.8…1.0 band: the blob runs through templates
+    /// continuously, just at varying intensity.
+    fileprivate static func syntheticPeak(t: TimeInterval) -> Float {
+        let p = sin(t * 0.7) * 0.5 + 0.5    // 0…1
+        return Float(0.18 + p * 0.27)       // 0.18…0.45
+    }
+
     @ObservedObject private var meter = RecordingLevelMeter.shared
     /// Lets the view know when a recording is actually in flight — used
     /// to decide whether the blob is in "idle ambient" mode (subtle
@@ -456,26 +485,21 @@ struct RecordingHUDView: View {
     /// idle downgrade can't hitch mid-transition.
     @State private var relaxing = false
     var body: some View {
-        let level = max(meter.micLevel, meter.systemLevel)
-        // Peak over the last ~0.5 s ring buffer, scaled so a normal
-        // speaking voice (peak ≈ 0.25-0.35) reads as full activity
-        // and a quiet room (peak ≈ 0.02-0.05) reads as zero.
-        let recentPeak = meter.history.max() ?? 0
-        let audioActivity = CGFloat(min(1, max(0, (recentPeak - 0.05) * 6)))
+        // Real audio levels from the level meter — used everywhere
+        // EXCEPT the welcome-active path, which synthesises its
+        // own gentle wave from the timeline clock further down.
+        let liveLevel = max(meter.micLevel, meter.systemLevel)
+        let liveRecentPeak = meter.history.max() ?? 0
 
-        // At idle (no recording) the blob is a near-perfect circle with
-        // only a faint breathing wobble — no morph through the star /
-        // hexagon templates, no jitter. During a recording the audio
-        // drives the shape directly.
-        let isRecording = ctx.recordingState != .idle
-
-        // Palette is bound directly to recording state — red while a
-        // recording is in flight (whether the blob is the floating HUD
-        // or the inline one in the Library), green at rest. Threshold-
-        // based flipping made the floating HUD strobe colours mid-call
-        // when audio dipped; that's the wrong signal for "we're still
-        // recording, just nobody's talking at this exact moment".
-        let palette: BlobPalette = isRecording ? .activeRed : .silentGreen
+        // `welcomeActive` co-opts the recording-mode morph (active
+        // templates + amplitude) without entering true recording
+        // state, so the palette stays green while the shape still
+        // breathes. The Library / HUD callers pass `false` and get
+        // exactly the prior behaviour.
+        let isRecording = welcomeActive || (ctx.recordingState != .idle)
+        let palette: BlobPalette =
+            welcomeActive ? .silentGreen
+                          : (isRecording ? .activeRed : .silentGreen)
 
         // Frame-rate is state-driven so the blob doesn't burn CPU
         // when nothing meaningful is changing on screen:
@@ -537,6 +561,18 @@ struct RecordingHUDView: View {
                     let e = 1 - p
                     return CGFloat(e * e)
                 }()
+                // Welcome-mode synthesises gentle audio levels from
+                // the clock so the morph keeps moving — three
+                // overlaid sines at distinct periods so the shape
+                // doesn't look mechanically rhythmic. Live mode
+                // reads from the level meter as before.
+                let level: Float = welcomeActive
+                    ? Self.syntheticLevel(t: t)
+                    : liveLevel
+                let recentPeak: Float = welcomeActive
+                    ? Self.syntheticPeak(t: t)
+                    : liveRecentPeak
+                let audioActivity = CGFloat(min(1, max(0, (recentPeak - 0.05) * 6)))
                 blobLayer(time: t,
                           level: level * Float(energy),
                           activity: audioActivity * energy,
@@ -714,20 +750,20 @@ struct RecordingHUDView: View {
                     )
             )
             .frame(width: 43, height: 43)
-        // The blob's original soft brand-coloured glow. The
-        // backdrop-blur "frosted lens" experiment put a dark veil over
-        // the blob (NSVisualEffectView `.hudWindow` darkened it) — the
-        // user rejected that; we're back to a clean opaque blob with
-        // just this multi-layer bloom (wide faint halo → mid → tight
-        // core). Breathes up with audio level.
+        // Soft brand-coloured glow — three-layer bloom (wide faint halo
+        // → mid → tight core). Toned down ~50 % from the previous
+        // values per user feedback — the prior multi-layer glow read
+        // as too heavy on light themes and bled past the surrounding
+        // cards inside the Library window. Still breathes with audio
+        // level so the blob doesn't go visually flat.
+        .shadow(color: palette.glowOuter.opacity(0.12),
+                radius: 26 + 10 * lvl, x: 0, y: 6)
         .shadow(color: palette.glowOuter.opacity(0.22),
-                radius: 44 + 18 * lvl, x: 0, y: 8)
-        .shadow(color: palette.glowOuter.opacity(0.40),
-                radius: 26 + 14 * lvl, x: 0, y: 6)
-        .shadow(color: palette.glowOuter.opacity(0.48),
-                radius: 13 + 8 * lvl, x: 0, y: 4)
-        .shadow(color: palette.glowInner.opacity(0.32),
-                radius: 5, x: 0, y: 2)
+                radius: 16 + 8 * lvl, x: 0, y: 4)
+        .shadow(color: palette.glowOuter.opacity(0.28),
+                radius: 8 + 4 * lvl, x: 0, y: 2)
+        .shadow(color: palette.glowInner.opacity(0.18),
+                radius: 3, x: 0, y: 1)
     }
 
 }

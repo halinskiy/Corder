@@ -42,6 +42,11 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     /// the *current* route. Drives the system-track chooser: on BT the
     /// Core-Audio tap is faint, so the SCStream backup is authoritative.
     var outputBluetoothAtStart: Bool? = nil
+    /// Timestamp the user first opened this meeting in the Library
+    /// window. Null = unseen → the sidebar / Recent renders the
+    /// title in the unseen accent. Stamped on the first GET
+    /// `/api/meetings/:id` after the row finishes transcribing.
+    var viewedAt: Int64? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -63,6 +68,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case summary
         case pinnedAt = "pinned_at"
         case outputBluetoothAtStart = "output_bluetooth_at_start"
+        case viewedAt = "viewed_at"
     }
 }
 

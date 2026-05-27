@@ -153,7 +153,7 @@ Cloud/
 
 Storage/
 ├ Database.swift            DatabaseQueue factory + migrations.run
-├ Migrations.swift          v1 → v15_bt_route, append-only
+├ Migrations.swift          v1 → v16_viewed_at, append-only
 ├ Models.swift              Meeting / Speaker / Segment + CodingKeys;
 │                           gemini_raw_turns, audio_hash, archived_at
 └ MeetingRepository.swift   GRDB read/write, FTS search, listMeetings
@@ -297,6 +297,11 @@ ALTER TABLE meetings ADD COLUMN audio_hash       TEXT;  -- "dual:m:s" or "mix:h"
 
 -- v8_archive
 ALTER TABLE meetings ADD COLUMN archived_at INTEGER;    -- soft-archive bin
+
+-- v16_viewed_at
+ALTER TABLE meetings ADD COLUMN viewed_at INTEGER;      -- ms epoch when the user first opened the .ready meeting
+UPDATE meetings SET viewed_at = ended_at
+  WHERE viewed_at IS NULL AND ended_at IS NOT NULL;     -- existing rows are "seen" from the user's POV
 ```
 
 The `boosted_text` / `boosted_at` columns existed from v2 as a
@@ -315,6 +320,15 @@ same audio (post-archive, post-clarify-banner) costs zero File API calls.
 `archived_at` (v8) — soft-archive timestamp. `listMeetings()` filters
 `archived_at IS NULL`. `purgeExpiredArchive()` runs on launch and
 hard-deletes rows where `archived_at < now − 7 d`.
+
+`viewed_at` (v16) — ms epoch when the user first fetched the
+`/api/meetings/:id` endpoint with the row already in `.ready` state.
+`MeetingRepository.markViewedIfNew(meetingId:atMs:)` stamps it; the
+detail route is the only caller. The sidebar + Dashboard Recent
+render the title in `--accent-gold` while `viewed_at IS NULL` for a
+ready meeting — that's the "unseen new transcript" affordance. The
+v16 migration seeds existing rows with `ended_at` so nothing pre-existing
+shows up as "unseen" on first launch after upgrade.
 
 ## Cancellation model
 

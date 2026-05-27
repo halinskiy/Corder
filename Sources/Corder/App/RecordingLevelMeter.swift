@@ -45,6 +45,19 @@ final class RecordingLevelMeter: ObservableObject {
     /// (≈ -48 dBFS) — i.e. nothing was actually captured.
     var capturedSilence: Bool { max(sessionMaxMic, sessionMaxSystem) < 0.004 }
 
+    /// Timestamp of the most recent audible buffer (peak ≥ speech floor).
+    /// The popover reads this and the current wall clock to decide
+    /// whether to surface the "no one's spoken for 10 minutes" warning
+    /// while a recording is in progress. `nil` means we haven't crossed
+    /// the floor yet this session.
+    @Published private(set) var lastSpeechAt: Date? = nil
+    /// Threshold above which we consider a buffer to contain real
+    /// speech (or any meaningful audio activity). Sits well above the
+    /// silence floor (0.004) used for the post-stop "no audio" check
+    /// but below normal-volume voice — keyboard taps and HVAC won't
+    /// reset the warning, but quiet talking will.
+    private static let speechFloor: Float = 0.05
+
     func reset() {
         micLevel = 0
         systemLevel = 0
@@ -54,6 +67,7 @@ final class RecordingLevelMeter: ObservableObject {
         lastHistoryPush = 0
         sessionMaxMic = 0
         sessionMaxSystem = 0
+        lastSpeechAt = nil
     }
 
     /// Called from CaptureEngine's mic tap. Always invoked on the audio
@@ -81,6 +95,7 @@ final class RecordingLevelMeter: ObservableObject {
     @MainActor
     private func applyMic(peak: Float) {
         if peak > sessionMaxMic { sessionMaxMic = peak }
+        if peak >= Self.speechFloor { lastSpeechAt = Date() }
         let now = CACurrentMediaTime()
         // perceptual: sqrt makes quiet speech (≈0.05 raw) read as a
         // visible bar (≈0.22 mapped) without hard-clipping loud bursts.
@@ -94,6 +109,7 @@ final class RecordingLevelMeter: ObservableObject {
     @MainActor
     private func applySystem(peak: Float) {
         if peak > sessionMaxSystem { sessionMaxSystem = peak }
+        if peak >= Self.speechFloor { lastSpeechAt = Date() }
         let now = CACurrentMediaTime()
         let mapped = min(1, sqrt(max(0, peak) * 3))
         guard now - lastPublishSys >= Self.publishHz else { return }
