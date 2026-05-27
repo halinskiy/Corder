@@ -4,11 +4,6 @@ import { RecordingBanner } from "./RecordingBanner";
 import { RecordingPlaceholder } from "./RecordingPlaceholder";
 import { TranscribingBanner } from "./TranscribingBanner";
 import { SpeakersClarifyBanner } from "./SpeakersClarifyBanner";
-import { SummaryPane } from "./SummaryPane";
-
-// Temporarily hidden on request — the summary block stays built and
-// wired, just not shown for now. Flip to re-enable.
-const SHOW_SUMMARY = false;
 import { EmptyDeleteBanner } from "./EmptyDeleteBanner";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import type { T } from "../i18n";
@@ -145,7 +140,6 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   return (
     <div className="transcript ovsb-scroll" ref={containerRef}>
-      {SHOW_SUMMARY && <SummaryPane detail={detail} t={t} />}
       {clarifyOpen && (
         // Mounted/unmounted directly. We tried wrapping it in a max-height
         // collapsible and a grid-rows collapsible — both leaked the banner's

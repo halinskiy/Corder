@@ -1,11 +1,17 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { listMeetings, MeetingSummary, RecordingState, getRecordingState, getSettings, setSettings, archiveMeeting, restoreMeeting } from "./api";
+// Country-flag SVG sprites (`.fi.fi-gb`, `.fi.fi-ua`, …). Used by the
+// LangPicker — emoji flags render poorly on Windows / some Linux
+// distros, so we ship real SVGs and pay ~10 kB gzipped CSS for it.
+import "flag-icons/css/flag-icons.min.css";
+import { listMeetings, listArchive, MeetingSummary, ArchivedMeeting, RecordingState, getRecordingState, getSettings, setSettings, archiveMeeting, restoreMeeting, startRecordingNow, stopRecordingNow } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
-import { ArchiveView } from "./components/ArchiveView";
+import { ArchiveSidebar } from "./components/ArchiveSidebar";
+import { Dashboard } from "./components/Dashboard";
+import { MainHeader } from "./components/MainHeader";
 import { ResizeHandle } from "./components/ResizeHandle";
-import { STRINGS, Lang, T } from "./i18n";
+import { Lang, T, pickStrings } from "./i18n";
 import { initTheme } from "./theme";
 
 const SIDEBAR_DEFAULT = 240, SIDEBAR_MIN = 200, SIDEBAR_MAX = 480;
@@ -80,6 +86,15 @@ function App() {
   // case and an empty-state in the latter.
   const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  // Imperative trigger — bumped by the profile menu's "Settings" item.
+  // Dashboard listens (toggles its right section to Settings) and
+  // MeetingView listens (flips `rightTab` to settings). One counter
+  // for both; consumers compare against a stored previous value.
+  const [openSettingsNonce, setOpenSettingsNonce] = React.useState(0);
+  // Last meeting the user actually opened — keeps MeetingView mounted
+  // across Dashboard↔Meeting flips so its `detail` survives and the
+  // skeleton doesn't flash on every return. See the render block below.
+  const lastSeenMeetingRef = React.useRef<string | null>(null);
   // Meeting whose audio is currently playing → sidebar play marker.
   const [playingId, setPlayingId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
@@ -91,7 +106,11 @@ function App() {
   // scheduled for 10s later. While the meeting is in this set the user can
   // press Undo on the toast and the timer is cancelled.
   const [softDeleted, setSoftDeleted] = React.useState<Set<string>>(new Set());
-  const pendingDeleteTimers = React.useRef<Map<string, number>>(new Map());
+  // Archived rows are kept around just for the Dashboard stats card —
+  // the user wants the lifetime "Recordings / Total recorded / This week"
+  // counters to include everything they've ever recorded, not only the
+  // library subset. Polled alongside meetings on every `refresh()`.
+  const [archived, setArchived] = React.useState<ArchivedMeeting[]>([]);
   // Ref-mirror so the 5-second refresh callback (memoised, no deps) sees
   // the live set instead of a stale closure capture. Without this the
   // refresh tick can re-select a meeting we just soft-deleted as the
@@ -99,8 +118,22 @@ function App() {
   const softDeletedRef = React.useRef<Set<string>>(softDeleted);
   React.useEffect(() => { softDeletedRef.current = softDeleted; }, [softDeleted]);
   const [recState, setRecState] = React.useState<RecordingState>({ active: false });
+  // Hide the native recording-blob (bottom-right NSView) while the user
+  // sits on the Dashboard and nothing is recording — the Dashboard's
+  // "Start recording" CTA already covers that role, the blob is just
+  // visual clutter there. As soon as recording starts (or the user
+  // opens a meeting), restore it so the stop-affordance reappears.
+  React.useEffect(() => {
+    const isDashboard = activeId === null;
+    const isIdle = !recState.active;
+    const visible = !(isDashboard && isIdle);
+    const bridge = (window as unknown as {
+      corderSetBlobVisible?: (v: boolean) => void;
+    }).corderSetBlobVisible;
+    try { bridge?.(visible); } catch {}
+  }, [activeId, recState.active]);
   const [lang, setLangState] = React.useState<Lang>("en");
-  const t: T = STRINGS[lang];
+  const t: T = pickStrings(lang);
 
   // The native window posts this on show/close. While the Library
   // window is hidden the page is alive but invisible — pausing the
@@ -116,18 +149,45 @@ function App() {
     return () => window.removeEventListener("corder-window-active", onActive);
   }, []);
 
+  // Native → web toast bridge. RecordingController posts a
+  // `corder-toast` event when the user should see something inside
+  // the window (e.g. "Silent recording auto-archived"); we route the
+  // payload through the existing `showToast` queue so the in-window
+  // banner reads identically to other toasts.
+  React.useEffect(() => {
+    const onNativeToast = (e: Event) => {
+      const d = (e as CustomEvent).detail as { title?: string; body?: string; kind?: string };
+      const msg = [d?.title, d?.body].filter(Boolean).join(" — ");
+      if (!msg) return;
+      const kind = d?.kind === "error" ? "error" : "success";
+      showToast(msg, kind);
+    };
+    window.addEventListener("corder-toast", onNativeToast);
+    return () => window.removeEventListener("corder-toast", onNativeToast);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const refresh = React.useCallback(async () => {
     try {
-      const m = await listMeetings();
+      const [m, a] = await Promise.all([
+        listMeetings(),
+        listArchive().catch(() => [] as ArchivedMeeting[]),
+      ]);
       setMeetings(m);
+      setArchived(a);
       setMeetingsLoaded(true);
-      // Pick a new active row only from meetings that aren't currently
-      // pending soft-delete — otherwise the just-deleted row would briefly
-      // come back as active until the 5-second timer finalises the DELETE.
+      // Validate the current selection against the fresh list:
+      //   • still there → keep it.
+      //   • gone (just archived / deleted by us or another tab) → fall
+      //     back to null = Dashboard.
+      //   • already null (user is ON the Dashboard) → keep null, do NOT
+      //     auto-jump to the first meeting. The previous behaviour
+      //     "snap to visible[0] on null" silently kicked the user out
+      //     of the Dashboard every poll tick (5 s).
       const dropped = softDeletedRef.current;
       const visible = m.filter((x) => !dropped.has(x.id));
       setActiveId((cur) =>
-        cur && visible.some((x) => x.id === cur) ? cur : (visible[0]?.id ?? null)
+        cur && visible.some((x) => x.id === cur) ? cur : null
       );
     } catch {}
   }, []);
@@ -192,11 +252,25 @@ function App() {
     }, ms);
   }, [dismissToast]);
 
+  // Dashboard hint shows the live shortcut label ("⌘⇧F" by default,
+  // whatever the user picked in Settings if they remapped it).
+  const [hotkeyLabel, setHotkeyLabel] = React.useState("⌘⇧F");
+
+  // Current paid-tier rung — drives the Sidebar Upgrade-card
+  // visibility (`max` hides it) and is forwarded to nested components
+  // that need to react to the tier. Re-fetched alongside the language
+  // / hotkey label so a manual `defaults write Corder.set.userTier`
+  // shows up after a window reload.
+  const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
+
   React.useEffect(() => {
     (async () => {
       try {
         const s = await getSettings();
         if (s.language === "ru" || s.language === "en") setLangState(s.language);
+        if (s.record_hotkey_label) setHotkeyLabel(s.record_hotkey_label);
+        const v = s.tier ?? (s.is_pro ? "pro" : "free");
+        if (v === "free" || v === "pro" || v === "max") setTier(v);
       } catch {}
     })();
   }, []);
@@ -207,17 +281,20 @@ function App() {
       await setSettings({ language: next });
     } catch {
       setLangState(lang);
-      showToast(STRINGS[next].toast_settings_failed, "error");
+      showToast(pickStrings(next).toast_settings_failed, "error");
     }
   }, [lang, showToast]);
 
-  // Soft-archive with a 5-second Undo window. The meeting is hidden from the
-  // UI immediately (optimistic) and the real archive request is fired right
-  // away; Undo restores it via /restore. We keep the row visible during the
-  // toast lifetime under softDeleted so refresh() — which polls every 2s —
-  // doesn't bounce it back in even though the server already moved it to
-  // archived_at != NULL. After the timer expires the optimistic hide
-  // releases naturally.
+  // Batched soft-archive: every meeting archived within a 5-second window
+  // collects into ONE pending batch with ONE shared timer + ONE toast.
+  // Previously each archive replaced the previous toast and its
+  // `pendingDeleteTimers` entry — so Undo restored only the most-recent
+  // row even when the user just archived a dozen in a row. Now Undo
+  // restores every id in the open batch, the toast label updates to
+  // "Archived (N)", and the 5-second countdown resets each time a new
+  // archive lands so the user always has the full window from their
+  // LAST action.
+  const archiveBatchRef = React.useRef<{ ids: string[]; tid: number | null }>({ ids: [], tid: null });
   const handleArchived = React.useCallback((archivedId?: string) => {
     if (!archivedId) return;
 
@@ -228,26 +305,52 @@ function App() {
     // can't leave the meeting in a half-archived state.
     archiveMeeting(archivedId).catch(() => {});
 
-    const undo = async () => {
-      const t = pendingDeleteTimers.current.get(archivedId);
-      if (t) { window.clearTimeout(t); pendingDeleteTimers.current.delete(archivedId); }
-      try { await restoreMeeting(archivedId); } catch {}
-      setSoftDeleted((prev) => { const n = new Set(prev); n.delete(archivedId); return n; });
+    // Add to / open a batch.
+    const batch = archiveBatchRef.current;
+    if (!batch.ids.includes(archivedId)) batch.ids.push(archivedId);
+    if (batch.tid != null) { window.clearTimeout(batch.tid); batch.tid = null; }
+
+    const undoBatch = async () => {
+      const ids = archiveBatchRef.current.ids.slice();
+      if (archiveBatchRef.current.tid != null) {
+        window.clearTimeout(archiveBatchRef.current.tid);
+      }
+      archiveBatchRef.current = { ids: [], tid: null };
+      // Restore every id in parallel; tolerate individual failures so
+      // one bad row can't block the rest from coming back.
+      await Promise.all(ids.map((id) => restoreMeeting(id).catch(() => {})));
+      setSoftDeleted((prev) => {
+        const n = new Set(prev);
+        for (const id of ids) n.delete(id);
+        return n;
+      });
       await refresh();
       dismissToast();
+      // Confirm the undo actually happened — the original "Archived"
+      // toast is gone by now, so without this the user is left
+      // guessing whether the click landed. Singular / plural copy
+      // is handled inside the locale helper.
+      const done = t.toast_undo_done ?? ((n: number) => n === 1 ? "Restored" : `Restored ${n}`);
+      showToast(done(ids.length), "success");
     };
 
     const finalize = async () => {
-      pendingDeleteTimers.current.delete(archivedId);
-      setSoftDeleted((prev) => { const n = new Set(prev); n.delete(archivedId); return n; });
+      const ids = archiveBatchRef.current.ids.slice();
+      archiveBatchRef.current = { ids: [], tid: null };
+      setSoftDeleted((prev) => {
+        const n = new Set(prev);
+        for (const id of ids) n.delete(id);
+        return n;
+      });
       await refresh();
     };
 
-    const tid = window.setTimeout(finalize, 5_000);
-    pendingDeleteTimers.current.set(archivedId, tid);
+    batch.tid = window.setTimeout(finalize, 5_000);
 
-    showToast(t.toast_archived, "success", {
-      action: { label: t.toast_undo, onClick: undo },
+    const count = archiveBatchRef.current.ids.length;
+    const label = count > 1 ? `${t.toast_archived} (${count})` : t.toast_archived;
+    showToast(label, "success", {
+      action: { label: t.toast_undo, onClick: undoBatch },
       durationMs: 5_000,
       countdown: true,
     });
@@ -257,6 +360,30 @@ function App() {
     () => meetings.filter((m) => !softDeleted.has(m.id)),
     [meetings, softDeleted]
   );
+
+  // Lifetime stats sample for the Dashboard counters — live meetings
+  // (including the just-archived rows still in softDeleted) PLUS the
+  // server's archive listing, so the totals never tick down when the
+  // user moves a row to Archive. We only need `started_at` and
+  // `duration_ms` downstream.
+  const statsMeetings = React.useMemo(() => {
+    return [
+      ...meetings.map((m) => ({ started_at: m.started_at, duration_ms: m.duration_ms })),
+      ...archived.map((a) => ({ started_at: a.started_at, duration_ms: a.duration_ms })),
+    ];
+  }, [meetings, archived]);
+
+  /// Open a meeting AND immediately clear its "unseen" gold/green
+  /// title — the backend stamps `viewed_at` inside `GET /api/meetings/:id`,
+  /// but the 5-second poll on `/api/meetings` only catches up later.
+  /// Without this optimistic flip, the title stays accent-coloured for
+  /// up to a poll cycle after the user obviously sees it.
+  const pickMeeting = React.useCallback((id: string) => {
+    setMeetings((prev) =>
+      prev.map((m) => (m.id === id && m.viewed === false ? { ...m, viewed: true } : m))
+    );
+    setActiveId(id);
+  }, []);
 
   const [sidebarW, setSidebarW] = React.useState(() =>
     clamp(readNum("corder.sidebarW", SIDEBAR_DEFAULT), SIDEBAR_MIN, SIDEBAR_MAX)
@@ -284,66 +411,126 @@ function App() {
         ["--right-w" as string]: `${rightW}px`,
       } as React.CSSProperties}
     >
-      <Sidebar
-        meetings={visibleMeetings}
-        loaded={meetingsLoaded}
-        activeId={activeId}
-        playingId={playingId}
-        query={query}
-        onQueryChange={setQuery}
-        onSelect={setActiveId}
-        onDeleted={handleArchived}
-        onRetranscribed={(id) => { if (id === activeId) setRetranscribeNonce((n) => n + 1); }}
-        onChanged={refresh}
-        onToast={showToast}
-        t={t}
-        lang={lang}
-      />
-      <ResizeHandle
-        className="resizer-sidebar"
-        onDrag={(dx) => setSidebarW((w) => clamp(w + dx, SIDEBAR_MIN, SIDEBAR_MAX))}
-        onReset={() => setSidebarW(SIDEBAR_DEFAULT)}
-      />
-      <main className="main">
-        {activeId ? (
-          <MeetingView
-            key={activeId}
-            meetingId={activeId}
-            onDeleted={handleArchived}
-            onOpenArchive={() => setArchiveOpen(true)}
-            onToast={showToast}
-            recordingState={recState}
-            onRecordingStopped={() => { setRecState({ active: false }); refresh(); }}
-            reloadSignal={retranscribeNonce}
-            lang={lang}
-            onLangChange={handleLangChange}
-            onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
-            onResetSplit={() => setRightW(RIGHT_DEFAULT)}
-            onPlayingChange={(playing) => setPlayingId(playing ? activeId : null)}
-            t={t}
-          />
-        ) : (
-          <>
-            <div className="main-header">
-              <div className="breadcrumb"><span className="breadcrumb-current">{t.breadcrumb_records}</span></div>
-            </div>
-            <div className="empty">
-              <div className="empty-title">{t.no_meeting_selected_title}</div>
-              <div>{t.no_meeting_selected_body}</div>
-            </div>
-          </>
-        )}
-      </main>
-      {toast && <Toast toast={toast} leaving={toastLeaving} />}
-      {archiveOpen && (
-        <ArchiveView
+      {archiveOpen ? (
+        <ArchiveSidebar
           onClose={() => setArchiveOpen(false)}
           onChanged={refresh}
           onToast={showToast}
           t={t}
           lang={lang}
         />
+      ) : (
+        <Sidebar
+          meetings={visibleMeetings}
+          loaded={meetingsLoaded}
+          activeId={activeId}
+          playingId={playingId}
+          query={query}
+          onQueryChange={setQuery}
+          onSelect={pickMeeting}
+          onDeleted={handleArchived}
+          onRetranscribed={(id) => { if (id === activeId) setRetranscribeNonce((n) => n + 1); }}
+          onChanged={refresh}
+          onToast={showToast}
+          t={t}
+          lang={lang}
+          tier={tier}
+        />
       )}
+      <ResizeHandle
+        className="resizer-sidebar"
+        onDrag={(dx) => setSidebarW((w) => clamp(w + dx, SIDEBAR_MIN, SIDEBAR_MAX))}
+        onReset={() => setSidebarW(SIDEBAR_DEFAULT)}
+      />
+      <main className="main">
+        {(() => {
+          // Remember the last meeting the user actually opened. Used so
+          // MeetingView can stay MOUNTED while the Dashboard is showing
+          // — that's what makes flipping Dashboard ↔ Meeting feel
+          // instant. Without this, every return to a meeting remounts
+          // MeetingView with `detail = null`, which flashes the
+          // skeleton on every click ("postoянно подгружается").
+          if (activeId) lastSeenMeetingRef.current = activeId;
+          const lastSeen = lastSeenMeetingRef.current;
+          return (
+            <>
+              {!activeId && (
+                <>
+                  <MainHeader
+                    breadcrumb={<span className="breadcrumb-current">{t.breadcrumb_dashboard}</span>}
+                    onOpenArchive={() => setArchiveOpen((v) => !v)}
+                    archiveOpen={archiveOpen}
+                    onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
+                    onOpenDashboard={() => setActiveId(null)}
+                    lang={lang}
+                    onLangChange={handleLangChange}
+                    onToast={showToast}
+                    t={t}
+                  />
+                  <Dashboard
+                    meetings={visibleMeetings}
+                    statsMeetings={statsMeetings}
+                    onPick={pickMeeting}
+                    onStart={async () => {
+                      try { await startRecordingNow(); } catch { showToast(t.toast_settings_failed, "error"); }
+                    }}
+                    isRecording={isActive}
+                    onStop={async () => {
+                      try { await stopRecordingNow(); } catch { showToast(t.toast_settings_failed, "error"); }
+                    }}
+                    hotkeyLabel={hotkeyLabel}
+                    t={t}
+                    lang={lang}
+                    onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
+                    onResetSplit={() => setRightW(RIGHT_DEFAULT)}
+                    openSettingsNonce={openSettingsNonce}
+                  />
+                </>
+              )}
+              {lastSeen !== null && (
+                // MeetingView stays mounted across Dashboard↔Meeting
+                // flips so its `detail` survives — no skeleton flash
+                // on subsequent opens. The wrapper toggles flex/none;
+                // when hidden it's still in the DOM, just not painted.
+                <div
+                  style={{
+                    display: activeId ? "flex" : "none",
+                    flexDirection: "column",
+                    flex: 1,
+                    minHeight: 0,
+                  }}
+                >
+                  <MeetingView
+                    // No `key={activeId}` — id changes are handled by
+                    // MeetingView's internal `useEffect([meetingId])`,
+                    // which fetches the new detail while keeping the
+                    // previous one visible until it arrives.
+                    meetingId={activeId ?? lastSeen}
+                    onDeleted={handleArchived}
+                    onOpenArchive={() => setArchiveOpen((v) => !v)}
+                    archiveOpen={archiveOpen}
+                    onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
+                    onOpenDashboard={() => setActiveId(null)}
+                    onToast={showToast}
+                    recordingState={recState}
+                    onRecordingStopped={() => { setRecState({ active: false }); refresh(); }}
+                    reloadSignal={retranscribeNonce}
+                    openSettingsNonce={openSettingsNonce}
+                    lang={lang}
+                    onLangChange={handleLangChange}
+                    onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
+                    onResetSplit={() => setRightW(RIGHT_DEFAULT)}
+                    onPlayingChange={(playing) => setPlayingId(playing && activeId ? activeId : null)}
+                    onBackToDashboard={() => setActiveId(null)}
+                    t={t}
+                  />
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </main>
+      {toast && <Toast toast={toast} leaving={toastLeaving} />}
     </div>
   );
 }

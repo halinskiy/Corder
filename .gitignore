@@ -48,3 +48,8 @@ NOTES.local.md
 # Local tooling runtime: per-session caches, worktrees, transcripts.
 # Never commit these — they balloon the repo and leak chat content.
 .notes/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example

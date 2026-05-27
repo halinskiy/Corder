@@ -56,15 +56,29 @@ interface Props {
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
   lang: Lang;
+  /// Current paid-tier rung. `max` hides the bottom Upgrade card
+  /// entirely; `free` / `pro` show it. Plumbed from main.tsx where
+  /// settings are loaded; falls back to `free` when unknown so the
+  /// CTA is shown by default (safer than silently hiding it).
+  tier?: "free" | "pro" | "max";
 }
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
+export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang, tier }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; value: string } | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
   const sidebarRef = React.useRef<HTMLElement>(null);
+
+  // Multi-select: plain click → set of {id}, anchor = id. Cmd-click
+  // toggles. Shift-click extends from anchor to the clicked row using
+  // the currently-visible (filtered + grouped) order. No checkboxes —
+  // visual selection is just the existing `.meeting-item.active` style
+  // applied to every member. Right-click on a row that's part of a
+  // multi-selection swaps the context menu for an Archive-all variant.
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set());
+  const [anchorId, setAnchorId] = React.useState<string | null>(null);
 
   const commitRename = async () => {
     if (!editing) return;
@@ -119,6 +133,63 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
     return out;
   }, [filtered, lang, t]);
 
+  // Flat list of meeting ids in the order they're VISIBLY rendered
+  // (pinned group → date buckets). Shift-select uses this to fill the
+  // contiguous range between anchor and clicked id.
+  const visibleOrder = React.useMemo(
+    () => groups.flatMap((g) => g.items.map((m) => m.id)),
+    [groups]
+  );
+
+  const handleSelect = (e: React.MouseEvent, id: string) => {
+    if (e.shiftKey && anchorId && anchorId !== id) {
+      const a = visibleOrder.indexOf(anchorId);
+      const b = visibleOrder.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        setSelectedIds(new Set(visibleOrder.slice(lo, hi + 1)));
+        onSelect(id);
+        return;
+      }
+    }
+    if (e.metaKey || e.ctrlKey) {
+      const next = new Set(selectedIds);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      // Anchor moves to the most recently clicked id even on toggle —
+      // matches Finder's behaviour.
+      setSelectedIds(next);
+      setAnchorId(id);
+      onSelect(id);
+      return;
+    }
+    setSelectedIds(new Set([id]));
+    setAnchorId(id);
+    onSelect(id);
+  };
+
+  // When the user opens a context menu on a row that ISN'T part of the
+  // current multi-selection, the menu acts on JUST that row — same as
+  // before. When the right-clicked row IS in a multi-selection, we
+  // collapse the menu to a single "Archive N selected" action.
+  const menuIds: string[] = menu
+    ? (selectedIds.size > 1 && selectedIds.has(menu.meetingId)
+        ? Array.from(selectedIds)
+        : [menu.meetingId])
+    : [];
+  const isBatchMenu = menuIds.length > 1;
+
+  const archiveAllSelected = () => {
+    const ids = Array.from(selectedIds);
+    setSelectedIds(new Set());
+    setAnchorId(null);
+    setMenu(null);
+    // Re-use the parent's per-id archive + undo flow. The 5-second
+    // undo window applies to each individually; this is loud on the
+    // toast stack but matches what right-click → Archive on a single
+    // row already does, just N times.
+    for (const id of ids) onDeleted(id);
+  };
+
   return (
     <aside className="sidebar" ref={sidebarRef}>
       <div className="sidebar-titlebar-pad" />
@@ -146,9 +217,29 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
           </div>
         )}
         {loaded && filtered.length === 0 && (
-          <div style={{ padding: 16, color: "var(--fg-muted)", fontSize: 13 }}>
-            {meetings.length === 0 ? t.sidebar_empty : t.sidebar_no_match}
-          </div>
+          meetings.length === 0 ? (
+            // Empty library → ghost placeholder row instead of a wall
+            // of help text. Same `.meeting-item` shell as real rows so
+            // sizes / paddings line up with everything else in the
+            // sidebar (the search field above, the future first
+            // recording below), faded to read as "this is where your
+            // recordings will live".
+            <>
+              <div className="sidebar-section-label">{t.sidebar_today ?? "Today"}</div>
+              <div className="meeting-item ghost" aria-hidden>
+                <div className="meeting-row">
+                  <div className="meeting-title">{t.ghost_title ?? "Your first recording"}</div>
+                </div>
+                <div className="meeting-meta">
+                  <span className="status-dot ready" />
+                  <span>{t.ghost_duration ?? "—"}</span>
+                </div>
+                <div className="meeting-preview">{t.ghost_preview ?? "Hit Start to begin."}</div>
+              </div>
+            </>
+          ) : (
+            <div className="sidebar-no-match">{t.sidebar_no_match}</div>
+          )
         )}
         {groups.map((g) => (
           <React.Fragment key={g.label}>
@@ -159,10 +250,11 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
               <div
                 key={m.id}
                 className={"meeting-item"
-                  + (m.id === activeId ? " active" : "")
+                  + ((m.id === activeId || selectedIds.has(m.id)) ? " active" : "")
                   + (m.status === "failed" ? " failed" : "")
-                  + (m.pinned ? " pinned" : "")}
-                onClick={() => onSelect(m.id)}
+                  + (m.pinned ? " pinned" : "")
+                  + (m.viewed === false && m.status === "ready" ? " unseen" : "")}
+                onClick={(e) => handleSelect(e, m.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setMenu({ x: e.clientX, y: e.clientY, meetingId: m.id });
@@ -209,49 +301,89 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
         ))}
         <div className="sidebar-list-spacer" />
       </div>
+      {/* Upgrade-to-Max CTA pinned at the bottom of the sidebar — only
+          shown for Free/Pro tiers. Tapping anywhere on the card opens
+          the public landing page's pricing section in the default
+          browser via the WKWebView bridge. */}
+      {tier !== "max" && <UpgradeCard t={t} />}
       <OverlayScrollbar scrollRef={listRef} dividerRef={sidebarRef} name="corder-sb-list" />
       {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          t={t}
-          pinned={!!meetings.find((m) => m.id === menu.meetingId)?.pinned}
-          onRename={() => {
-            const id = menu.meetingId;
-            const cur = meetings.find((m) => m.id === id)?.title?.trim() ?? "";
-            setMenu(null);
-            setEditing({ id, value: cur });
-          }}
-          onPin={async () => {
-            const id = menu.meetingId;
-            const isPinned = !!meetings.find((m) => m.id === id)?.pinned;
-            setMenu(null);
-            try {
-              await pinMeeting(id, !isPinned);
-              onChanged?.();
-            } catch {
-              onToast(t.toast_settings_failed, "error");
-            }
-          }}
-          onDelete={() => {
-            const id = menu.meetingId;
-            setMenu(null);
-            // Actual DELETE is scheduled by the parent (10s undo window).
-            onDeleted(id);
-          }}
-          onRetranscribe={async () => {
-            const id = menu.meetingId;
-            setMenu(null);
-            try {
-              await retranscribe(id);
-              onToast(t.toast_retranscribe_started, "success");
-              onRetranscribed?.(id);
-            }
-            catch { onToast(t.toast_retranscribe_failed, "error"); }
-          }}
-        />
+        isBatchMenu ? (
+          <BatchContextMenu
+            x={menu.x}
+            y={menu.y}
+            count={menuIds.length}
+            onArchive={archiveAllSelected}
+            t={t}
+          />
+        ) : (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            t={t}
+            pinned={!!meetings.find((m) => m.id === menu.meetingId)?.pinned}
+            onRename={() => {
+              const id = menu.meetingId;
+              const cur = meetings.find((m) => m.id === id)?.title?.trim() ?? "";
+              setMenu(null);
+              setEditing({ id, value: cur });
+            }}
+            onPin={async () => {
+              const id = menu.meetingId;
+              const isPinned = !!meetings.find((m) => m.id === id)?.pinned;
+              setMenu(null);
+              try {
+                await pinMeeting(id, !isPinned);
+                onChanged?.();
+              } catch {
+                onToast(t.toast_settings_failed, "error");
+              }
+            }}
+            onDelete={() => {
+              const id = menu.meetingId;
+              setMenu(null);
+              // Actual DELETE is scheduled by the parent (10s undo window).
+              onDeleted(id);
+            }}
+            onRetranscribe={async () => {
+              const id = menu.meetingId;
+              setMenu(null);
+              try {
+                await retranscribe(id);
+                onToast(t.toast_retranscribe_started, "success");
+                onRetranscribed?.(id);
+              }
+              catch { onToast(t.toast_retranscribe_failed, "error"); }
+            }}
+          />
+        )
       )}
     </aside>
+  );
+}
+
+/// Upgrade card sitting at the bottom of the sidebar. Same shape as
+/// a meeting row but with an accent left-border + a tinted background
+/// to read as a real-money CTA. The whole card is the click target so
+/// the user doesn't have to aim at a tiny button.
+function UpgradeCard({ t }: { t: T }) {
+  const onClick = React.useCallback(() => {
+    try {
+      (window as unknown as { corderOpenExternal?: (url: string) => void })
+        .corderOpenExternal?.("https://halinskiy.github.io/corder-landing/#pricing");
+    } catch {}
+  }, []);
+  return (
+    <button
+      type="button"
+      className="upgrade-card"
+      onClick={onClick}
+      title={t.upgrade_card_cta ?? "Upgrade"}
+    >
+      <div className="upgrade-card-title">{t.upgrade_card_title ?? "Unlock Max"}</div>
+      <div className="upgrade-card-body">{t.upgrade_card_body ?? "Unlimited recordings, all ASR providers, priority support"}</div>
+      <div className="upgrade-card-cta">{t.upgrade_card_cta ?? "Upgrade"}</div>
+    </button>
   );
 }
 
@@ -274,6 +406,27 @@ function ContextMenu({ x, y, pinned, onRename, onPin, onDelete, onRetranscribe, 
       <button className="ctx-item" onClick={onRetranscribe}>{t.ctx_retranscribe}</button>
       <div className="ctx-sep" />
       <button className="ctx-item" onClick={onDelete}>{t.ctx_archive}</button>
+    </div>
+  );
+}
+
+/// Right-click menu when the user opened the context on a row that's
+/// part of a multi-selection — collapse to a single batch action so
+/// per-row operations (rename, pin, re-transcribe) don't try to apply
+/// to N rows at once.
+function BatchContextMenu({ x, y, count, onArchive, t }: {
+  x: number; y: number; count: number; onArchive: () => void; t: T;
+}) {
+  return (
+    <div
+      className="ctx-menu"
+      style={{ top: y, left: x }}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <button className="ctx-item" onClick={onArchive}>
+        {t.ctx_archive_selected(count)}
+      </button>
     </div>
   );
 }

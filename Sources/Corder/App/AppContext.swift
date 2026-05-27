@@ -105,14 +105,18 @@ enum AppSettings {
     private static let kCaptureAudio   = "Corder.set.captureAudio"
     private static let kAutoTranscribe = "Corder.set.autoTranscribe"
     private static let kAutoTitle      = "Corder.set.autoTitle"
+    private static let kAutoSummary    = "Corder.set.autoSummary"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
+    private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
+    private static let kTranscriptCleanup = "Corder.set.transcriptCleanup"
 
     static var notificationsEnabled: Bool { flag(kNotifications) }
     static var captureVideo: Bool          { flag(kCaptureVideo) }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
     static var autoTitle: Bool             { flag(kAutoTitle) }
+    static var autoSummary: Bool           { flag(kAutoSummary) }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
 
@@ -121,8 +125,59 @@ enum AppSettings {
     static func setCaptureAudio(_ v: Bool)   { setFlag(kCaptureAudio, v) }
     static func setAutoTranscribe(_ v: Bool) { setFlag(kAutoTranscribe, v) }
     static func setAutoTitle(_ v: Bool)      { setFlag(kAutoTitle, v) }
+    static func setAutoSummary(_ v: Bool)    { setFlag(kAutoSummary, v) }
     static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
     static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }
+
+    /// ASR provider toggle (Gemini default, OpenAI Whisper as opt-in).
+    /// Default is `.gemini` so existing users keep their pipeline
+    /// untouched on upgrade; the Settings UI toggle is wired separately.
+    /// ASR provider is tier-driven, not user-selectable. Each tier
+    /// maps to the right cost/quality trade-off:
+    ///   • Free → `.whisperLocal` (on-device, $0/час forever)
+    ///   • Pro  → `.whisper`      (cloud whisper-1 + gpt-4o-mini polish, ~$0.36/час)
+    ///   • Max  → `.whisper`      (same as Pro for now; reserved for future
+    ///                             upgrade to Gemini Pro / o-series when
+    ///                             tier-specific premium model is wired)
+    ///
+    /// The raw `kTranscriptionProvider` UserDefaults key is still
+    /// honoured as an EXPLICIT OVERRIDE for dev / QA. If somebody runs
+    /// `defaults write com.3mpq.Corder Corder.set.transcriptionProvider whisper`,
+    /// we respect it regardless of tier. Cleared via setting empty
+    /// string or removing the key. End users should NEVER hit this
+    /// path through the UI.
+    ///
+    /// Cache keys are prefixed with the provider name so the three
+    /// providers' raw outputs never replay each other.
+    static var transcriptionProvider: TranscriptionProvider {
+        // Explicit override wins.
+        if let raw = UserDefaults.standard.string(forKey: kTranscriptionProvider),
+           let p = TranscriptionProvider(rawValue: raw) {
+            return p
+        }
+        // Tier-driven default.
+        switch userTier {
+        case .free:           return .whisperLocal
+        case .pro, .max:      return .whisper
+        }
+    }
+    static func setTranscriptionProvider(_ v: TranscriptionProvider) {
+        UserDefaults.standard.set(v.rawValue, forKey: kTranscriptionProvider)
+    }
+    /// Clear the dev override so the tier-driven default is in effect
+    /// again. UI doesn't surface this; ops / support flow only.
+    static func clearTranscriptionProviderOverride() {
+        UserDefaults.standard.removeObject(forKey: kTranscriptionProvider)
+    }
+
+    /// LLM polish toggle for Whisper transcripts. When ON (default for
+    /// Whisper users), raw whisper-1 output goes through gpt-4o-mini for
+    /// punctuation / capitalisation / obvious-typo cleanup before being
+    /// persisted. Best-effort: any failure falls back to the raw turns
+    /// untouched, so flipping this flag never breaks transcription —
+    /// only the polish stage is gated. Gemini path ignores this setting.
+    static var transcriptCleanup: Bool { flag(kTranscriptCleanup) }
+    static func setTranscriptCleanup(_ v: Bool) { setFlag(kTranscriptCleanup, v) }
 
     // Global record hotkey. Stored as a Carbon virtual key code + a
     // Carbon modifier mask (cmdKey 256 | shiftKey 512 | optionKey 2048 |
@@ -135,11 +190,192 @@ enum AppSettings {
     static func setRecordHotkey(code: Int, mods: Int) {
         setInt(kRecCode, code); setInt(kRecMods, mods)
     }
+
+    // Preferred microphone input device, stored as the Core Audio
+    // device UID (stable across reboots, unlike the numeric AudioDeviceID
+    // which the system re-issues). `nil` (key absent / empty string)
+    // means "use whatever the system currently calls default input" —
+    // identical to the pre-feature behaviour and the fallback when the
+    // saved device is unplugged at recording start. We persist the UID
+    // (not the human name) because device names can collide
+    // ("USB Audio Device", "External Microphone") while UIDs don't.
+    private static let kMicDeviceUID = "Corder.set.micDeviceUID"
+    static var micDeviceUID: String? {
+        let raw = (UserDefaults.standard.string(forKey: kMicDeviceUID) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+    static func setMicDeviceUID(_ uid: String?) {
+        let cleaned = (uid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kMicDeviceUID)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: kMicDeviceUID)
+        }
+    }
+
+    // Paddle-issued licence key the user pastes into the Welcome wizard
+    // (or, later, Settings). MVP rule: any non-empty, well-formed key
+    // — ≥ 20 chars, alphanumeric / dash / underscore — flips the local
+    // `isPro` switch. Real server-side validation lands when we have a
+    // backend; until then the honour system is enough (the free tier
+    // already covers the unconverted-user case, and cheaters are not
+    // the bottleneck on day one). Cleared by setting an empty string.
+    private static let kLicenceKey = "Corder.set.licenceKey"
+    static var licenceKey: String? {
+        let raw = (UserDefaults.standard.string(forKey: kLicenceKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+    static func setLicenceKey(_ key: String?) {
+        let cleaned = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kLicenceKey)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: kLicenceKey)
+        }
+    }
+    /// Format-only validation. We can't reach the server yet, so any
+    /// reasonably licence-shaped string (≥ 20 chars, A-Z/0-9/-/_)
+    /// passes. The point is to catch obvious typos (single letter,
+    /// trailing space, accidental email), not to defeat a determined
+    /// attacker. Real cryptographic checks land with the backend.
+    static func isValidLicenceFormat(_ key: String) -> Bool {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 20 else { return false }
+        let allowed = CharacterSet(charactersIn:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        return trimmed.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+    // Three-tier model (Free / Pro / Max). Stored as the raw string so
+    // a future fourth tier slots in without a UserDefaults migration.
+    // `isPro` (below) is kept as a derived getter for backward compat
+    // with every existing call site — `userTier != .free` is the new
+    // truth, but old callers still read the cached boolean. The legacy
+    // licence-key format check ALSO flips `isPro` true on its own so
+    // existing Paddle-key installs don't lose Pro entitlements at
+    // upgrade time; explicit `userTier` overrides only matter when the
+    // user has been promoted to Max (or demoted to Free) manually.
+    private static let kUserTier = "Corder.set.userTier"
+    static var userTier: UserTier {
+        UserTier(rawValue: UserDefaults.standard.string(forKey: kUserTier) ?? "") ?? .free
+    }
+    static func setUserTier(_ v: UserTier) {
+        UserDefaults.standard.set(v.rawValue, forKey: kUserTier)
+    }
+
+    static var isPro: Bool {
+        if userTier == .pro || userTier == .max { return true }
+        guard let k = licenceKey else { return false }
+        return isValidLicenceFormat(k)
+    }
+
+    // Display name harvested from the OAuth provider (Google `name`
+    // claim, Apple full-name on first sign-in). Used in the profile
+    // popover header. Optional — email-only sign-ups leave it nil.
+    private static let kUserName = "Corder.set.userName"
+    static var userName: String? {
+        let raw = (UserDefaults.standard.string(forKey: kUserName) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+    static func setUserName(_ name: String?) {
+        let cleaned = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kUserName)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: kUserName)
+        }
+    }
+
+    // First-run onboarding flag. Unlike every other Bool here, this
+    // one defaults to **false** (the Welcome wizard should open the
+    // FIRST time, not silently skip). Flipped to true only when the
+    // user clicks "Done" on the final wizard step.
+    private static let kOnboardingDone = "Corder.set.onboardingCompleted"
+    static var onboardingCompleted: Bool {
+        UserDefaults.standard.bool(forKey: kOnboardingDone)
+    }
+    static func setOnboardingCompleted(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kOnboardingDone)
+    }
+
+    // Resume slot for the Welcome wizard. macOS permission grants
+    // (Microphone, Screen Recording) sometimes require a relaunch
+    // to take effect — without persisting "which step the user was
+    // on", the wizard would always reopen on step 1 and lose the
+    // user's progress through the funnel. Stored as a raw `Int`
+    // matching `WizardStep.rawValue`. 0 = welcome (default).
+    private static let kOnboardingStep = "Corder.set.onboardingStep"
+    static var onboardingStep: Int {
+        UserDefaults.standard.integer(forKey: kOnboardingStep)
+    }
+    static func setOnboardingStep(_ step: Int) {
+        UserDefaults.standard.set(step, forKey: kOnboardingStep)
+    }
+
+    // Demo-data seed flag. `DemoSeeder` flips this true after its
+    // one-shot pass on first launch. Re-seeding still happens when
+    // the SEED VERSION bumps (see `demoDataSeedVersion`), which lets
+    // us ship new sample content to existing installs by dropping the
+    // previously seeded rows and re-inserting the current templates.
+    private static let kDemoDataSeeded = "Corder.set.demoDataSeeded"
+    static var demoDataSeeded: Bool {
+        UserDefaults.standard.bool(forKey: kDemoDataSeeded)
+    }
+    static func setDemoDataSeeded(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kDemoDataSeeded)
+    }
+
+    /// Stored seed-content version. Compared against
+    /// `DemoSeeder.currentSeedVersion` on launch — mismatch triggers
+    /// a re-seed (old rows are removed by id, fresh ones inserted).
+    /// Defaults to 0 so any non-zero current version on a brand-new
+    /// install or an install that pre-dated the version field will
+    /// re-seed once.
+    private static let kDemoDataSeedVersion = "Corder.set.demoDataSeedVersion"
+    static var demoDataSeedVersion: Int {
+        UserDefaults.standard.integer(forKey: kDemoDataSeedVersion)
+    }
+    static func setDemoDataSeedVersion(_ v: Int) {
+        UserDefaults.standard.set(v, forKey: kDemoDataSeedVersion)
+    }
+
+    /// IDs of the meetings DemoSeeder inserted. We keep them so the
+    /// re-seed path can delete the exact rows it owns without touching
+    /// any meeting the user recorded themselves.
+    private static let kDemoSeededIDs = "Corder.set.demoSeededIDs"
+    static var demoSeededIDs: [String] {
+        UserDefaults.standard.stringArray(forKey: kDemoSeededIDs) ?? []
+    }
+    static func setDemoSeededIDs(_ ids: [String]) {
+        UserDefaults.standard.set(ids, forKey: kDemoSeededIDs)
+    }
 }
 
 enum SourceMode: String {
     case full   // full screen
     case window // pick a window each time
+}
+
+/// Paid-tier ladder. Free = baseline; Pro = paying customer; Max =
+/// top-tier ($everything-unlimited bundle). Stored in UserDefaults
+/// under `Corder.set.userTier`; default = `.free` when the key is
+/// absent. `AppSettings.isPro` is `true` for both `.pro` and `.max`.
+enum UserTier: String { case free, pro, max }
+
+/// ASR provider selector. Three providers in the wild now:
+///   • `.gemini`         — Gemini 2.5 Flash (cloud, default). $0.30/h-ish.
+///   • `.whisper`        — OpenAI whisper-1 + gpt-4o-mini polish (cloud).
+///                         ~$0.36/h before the LLM polish stage.
+///   • `.whisperLocal`   — WhisperKit (Core ML, on-device). Apple Silicon
+///                         only; falls back to `.gemini` at the pipeline
+///                         level when run on Intel. $0/h after the
+///                         one-time ~1.5 GB multilingual model download.
+enum TranscriptionProvider: String {
+    case gemini         // gemini-2.5-flash (default)
+    case whisper        // OpenAI whisper-1 + gpt-4o-mini polish
+    case whisperLocal   // WhisperKit on-device (Apple Silicon)
 }
 
 enum RecordingState: Equatable {

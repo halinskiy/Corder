@@ -215,6 +215,27 @@ final class TranscriptionPipeline {
             //    Hash key for dual-track is "md5(mic.wav)+md5(system.wav)";
             //    for legacy it's md5(audio.wav). The two key spaces
             //    can't collide so a single column carries both.
+            // Provider tag bakes into the cache key so flipping
+            // Gemini ↔ Whisper never replays the other model's raw
+            // turns. Stage 1 uses two prefixes — gemini-default
+            // (unprefixed, preserves every existing cache hit) and
+            // `whisper:v2:` for the new path. v2 = post-LLM-cleanup
+            // (gpt-4o-mini polish for punctuation / capitalisation /
+            // obvious typos); v1 records were raw whisper-1 output
+            // and aren't replayable here — the prefix bump forces a
+            // re-transcribe through the new polish stage.
+            let providerTag: String = {
+                switch AppSettings.transcriptionProvider {
+                case .gemini:        return ""
+                case .whisper:       return "whisper:v2:"
+                case .whisperLocal:
+                    // Local Whisper keeps its own cache namespace so a
+                    // flip between cloud and local never replays the
+                    // other model's raw text. v1 = first ship of the
+                    // local provider (WhisperKit large-v3-turbo).
+                    return "whisper-local:v1:"
+                }
+            }()
             let cacheKey: String
             if inPerson {
                 // The expected-speaker hint is baked into the Gemini
@@ -240,7 +261,7 @@ final class TranscriptionPipeline {
                 // different raw audio source than the old "tap silent"
                 // gate did, so any v9-cached turns can be stale — bump
                 // to force a clean re-transcribe.
-                cacheKey = "inperson:v10:\(ex):\(mh)"
+                cacheKey = "\(providerTag)inperson:v10:\(ex):\(mh)"
             } else if canDualTrack {
                 // v2 + the other-speaker count: system.wav is now
                 // diarized on-device with numSpeakers = expectedOther,
@@ -248,14 +269,14 @@ final class TranscriptionPipeline {
                 let mh = (try? Self.md5OfFile(at: micURL)) ?? ""
                 let sh = (try? Self.md5OfFile(at: systemURL)) ?? ""
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
-                cacheKey = "dual:v10:\(ex):\(mh):\(sh)"
+                cacheKey = "\(providerTag)dual:v10:\(ex):\(mh):\(sh)"
             } else {
                 if !FileManager.default.fileExists(atPath: mixURL.path),
                    let remote = meeting.dropboxAudioPath {
                     FileLogger.log("transcribe(): legacy fallback — pulling mix from Dropbox \(remote)")
                     try await DropboxService.shared.download(remotePath: remote, to: mixURL)
                 }
-                cacheKey = "mix:" + ((try? Self.md5OfFile(at: mixURL)) ?? "")
+                cacheKey = "\(providerTag)mix:" + ((try? Self.md5OfFile(at: mixURL)) ?? "")
             }
 
             // RAW Gemini text turns (the only thing a Gemini call buys).
@@ -321,6 +342,23 @@ final class TranscriptionPipeline {
                                                    message: err.localizedDescription)
                         throw err
                     }
+                    // Whisper-only LLM polish stage. Punctuation /
+                    // capitalisation / obvious-typo cleanup via
+                    // gpt-4o-mini; same contract back (timestamps +
+                    // speaker labels unchanged, only `.text` differs).
+                    // Best-effort: a polish failure returns the raw
+                    // turns, so this can never block the pipeline.
+                    // Per-track polish keeps each speaker's lines in
+                    // one numbered block, which matches what the model
+                    // can actually reason about.
+                    // LLM polish applies to both cloud and local Whisper
+                    // — the polish stage only touches text and doesn't
+                    // care where the raw turns came from.
+                    if AppSettings.transcriptionProvider != .gemini {
+                        let lang = AppLanguage.current
+                        rawUserTurns = await WhisperCleanup.polish(rawUserTurns, language: lang)
+                        rawOtherTurns = await WhisperCleanup.polish(rawOtherTurns, language: lang)
+                    }
                     usingDualTrack = true
                 } else {
                     // In-person: everyone on the one mic. One Gemini
@@ -331,15 +369,62 @@ final class TranscriptionPipeline {
                     usingDualTrack = true
                     rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
                     rawUserTurns = []
+                    if AppSettings.transcriptionProvider != .gemini {
+                        rawOtherTurns = await WhisperCleanup.polish(
+                            rawOtherTurns, language: AppLanguage.current)
+                    }
                 }
             } else {
                 FileLogger.log("transcribe(): legacy single-stream (no mic+system on disk) — falling back to mix")
-                do {
-                    legacyTurns = try await GeminiTranscriber.transcribe(audioURL: mixURL, mode: .diarize)
-                } catch let err as GeminiTranscriber.GError {
-                    TranscriptionErrors.record(meetingId: meetingId,
-                                               message: err.localizedDescription)
-                    throw err
+                switch AppSettings.transcriptionProvider {
+                case .gemini:
+                    do {
+                        legacyTurns = try await GeminiTranscriber.transcribe(audioURL: mixURL, mode: .diarize)
+                    } catch let err as GeminiTranscriber.GError {
+                        TranscriptionErrors.record(meetingId: meetingId,
+                                                   message: err.localizedDescription)
+                        throw err
+                    }
+                case .whisper:
+                    do {
+                        // Legacy mix is one merged stream — diarization
+                        // labels come from the model itself
+                        // (gpt-4o-transcribe-diarize).
+                        let prompt = AppVocabulary.current.nilIfEmpty
+                        legacyTurns = try await WhisperTranscriber.transcribe(
+                            audioURL: mixURL, mode: .diarize, initialPrompt: prompt)
+                    } catch let err as WhisperTranscriber.WhisperError {
+                        TranscriptionErrors.record(meetingId: meetingId,
+                                                   message: err.localizedDescription)
+                        throw err
+                    }
+                    // LLM polish stage — same best-effort cleanup as
+                    // the dual-track path. Legacy mix carries multiple
+                    // speakers in one numbered block which the editor
+                    // model handles fine (it's not asked to attribute,
+                    // only to fix punctuation / typos line by line).
+                    legacyTurns = await WhisperCleanup.polish(
+                        legacyTurns, language: AppLanguage.current)
+                case .whisperLocal:
+                    // Local Whisper has no diarize mode — fall back to
+                    // Gemini for the legacy mix case (the on-device
+                    // pipeline can't attribute speakers without a known
+                    //-stream input). This branch is rare in practice:
+                    // it only fires when the original wavs are gone and
+                    // we're transcribing a Dropbox-hydrated mix.
+                    if !LocalWhisperTranscriber.isAvailable() {
+                        FileLogger.log("transcribe(): whisperLocal on Intel + legacy mix → falling back to Gemini")
+                    } else {
+                        FileLogger.log("transcribe(): whisperLocal + legacy mix not supported (no diarize on-device) → falling back to Gemini")
+                    }
+                    do {
+                        legacyTurns = try await GeminiTranscriber.transcribe(
+                            audioURL: mixURL, mode: .diarize)
+                    } catch let err as GeminiTranscriber.GError {
+                        TranscriptionErrors.record(meetingId: meetingId,
+                                                   message: err.localizedDescription)
+                        throw err
+                    }
                 }
                 usingDualTrack = false
             }
@@ -492,13 +577,31 @@ final class TranscriptionPipeline {
                 }
             }
 
+            // 3b. Optional auto-summary — run once per meeting after
+            //     transcription finishes, only when the user opted in
+            //     and the row doesn't already have a structured summary
+            //     (handles re-transcribe + interrupted-app scenarios).
+            //     Mirrors the auto-title invariant: bills once, can be
+            //     re-triggered by clearing the cached summary.
+            if AppSettings.autoSummary,
+               meeting.status == .ready,
+               (meeting.summary?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
+                let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
+                let spks = (try? repo.speakers(forMeeting: meetingId)) ?? []
+                if !segs.isEmpty {
+                    let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
+                    if let summary = await GeminiSummarizer.generate(transcript: text) {
+                        try? repo.setSummary(meetingId: meetingId, summary: summary)
+                        FileLogger.log("transcribe(): summarised \(meetingId) (\(summary.count) chars)")
+                    }
+                }
+            }
+
             // 4. Optional Dropbox archive.
             if DropboxService.shared.isConfigured {
                 let mid = meetingId
                 let videoURL = URL(fileURLWithPath: meeting.videoPath)
                 let mixCopy = mixURL
-                let micCopy = micURL
-                let systemCopy = systemURL
                 let repoRef = repo
                 Task.detached {
                     do {
@@ -978,31 +1081,85 @@ final class TranscriptionPipeline {
 
     /// Diarize-first transcription of one track. FluidAudio decides WHO
     /// (globally-stable labels, the known speaker count enforced as a
-    /// hard clustering constraint), Gemini `.single` decides WHAT
-    /// (verbatim text + accurate timestamps, no LLM speaker-counting).
-    /// The two run in parallel; ASR turns are then re-labeled by
-    /// temporal overlap with the diarization timeline.
+    /// hard clustering constraint), the cloud ASR provider decides WHAT
+    /// (verbatim text + timestamps, no LLM speaker-counting). The two
+    /// run in parallel; ASR turns are then re-labeled by temporal
+    /// overlap with the diarization timeline.
+    ///
+    /// Provider routing: `.gemini` (default) sends `.single` to
+    /// gemini-2.5-flash; `.whisper` sends `.single` to OpenAI
+    /// gpt-4o-mini-transcribe. Both return `[GeminiTranscriber.Turn]`,
+    /// so the rest of the pipeline is provider-agnostic.
     ///
     /// Fallback: if on-device diarization is unavailable (models not yet
     /// downloaded on a first-ever offline run, no speech, Core ML
     /// error), we drop back to Gemini's own `.diarize` so a meeting
-    /// never hard-fails worse than the pre-FluidAudio behaviour. A
-    /// Gemini ASR/quota/network error is a real failure and propagates.
-    /// The expensive half: the Gemini `.single` ASR call. Returns
-    /// Gemini's raw text turns — its own per-chunk timestamps ride on the
-    /// struct but are NOT trusted (`applyTiming` overwrites them). This is
-    /// the ONLY part that costs a network/quota round-trip, so it's
-    /// cached and skipped on every subsequent run. ASR is always chunked
-    /// so a long recording can't time out mid-generate and hard-fail.
+    /// never hard-fails worse than the pre-FluidAudio behaviour. (We
+    /// keep Gemini for this fallback regardless of provider: it's the
+    /// only path that gives us speaker labels from the model itself,
+    /// and it's a rare hit anyway. TODO once Whisper is the steady
+    /// state: ship a Whisper-native diarize fallback via gpt-4o-
+    /// transcribe-diarize.) An ASR/quota/network error from the active
+    /// provider is a real failure and propagates.
     private func geminiRawTurns(wavURL: URL,
                                 meetingId: String) async throws -> [GeminiTranscriber.Turn] {
-        do {
-            return try await GeminiTranscriber.transcribe(
-                audioURL: wavURL, mode: .single, singlePass: false)
-        } catch let err as GeminiTranscriber.GError {
-            TranscriptionErrors.record(meetingId: meetingId,
-                                       message: err.localizedDescription)
-            throw err
+        switch AppSettings.transcriptionProvider {
+        case .gemini:
+            do {
+                return try await GeminiTranscriber.transcribe(
+                    audioURL: wavURL, mode: .single, singlePass: false)
+            } catch let err as GeminiTranscriber.GError {
+                TranscriptionErrors.record(meetingId: meetingId,
+                                           message: err.localizedDescription)
+                throw err
+            }
+        case .whisper:
+            do {
+                // Initial prompt — same vocabulary lever the Gemini
+                // path uses, just routed through Whisper's `prompt=`
+                // parameter. Whisper biases recognition toward the
+                // words in the prompt, which is exactly the right
+                // thing for personal names + domain jargon (the
+                // categories Whisper otherwise mishears most). 224
+                // tokens is the documented cap; we send a string,
+                // OpenAI tokenises and truncates.
+                let prompt = AppVocabulary.current.nilIfEmpty
+                return try await WhisperTranscriber.transcribe(
+                    audioURL: wavURL, mode: .single, initialPrompt: prompt)
+            } catch let err as WhisperTranscriber.WhisperError {
+                TranscriptionErrors.record(meetingId: meetingId,
+                                           message: err.localizedDescription)
+                throw err
+            }
+        case .whisperLocal:
+            // Apple-Silicon-only — gracefully fall back to Gemini on
+            // Intel rather than hard-failing the meeting. The provider
+            // toggle keeps the user's preference; we just override the
+            // execution path for this single run.
+            guard LocalWhisperTranscriber.isAvailable() else {
+                FileLogger.log("LocalWhisper: not available on Intel, falling back to Gemini for this track")
+                do {
+                    return try await GeminiTranscriber.transcribe(
+                        audioURL: wavURL, mode: .single, singlePass: false)
+                } catch let err as GeminiTranscriber.GError {
+                    TranscriptionErrors.record(meetingId: meetingId,
+                                               message: err.localizedDescription)
+                    throw err
+                }
+            }
+            do {
+                // Same vocabulary lever as cloud Whisper, but
+                // LocalWhisperTranscriber tokenises the prompt itself
+                // (WhisperKit takes token IDs, not raw text).
+                try await LocalWhisperTranscriber.ensureModelReady()
+                let prompt = AppVocabulary.current.nilIfEmpty
+                return try await LocalWhisperTranscriber.transcribe(
+                    audioURL: wavURL, mode: .single, initialPrompt: prompt)
+            } catch let err as LocalWhisperTranscriber.LocalWhisperError {
+                TranscriptionErrors.record(meetingId: meetingId,
+                                           message: err.localizedDescription)
+                throw err
+            }
         }
     }
 

@@ -73,21 +73,18 @@ final class RecordingController {
 
         do {
             try AppContext.shared.repo.insertMeeting(meeting)
-            // Show the "Starting recording…" spinner inside the same
-            // menu-bar popover the invite uses, so the user gets visible
-            // feedback during the SCStream + AVAudioEngine warm-up
-            // (~200-400 ms) on BOTH the manual Start and auto-detect
-            // paths. The auto-detect path just closed the invite from
-            // the same anchor, so invite → loading → blob reads as one
-            // continuous element.
-            MenuBarController.shared?.showLoadingState()
+            // Earlier we showed a "Starting recording…" spinner inside
+            // the menu-bar popover during the SCStream + AVAudioEngine
+            // warm-up (~200-400 ms). That spinner required flipping
+            // popover.behavior to .applicationDefined and back, and
+            // races between that swap and `RecordingController`'s
+            // state transitions left the popover sticky (refusing
+            // to dismiss on outside clicks). The floating HUD pill
+            // is already the canonical "capture is alive" signal —
+            // 400 ms with no menu-bar feedback is fine, the HUD
+            // pops in right after. No spinner == no sticky popover.
             try await AppContext.shared.capture.start(meetingId: id, source: source)
             AppContext.shared.recordingState = .recording(meetingId: id, startedAt: Date())
-            // Capture is live — drop the loading popover. The floating
-            // blob springs in from a tiny transparent dot (its own
-            // entry animation), so the loading state never "morphs"
-            // into it; it simply hands off.
-            MenuBarController.shared?.finishLoadingState()
             // Float Granola-style recording pill over every space so the
             // user always knows capture is alive (and can stop without
             // chasing the menu bar).
@@ -95,9 +92,6 @@ final class RecordingController {
             FileLogger.log("RecordingController: started \(id)")
         } catch {
             FileLogger.log("RecordingController: start failed for \(id): \(error)")
-            // Tear down the loading popover so the user isn't left
-            // staring at a spinner that never resolves.
-            MenuBarController.shared?.finishLoadingState()
             present(error: "Не удалось начать запись: \(error.localizedDescription)")
             try? AppContext.shared.repo.deleteMeeting(id: id)
             AppContext.shared.recordingState = .idle
@@ -122,15 +116,13 @@ final class RecordingController {
         await AppContext.shared.capture.stop()
 
         // Tell the user *now* if nothing was actually captured (mic muted,
-        // wrong input, permission silently lost) instead of letting them
-        // discover an empty transcript after the meeting.
+        // wrong input, permission silently lost). The silent-recording
+        // notification is fired in the meeting-save block below — kept
+        // there so it goes out only AFTER the row is actually marked as
+        // archived (we don't want to say "moved to Archive" and then
+        // have the save fail).
         if capturedSilence {
             FileLogger.log("stopRecording: \(id) captured silence (maxMic=\(maxMic) maxSys=\(maxSys))")
-            if AppSettings.notificationsEnabled {
-                NotificationsService.post(
-                    title: L.notif("notif_silent_title"),
-                    body: L.notif("notif_silent_body"))
-            }
         } else if maxSys < 0.004 && AppContext.shared.capture.outputBluetoothAtStart {
             // We DID record audio (not the total-silence case above), but
             // the system track is empty while the output route was
@@ -148,18 +140,31 @@ final class RecordingController {
         let endedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
         let durationMs = Int64(Date().timeIntervalSince(startedAt) * 1000)
 
+        // Auto-archive guard: silent recording AND under a minute.
+        // The user explicitly asked to limit auto-archive to short
+        // silent takes — a long silent run could be an intentional
+        // recording (timer / leaving the room) that the user wants
+        // kept around. Short silent ones are almost always a setup
+        // mistake (muted mic, wrong input, forgot the call) and the
+        // user wants them out of the main library instantly.
+        let shouldAutoArchive = capturedSilence && durationMs < 60_000
+
         // Auto-transcribe OFF: keep the recording but DON'T enqueue and
         // DON'T mark it .transcribing (that would hang forever and
         // resetStuckMeetings() would flip it to .failed next launch).
         // Land it .ready with no segments — it's browsable and the user
         // can produce a transcript on demand via the existing
         // right-click → Re-transcribe (the manual affordance).
-        let autoTx = AppSettings.autoTranscribe
+        // Silent recordings skip transcription regardless of length
+        // (nothing to transcribe). Only the SHORT silent ones also
+        // auto-archive (see `shouldAutoArchive` above).
+        let autoTx = AppSettings.autoTranscribe && !capturedSilence
         do {
             if var meeting = try AppContext.shared.repo.meeting(id: id) {
                 meeting.endedAt = endedAtMs
                 meeting.durationMs = durationMs
                 meeting.status = autoTx ? .transcribing : .ready
+                if shouldAutoArchive { meeting.archivedAt = endedAtMs }
                 // Snapshot the OUTPUT route now — the pipeline's
                 // system-track chooser needs to know this recording was
                 // on Bluetooth (faint tap) even if it transcribes later.
@@ -168,16 +173,48 @@ final class RecordingController {
                 try AppContext.shared.repo.updateMeeting(meeting)
             }
             if AppSettings.notificationsEnabled {
-                NotificationsService.post(
-                    title: L.notif("notif_saved_title"),
-                    body: L.notif("notif_saved_body")
-                        .replacingOccurrences(of: "{s}", with: "\(durationMs / 1000)"))
+                if shouldAutoArchive {
+                    NotificationsService.post(
+                        title: L.notif("notif_silent_archived_title"),
+                        body: L.notif("notif_silent_archived_body"))
+                } else if capturedSilence {
+                    // Long silent recording — kept, but flag that
+                    // nothing was captured so the user isn't surprised
+                    // when the transcript stays empty.
+                    NotificationsService.post(
+                        title: L.notif("notif_silent_title"),
+                        body: L.notif("notif_silent_body"))
+                } else {
+                    NotificationsService.post(
+                        title: L.notif("notif_saved_title"),
+                        body: L.notif("notif_saved_body")
+                            .replacingOccurrences(of: "{s}", with: "\(durationMs / 1000)"))
+                }
+            }
+            // Also surface the short-silent → archived event as an
+            // in-app toast for the Library window's WKWebView, so a
+            // user with the window already open sees a banner without
+            // having to glance at the Notification Center.
+            if shouldAutoArchive {
+                LibraryWindow.shared.postToast(
+                    title: L.notif("notif_silent_archived_title"),
+                    body: L.notif("notif_silent_archived_body"),
+                    kind: "info")
             }
         } catch {
             present(error: "Не удалось сохранить запись: \(error.localizedDescription)")
         }
 
         AppContext.shared.recordingState = .idle
+
+        // Silent + auto-archived: nothing left to do — no transcription,
+        // no playback mix needed (the row is in Archive). The user can
+        // restore + manually re-transcribe from the bin if they really
+        // want to keep an empty row around.
+        if capturedSilence {
+            FileLogger.log("stopRecording: auto-archived silent recording \(id)")
+            return
+        }
 
         guard autoTx else {
             FileLogger.log("stopRecording: auto-transcribe OFF — \(id) saved un-transcribed (manual re-transcribe available)")

@@ -19,6 +19,9 @@ enum L {
         "start": "Start recording",
         "stop": "Stop recording",
         "open_library": "Open library",
+        "open_account": "Open account",
+        "open_corder": "Open Corder",
+        "locked_status": "Cannot record yet",
         "quit": "Quit",
         // Meeting invite panel
         "invite_question": "Record meeting?",
@@ -37,6 +40,18 @@ enum L {
         "notif_ready_body": "Open the library to view it.",
         "notif_silent_title": "No audio captured",
         "notif_silent_body": "The recording is effectively silent — check the input device and Microphone permission.",
+        // Short by design — it's a passing toast/notification, not a
+        // help article. The library shows the row in Archive; if the
+        // user cares why, the Settings panel covers Microphone /
+        // device tips. Keep this to one short clause.
+        "notif_silent_archived_title": "Recording archived",
+        "notif_silent_archived_body": "Nothing was captured.",
+        // Surfaced inside the menu-bar popover (not as a system
+        // notification) when recording has been going for > 10 min
+        // without any audible speech. Body stays short — the popover
+        // is 320 pt wide and the warning sits above the Stop button.
+        "silence_warning_title": "Still recording",
+        "silence_warning_body": "No one's spoken for 10 minutes. Still recording?",
         "notif_bt_title": "Other side not recorded",
         "notif_bt_body": "Your audio output is Bluetooth, so the remote side wasn't captured. Switch to built-in or wired output and re-record to get everyone.",
         "notif_stopped_title": "Recording stopped",
@@ -52,6 +67,9 @@ enum L {
         "start": "Начать запись",
         "stop": "Остановить запись",
         "open_library": "Открыть библиотеку",
+        "open_account": "Открыть аккаунт",
+        "open_corder": "Открыть Corder",
+        "locked_status": "Нельзя записывать",
         "quit": "Выйти",
         "invite_question": "Записать встречу?",
         "invite_tap_hint": "Нажми, чтобы начать запись",
@@ -63,6 +81,10 @@ enum L {
         "notif_ready_body": "Открой библиотеку чтобы посмотреть.",
         "notif_silent_title": "Звук не записался",
         "notif_silent_body": "Запись фактически беззвучная — проверь устройство ввода и доступ к микрофону.",
+        "notif_silent_archived_title": "Запись в архиве",
+        "notif_silent_archived_body": "Ничего не записалось.",
+        "silence_warning_title": "Всё ещё идёт запись",
+        "silence_warning_body": "Никто не говорил 10 минут. Всё ещё записываете?",
         "notif_bt_title": "Собеседник не записан",
         "notif_bt_body": "Вывод звука — Bluetooth, поэтому удалённую сторону не удалось записать. Переключи вывод на встроенный или проводной и перезапиши, чтобы записать всех.",
         "notif_stopped_title": "Запись остановлена",

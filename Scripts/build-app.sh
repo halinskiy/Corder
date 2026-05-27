@@ -46,6 +46,16 @@ if [ -f "$ROOT/Resources/icons/AppIcon.icns" ]; then
     cp "$ROOT/Resources/icons/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
+# 3b. Embed the Developer ID provisioning profile (if shipped). Required
+# for entitlements that the system validates against the profile —
+# notably `com.apple.developer.applesignin`. The file lives at
+# `Contents/embedded.provisionprofile` (Apple-fixed path); codesign
+# refuses entitlements that aren't in the profile, so this must run
+# BEFORE the codesign step below.
+if [ -f "$ROOT/Resources/Corder.provisionprofile" ]; then
+    cp "$ROOT/Resources/Corder.provisionprofile" "$APP/Contents/embedded.provisionprofile"
+fi
+
 # 3a. Sparkle framework (SwiftPM doesn't auto-embed XCFrameworks for CLI
 # `swift build`, so we copy it into Contents/Frameworks/ ourselves).
 SPARKLE_FW="$ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"

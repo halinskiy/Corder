@@ -52,8 +52,6 @@
     <rect x="318" y="218" width="148" height="160" rx="36" fill="url(#topGloss)"/>
     <!-- Left rim -->
     <rect x="312" y="212" width="40" height="600" rx="20" fill="url(#leftRim)"/>
-    <!-- Hairline bottom shadow for grounding -->
-    <rect x="318" y="790" width="148" height="22" rx="11" fill="rgba(0,0,0,0.55)"/>
   </g>
 
   <!-- 4. Right bar. -->
@@ -61,6 +59,5 @@
     <rect x="552" y="212" width="160" height="600" rx="44" fill="url(#bar)"/>
     <rect x="558" y="218" width="148" height="160" rx="36" fill="url(#topGloss)"/>
     <rect x="552" y="212" width="40" height="600" rx="20" fill="url(#leftRim)"/>
-    <rect x="558" y="790" width="148" height="22" rx="11" fill="rgba(0,0,0,0.55)"/>
   </g>
 </svg>

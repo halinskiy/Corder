@@ -15,6 +15,9 @@ export interface MeetingSummary {
   speaker_names?: string;
   /** Pinned sessions sort to a group at the very top with a gold title. */
   pinned?: boolean;
+  /** False = the user hasn't opened this meeting yet; drives the
+   *  "unseen" gold title styling in the sidebar + Recent. */
+  viewed?: boolean;
 }
 
 export interface SpeakerDTO {
@@ -129,9 +132,13 @@ export async function retranscribe(id: string): Promise<void> {
 
 /// Returns the cached summary or generates one on the spot (the
 /// backend blocks on the Gemini call, so this request can take a few
-/// seconds the first time per meeting).
-export async function summarize(id: string): Promise<string> {
-  const r = await fetch(`/api/meetings/${id}/summarize`, { method: "POST" });
+/// seconds the first time per meeting). Pass `force=true` to skip the
+/// cache and regenerate from scratch.
+export async function summarize(id: string, force = false): Promise<string> {
+  const url = force
+    ? `/api/meetings/${id}/summarize?force=1`
+    : `/api/meetings/${id}/summarize`;
+  const r = await fetch(url, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = await r.json();
   if (j.error || !j.summary) throw new Error(j.error || "no summary");
@@ -183,7 +190,10 @@ export async function startRecordingNow(): Promise<void> {
 }
 
 export interface Settings {
-  language?: "ru" | "en";
+  /// All locales the LangPicker can show. Untranslated locales fall
+  /// back to English at runtime (see `pickStrings` in i18n.ts) — the
+  /// backend just stores the code, no translation work needed here.
+  language?: string;
   vocabulary?: string;
   /** write-only: send a new Gemini key. Never returned by GET. */
   gemini_key?: string;
@@ -196,6 +206,7 @@ export interface Settings {
   capture_audio?: boolean;
   auto_transcribe?: boolean;
   auto_title?: boolean;
+  auto_summary?: boolean;
   /** user-managed bundle ids for the call auto-detector. */
   meeting_whitelist?: string[];
   meeting_blacklist?: string[];
@@ -208,6 +219,34 @@ export interface Settings {
   record_hotkey_label?: string;
   record_hotkey_conflict?: string | null;
   record_hotkey_ok?: boolean;
+  /** Preferred mic input device, stored as the stable Core Audio UID.
+   *  Empty string / null = "use system default". */
+  mic_device_uid?: string | null;
+  /** read-only: discoverable input devices (current system default first). */
+  audio_input_devices?: AudioInputDevice[];
+  /** Paddle-issued licence key the user pasted into the Welcome wizard.
+   *  Empty / null = Free tier. */
+  licence_key?: string | null;
+  /** read-only: server-derived "this licence currently looks Pro" flag.
+   *  Free tier when false. */
+  is_pro?: boolean;
+  /** read-only: paid-tier ladder rung. `free` = baseline, `pro` = paying
+   *  customer, `max` = top-tier unlimited bundle. Drives the profile
+   *  tier badge styling and the Sidebar Upgrade-card visibility. */
+  tier?: "free" | "pro" | "max";
+  /** read-only: has the user finished the Welcome wizard at least once?
+   *  AppDelegate uses this to decide whether to auto-open the wizard
+   *  on launch. The wizard's final step flips it. */
+  onboarding_completed?: boolean;
+}
+
+export interface AudioInputDevice {
+  uid: string;
+  name: string;
+  manufacturer?: string | null;
+  /** "BuiltIn" / "USB" / "Bluetooth" / "Virtual" / "Aggregate" / "Continuity" / etc. */
+  transport?: string | null;
+  is_system_default: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -277,5 +316,15 @@ export async function getUpdateStatus(): Promise<UpdateStatus> {
 
 export async function triggerUpdateCheck(): Promise<void> {
   const r = await fetch("/api/update-check", { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Clears the local account state (licence key, display name, tier)
+ *  and resets `onboardingCompleted` so the Welcome wizard re-opens on
+ *  next launch / window load. There is no server session to invalidate
+ *  yet; this is purely a local-state reset that happens on the Swift
+ *  side via `AppSettings.setLicenceKey(nil)` etc. */
+export async function signOut(): Promise<void> {
+  const r = await fetch("/api/account/signout", { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }

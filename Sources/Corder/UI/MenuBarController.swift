@@ -11,6 +11,20 @@ final class MenuBarController {
 
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
+
+    /// True while any popover content (menu, invite, loading) is on
+    /// screen. Used by `AppDelegate.quitOrClosePopover` to swallow
+    /// ⌘Q when the popover is up.
+    var isPopoverShown: Bool { popover.isShown }
+
+    /// Force-close the popover regardless of `behavior`. `close()` is
+    /// the AppKit-blessed synchronous teardown that ignores
+    /// `.applicationDefined` stickiness; `performClose:` would honour
+    /// it and leave the popover open.
+    func forceClosePopover() {
+        popover.behavior = .transient
+        popover.close()
+    }
     private let onOpenLibrary: () -> Void
     private var cancellable: AnyCancellable?
     /// The normal popover content (menu). Stashed while the invite
@@ -21,7 +35,14 @@ final class MenuBarController {
     init(onOpenLibrary: @escaping () -> Void) {
         self.onOpenLibrary = onOpenLibrary
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Explicit isVisible = true — macOS Sequoia auto-hides
+        // menu-bar items it considers overflow; forcing this on
+        // (and persisting via `autosaveName`) prevents Corder
+        // ending up in the hidden bucket.
+        statusItem.isVisible = true
+        statusItem.autosaveName = "CorderMenuBarItem"
         MenuBarController.shared = self
+        FileLogger.log("MenuBarController: created, isVisible=\(statusItem.isVisible)")
 
         if let button = statusItem.button {
             button.target = self
@@ -42,7 +63,23 @@ final class MenuBarController {
         cancellable = AppContext.shared.$recordingState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                self?.updateIcon(for: state)
+                guard let self = self else { return }
+                self.updateIcon(for: state)
+                // After invite/loading flow the popover content gets
+                // swapped back to `menuHost`, but the behavior can
+                // stick on `.applicationDefined` if `finishLoadingState`
+                // raced this state change. Force `.transient` + restore
+                // menu content unconditionally — same state recording
+                // sees on a normal launch. UI is idempotent; nothing
+                // breaks if it was already correct.
+                switch state {
+                case .recording, .stopping, .idle:
+                    if let menuHost = self.menuHost,
+                       self.popover.contentViewController !== menuHost {
+                        self.popover.contentViewController = menuHost
+                    }
+                    self.popover.behavior = .transient
+                }
             }
         updateIcon(for: AppContext.shared.recordingState)
     }
@@ -51,8 +88,8 @@ final class MenuBarController {
         guard let button = statusItem.button else { return }
         switch state {
         case .idle:
-            // Outline circle, template-rendered so it follows light/dark
-            // menu-bar appearance.
+            // Outline circle SF Symbol — template-rendered so it
+            // follows the menu bar's light/dark tint.
             let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
             let img = NSImage(systemSymbolName: "circle", accessibilityDescription: "Corder")?
                 .withSymbolConfiguration(config)
@@ -89,8 +126,25 @@ final class MenuBarController {
                 dismissInvite(fireDismiss: true)
                 return
             }
-            popover.performClose(sender)
+            // Reset to `.transient` BEFORE close so a sticky
+            // applicationDefined behavior (left over from an
+            // interrupted invite/loading path) doesn't reject the
+            // close. `popover.close()` (vs `performClose:`) is the
+            // sync, behavior-ignoring variant — guaranteed to land.
+            popover.behavior = .transient
+            popover.close()
         } else {
+            // Hard-reset to the default menu content + `.transient`
+            // behaviour every normal open. The invite/loading paths
+            // flip the popover to `.applicationDefined` and swap in
+            // their own content view, and if any of those paths
+            // crashed or returned early the popover could end up
+            // sticky: clicks outside no longer dismiss it. Restoring
+            // both knobs unconditionally before show guarantees the
+            // user always gets the click-outside-to-dismiss behaviour
+            // they expect from a menu-bar popover.
+            if let menuHost { popover.contentViewController = menuHost }
+            popover.behavior = .transient
             popover.contentViewController?.view.layoutSubtreeIfNeeded()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()

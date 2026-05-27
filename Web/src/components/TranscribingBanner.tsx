@@ -10,13 +10,17 @@ interface Props {
   t: T;
 }
 
-/// Mirrors RecordingBanner but for the transcribing phase: green spinner
-/// instead of a red blinking dot, "TRANSCRIBING" + elapsed timer, and a
-/// "Stop transcription" button that cancels the pipeline server-side.
+/// "Transcribing…" card. Shares the EXACT same shell as every other
+/// status / empty / clarify banner in the product —
+/// `.trans-banner.clarify-banner` + `.clarify-text` (body + sub) +
+/// `.clarify-actions` — so the surface doesn't change size or layout
+/// between recording / transcribing / failed / empty states. The
+/// spinner sits inline next to the headline so the "this is moving"
+/// signal is part of the title, not a separate row that grows the card.
 export function TranscribingBanner({ meetingId, onCancelled, onToast, t }: Props) {
-  // Timer starts when the banner mounts. This is approximate (we don't
-  // know exactly when WhisperKit started chewing), but matches the user's
-  // mental model: "I clicked Re-transcribe at 00:00 of the spinner".
+  // Timer starts when the banner mounts. Approximate (we don't know
+  // exactly when the pipeline started its current chunk), but matches
+  // the user's mental model: "I clicked Re-transcribe at 00:00".
   const startedAt = React.useRef(Date.now()).current;
   const [now, setNow] = React.useState(Date.now());
   const [stopping, setStopping] = React.useState(false);
@@ -42,18 +46,19 @@ export function TranscribingBanner({ meetingId, onCancelled, onToast, t }: Props
   };
 
   return (
-    <div className="trans-banner">
-      <div className="trans-banner-row">
-        <Loader2 size={16} className="trans-spinner" />
-        <div className="trans-text">
-          <div className="trans-label">{t.trans_label}</div>
-          <div className="trans-time">{m}:{s}</div>
+    <div className="trans-banner clarify-banner">
+      <div className="clarify-text">
+        <div className="clarify-body clarify-body-with-icon">
+          <Loader2 size={16} className="trans-inline-spinner" aria-hidden />
+          <span>{t.trans_label}</span>
         </div>
+        <div className="dash-sub clarify-sub-mono">{m}:{s}</div>
       </div>
-      <button className="trans-stop" onClick={onStop} disabled={stopping}>
-        <span className="trans-stop-square" />
-        {t.trans_stop}
-      </button>
+      <div className="clarify-actions clarify-actions-stack">
+        <button className="clarify-btn danger" onClick={onStop} disabled={stopping}>
+          {t.trans_stop}
+        </button>
+      </div>
     </div>
   );
 }

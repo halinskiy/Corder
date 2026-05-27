@@ -47,6 +47,7 @@ struct MeetingRepository {
         let speakerCount: Int
         let speakerNames: String?
         let pinnedAt: Int64?
+        let viewedAt: Int64?
     }
 
     func listMeetingSummaries() throws -> [SummaryRow] {
@@ -60,6 +61,7 @@ struct MeetingRepository {
                     m.status,
                     m.title,
                     m.pinned_at,
+                    m.viewed_at,
                     (SELECT s.text
                        FROM segments s
                        WHERE s.meeting_id = m.id
@@ -95,7 +97,8 @@ struct MeetingRepository {
                     preview: r["preview"],
                     speakerCount: r["speaker_count"] ?? 0,
                     speakerNames: r["speaker_names"],
-                    pinnedAt: r["pinned_at"]
+                    pinnedAt: r["pinned_at"],
+                    viewedAt: r["viewed_at"]
                 )
             }
         }
@@ -123,6 +126,17 @@ struct MeetingRepository {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET pinned_at = ? WHERE id = ?",
                            arguments: [pinnedAt, meetingId])
+        }
+    }
+
+    /// Stamp `viewed_at` with the current time, but only if it's still
+    /// null — once seen, the row stays seen. Used by the GET detail
+    /// route to mark a meeting as opened the first time the user looks
+    /// at it.
+    func markViewedIfNew(meetingId: String, atMs: Int64) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET viewed_at = ? WHERE id = ? AND viewed_at IS NULL",
+                           arguments: [atMs, meetingId])
         }
     }
 

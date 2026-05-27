@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Search } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  type Settings, type InstalledApp,
+  type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
 import type { T } from "../i18n";
 
@@ -57,9 +57,15 @@ export function SettingsPane({ t }: { t: T }) {
   // backend default, so no flicker to "off" then back).
   const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
 
+  // Each plain toggle gets its OWN framed card — the uppercase category
+  // labels (NOTIFICATIONS / CAPTURE / TRANSCRIPTION) read as form
+  // chrome that the user explicitly didn't want. Settings now feels
+  // like a vertical stack of independent setting cards. The two
+  // compound sections (Auto-detect lists, Shortcut) keep their titles
+  // because they bundle multiple sub-elements that need a frame.
   return (
     <div className="settings-pane">
-      <Section title={t.settings_sec_notifications}>
+      <SoloCard>
         <Toggle
           label={t.settings_notifications}
           desc={t.settings_notifications_desc}
@@ -67,9 +73,9 @@ export function SettingsPane({ t }: { t: T }) {
           disabled={!loaded}
           onChange={(v) => patch({ notifications: v })}
         />
-      </Section>
+      </SoloCard>
 
-      <Section title={t.settings_sec_capture}>
+      <SoloCard>
         <Toggle
           label={t.settings_video}
           desc={t.settings_video_desc}
@@ -77,9 +83,25 @@ export function SettingsPane({ t }: { t: T }) {
           disabled={!loaded}
           onChange={(v) => patch({ capture_video: v })}
         />
-      </Section>
+      </SoloCard>
 
-      <Section title={t.settings_sec_transcription}>
+      {/* Microphone picker. Sits next to the screen-video toggle
+          because both belong to "what the recorder captures". Pre-feature
+          behaviour ("System default") stays available as the first option
+          and is the value used when `mic_device_uid` is empty/null. The
+          choice applies to the NEXT recording — we don't hot-swap a live
+          AVAudioEngine binding (would need a stop/start cycle). */}
+      <SoloCard>
+        <MicDevicePicker
+          devices={s?.audio_input_devices ?? []}
+          value={s?.mic_device_uid ?? ""}
+          disabled={!loaded}
+          onChange={(uid) => patch({ mic_device_uid: uid })}
+          t={t}
+        />
+      </SoloCard>
+
+      <SoloCard>
         <Toggle
           label={t.settings_autotranscribe}
           desc={t.settings_autotranscribe_desc}
@@ -87,6 +109,9 @@ export function SettingsPane({ t }: { t: T }) {
           disabled={!loaded}
           onChange={(v) => patch({ auto_transcribe: v })}
         />
+      </SoloCard>
+
+      <SoloCard>
         <Toggle
           label={t.settings_autotitle}
           desc={t.settings_autotitle_desc}
@@ -94,9 +119,20 @@ export function SettingsPane({ t }: { t: T }) {
           disabled={!loaded}
           onChange={(v) => patch({ auto_title: v })}
         />
-      </Section>
+      </SoloCard>
 
-      <Section title={t.settings_sec_shortcut}>
+      <SoloCard>
+        <Toggle
+          label={t.settings_autosummary}
+          desc={t.settings_autosummary_desc}
+          checked={on("auto_summary")}
+          disabled={!loaded}
+          onChange={(v) => patch({ auto_summary: v })}
+        />
+      </SoloCard>
+
+      <div className="settings-divider" />
+      <SoloCard>
         <HotkeyRow
           label={s?.record_hotkey_label ?? "⌘⇧F"}
           conflict={s?.record_hotkey_conflict ?? null}
@@ -108,31 +144,92 @@ export function SettingsPane({ t }: { t: T }) {
           }}
           t={t}
         />
-      </Section>
+      </SoloCard>
 
-      <div className="settings-section">
-        <div className="settings-section-title">{t.settings_sec_autodetect}</div>
+      <SoloCard>
         <AppListEditor
           title={t.settings_whitelist}
-          desc={t.settings_whitelist_desc}
           items={s?.meeting_whitelist ?? []}
           apps={apps}
           disabled={!loaded}
           onChange={(next) => patch({ meeting_whitelist: next })}
           t={t}
         />
+      </SoloCard>
+
+      <SoloCard>
         <AppListEditor
           title={t.settings_blacklist}
-          desc={t.settings_blacklist_desc}
           items={s?.meeting_blacklist ?? []}
           apps={apps}
           disabled={!loaded}
           onChange={(next) => patch({ meeting_blacklist: next })}
           t={t}
         />
-      </div>
+      </SoloCard>
+    </div>
+  );
+}
 
-      <div className="settings-pro-note">{t.settings_pro_note}</div>
+/// One-row framed card — no section title above. Used for the standalone
+/// toggle settings; visually a single `.settings-rows` frame holding one
+/// child. Identical look to a single-row Section but without the eyebrow.
+function SoloCard({ children }: { children: React.ReactNode }) {
+  return <div className="settings-rows">{children}</div>;
+}
+
+/// Microphone input device dropdown. Uses a native `<select>` styled
+/// to fit the `.settings-row` frame — same horizontal rhythm as the
+/// toggles next to it. We picked native over a portal popover for
+/// two reasons: (1) every macOS user already knows how the system
+/// menu reads, no behaviour to relearn; (2) keyboard / VoiceOver
+/// handling comes free. The first option is the explicit "System
+/// default" fall-back (empty UID), and the device flagged
+/// `is_system_default` gets a trailing hint so the user can see
+/// which physical device the OS currently considers default without
+/// switching tabs.
+function MicDevicePicker({
+  devices, value, disabled, onChange, t,
+}: {
+  devices: AudioInputDevice[];
+  value: string;
+  disabled?: boolean;
+  onChange: (uid: string) => void;
+  t: T;
+}) {
+  const noDevices = devices.length === 0;
+  const sysLabel = t.settings_mic_device_system ?? "System default";
+  // Same vertical layout as `HotkeyRow` (.hk-block): label + desc
+  // stacked on top, control on its own row underneath, full width.
+  // Keeps the design system consistent — every "single control with
+  // explainer" row in Settings reads the same way.
+  return (
+    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
+         aria-label={t.settings_mic_device ?? "Microphone"}>
+      <div className="settings-row-label">{t.settings_mic_device ?? "Microphone"}</div>
+      <div className="settings-row-desc">
+        {t.settings_mic_device_desc
+          ?? "Pick which input device records your voice."}
+      </div>
+      <select
+        className="settings-row-select mic-select"
+        value={value}
+        disabled={disabled || noDevices}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={t.settings_mic_device ?? "Microphone"}
+      >
+        <option value="">{sysLabel}</option>
+        {devices.map((d) => (
+          <option key={d.uid} value={d.uid}>
+            {d.is_system_default ? `${d.name} · system default` : d.name}
+          </option>
+        ))}
+        {noDevices && (
+          <option value="" disabled>
+            {t.settings_mic_device_empty ?? "No input devices found"}
+          </option>
+        )}
+      </select>
     </div>
   );
 }
@@ -143,10 +240,9 @@ export function SettingsPane({ t }: { t: T }) {
 /// icon + friendly name (bundle id is the tooltip). Built only from
 /// existing tokens/components — consistency first.
 function AppListEditor({
-  title, desc, items, apps, disabled, onChange, t,
+  title, items, apps, disabled, onChange, t,
 }: {
   title: string;
-  desc: string;
   items: string[];
   apps: InstalledApp[];
   disabled?: boolean;
@@ -213,45 +309,45 @@ function AppListEditor({
   return (
     <div className="applist-block">
       <div className="settings-row-label">{title}</div>
-      <div className="settings-row-desc">{desc}</div>
-      <div className="applist">
-        {items.length === 0 && (
-          <div className="applist-empty">{t.settings_list_empty}</div>
-        )}
-        {items.map((b) => (
-          <div className="applist-row" key={b}>
-            <img
-              className="applist-ico"
-              src={appIconSrc(b)}
-              alt=""
-              aria-hidden
-              onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
-            />
-            <span className="applist-name" title={b}>{nameFor(b)}</span>
-            <button
-              type="button"
-              className="applist-x"
-              disabled={disabled}
-              aria-label={t.settings_list_remove}
-              title={t.settings_list_remove}
-              onClick={() => remove(b)}
-            >
-              <X size={14} strokeWidth={2.2} />
-            </button>
-          </div>
-        ))}
-        <div className="applist-add-row">
-          <button
-            ref={addRef}
-            type="button"
-            className="clarify-btn accent bigbtn-full"
-            disabled={disabled}
-            onClick={() => setOpen((v) => !v)}
-          >
-            + {t.settings_list_add}
-          </button>
+      {/* Picked apps render as a plain stack (no surrounding frame,
+          no Empty placeholder — empty just means no rows). The Add
+          button sits below them as a regular outline `.clarify-btn`,
+          matching "Transcribe now" in the empty-transcript banner. */}
+      {items.length > 0 && (
+        <div className="applist">
+          {items.map((b) => (
+            <div className="applist-row" key={b}>
+              <img
+                className="applist-ico"
+                src={appIconSrc(b)}
+                alt=""
+                aria-hidden
+                onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+              />
+              <span className="applist-name" title={b}>{nameFor(b)}</span>
+              <button
+                type="button"
+                className="applist-x"
+                disabled={disabled}
+                aria-label={t.settings_list_remove}
+                title={t.settings_list_remove}
+                onClick={() => remove(b)}
+              >
+                <X size={14} strokeWidth={2.2} />
+              </button>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
+      <button
+        ref={addRef}
+        type="button"
+        className="clarify-btn bigbtn-full applist-addbtn"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {t.settings_list_add}
+      </button>
       {open && pos && createPortal(
         <div
           ref={popRef}
@@ -383,14 +479,6 @@ function HotkeyRow({
 }
 
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="settings-section">
-      <div className="settings-section-title">{title}</div>
-      <div className="settings-rows">{children}</div>
-    </div>
-  );
-}
 
 /// Controlled + persisted. The whole row is the hit target
 /// (hover-highlights like a sidebar session; click anywhere toggles).

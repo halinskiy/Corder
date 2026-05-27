@@ -182,6 +182,17 @@ enum Migrations {
         m.registerMigration("v15_bt_route") { db in
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN output_bluetooth_at_start INTEGER;")
         }
+        // Per-meeting "seen" marker. A non-null timestamp means the user
+        // has opened the meeting at least once; null = unseen (the title
+        // is rendered in the unseen accent in the sidebar + Recent).
+        // Existing rows stay NULL — that's wrong for old meetings on
+        // first launch after upgrade (they'd all show as unseen), so
+        // the second SQL statement seeds them as seen by stamping
+        // viewed_at = ended_at where ended_at is set.
+        m.registerMigration("v16_viewed_at") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN viewed_at INTEGER;")
+            try db.execute(sql: "UPDATE meetings SET viewed_at = ended_at WHERE ended_at IS NOT NULL;")
+        }
 
         return m
     }

@@ -12,5 +12,17 @@
          we move to notarized Developer ID builds. -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
+    <!-- Sign in with Apple capability is registered for
+         com.3mpq.Corder on developer.apple.com (2026-05-25).
+         The `com.apple.developer.applesignin` entitlement is
+         temporarily disabled because adding it causes launchd
+         to refuse the binary (RBSRequestErrorDomain 5,
+         NSPOSIXErrorDomain 163) — even when signed with the
+         Developer ID identity and hardened runtime. Hypothesis:
+         macOS Developer ID builds want an embedded
+         provisioning profile (`embedded.provisionprofile` in
+         the .app bundle) carrying this capability before the
+         system trusts the entitlement. Wire that up next, then
+         re-add the key. -->
 </dict>
 </plist>

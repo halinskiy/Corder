@@ -1,8 +1,10 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { Download, Maximize2, X } from "lucide-react";
-import { MeetingDetail, audioSrc, videoSrc } from "../api";
-import { DownloadMenu } from "./DownloadMenu";
+import { Download, Maximize2, X, ChevronLeft } from "lucide-react";
+import {
+  MeetingDetail, audioSrc, videoSrc,
+  transcriptSrc, transcriptMdSrc, transcriptJsonSrc, bundleSrc,
+} from "../api";
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 
@@ -19,23 +21,82 @@ interface Props {
 export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "ru" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
+  // Download view replaces the Recording-tab content in place. The
+  // <audio> element underneath stays MOUNTED (display:none on the
+  // wrapper) so playback (and the transcript pane's seek-by-click)
+  // keeps working while the user is picking a file to save.
+  const [downloadOpen, setDownloadOpen] = React.useState(false);
   return (
     <div className="right-panel">
-      {detail.has_video && (
-        <ScreenVideo
+      {downloadOpen && (
+        <DownloadView
           detail={detail}
-          videoRef={screenVideoRef}
-          audioRef={audioRef}
-          currentTimeSec={currentTimeSec}
+          onBack={() => setDownloadOpen(false)}
+          t={t}
         />
       )}
-      <AudioCard
-        detail={detail}
-        audioRef={audioRef}
-        onTimeUpdate={onTimeUpdate}
-        t={t}
-      />
-      <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
+      <div style={{ display: downloadOpen ? "none" : "contents" }}>
+        {detail.has_video && (
+          <ScreenVideo
+            detail={detail}
+            videoRef={screenVideoRef}
+            audioRef={audioRef}
+            currentTimeSec={currentTimeSec}
+          />
+        )}
+        <AudioCard
+          detail={detail}
+          audioRef={audioRef}
+          onTimeUpdate={onTimeUpdate}
+          onOpenDownload={() => setDownloadOpen(true)}
+          t={t}
+        />
+        <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
+      </div>
+    </div>
+  );
+}
+
+/// Inline download chooser: replaces the Recording-tab content in
+/// place. Same `.clarify-btn` outline-card vocabulary as the rest of
+/// the design system, no icons (consistency with the other inline
+/// banners). The audio element lives a sibling level up and stays
+/// mounted while this view is on screen, so playback continues.
+function DownloadView({
+  detail, onBack, t,
+}: {
+  detail: MeetingDetail;
+  onBack: () => void;
+  t: T;
+}) {
+  const rows: Array<{ label: string; href: string; file: string; show: boolean }> = [
+    { label: t.download_video,      href: videoSrc(detail.id),         file: `corder-${detail.id}.mov`,  show: !!detail.has_video },
+    { label: t.download_audio,      href: audioSrc(detail.id),         file: `corder-${detail.id}.wav`,  show: true },
+    { label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: detail.segments.length > 0 },
+    { label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: detail.segments.length > 0 },
+    { label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: detail.segments.length > 0 },
+    { label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: true },
+  ];
+  return (
+    <div className="inline-view">
+      <button className="inline-view-back" onClick={onBack} aria-label={t.audio_card_title}>
+        <ChevronLeft size={16} strokeWidth={2} />
+        <span>{t.audio_card_title}</span>
+      </button>
+      <div className="inline-view-title">{t.download_title}</div>
+      <div className="inline-view-body">{t.download_body}</div>
+      <div className="inline-view-actions">
+        {rows.filter((r) => r.show).map((r) => (
+          <a
+            key={r.label}
+            className="clarify-btn bigbtn-full"
+            href={r.href}
+            download={r.file}
+          >
+            {r.label}
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -64,6 +125,16 @@ function ScreenVideo({
   // shimmer where the video will be, so switching back to the
   // Recording tab never shows an empty hole during decode.
   const [loaded, setLoaded] = React.useState(false);
+  // In-memory poster cache: first painted frame of each meeting,
+  // captured into a <canvas> data-URL after first load. Subsequent
+  // mounts of the same meeting paint the poster instantly while the
+  // <video> element re-decodes, killing the grey-flash on tab switch.
+  // Window-scope so it survives component remounts within one session.
+  const cachedPoster = React.useMemo(() => {
+    const w = window as unknown as { corderPosterCache?: Map<string, string> };
+    if (!w.corderPosterCache) w.corderPosterCache = new Map();
+    return w.corderPosterCache.get(detail.id) ?? null;
+  }, [detail.id]);
   // Tracks whether the audio (master clock) is currently playing.
   // Drives the Apple-style centred play overlay: visible while paused,
   // hidden during playback so the video is unobstructed.
@@ -297,11 +368,50 @@ function ScreenVideo({
           preload="metadata"
           className="screen-video"
           onLoadedMetadata={onLoadedMetadata}
-          onLoadedData={() => setLoaded(true)}
+          onLoadedData={(e) => {
+            setLoaded(true);
+            // Snapshot first frame into the session poster cache so
+            // the next time the user opens this meeting we paint a
+            // real preview instead of the grey ghost while the
+            // <video> element re-decodes.
+            try {
+              const v = e.currentTarget as HTMLVideoElement;
+              const w = window as unknown as { corderPosterCache?: Map<string, string> };
+              if (!w.corderPosterCache) w.corderPosterCache = new Map();
+              if (!w.corderPosterCache.has(detail.id) && v.videoWidth > 0) {
+                const c = document.createElement("canvas");
+                // Half-resolution is plenty for the card-size preview
+                // and keeps the data URL tiny (~30-60 kB per meeting).
+                c.width = Math.max(1, Math.round(v.videoWidth / 2));
+                c.height = Math.max(1, Math.round(v.videoHeight / 2));
+                const ctx = c.getContext("2d");
+                if (ctx) {
+                  ctx.drawImage(v, 0, 0, c.width, c.height);
+                  w.corderPosterCache.set(detail.id, c.toDataURL("image/jpeg", 0.7));
+                }
+              }
+            } catch {}
+          }}
           onError={() => setFailed(true)}
         />
-        {!loaded && !failed && <div className="screen-video-ghost" aria-hidden />}
-        {paused && <div className="screen-video-scrim" aria-hidden />}
+        {/* Poster overlay: instant preview from cache while <video>
+            re-decodes on meeting switch. Hidden the moment loaded
+            flips, so it never sticks around past the real frame. */}
+        {!loaded && !failed && cachedPoster && (
+          <img
+            src={cachedPoster}
+            className="screen-video-poster"
+            alt=""
+            aria-hidden
+            draggable={false}
+          />
+        )}
+        {!loaded && !failed && !cachedPoster && <div className="screen-video-ghost" aria-hidden />}
+        {/* No more paused scrim — the frosted play puck reads clearly
+            on its own, and the white veil broke the theme cross-fade
+            (it lived in front of the <video>, so during the wipe the
+            play button's backdrop-filter sampled the disappearing
+            scrim and snapped back in). */}
         {paused && (
           <div className="screen-video-play" aria-hidden>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden>
@@ -363,17 +473,21 @@ function ScreenVideo({
                 )}
               </div>
             )}
-            {/* Scrubber is absolutely positioned just under the video
-                (see .video-fs-scrub) — deliberately NOT part of the
-                FLIP box, so .video-fs-inner stays exactly the video's
-                rect and morphs onto the inline card without distortion.
-                It fades in on its own once the lightbox is open. */}
-            <FsScrubber
-              detail={detail}
-              currentTimeSec={currentTimeSec}
-              audioRef={audioRef}
-            />
           </div>
+          {/* Scrubber is a SIBLING of `.video-fs-inner`, not its
+              child — keeping it out of the FLIP box lets the inner
+              morph onto the inline card without distortion, and
+              anchoring to the overlay's bottom edge guarantees the
+              bar is on-screen regardless of how the centred video
+              + max-height-percentage cascade resolves (the previous
+              `top: calc(100% + 14px)` of `.video-fs-inner` slid the
+              bar off the bottom of the viewport on tall videos).
+              Same opacity fade via `.video-fs-overlay.shown`. */}
+          <FsScrubber
+            detail={detail}
+            currentTimeSec={currentTimeSec}
+            audioRef={audioRef}
+          />
         </div>,
         document.body
       )}
@@ -484,17 +598,17 @@ function FsScrubber({
  *  time / duration, and a clickable scrub line. The native <audio>
  *  element is kept hidden — we drive it through React state. */
 function AudioCard({
-  detail, audioRef, onTimeUpdate, t,
+  detail, audioRef, onTimeUpdate, onOpenDownload, t,
 }: {
   detail: MeetingDetail;
   audioRef: React.RefObject<HTMLAudioElement>;
   onTimeUpdate: (sec: number) => void;
+  onOpenDownload: () => void;
   t: T;
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState((detail.duration_ms ?? 0) / 1000);
   const [time, setTime] = React.useState(0);
-  const [dlOpen, setDlOpen] = React.useState(false);
 
   const togglePlay = () => {
     const a = audioRef.current; if (!a) return;
@@ -553,22 +667,13 @@ function AudioCard({
         </div>
         <button
           className="toolbar-icon-btn audio-download-btn"
-          onClick={() => setDlOpen(true)}
+          onClick={onOpenDownload}
           title={t.download_title}
           aria-label={t.download_title}
         >
           <Download size={16} strokeWidth={2} />
         </button>
       </div>
-      {dlOpen && (
-        <DownloadMenu
-          meetingId={detail.id}
-          hasVideo={!!detail.has_video}
-          hasTranscript={detail.segments.length > 0}
-          onClose={() => setDlOpen(false)}
-          t={t}
-        />
-      )}
       <audio
         ref={audioRef}
         src={audioSrc(detail.id)}
