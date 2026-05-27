@@ -382,11 +382,22 @@ private struct FlatButtonView: View {
     //   border-radius: 8px; padding: 13px 16px; font-size: 14px.
     // Weight: SF on macOS renders heavier than the same
     // `font-weight` rule in a browser, so we use `.light` (300)
-    // everywhere — visually matches the CSS 500 rule without the
-    // platform's "render bolder" bias.
+    // for the dark-fill roles (primary on light popover = dark text
+    // on white → SF subpixel AA already paints those glyphs as
+    // visually weighty; .regular tipped over into "bold"). Inverse-
+    // colour roles (secondary / danger / accent — light text on
+    // dark fill) get `.regular`: white-on-dark loses some weight to
+    // the dark surface eating into the glyph edges, so a touch
+    // more body keeps "Start recording" reading at the same visual
+    // weight as "Open library" right under it.
     private var cornerRadius: CGFloat   { 8 }
     private var fontSize: CGFloat       { 14 }
-    private var fontWeight: Font.Weight { .light }
+    private var fontWeight: Font.Weight {
+        switch role {
+        case .primary: return .regular
+        case .secondary, .danger, .accent: return .light
+        }
+    }
     private var verticalPadding: CGFloat { 13 }
 
     @ViewBuilder

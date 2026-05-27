@@ -5,8 +5,84 @@ import { RecordingPlaceholder } from "./RecordingPlaceholder";
 import { TranscribingBanner } from "./TranscribingBanner";
 import { SpeakersClarifyBanner } from "./SpeakersClarifyBanner";
 import { EmptyDeleteBanner } from "./EmptyDeleteBanner";
+import { RatingBanner } from "./RatingBanner";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import type { T } from "../i18n";
+
+// ──────────────────────────────────────────────────────────────────
+// Rating prompt state — surfaced once the user has seen N transcripts
+// so we ask for feedback only after they have actually used Corder.
+// All state lives in localStorage; no server round-trip until the
+// user clicks Send.
+// ──────────────────────────────────────────────────────────────────
+type RatingState = {
+  state: "pending" | "submitted" | "dismissed";
+  dismissedAt?: number;
+  transcriptsViewed: number;
+};
+
+const RATING_STATE_KEY = "corder.ratingPromptState";
+const RATING_SEEN_KEY = "corder.ratingPromptSeenIds";
+// TODO: revert to 3 after the rating-banner UX is signed off.
+// Lowered to 1 so the banner shows on the first ready transcript.
+const RATING_THRESHOLD = 1;
+const RATING_REDISMISS_MS = 7 * 24 * 3600 * 1000;
+const RATING_API_URL = "https://corder-api.empqwork.workers.dev/feedback";
+// Bumped manually when the native shell version moves. The wizard
+// already POSTs `version` to /signup so once we wire it through the
+// Swift bridge we can drop the hardcode; until then it stays in sync
+// with `Info.plist`.
+const RATING_APP_VERSION = "0.10.0";
+
+function readRatingState(): RatingState {
+  try {
+    const raw = localStorage.getItem(RATING_STATE_KEY);
+    if (!raw) return { state: "pending", transcriptsViewed: 0 };
+    const parsed = JSON.parse(raw) as RatingState;
+    if (!parsed || typeof parsed.transcriptsViewed !== "number") {
+      return { state: "pending", transcriptsViewed: 0 };
+    }
+    return parsed;
+  } catch {
+    return { state: "pending", transcriptsViewed: 0 };
+  }
+}
+
+function writeRatingState(s: RatingState) {
+  try { localStorage.setItem(RATING_STATE_KEY, JSON.stringify(s)); } catch {}
+}
+
+function readSeenIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(RATING_SEEN_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter((x) => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSeenIds(ids: Set<string>) {
+  try { localStorage.setItem(RATING_SEEN_KEY, JSON.stringify(Array.from(ids))); } catch {}
+}
+
+function shouldShowRatingBanner(s: RatingState): boolean {
+  if (s.state === "submitted") return false;
+  if (s.state === "pending") return s.transcriptsViewed >= RATING_THRESHOLD;
+  // dismissed: only re-show after the cooldown elapses AND the
+  // threshold is still met (it always is, since transcriptsViewed
+  // only grows).
+  if (s.state === "dismissed") {
+    return (
+      s.transcriptsViewed >= RATING_THRESHOLD &&
+      typeof s.dismissedAt === "number" &&
+      Date.now() - s.dismissedAt > RATING_REDISMISS_MS
+    );
+  }
+  return false;
+}
 
 interface Props {
   detail: MeetingDetail;
@@ -31,6 +107,57 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     detail.speakers.forEach((s) => map.set(s.id, s));
     return map;
   }, [detail.speakers]);
+
+  // Rating prompt: count UNIQUE ready-with-segments transcripts the
+  // user has seen, surface the banner once we cross the threshold.
+  // `ratingState` is mirrored in component state so onSubmit/onDismiss
+  // hide the banner immediately without a remount; localStorage is
+  // the source of truth across sessions.
+  const [ratingState, setRatingState] = React.useState<RatingState>(() => readRatingState());
+  React.useEffect(() => {
+    if (detail.status !== "ready" || detail.segments.length === 0) return;
+    const seen = readSeenIds();
+    if (seen.has(detail.id)) return;
+    seen.add(detail.id);
+    writeSeenIds(seen);
+    setRatingState((prev) => {
+      // Already submitted? Stop counting. Counting forever leaks
+      // localStorage and serves no purpose.
+      if (prev.state === "submitted") return prev;
+      const next: RatingState = { ...prev, transcriptsViewed: prev.transcriptsViewed + 1 };
+      writeRatingState(next);
+      return next;
+    });
+  }, [detail.id, detail.status, detail.segments.length]);
+
+  const showRating = shouldShowRatingBanner(ratingState);
+
+  const handleRatingSubmit = React.useCallback((rating: number, comment: string, email: string | null) => {
+    // Fire-and-forget so the UI flips instantly. We don't await the
+    // response — the user has already seen "Thanks!" via the toast
+    // and the banner is gone. Network failures are intentionally
+    // silent: a retry would be confusing and the data is low-stakes.
+    const body = JSON.stringify({ rating, comment, email, source: "corder-mac", version: RATING_APP_VERSION });
+    void fetch(RATING_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }).catch(() => { /* swallow */ });
+    const next: RatingState = { state: "submitted", transcriptsViewed: ratingState.transcriptsViewed };
+    writeRatingState(next);
+    setRatingState(next);
+    onToast(t.rating_thanks || "Thanks for the feedback!", "success");
+  }, [onToast, ratingState.transcriptsViewed, t]);
+
+  const handleRatingDismiss = React.useCallback(() => {
+    const next: RatingState = {
+      state: "dismissed",
+      dismissedAt: Date.now(),
+      transcriptsViewed: ratingState.transcriptsViewed,
+    };
+    writeRatingState(next);
+    setRatingState(next);
+  }, [ratingState.transcriptsViewed]);
 
   // Group consecutive segments by the same speaker for paragraph layout.
   const groups = React.useMemo(() => {
@@ -197,6 +324,13 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
       })}
       {filteredGroups.length === 0 && q && (
         <div className="transcript-empty">{t.transcript_no_match(q)}</div>
+      )}
+      {showRating && (
+        <RatingBanner
+          t={t}
+          onSubmit={handleRatingSubmit}
+          onDismiss={handleRatingDismiss}
+        />
       )}
       <div className="transcript-spacer" />
       <OverlayScrollbar scrollRef={containerRef} name="corder-sb-transcript" />

@@ -16,6 +16,23 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.11.0] — 2026-05-27
+
+### Added
+- Pick a Whisper Local model size in Settings: Turbo (1.5 GB), Small (480 MB), Base (150 MB) or Tiny (75 MB). Per-variant download tracking.
+- Inline "Download model" button under the Transcription model picker — primary green CTA that flips into an outlined progress bar with live percent as WhisperKit fetches the bytes.
+- Language picker moved into Settings as a third dropdown alongside Microphone and Transcription model.
+- Get help link in the profile menu (opens a mailto handoff to support).
+- Rating banner under finished transcripts (1–5 stars, optional comment when rating ≤ 4, optional email).
+
+### Changed
+- Microphone and Transcription model dropdowns use the in-app popover style instead of the native macOS select (matches the language picker and the rest of the UI).
+- Dropdowns auto-flip upward when there isn't room below the trigger.
+- Profile menu spacing reworked: 8 px breathing room around each separator, Get help sits in the same group as Sign out.
+
+### Fixed
+- Download button text now stays readable across the full progress bar (no more pink-on-green from the previous blend-mode attempt).
+
 ## [0.10.0] — 2026-05-27
 
 ### Added

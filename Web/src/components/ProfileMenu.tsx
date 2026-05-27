@@ -1,7 +1,6 @@
 import React from "react";
-import { Home, LogOut, Settings } from "lucide-react";
-import { LangPicker } from "./LangPicker";
-import type { Lang, T } from "../i18n";
+import { Home, LifeBuoy, LogOut, Settings } from "lucide-react";
+import type { T } from "../i18n";
 import { getSettings, signOut } from "../api";
 
 const AVATAR_COUNT = 9;
@@ -127,8 +126,6 @@ type Tier = "free" | "pro" | "max";
 export function ProfileMenu({
   onOpenSettings,
   onOpenDashboard,
-  lang,
-  onLangChange,
   t,
 }: {
   /// Kept in the signature for the parent's existing call site even
@@ -138,12 +135,6 @@ export function ProfileMenu({
   onToast?: (msg: string, kind?: "success" | "error") => void;
   onOpenSettings: () => void;
   onOpenDashboard: () => void;
-  /// Required now that the LangPicker lives inside the profile
-  /// popover (moved out of MainHeader). The picker doesn't read these
-  /// itself — they're forwarded down so the same Globe-icon dropdown
-  /// the MainHeader used to host renders here unchanged.
-  lang: Lang;
-  onLangChange: (next: Lang) => void;
   t: T;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -200,6 +191,18 @@ export function ProfileMenu({
 
   const goDashboard = () => { onOpenDashboard(); setOpen(false); setPickerOpen(false); };
   const goSettings = () => { onOpenSettings(); setOpen(false); setPickerOpen(false); };
+  /// Hands the mailto: off to the native bridge so the system default
+  /// mail client opens (WKWebView's own link handler refuses mailto:
+  /// without a navigation action). Same `corderOpenExternal` channel
+  /// used by Sidebar's Upgrade-to-Pro and Donate buttons.
+  const goHelp = () => {
+    try {
+      (window as unknown as { corderOpenExternal?: (url: string) => void })
+        .corderOpenExternal?.("mailto:hegona3@gmail.com?subject=Corder%20help");
+    } catch {}
+    setOpen(false);
+    setPickerOpen(false);
+  };
 
   const tierLabel =
     tier === "max" ? (t.profile_tier_max ?? "Max")
@@ -271,28 +274,22 @@ export function ProfileMenu({
           <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
             <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
           </button>
-          {/* Language picker — moved out of MainHeader's toolbar. Same
-              portal-popover the toolbar used to host, just anchored to
-              this row instead of a top-bar button. Reads as a normal
-              profile-popover row: Globe icon + "Language" label, tap
-              opens the flag-list picker. */}
-          <LangPicker
-            lang={lang}
-            onChange={onLangChange}
-            t={t}
-            className="profile-pop-item"
-            label={<span>{t.profile_language ?? "Language"}</span>}
-          />
-
           <button className="profile-pop-item" onClick={goSettings} role="menuitem">
             <Settings size={15} strokeWidth={2} /> {t.profile_account}
           </button>
 
-          {/* Sign out — clears local account state (licence/email/name)
-              and re-opens the Welcome wizard so the user can sign in
-              again as someone else. There is no server-side session
-              to invalidate yet; this is purely a local-state reset. */}
+          {/* Auxiliary group: Get help + Sign out. Same 8 px breathing
+              room as the Dashboard / Language / Settings group above,
+              created by the divider's symmetric `margin: 8px -8px`.
+              Get help opens a mailto handoff; Sign out clears local
+              account state (licence/email/name) and re-opens the
+              Welcome wizard so the user can sign in again as someone
+              else. There is no server-side session to invalidate yet;
+              this is purely a local-state reset. */}
           <div className="profile-pop-sep" />
+          <button className="profile-pop-item" onClick={goHelp} role="menuitem">
+            <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
+          </button>
           <button
             className="profile-pop-item profile-pop-item-danger"
             onClick={async () => {

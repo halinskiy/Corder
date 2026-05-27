@@ -465,7 +465,13 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 .profile-pop-sep {
   height: 1px;
   background: var(--border);
-  margin: 2px -8px 6px;
+  /* 8 px top + bottom so the Dashboard / Language / Settings group has
+     consistent breathing room above Dashboard and below Settings. The
+     Sign-out row that sits below the second separator inherits the
+     same gap, which keeps it visually isolated from the account group
+     without being visually buried — same spacing language as the rest
+     of the popover. */
+  margin: 8px -8px;
 }
 .profile-pop-item {
   width: 100%;
@@ -2046,6 +2052,129 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: color-mix(in srgb, var(--accent) 88%, #000);
 }
 .clarify-btn.accent:disabled { opacity: 0.5; }
+
+/* In-app rating prompt (RatingBanner) — sits at the BOTTOM of a
+   non-empty transcript, asks for 1-5 stars + optional comment +
+   optional email. Same outline card family as `.clarify-banner`;
+   adds a star row and a couple of inputs. The card is allowed to
+   stretch slightly wider than the 420 px clarify default because
+   the textarea reads better with room to breathe. */
+/* Match SpeakersClarifyBanner: full width of the transcript column,
+   no max-width clamp. Padding mirrors `.trans-banner` (14 16). */
+.rating-banner {
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg);
+}
+/* Stars sit ~8 px tighter than before (was gap: 6 → now gap: 0 with
+   2 px negative overlap), so the row reads as a single widget rather
+   than five free-standing icons. The button itself has 4 px internal
+   padding, so −2 px margin still leaves the hit-targets clear. */
+.rating-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+.rating-stars .rating-star + .rating-star { margin-left: -2px; }
+.rating-star {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  /* Empty stars are muted; filled stars pick up the brand accent.
+     `color` carries the icon stroke + the `fill="currentColor"` we
+     pass to lucide's <Star>, so a single property flips both. */
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: color 80ms ease, transform 80ms ease;
+}
+.rating-star:hover { color: var(--accent); }
+.rating-star.filled { color: var(--accent); }
+.rating-star:active { transform: scale(0.94); }
+/* Comment box + email field — inherit the input look used elsewhere
+   in the app (Settings vocab textarea, Search inputs). 1 px border,
+   `--bg` fill, no inner shadow, focus-ring matches `.search-input`. */
+/* Match the shared `input[type="text"|"search"]` base — same fill,
+   border, font-size and pill radius as `Search the transcript…`. The
+   email input picks the base styles up automatically (type="email"
+   falls back to the unprefixed selector); the textarea has its own
+   class so we restate the same tokens here and only change the radius
+   (pills look silly when multi-line) + resize. */
+.rating-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 72px;
+  outline: none;
+  transition: border-color 80ms ease, background 80ms ease;
+}
+.rating-textarea:hover {
+  background: var(--bg-hover);
+  border-color: #b8b8b4;
+}
+.rating-textarea:focus {
+  border-color: var(--fg-muted);
+  background: var(--bg-input);
+}
+.rating-textarea::placeholder { color: var(--fg-muted); }
+.rating-email {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  outline: none;
+  transition: border-color 80ms ease, background 80ms ease;
+}
+.rating-email:hover {
+  background: var(--bg-hover);
+  border-color: #b8b8b4;
+}
+.rating-email:focus {
+  border-color: var(--fg-muted);
+  background: var(--bg-input);
+}
+.rating-email::placeholder { color: var(--fg-muted); }
+/* Stacked — Send over Skip — but each button stays at the base
+   `button` pill size (8×14, 13 px, 999 px radius). NOT `.clarify-btn`
+   (which is the big 14×16 CTA used in EmptyDeleteBanner) and NOT
+   full-width: a full-width pill in a 480-ish-wide banner reads as a
+   "submit-form" CTA, way more visual weight than a rating prompt
+   needs. The pair sits flush-left under the email field. */
+.rating-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 2px;
+}
+.rating-actions .rating-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.rating-actions .rating-btn-primary:hover {
+  background: var(--accent-hover, var(--accent));
+  border-color: var(--accent-hover, var(--accent));
+}
+.rating-actions .rating-btn-primary:disabled { opacity: 0.5; }
+
 /* Full-width single big card button (Settings: hotkey capture, +Add).
    Fixed height so the label swapping (combo ⇄ "Press a combo…") never
    resizes it. */
@@ -3116,6 +3245,180 @@ body.resizing { cursor: col-resize; user-select: none; }
 .dark .mic-block .mic-select {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23bbb' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
 }
+
+/* ── Whisper Local download button ─────────────────────────────────
+   Reuses `.clarify-btn.accent` (same chip the Dashboard's
+   "Start recording" sits on) so the resting state is pixel-identical
+   to every other primary CTA in the product — same accent fill, same
+   white label, same hover. We only override two things:
+     • idle    → nothing (inherits .clarify-btn.accent verbatim,
+                 including hover-darken on `var(--accent-hover)`).
+     • loading → fill flips to white, outline stays accent, an inner
+                 accent rectangle grows left→right as
+                 `--wl-progress` advances. The label is rendered
+                 TWICE — once dark on the white background, once
+                 white clipped to the fill — so it stays readable
+                 whether the bar has reached it yet or not. */
+.wl-download-btn {
+  position: relative;
+  width: 100%;
+  margin-top: 10px;
+  overflow: hidden;
+}
+/* Resting `.clarify-btn.accent` paints over .wl-download-btn-fill;
+   force it transparent in the loading state so the inner fill is
+   visible and the white surface shows through. */
+.wl-download-btn.is-loading {
+  background: var(--bg);
+  color: var(--fg);
+  cursor: default;
+}
+.wl-download-btn.is-loading:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+.wl-download-btn-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--wl-progress, 0%);
+  background: var(--accent);
+  transition: width 280ms cubic-bezier(0.3, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+/* Two label layers, both centred via the parent's flex. The base
+   layer is dark text on the white surface; the overlay is white text
+   clipped to the same width as the fill — i.e. visible exactly
+   where the green bar has reached. Together they keep the label
+   readable across both halves of the bar with no blend-mode hacks. */
+.wl-download-btn-label {
+  position: relative;
+  z-index: 1;
+  /* Inherits the button's `color` — `#fff` from `.clarify-btn.accent`
+     in the idle state, then flipped to `var(--fg)` below when the
+     button enters `.is-loading` (the surface becomes white and the
+     label needs to read as dark text on the un-filled portion). */
+  color: inherit;
+}
+.wl-download-btn.is-loading .wl-download-btn-label { color: var(--fg); }
+.wl-download-btn-label-fill {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  z-index: 2;
+  /* `clip-path` over the same `--wl-progress` value as the fill
+     means the white label is revealed exactly where the green has
+     painted — no animation drift, no off-by-one between the bar
+     and the text colour switch. */
+  clip-path: inset(0 calc(100% - var(--wl-progress, 0%)) 0 0);
+  pointer-events: none;
+}
+/* Idle .clarify-btn.accent is solid green; we only need a small
+   visual breath above it from the picker. */
+.wl-download-btn:disabled.is-loading { opacity: 1; }
+
+/* ── SettingsSelect ────────────────────────────────────────────────
+   Custom portal-popover dropdown used by Microphone / Transcription
+   model / Language in Settings. Replaces the native <select> chrome
+   (dark macOS context menu) with the same `.profile-pop` shell that
+   LangPicker / ProfileMenu use, so every dropdown in the product
+   reads as one design language. Trigger is a full-width outlined
+   pill — matches `.clarify-btn` proportions so it stacks visually
+   with the toggle rows around it. */
+.settings-select-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 13px 14px 13px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  gap: 10px;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+.settings-select-trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  /* Pad the label so the chevron's reserved space on the right is
+     mirrored on the left — keeps the active label visually centred
+     under the row label, matching the old `text-align-last: center`. */
+  padding-left: 24px;
+}
+.settings-select-trigger-meta { color: var(--fg-muted); font-weight: 400; }
+.settings-select-chevron {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  /* Chevron stays fully visible on hover — the previous native-select
+     chrome painted the arrow into the background image, which the
+     hover-state background quietly painted over. */
+  transition: transform 120ms ease, color 80ms ease;
+}
+.settings-select-trigger:hover {
+  background: var(--bg-hover);
+  border-color: #b8b8b4;
+}
+.settings-select-trigger:hover .settings-select-chevron { color: var(--fg); }
+.settings-select-trigger.is-open { border-color: var(--fg-muted); }
+.settings-select-trigger.is-open .settings-select-chevron { transform: rotate(180deg); color: var(--fg); }
+.settings-select-trigger:disabled { opacity: 0.55; cursor: not-allowed; }
+.settings-select-trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Popover list — reuses `.profile-pop` shell (white card, 1 px
+   outline, soft elevation, 12 px radius, 8 px padding). The trigger
+   sets `width` inline so the popover hugs the trigger; option rows
+   stretch full-width like ProfileMenu's. */
+.settings-select-pop {
+  /* `width` is set inline from the trigger's rect — leave the default
+     `.profile-pop` 280 px out of the way. */
+  width: auto;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.settings-select-item {
+  /* `.profile-pop-item` already covers padding/radius/hover; we just
+     re-layout the row so the trailing meta + check sit at the right
+     edge while the label takes the remaining space. */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-select-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-select-item-meta {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+.settings-select-item .settings-select-check {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.settings-select-item.is-active { background: var(--bg-hover); }
+.settings-select-item.is-locked { opacity: 0.55; }
+.settings-select-item.is-locked:hover { background: transparent; }
 /* Full-width card button at the bottom of the block; tabular digits +
    nowrap so swapping combo ⇄ "Press a combo…" never resizes it. */
 .hk-capbtn {

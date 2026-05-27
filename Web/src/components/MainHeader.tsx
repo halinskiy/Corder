@@ -3,7 +3,7 @@ import { Moon, Archive as ArchiveIcon, Settings as SettingsIcon } from "lucide-r
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { useTheme } from "../theme";
-import { type Lang, type T } from "../i18n";
+import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip — breadcrumb
 /// on the left, global controls on the right. Used by both the
@@ -21,8 +21,6 @@ export function MainHeader({
   archiveOpen,
   onOpenSettings,
   onOpenDashboard,
-  lang,
-  onLangChange,
   onToast,
   t,
 }: {
@@ -40,8 +38,6 @@ export function MainHeader({
   /// Fires when the user clicks "Dashboard" in the profile popover —
   /// always returns to the landing surface (parent clears activeId).
   onOpenDashboard: () => void;
-  lang: Lang;
-  onLangChange: (next: Lang) => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
 }) {
@@ -78,8 +74,6 @@ export function MainHeader({
           onToast={onToast}
           onOpenSettings={onOpenSettings}
           onOpenDashboard={onOpenDashboard}
-          lang={lang}
-          onLangChange={onLangChange}
           t={t}
         />
       </div>

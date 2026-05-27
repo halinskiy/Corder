@@ -140,14 +140,17 @@ final class RecordingController {
         let endedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
         let durationMs = Int64(Date().timeIntervalSince(startedAt) * 1000)
 
-        // Auto-archive guard: silent recording AND under a minute.
-        // The user explicitly asked to limit auto-archive to short
-        // silent takes — a long silent run could be an intentional
-        // recording (timer / leaving the room) that the user wants
-        // kept around. Short silent ones are almost always a setup
-        // mistake (muted mic, wrong input, forgot the call) and the
-        // user wants them out of the main library instantly.
-        let shouldAutoArchive = capturedSilence && durationMs < 60_000
+        // Auto-archive in two cases:
+        //   1. Under 5 seconds — almost always a misclick (Start →
+        //      immediate Stop, Discord toast vanished, etc). User
+        //      asked to bin those without thinking.
+        //   2. Silent recording under a minute — setup mistake
+        //      (muted mic, wrong input, forgot the call). Long
+        //      silent runs are intentional (timer, leaving the
+        //      room) and stay in the main library.
+        let isUltraShort = durationMs < 5_000
+        let isShortSilent = capturedSilence && durationMs < 60_000
+        let shouldAutoArchive = isUltraShort || isShortSilent
 
         // Auto-transcribe OFF: keep the recording but DON'T enqueue and
         // DON'T mark it .transcribing (that would hang forever and
@@ -158,7 +161,10 @@ final class RecordingController {
         // Silent recordings skip transcription regardless of length
         // (nothing to transcribe). Only the SHORT silent ones also
         // auto-archive (see `shouldAutoArchive` above).
-        let autoTx = AppSettings.autoTranscribe && !capturedSilence
+        // Auto-transcribe skips silent takes (nothing to transcribe)
+        // AND ultra-short ones (5s isn't a meeting; even with audio,
+        // sending to Whisper just burns API quota for nothing).
+        let autoTx = AppSettings.autoTranscribe && !capturedSilence && !isUltraShort
         do {
             if var meeting = try AppContext.shared.repo.meeting(id: id) {
                 meeting.endedAt = endedAtMs
