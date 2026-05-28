@@ -25,6 +25,40 @@ enum DemoSeeder {
     /// lower than this number.
     static let currentSeedVersion: Int = 3
 
+    /// One-shot sweep for existing installs that already received the
+    /// demo rows: drop them and reset the flags so re-launches don't
+    /// re-create them. A user landing on Corder wants an empty Library,
+    /// not someone else's hand-written "Daily standup".
+    static func removeAll(repo: MeetingRepository) {
+        let seededIds = AppSettings.demoSeededIDs
+        var dropped = 0
+        for id in seededIds {
+            if (try? repo.deleteMeeting(id: id)) != nil { dropped += 1 }
+        }
+        // Title sweep too, in case older builds left rows without the
+        // stored id list (v1 didn't track them).
+        let knownTitles: Set<String> = [
+            "Daily standup",
+            "1:1 with Dima, quarterly plan",
+            "All hands, Q1 review",
+            // v1 (russian, in case any v1 installs survive)
+            "Standup — что блокирует и кто блестит",
+            "1:1 с Димой — план на квартал",
+            "All-hands — итоги Q1",
+        ]
+        if let all = try? repo.listMeetings() {
+            for row in all where row.title.map(knownTitles.contains) == true {
+                if (try? repo.deleteMeeting(id: row.id)) != nil { dropped += 1 }
+            }
+        }
+        AppSettings.setDemoSeededIDs([])
+        AppSettings.setDemoDataSeeded(true)
+        AppSettings.setDemoDataSeedVersion(Self.currentSeedVersion)
+        if dropped > 0 {
+            FileLogger.log("DemoSeeder.removeAll: dropped \(dropped) demo rows")
+        }
+    }
+
     /// Run the one-shot seed (or re-seed if the content version has
     /// moved). Existing user recordings are never touched: only the
     /// ids DemoSeeder owns get deleted on a version bump.

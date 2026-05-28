@@ -137,7 +137,9 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
   React.useEffect(() => {
     if (openSettingsNonce !== lastSettingsNonceRef.current) {
       lastSettingsNonceRef.current = openSettingsNonce;
-      setRightTab("settings");
+      // Toggle: a second tap on the Settings gear returns to the
+      // Recording tab — same affordance as the Archive button.
+      setRightTab((cur) => cur === "settings" ? "recording" : "settings");
     }
   }, [openSettingsNonce]);
   // Left-column tab: Transcript (default) | Summary. Summary is rendered

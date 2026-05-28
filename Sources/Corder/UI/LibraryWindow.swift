@@ -185,7 +185,10 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
                 return wv.convert(cssRect, to: nil)
             }
             let rects = interactive.compactMap(toWindowRect)
-            FileLogger.log("headerHits: \(rects.count) rects, first=\(rects.first.map { "\($0)" } ?? "nil")")
+            // Diagnostic log removed — this message used to fire on every
+            // header DOM mutation (theme switch, route change, tooltip
+            // open), filling `/tmp/corder.log` with hundreds of entries
+            // per minute. The bridge itself stays; just don't narrate it.
             // Resize the drag overlay to match the page-reported header
             // height so the bottom-border row is never a dead pixel.
             var newHeaderHeight: CGFloat? = nil

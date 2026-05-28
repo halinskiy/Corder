@@ -3320,6 +3320,20 @@ body.resizing { cursor: col-resize; user-select: none; }
    visual breath above it from the picker. */
 .wl-download-btn:disabled.is-loading { opacity: 1; }
 
+/* Dashboard slot under the Start/Stop primary button: shares the
+   `.wl-download-btn` look but lives inside `.clarify-actions-stack`
+   where the 8 px gap already provides breathing room. The 10 px
+   `margin-top` from the Settings version would make the chip float
+   too far below the Start button. The accompanying `.dash-prefetch-picker`
+   wraps the variant `SettingsSelect` so the trigger matches the chip
+   geometry (full width, same 8 px radius). */
+.dash-prefetch-pill {
+  margin-top: 0 !important;
+}
+.dash-prefetch-picker {
+  width: 100%;
+}
+
 /* ── Tooltip ──────────────────────────────────────────────────────
    Small floating chip rendered by the `<Tooltip>` component (see
    `components/Tooltip.tsx`). Anchored via inline `top` + `left` and

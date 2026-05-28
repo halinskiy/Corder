@@ -133,6 +133,10 @@ interface Strings {
   /// In-progress label that replaces the CTA while a download is
   /// running. " <percent>%" is appended at render time.
   settings_asr_downloading?: string;
+  /// Label on the Dashboard pill that shows the launch-time auto-
+  /// prefetch of the on-device Whisper model. Suffix " · <percent>%"
+  /// is appended at render time.
+  whisper_prefetch_label?: string;
   settings_sec_shortcut: string;
   settings_shortcut_label: string;
   settings_shortcut_desc: string;
@@ -397,9 +401,9 @@ const ru: Strings = {
   settings_autosummary: "Авторезюме",
   settings_autosummary_desc: "Готовить структурированное резюме сразу после транскрибации.",
   settings_delete_account_label: "Удалить аккаунт",
-  settings_delete_account_desc: "Безвозвратно удалит все записи, транскрипты, саммари и аудио из облака. Действие необратимо.",
+  settings_delete_account_desc: "Безвозвратно удалит аккаунт. Действие необратимо.",
   settings_api_label: "Доступ к API",
-  settings_api_desc: "Токен для подключения Corder к MCP-клиентам (Claude Desktop, Cursor) или прямых вызовов REST API. Любой, у кого есть токен, может читать ваши встречи — храните как пароль.",
+  settings_api_desc: "Используйте этот токен для подключения Corder к MCP-клиентам",
   settings_api_reveal: "Показать MCP-токен",
   settings_api_copy: "Копировать",
   settings_api_copied: "Скопировано",
@@ -434,6 +438,7 @@ const ru: Strings = {
   settings_asr_suffix_download: "1.5 GB загрузки",
   settings_asr_download_cta: "Скачать модель",
   settings_asr_downloading: "Загрузка…",
+  whisper_prefetch_label: "Скачиваем модель",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "На Intel-Mac Local Whisper недоступен и расшифровка пойдёт по облаку.",
   settings_sec_shortcut: "Горячая клавиша",
@@ -550,8 +555,8 @@ const ru: Strings = {
   no_meeting_selected_title: "Запись не выбрана",
   no_meeting_selected_body: "Выбери запись из списка слева, или нажми Start в menu bar.",
   dashboard_heading: "Готов когда ты.",
-  dashboard_subtitle: "Жми Start в меню-баре, шорткат, или попроси Corder поймать звонок автоматически.",
-  dashboard_subtitle_recording: "Жми Stop, шорткат, или закрой окно — Corder продолжит писать в фоне.",
+  dashboard_subtitle: "Начните запись в фоне.",
+  dashboard_subtitle_recording: "Corder продолжит писать в фоне.",
   rec_starting: "Запускаю…",
   rec_stopping: "Останавливаю…",
   sidebar_today: "Сегодня",
@@ -658,9 +663,9 @@ const en: Strings = {
   settings_autosummary: "Auto-summary",
   settings_autosummary_desc: "Generate a structured recap as soon as the transcript is ready.",
   settings_delete_account_label: "Delete account",
-  settings_delete_account_desc: "Permanently removes every recording, transcript, summary, and audio file from the cloud. This cannot be undone.",
+  settings_delete_account_desc: "Permanently removes your account. This cannot be undone.",
   settings_api_label: "API access",
-  settings_api_desc: "Use this token to connect Corder to MCP clients (Claude Desktop, Cursor) or call the REST API directly. Anyone with the token can read your meetings — treat it like a password.",
+  settings_api_desc: "Use this token to connect Corder to MCP clients",
   settings_api_reveal: "Reveal MCP token",
   settings_api_copy: "Copy",
   settings_api_copied: "Copied",
@@ -695,6 +700,7 @@ const en: Strings = {
   settings_asr_suffix_download: "1.5 GB download",
   settings_asr_download_cta: "Download model",
   settings_asr_downloading: "Downloading…",
+  whisper_prefetch_label: "Downloading model",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud.",
   settings_sec_shortcut: "Shortcut",
@@ -812,8 +818,8 @@ const en: Strings = {
   no_meeting_selected_title: "No recording selected",
   no_meeting_selected_body: "Pick a recording from the list on the left, or press Start in the menu bar.",
   dashboard_heading: "Ready when you are.",
-  dashboard_subtitle: "Hit Start in the menu bar, the shortcut, or let Corder catch the call automatically.",
-  dashboard_subtitle_recording: "Hit Stop, the shortcut, or close the window — Corder keeps recording in the background.",
+  dashboard_subtitle: "Start a recording in the background.",
+  dashboard_subtitle_recording: "Corder keeps recording in the background.",
   rec_starting: "Starting…",
   rec_stopping: "Stopping…",
   sidebar_today: "Today",
@@ -1059,8 +1065,8 @@ const uk: Strings = {
   no_meeting_selected_title: "Запис не вибрано",
   no_meeting_selected_body: "Обери запис зі списку зліва, або натисни Start у menu bar.",
   dashboard_heading: "Готовий, коли ти.",
-  dashboard_subtitle: "Тисни Start у меню-барі, шорткат, або попроси Corder зловити дзвінок автоматично.",
-  dashboard_subtitle_recording: "Тисни Stop, шорткат, або закрий вікно — Corder продовжить писати у фоні.",
+  dashboard_subtitle: "Почніть запис у фоні.",
+  dashboard_subtitle_recording: "Corder продовжить писати у фоні.",
   rec_starting: "Запускаю…",
   rec_stopping: "Зупиняю…",
   sidebar_today: "Сьогодні",

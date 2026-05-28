@@ -176,28 +176,66 @@ enum LocalWhisperTranscriber {
     /// packages by name; presence of the folder alone isn't enough
     /// because a partial download leaves the folder empty.
     nonisolated static func isModelDownloaded(_ variant: Variant) -> Bool {
+        // 1. If a download is currently in flight, we are not "ready"
+        // by definition — even if WhisperKit has already materialised
+        // some of the required `.mlmodelc` folders, they may still be
+        // empty/incomplete. The old logic flipped to true the instant
+        // those folders appeared and bounced the UI to "ready" while
+        // the bytes were still streaming in.
+        if currentProgress(variant) != nil { return false }
         let dir = modelFolderURL(variant)
         let fm = FileManager.default
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
             return false
         }
-        let required = ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc"]
+        // 2. HuggingFace-Hub.swift writes `<file>.incomplete` markers
+        // while it's downloading and removes them on success. If any
+        // marker is still present anywhere in the model folder tree,
+        // the download didn't finish.
+        if let walker = fm.enumerator(at: dir, includingPropertiesForKeys: nil) {
+            for case let url as URL in walker {
+                if url.lastPathComponent.hasSuffix(".incomplete") { return false }
+            }
+        }
+        // 3. Every variant publishes a full set of Core ML packages
+        // and a config.json. Missing any of them = partial download.
+        let required = [
+            "AudioEncoder.mlmodelc",
+            "TextDecoder.mlmodelc",
+            "MelSpectrogram.mlmodelc",
+            "config.json",
+        ]
         for name in required {
-            let url = dir.appendingPathComponent(name, isDirectory: true)
+            let url = dir.appendingPathComponent(name)
             if !fm.fileExists(atPath: url.path) { return false }
+        }
+        // 4. Each `.mlmodelc` package itself must contain its weights
+        // / coremldata blobs — WhisperKit creates the package shell
+        // first, then streams the bytes in. We assert the package is
+        // non-empty as a final sanity check.
+        for name in ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"] {
+            let pkg = dir.appendingPathComponent(name, isDirectory: true)
+            let contents = (try? fm.contentsOfDirectory(atPath: pkg.path)) ?? []
+            if contents.isEmpty { return false }
         }
         return true
     }
 
     /// Concrete on-disk URL for the variant's model folder under
-    /// `~/Library/Application Support/Corder/models/argmaxinc/whisperkit-coreml/<variant>/`.
-    /// WhisperKit preserves the HuggingFace repo path, so the folder we
-    /// hand to `WhisperKitConfig.modelFolder` is one level deeper than
-    /// the downloadBase.
+    /// `<modelsDir>/models/argmaxinc/whisperkit-coreml/<variant>/`.
+    /// WhisperKit's `download(...)` helper preserves the HuggingFace
+    /// repo path AND adds an extra `models/` segment under whatever you
+    /// pass as `downloadBase`, so the final folder lives **two** levels
+    /// deeper than `downloadBase`, not one. Reflect that here so
+    /// `isModelDownloaded` finds the bytes WhisperKit just wrote — the
+    /// earlier single-segment path silently mis-reported every download
+    /// as incomplete and bounced the UI back to "Download model" the
+    /// instant the (no-op fast) re-download returned.
     nonisolated private static var downloadBaseURL: URL { AppPaths.modelsDir }
     nonisolated static func modelFolderURL(_ variant: Variant) -> URL {
         downloadBaseURL
+            .appendingPathComponent("models", isDirectory: true)
             .appendingPathComponent("argmaxinc", isDirectory: true)
             .appendingPathComponent("whisperkit-coreml", isDirectory: true)
             .appendingPathComponent(variant.rawValue, isDirectory: true)
@@ -215,6 +253,18 @@ enum LocalWhisperTranscriber {
         guard isAvailable() else { throw LocalWhisperError.notAvailableOnIntel }
         try FileManager.default.createDirectory(at: AppPaths.modelsDir,
                                                 withIntermediateDirectories: true)
+
+        // Wait out any in-flight prewarm download for the same variant
+        // before kicking our own — otherwise the launch-time prefetch
+        // and a fast post-record transcribe end up calling
+        // `WhisperKit.download` concurrently and racing on the same
+        // model folder.
+        if !isModelDownloaded(variant), currentProgress(variant) != nil {
+            FileLogger.log("LocalWhisper: \(variant.rawValue) prewarm in flight — waiting")
+            while currentProgress(variant) != nil {
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
 
         if !isModelDownloaded(variant) {
             FileLogger.log("LocalWhisper: model not on disk — downloading \(variant.rawValue) into \(downloadBaseURL.path)")

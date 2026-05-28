@@ -3,9 +3,8 @@ import { createPortal } from "react-dom";
 import { X, Search } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  downloadWhisperLocal, deleteAccount, getMcpToken,
+  deleteAccount, getMcpToken,
   type Settings, type InstalledApp, type AudioInputDevice,
-  type WhisperLocalModel,
 } from "../api";
 import { LANGS, type Lang, type T } from "../i18n";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
@@ -118,54 +117,6 @@ export function SettingsPane({
         />
       </SoloCard>
 
-      {/* Microphone picker. Sits next to the screen-video toggle
-          because both belong to "what the recorder captures". Pre-feature
-          behaviour ("System default") stays available as the first option
-          and is the value used when `mic_device_uid` is empty/null. The
-          choice applies to the NEXT recording — we don't hot-swap a live
-          AVAudioEngine binding (would need a stop/start cycle). */}
-      <SoloCard>
-        <MicDevicePicker
-          devices={s?.audio_input_devices ?? []}
-          value={s?.mic_device_uid ?? ""}
-          disabled={!loaded}
-          onChange={(uid) => patch({ mic_device_uid: uid })}
-          t={t}
-        />
-      </SoloCard>
-
-      {/* ASR provider override. Same `.hk-block` shell as MicDevicePicker
-          so the two "single select with explainer" rows read identically.
-          Free tier sees a Pro-locked picker (Auto + Local always usable,
-          cloud options visually dimmed + ignored on click with a toast);
-          Pro/Max sees every option enabled. */}
-      <SoloCard>
-        <TranscriptionProviderPicker
-          value={s?.transcription_provider ?? "auto"}
-          tier={s?.tier ?? "free"}
-          variant={s?.whisper_local_variant}
-          models={s?.whisper_local_models ?? []}
-          appleSilicon={s?.apple_silicon ?? true}
-          disabled={!loaded}
-          onProviderChange={(v) => patch({ transcription_provider: v })}
-          onVariantChange={(v) => patch({ whisper_local_variant: v })}
-          onSettingsReplace={(next) => setS(next)}
-          t={t}
-        />
-      </SoloCard>
-
-      {/* Language picker. Same `.hk-block` shell as Microphone /
-          Transcription model — three "single select with explainer"
-          rows in a row read identically. The block deliberately uses
-          our SettingsSelect (NO search field) instead of the full
-          LangPicker (with flags + search): search makes sense for the
-          20-locale popover that lives in the header, but in a
-          settings row a chevron + a short scrollable list reads
-          consistent with Microphone and Transcription model. */}
-      <SoloCard>
-        <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
-      </SoloCard>
-
       <SoloCard>
         <Toggle
           label={t.settings_autotranscribe}
@@ -194,6 +145,39 @@ export function SettingsPane({
           disabled={!loaded}
           onChange={(v) => patch({ auto_summary: v })}
         />
+      </SoloCard>
+
+      {/* Microphone picker. Pre-feature behaviour ("System default")
+          stays available as the first option and is the value used
+          when `mic_device_uid` is empty/null. The choice applies to
+          the NEXT recording — we don't hot-swap a live AVAudioEngine
+          binding (would need a stop/start cycle). */}
+      <SoloCard>
+        <MicDevicePicker
+          devices={s?.audio_input_devices ?? []}
+          value={s?.mic_device_uid ?? ""}
+          disabled={!loaded}
+          onChange={(uid) => patch({ mic_device_uid: uid })}
+          t={t}
+        />
+      </SoloCard>
+
+      {/* Transcription model picker used to live here, but it now
+          lives under the Dashboard primary button (see
+          `WhisperPrefetchPill`): same control, single source of
+          truth, no risk of the two surfaces showing different
+          values. Don't reintroduce a separate picker in Settings. */}
+
+      {/* Language picker. Same `.hk-block` shell as Microphone
+          so the two "single select with explainer" rows read identically.
+          The block deliberately uses
+          our SettingsSelect (NO search field) instead of the full
+          LangPicker (with flags + search): search makes sense for the
+          20-locale popover that lives in the header, but in a
+          settings row a chevron + a short scrollable list reads
+          consistent with Microphone and Transcription model. */}
+      <SoloCard>
+        <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
       </SoloCard>
 
       <div className="settings-divider" />
@@ -471,194 +455,6 @@ function MicDevicePicker({
 /// so the upgrade path is discoverable — clicking one shows a toast
 /// instead of switching. Apple Silicon is detected server-side; on
 /// Intel a small warning line surfaces because WhisperKit's Core ML
-/// kernels are arm64-only and the pipeline silently falls back to
-/// the cloud at runtime.
-/// The picker now has TWO axes: cloud-vs-local provider + (for local)
-/// which Whisper variant. We flatten them into ONE SettingsSelect so
-/// the row reads as a single choice — easier than nested menus. The
-/// list is:
-///   • Auto (recommended) — clears the override
-///   • Whisper {Turbo | Small | Base | Tiny} — pins `.whisperLocal`
-///     AND a variant; meta shows `· 75 MB` / `· ready` per model
-///   • Whisper Cloud (OpenAI) — pins `.whisper`
-///   • Gemini 2.5 Flash — pins `.gemini`
-/// Free tier sees the cloud rows disabled (locked toast on click);
-/// every Whisper Local row stays selectable so the user can pick a
-/// model size to download even before transcribing.
-type PickerValue = "auto" | "gemini" | "whisper" | `whisperLocal:${string}`;
-
-function TranscriptionProviderPicker({
-  value, tier, variant, models, appleSilicon, disabled,
-  onProviderChange, onVariantChange, onSettingsReplace, t,
-}: {
-  value: "auto" | "gemini" | "whisper" | "whisperLocal";
-  tier: "free" | "pro" | "max";
-  variant?: string;
-  models: WhisperLocalModel[];
-  appleSilicon: boolean;
-  disabled?: boolean;
-  onProviderChange: (v: "auto" | "gemini" | "whisper" | "whisperLocal") => void;
-  onVariantChange: (v: string) => void;
-  /// Replaces the parent's Settings snapshot after a /api/whisper-local/download
-  /// call (the response carries a fresh state). Used so a `Download`
-  /// click flips the inline button into "downloading…" without
-  /// waiting for the next poll tick.
-  onSettingsReplace: (next: Settings) => void;
-  t: T;
-}) {
-  const free = tier === "free";
-  const desc = free
-    ? (t.settings_asr_desc_free ??
-       "Local Whisper on your Mac: free, offline. Pro and Max unlock cloud models.")
-    : (t.settings_asr_desc_paid ??
-       "You can pin a different one.");
-  const lockedToast = t.settings_asr_locked_toast ?? "Upgrade to Pro to use cloud models";
-  const sufReady = t.settings_asr_suffix_ready ?? "ready";
-  const sufPro = t.settings_asr_suffix_pro ?? "Pro+";
-
-  // Compose the flat option list. Whisper Local variants come from
-  // the server (`models`) so size labels and ready-state stay
-  // authoritative across launches and partial downloads.
-  const options: SettingsSelectOption<PickerValue>[] = [
-    { value: "auto", label: t.settings_asr_auto ?? "Auto (recommended)" },
-    ...models.map<SettingsSelectOption<PickerValue>>((m) => ({
-      value: `whisperLocal:${m.id}` as PickerValue,
-      label: m.label,
-      meta: m.ready ? sufReady : m.size_label,
-    })),
-    {
-      value: "whisper",
-      label: t.settings_asr_cloud_whisper ?? "Whisper Cloud (OpenAI)",
-      meta: free ? sufPro : undefined,
-      disabled: free,
-    },
-    {
-      value: "gemini",
-      label: t.settings_asr_gemini ?? "Gemini 2.5 Flash",
-      meta: free ? sufPro : undefined,
-      disabled: free,
-    },
-  ];
-
-  // Reconstruct the picker's current value from the two pieces of
-  // server state. When provider is whisperLocal we glue the variant
-  // id; otherwise it's just the provider name.
-  const current: PickerValue = value === "whisperLocal"
-    ? (`whisperLocal:${variant ?? (models[0]?.id ?? "openai_whisper-large-v3_turbo")}` as PickerValue)
-    : value;
-
-  const onChange = (v: PickerValue) => {
-    if (v.startsWith("whisperLocal:")) {
-      const id = v.slice("whisperLocal:".length);
-      onProviderChange("whisperLocal");
-      onVariantChange(id);
-      return;
-    }
-    onProviderChange(v as "auto" | "gemini" | "whisper");
-  };
-  const onLocked = (_: PickerValue) => {
-    try {
-      window.dispatchEvent(new CustomEvent("corder-toast", { detail: { text: lockedToast } }));
-    } catch { /* no-op */ }
-  };
-
-  // The model below the picker — the one that gets the Download
-  // button. Always reflects the currently picked variant when the
-  // provider is whisperLocal; nothing renders otherwise.
-  const activeModel: WhisperLocalModel | undefined = value === "whisperLocal"
-    ? models.find((m) => m.id === (variant ?? models[0]?.id))
-    : undefined;
-
-  return (
-    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
-         aria-label={t.settings_asr_label ?? "Transcription model"}>
-      <div className="settings-row-label">
-        {t.settings_asr_label ?? "Transcription model"}
-      </div>
-      <div className="settings-row-desc">{desc}</div>
-      {!appleSilicon && (
-        <div className="settings-row-desc" style={{ opacity: 0.75 }}>
-          {t.settings_asr_intel_warn ??
-            "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud."}
-        </div>
-      )}
-      <SettingsSelect<PickerValue>
-        value={current}
-        options={options}
-        disabled={disabled}
-        onChange={onChange}
-        onLockedClick={onLocked}
-        ariaLabel={t.settings_asr_label ?? "Transcription model"}
-      />
-      {activeModel && (
-        <WhisperLocalDownloadButton
-          model={activeModel}
-          onStart={async () => {
-            try {
-              const next = await downloadWhisperLocal(activeModel.id);
-              onSettingsReplace(next);
-            } catch { /* polling will surface it */ }
-          }}
-          t={t}
-        />
-      )}
-    </div>
-  );
-}
-
-/// Three-state CTA under the Transcription model picker:
-///   idle      → primary green "Download model · 1.5 GB"
-///   loading   → secondary outline pill with a green fill that grows
-///               left → right as `progress` advances; label shows
-///               "Downloading… 42%"
-///   ready     → nothing rendered (the picker meta already shows
-///               "ready"; a second CTA would be visual noise)
-/// Single component because the geometry stays IDENTICAL across the
-/// two visible states (same height/width/font); only the fill + label
-/// flip. Same trick as a typical progress-button on the web.
-function WhisperLocalDownloadButton({
-  model, onStart, t,
-}: {
-  model: WhisperLocalModel;
-  onStart: () => void | Promise<void>;
-  t: T;
-}) {
-  if (model.ready) return null;
-  const downloading = typeof model.progress === "number";
-  const pct = downloading ? Math.max(0, Math.min(100, Math.round((model.progress ?? 0) * 100))) : 0;
-  const label = downloading
-    ? `${t.settings_asr_downloading ?? "Downloading…"} ${pct}%`
-    : `${t.settings_asr_download_cta ?? "Download model"} · ${model.size_label}`;
-  // Idle reuses `.clarify-btn.accent` so the visuals match
-  // Dashboard's "Start recording" — same accent fill, same white
-  // label, same hover. Loading overlays a fill + a second label
-  // clipped to the bar so readability stays clean across both
-  // halves of the progress.
-  const cls = "clarify-btn accent wl-download-btn"
-    + (downloading ? " is-loading" : "");
-  return (
-    <button
-      type="button"
-      className={cls}
-      style={downloading ? ({ ["--wl-progress" as string]: `${pct}%` }) : undefined}
-      onClick={downloading ? undefined : () => onStart()}
-      disabled={downloading}
-      aria-label={label}
-    >
-      {downloading && <span className="wl-download-btn-fill" aria-hidden />}
-      <span className="wl-download-btn-label">{label}</span>
-      {downloading && (
-        <span className="wl-download-btn-label-fill" aria-hidden>{label}</span>
-      )}
-    </button>
-  );
-}
-
-/// Language picker block. Same `.hk-block` shell as Microphone /
-/// Transcription model, so all three "single select with explainer"
-/// rows in Settings read identically. Uses `SettingsSelect` rather
-/// than the full `LangPicker` (the latter carries SVG flags + a
-/// search input that only earn their keep in the toolbar popover).
 function LanguageBlock({
   lang, onChange, t,
 }: {
