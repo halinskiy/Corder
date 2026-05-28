@@ -1,15 +1,60 @@
 import AppKit
 import WebKit
 
-/// Invisible 28pt-tall view at the top of the window that forwards mouseDown
-/// to the window's drag handler. WKWebView normally swallows mouse events,
-/// so isMovableByWindowBackground alone doesn't make the window draggable.
-private final class DragView: NSView {
+/// Full-coverage (64 pt × entire window width) invisible overlay over
+/// the React `.main-header` band. Drives:
+///
+/// 1. **Drag**: single mousedown + movement past `dragThreshold` (4 pt)
+///    → `performDrag`, AppKit moves the window normally.
+/// 2. **Click forwarding**: single mousedown + release without movement
+///    → forward into the WKWebView via `elementFromPoint(x, y)` +
+///    synthetic mousedown/mouseup/click. Breadcrumb click-to-rename
+///    keeps working.
+/// 3. **Double-click**: honour the user's "Double-click a window's
+///    title bar to…" preference (Maximize / Minimize / Fill / nothing).
+///
+/// To preserve native hover + click on real interactive elements
+/// (toolbar buttons, profile avatar, language picker), `hitTest`
+/// returns `nil` whenever the point falls inside one of the live
+/// element rects the page reports via the `headerHits` JS bridge. Those
+/// events then propagate to the underlying WKWebView, exactly as if the
+/// overlay wasn't there. Drag still works in every other pixel — over
+/// breadcrumb text, between toolbar icons, above/below them — because
+/// hover-less geometry is the only thing the overlay covers.
+///
+/// This replaces the earlier "L-shape + 28 pt button band carve-out"
+/// approach, which left the gaps between toolbar buttons mute (no drag,
+/// no hover). It also replaces the JS-bridge `postMessage('drag')` path
+/// from the 0.11.0 line, which raced `NSApp.currentEvent` and silently
+/// failed in most of the header.
+private final class HeaderDragView: NSView {
+    /// Bounding rects of every interactive element inside the React
+    /// `.main-header`, in **window coordinates** (origin bottom-left).
+    /// The page repopulates this on mount, resize, language switch,
+    /// theme switch, and any DOM mutation inside `.main-header`.
+    /// Read by `hitTest` to decide pass-through vs. drag.
+    static var interactiveRects: [CGRect] = []
+
+    weak var webView: WKWebView?
+    private let dragThreshold: CGFloat = 4
+
+    /// Pass-through hit test: if the point lands inside a known
+    /// interactive element rect, AppKit routes the event past this
+    /// overlay to the WKWebView (which then handles hover and click
+    /// natively). Otherwise we claim the event so `mouseDown` can run
+    /// the drag/click-forward logic.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let sv = superview else { return super.hitTest(point) }
+        let windowPoint = sv.convert(point, to: nil)
+        for rect in Self.interactiveRects {
+            if rect.contains(windowPoint) {
+                return nil
+            }
+        }
+        return super.hitTest(point)
+    }
+
     override func mouseDown(with event: NSEvent) {
-        // Double-click on the title-bar area: honour the user's
-        // "Double-click a window's title bar to…" preference (Maximize /
-        // Minimize / Fill / nothing). Without this branch our performDrag
-        // call swallows the second click and the window never zooms.
         if event.clickCount >= 2 {
             let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
             switch action {
@@ -22,16 +67,77 @@ private final class DragView: NSView {
             }
             return
         }
-        window?.performDrag(with: event)
+
+        let startPoint = event.locationInWindow
+        var dragged = false
+
+        // Spin the run loop on the live mouse-tracking mode until the
+        // user either moves past the threshold (drag) or releases (click).
+        trackingLoop: while let next = window?.nextEvent(
+            matching: [.leftMouseUp, .leftMouseDragged],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            switch next.type {
+            case .leftMouseUp:
+                break trackingLoop
+            case .leftMouseDragged:
+                let dx = abs(next.locationInWindow.x - startPoint.x)
+                let dy = abs(next.locationInWindow.y - startPoint.y)
+                if dx > dragThreshold || dy > dragThreshold {
+                    // performDrag takes over until the user releases.
+                    window?.performDrag(with: event)
+                    dragged = true
+                    break trackingLoop
+                }
+            default:
+                break
+            }
+        }
+
+        if !dragged {
+            forwardClick(at: startPoint)
+        }
     }
-    override var mouseDownCanMoveWindow: Bool { true }
+
+    /// Synthesises a click into the WKWebView at the given window-space
+    /// point so the React onClick (breadcrumb rename, anything else) fires
+    /// even though AppKit swallowed the original mousedown.
+    private func forwardClick(at windowPoint: NSPoint) {
+        guard let wv = webView else { return }
+        let viewPoint = wv.convert(windowPoint, from: nil)
+        // WKWebView's coordinate system flips with the NSView convention:
+        // AppKit Y grows upward from the bottom-left, CSS Y grows downward
+        // from the top-left.
+        let cssX = viewPoint.x
+        let cssY = wv.bounds.height - viewPoint.y
+        let js = """
+        (function() {
+          var x = \(cssX), y = \(cssY);
+          var el = document.elementFromPoint(x, y);
+          if (!el) return;
+          var opts = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 };
+          el.dispatchEvent(new MouseEvent('mousedown', opts));
+          el.dispatchEvent(new MouseEvent('mouseup', opts));
+          el.dispatchEvent(new MouseEvent('click', opts));
+        })();
+        """
+        wv.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    // We do our own tracking + performDrag so AppKit shouldn't also
+    // treat this view as window-draggable background (would double-fire).
+    override var mouseDownCanMoveWindow: Bool { false }
 }
 
 /// Receives messages from JavaScript:
-///   - "drag" → starts a window drag (mousedown on header background)
 ///   - "copy" with payload → copies the payload to NSPasteboard. WKWebView's
 ///     `navigator.clipboard.writeText` and `document.execCommand('copy')` are
 ///     both unreliable inside our window, so we route Copy through native.
+///   - "openExternal" with URL → hands the URL to NSWorkspace.shared.open.
+///   - "themeColor" with #rrggbb → recolours the window background.
+///   - "blobVisible" with Bool → toggles the inline recording blob.
 private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
     weak var window: NSWindow?
     /// Toggles the inline recording blob. The blob is a native NSView
@@ -40,6 +146,9 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
     /// float on top of the dimmed video. The page calls
     /// `corderSetBlobVisible(false)` on open and `(true)` on close.
     var onBlobVisible: ((Bool) -> Void)?
+    /// The native overlay covering `.main-header`. We update its frame
+    /// and its `interactiveRects` from `headerHits` messages.
+    weak var headerDragView: HeaderDragView?
     init(window: NSWindow?) { self.window = window }
     func userContentController(_ userContentController: WKUserContentController,
                                 didReceive message: WKScriptMessage) {
@@ -49,48 +158,55 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async { [weak self] in
                 self?.onBlobVisible?(visible)
             }
-        case "drag":
-            // This handler is already delivered on the main thread.
-            // The previous `DispatchQueue.main.async` hop deferred the
-            // drag to a later run-loop turn, by which point
-            // `NSApp.currentEvent` was usually no longer the live
-            // mousedown — so `performDrag` was never called and only
-            // the top native DragView strip (which drags synchronously
-            // in its own `mouseDown`) actually moved the window. Acting
-            // synchronously here, while the mousedown is still the
-            // current event, makes the whole `.main-header` background
-            // draggable, not just the top 28 px.
-            guard let event = NSApp.currentEvent else { return }
-            // `NSEvent.clickCount` ONLY exists on mouse-click events;
-            // reading it on any other type throws
-            // NSInternalInconsistencyException → SIGABRT. Gate the read
-            // on the event type.
-            let clickTypes: Set<NSEvent.EventType> = [
-                .leftMouseDown, .leftMouseUp,
-                .rightMouseDown, .rightMouseUp,
-                .otherMouseDown, .otherMouseUp,
-            ]
-            // Double-click on the header behaves like a real title bar:
-            // honour the user's "Double-click a window's title bar to…"
-            // preference. Without this the per-mousedown performDrag
-            // swallows the gesture and the window never zooms.
-            if clickTypes.contains(event.type), event.clickCount >= 2 {
-                let action = UserDefaults.standard
-                    .string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
-                switch action {
-                case "Minimize":
-                    self.window?.performMiniaturize(nil)
-                case "Maximize", "Fill":
-                    self.window?.performZoom(nil)
-                default:
-                    break
-                }
+        case "headerHits":
+            // Payload: { header: {x,y,w,h}, interactive: [{x,y,w,h}, ...] }
+            // All values are in CSS pixels with origin top-left of the
+            // WKWebView. We convert to window coordinates (origin
+            // bottom-left of contentView) and hand the rect list to
+            // HeaderDragView for its hit-test.
+            guard let dict = message.body as? [String: Any],
+                  let dragView = self.headerDragView,
+                  let wv = dragView.webView,
+                  let interactive = dict["interactive"] as? [[String: Any]] else {
+                FileLogger.log("headerHits: bad payload \(type(of: message.body))")
                 return
             }
-            // performDrag is only valid for a mouse-drag/-down event;
-            // ignore anything else rather than risk another throw.
-            if clickTypes.contains(event.type) || event.type == .leftMouseDragged {
-                self.window?.performDrag(with: event)
+            // WKWebView reports `isFlipped == true`, so its coordinate
+            // system already matches CSS (top-left origin, Y grows
+            // downward). Build the rect in WV-coords and let AppKit's
+            // `convert(_:to:)` do the flip into window coords.
+            func toWindowRect(_ raw: [String: Any]) -> CGRect? {
+                guard let x = (raw["x"] as? NSNumber)?.doubleValue,
+                      let y = (raw["y"] as? NSNumber)?.doubleValue,
+                      let w = (raw["w"] as? NSNumber)?.doubleValue,
+                      let h = (raw["h"] as? NSNumber)?.doubleValue else { return nil }
+                let cssRect = NSRect(x: CGFloat(x), y: CGFloat(y),
+                                     width: CGFloat(w), height: CGFloat(h))
+                return wv.convert(cssRect, to: nil)
+            }
+            let rects = interactive.compactMap(toWindowRect)
+            FileLogger.log("headerHits: \(rects.count) rects, first=\(rects.first.map { "\($0)" } ?? "nil")")
+            // Resize the drag overlay to match the page-reported header
+            // height so the bottom-border row is never a dead pixel.
+            var newHeaderHeight: CGFloat? = nil
+            if let header = dict["header"] as? [String: Any],
+               let h = (header["h"] as? NSNumber)?.doubleValue {
+                newHeaderHeight = CGFloat(h)
+            }
+            DispatchQueue.main.async {
+                HeaderDragView.interactiveRects = rects
+                if let h = newHeaderHeight,
+                   let win = dragView.window,
+                   let contentView = win.contentView {
+                    let contentH = contentView.bounds.height
+                    let contentW = contentView.bounds.width
+                    dragView.frame = NSRect(
+                        x: 0,
+                        y: contentH - h,
+                        width: contentW,
+                        height: h
+                    )
+                }
             }
         case "themeColor":
             // The page reports its resolved --bg (e.g. "#ffffff" /
@@ -309,36 +425,70 @@ final class LibraryWindow: NSWindowController {
         let cfg = WKWebViewConfiguration()
         cfg.defaultWebpagePreferences.allowsContentJavaScript = true
 
-        // Bridge: page can post {drag, copy} messages to native.
+        // Bridge: page can post {copy, openExternal, themeColor,
+        // blobVisible} messages to native. The old "drag" channel was
+        // removed — the header is fully native-draggable via
+        // `HeaderDragView` now, no async JS round-trip needed.
         let handler = WebBridgeHandler(window: win)
-        cfg.userContentController.add(handler, name: "drag")
         cfg.userContentController.add(handler, name: "themeColor")
         cfg.userContentController.add(handler, name: "copy")
         cfg.userContentController.add(handler, name: "openExternal")
         cfg.userContentController.add(handler, name: "blobVisible")
+        cfg.userContentController.add(handler, name: "headerHits")
         let bridgeJS = """
         (function() {
-          // Drag: mousedown on the header (except over real controls)
-          // posts a message; Swift calls `performDrag` on the live
-          // event. `preventDefault()` on the SPAN targets stops
-          // WebKit from claiming the mousedown for its own text-cursor
-          // / selection routine — without it, clicking the
-          // `.breadcrumb-rename` title (which carries `cursor: text`)
-          // hands the mouse to WebKit's caret machinery and AppKit
-          // never gets the drag. We skip `preventDefault` for the
-          // header container itself so empty whitespace remains a
-          // first-class draggable region. Click-to-rename still
-          // fires: click is a synthetic mouseup→same-target event
-          // that `preventDefault` on mousedown does not cancel.
-          document.addEventListener('mousedown', function(e) {
-            const header = e.target.closest && e.target.closest('.main-header');
+          // Header drag/hover hit-test: report the bounding rects of
+          // every interactive element inside `.main-header` so the
+          // native overlay knows which pixels should pass through to
+          // the WKWebView. Anything not in this list becomes drag.
+          // Re-runs on resize, language switch, theme switch, and any
+          // DOM mutation inside the header. Debounced via rAF so a
+          // burst of mutations only fires one report.
+          var __headerHitsScheduled = false;
+          function __reportHeaderHits() {
+            var header = document.querySelector('.main-header');
             if (!header) return;
-            if (e.target.closest('button, input, select, textarea, a')) return;
-            if (e.target !== header) {
-              try { e.preventDefault(); } catch (_) {}
+            var hRect = header.getBoundingClientRect();
+            // Anything the user might want to click natively. We do
+            // NOT include `.breadcrumb-rename`: it's draggable AND
+            // click-to-rename — the native overlay forwards the click
+            // via elementFromPoint when there's no drag movement.
+            var sel = '.main-header button, .main-header a, .main-header input, .main-header select, .main-header textarea, .main-header [role="button"]';
+            var els = document.querySelectorAll(sel);
+            var interactive = [];
+            for (var i = 0; i < els.length; i++) {
+              var r = els[i].getBoundingClientRect();
+              if (r.width > 0 && r.height > 0) {
+                interactive.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+              }
             }
-            window.webkit.messageHandlers.drag.postMessage('drag');
-          }, true);
+            window.webkit.messageHandlers.headerHits.postMessage({
+              header: { x: hRect.left, y: hRect.top, w: hRect.width, h: hRect.height },
+              interactive: interactive
+            });
+          }
+          function __scheduleHeaderHits() {
+            if (__headerHitsScheduled) return;
+            __headerHitsScheduled = true;
+            requestAnimationFrame(function() {
+              __headerHitsScheduled = false;
+              __reportHeaderHits();
+            });
+          }
+          window.addEventListener('load', __scheduleHeaderHits);
+          window.addEventListener('resize', __scheduleHeaderHits);
+          // Initial report once React has had a chance to render.
+          setTimeout(__scheduleHeaderHits, 50);
+          setTimeout(__scheduleHeaderHits, 250);
+          setTimeout(__scheduleHeaderHits, 1000);
+          // Live updates: a MutationObserver on body picks up route
+          // changes (Dashboard ↔ MeetingView swap the breadcrumb +
+          // toolbar contents), theme switch, language switch, etc.
+          try {
+            new MutationObserver(__scheduleHeaderHits).observe(document.body, {
+              subtree: true, childList: true, attributes: true, characterData: false
+            });
+          } catch (_) {}
 
           // Copy: page calls window.corderCopy(text) and we route through native
           // pasteboard, bypassing WKWebView's flaky clipboard support.
@@ -416,48 +566,30 @@ final class LibraryWindow: NSWindowController {
         win.contentView?.addSubview(wv)
         self.webView = wv
 
-        // Drag region for the header — full 64 pt of header height,
-        // covering left side + breadcrumb + gap up to the right
-        // toolbar (which is ~320 pt of buttons + margins). The right
-        // 320 pt are left untouched so WKWebView keeps handling
-        // toolbar button clicks natively. JS-bridge mousedown handler
-        // is still the secondary path for any pixel inside the
-        // right-side toolbar's empty gaps.
-        let toolbarReserve: CGFloat = 320
+        // Single full-width native overlay across the React
+        // `.main-header` band. `hitTest` returns nil when the point
+        // lands inside one of the live interactive rects the page
+        // posts via the `headerHits` bridge — those events propagate
+        // to the WKWebView so buttons keep hover + click. Everywhere
+        // else (over breadcrumb text, between buttons, above/below
+        // them, all the way down to the bottom border) the overlay
+        // claims the event and drives drag/click-forward.
+        //
+        // The overlay's frame is also re-fit to the page's reported
+        // header rect on every "headerHits" message — guarantees the
+        // bottom border row isn't a dead pixel.
+        let initialHeaderHeight: CGFloat = 64
         let contentH = win.contentView!.bounds.height
         let contentW = win.contentView!.bounds.width
-        // 28 pt = native title-bar height (the strip with the
-        // traffic-light buttons). The earlier 90 pt covered the
-        // whole React `.main-header` band — which "fixed" drag in
-        // the lower header but ALSO swallowed every breadcrumb /
-        // toolbar-button click in that band (DragView's `mouseDown`
-        // starts the window drag synchronously, never letting the
-        // mousedown reach WebView). Now: native strip handles drag
-        // in the area where there are no React interactive elements
-        // (above the React header), and the JS bridge below handles
-        // drag-on-empty-area inside `.main-header` itself — clicks
-        // on breadcrumb crumbs / toolbar icons reach React.
-        let headerHeight: CGFloat = 28
-        let dragView = DragView(frame: NSRect(
+        let dragView = HeaderDragView(frame: NSRect(
             x: 0,
-            y: contentH - headerHeight,
-            width: max(0, contentW - toolbarReserve),
-            height: headerHeight))
-        // width AND y track resize: width follows .width autoresize,
-        // and the top-anchor follows .minYMargin so the strip stays
-        // pinned to the window's top edge as the window grows.
+            y: contentH - initialHeaderHeight,
+            width: contentW,
+            height: initialHeaderHeight))
+        dragView.webView = wv
         dragView.autoresizingMask = [.width, .minYMargin]
         win.contentView?.addSubview(dragView)
-
-        // Drag for the rest of the header (below the top 28-pt strip)
-        // is handled by the JS bridge: mousedown on `.main-header`
-        // background → postMessage('drag') → Swift `performDrag`.
-        // An earlier version used a native `NSEvent` local monitor
-        // that asked the page synchronously whether the cursor was
-        // on a clickable element; the RunLoop spin to wait for the
-        // JS reply turned out to fire too slowly and the monitor
-        // treated every click as a drag, breaking every button in
-        // the header. JS bridge is reliable enough on its own.
+        handler.headerDragView = dragView
 
         // Same SwiftUI blob the floating HUD uses, embedded directly in
         // the bottom-right of the Library window. Reused — not a copy.

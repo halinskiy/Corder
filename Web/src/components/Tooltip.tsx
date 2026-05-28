@@ -74,6 +74,8 @@ export function Tooltip({
     ref?: React.Ref<HTMLElement>;
     onMouseEnter?: React.MouseEventHandler<HTMLElement>;
     onMouseLeave?: React.MouseEventHandler<HTMLElement>;
+    onMouseDown?: React.MouseEventHandler<HTMLElement>;
+    onClick?: React.MouseEventHandler<HTMLElement>;
     onFocus?: React.FocusEventHandler<HTMLElement>;
     onBlur?: React.FocusEventHandler<HTMLElement>;
   }>;
@@ -91,6 +93,17 @@ export function Tooltip({
     },
     onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
       child.props.onMouseLeave?.(e); onLeave();
+    },
+    // Click on the trigger should hide the tooltip immediately and
+    // suppress re-show on the lingering hover — otherwise the chip
+    // stays floating while the user's already acted on the button
+    // (theme switch, archive open, copy, etc.). mouseLeave is the
+    // only thing that resets the suppression.
+    onMouseDown: (e: React.MouseEvent<HTMLElement>) => {
+      child.props.onMouseDown?.(e); onLeave();
+    },
+    onClick: (e: React.MouseEvent<HTMLElement>) => {
+      child.props.onClick?.(e); onLeave();
     },
     onFocus: (e: React.FocusEvent<HTMLElement>) => {
       child.props.onFocus?.(e); onEnter();
