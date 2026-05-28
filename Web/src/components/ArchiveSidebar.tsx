@@ -1,6 +1,7 @@
 import React from "react";
 import { RotateCcw } from "lucide-react";
 import { OverlayScrollbar } from "./OverlayScrollbar";
+import { Tooltip } from "./Tooltip";
 import { listArchive, restoreMeeting, deleteMeeting, ArchivedMeeting } from "../api";
 import { formatDate, formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
@@ -163,28 +164,29 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
                   look from the main header (outlined square, 16 px
                   icon). Stops click propagation so it does not also
                   toggle the row selection. */}
-              <button
-                type="button"
-                className="toolbar-icon-btn arc-item-restore"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (busy) return;
-                  setBusy(true);
-                  try {
-                    await restoreMeeting(it.id);
-                    onToast(t.toast_archive_restored(1), "success");
-                    await load();
-                    onChanged();
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                title={t.archive_action_restore}
-                aria-label={t.archive_action_restore}
-                disabled={busy}
-              >
-                <RotateCcw size={16} strokeWidth={2} />
-              </button>
+              <Tooltip label={t.archive_action_restore}>
+                <button
+                  type="button"
+                  className="toolbar-icon-btn arc-item-restore"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (busy) return;
+                    setBusy(true);
+                    try {
+                      await restoreMeeting(it.id);
+                      onToast(t.toast_archive_restored(1), "success");
+                      await load();
+                      onChanged();
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  aria-label={t.archive_action_restore}
+                  disabled={busy}
+                >
+                  <RotateCcw size={16} strokeWidth={2} />
+                </button>
+              </Tooltip>
             </div>
           ))
         )}
