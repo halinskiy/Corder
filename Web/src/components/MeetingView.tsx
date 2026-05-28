@@ -459,14 +459,15 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
               </div>
               <span className="toolbar-sep" />
               {detail.status === "ready" && detail.segments.length > 0 && (
-                <button
-                  className={"toolbar-icon-btn" + (clarifyOpen ? " active" : "")}
-                  onClick={toggleClarify}
-                  title={t.clarify_question}
-                  aria-label={t.clarify_question}
-                >
-                  <Users size={16} strokeWidth={2} />
-                </button>
+                <Tooltip label={t.clarify_question}>
+                  <button
+                    className={"toolbar-icon-btn" + (clarifyOpen ? " active" : "")}
+                    onClick={toggleClarify}
+                    aria-label={t.clarify_question}
+                  >
+                    <Users size={16} strokeWidth={2} />
+                  </button>
+                </Tooltip>
               )}
               <Tooltip label={t.btn_copy}>
                 <button

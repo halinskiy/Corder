@@ -1,5 +1,6 @@
 import React from "react";
 import { getUpdateStatus, triggerUpdateCheck } from "../api";
+import { Tooltip } from "./Tooltip";
 import type { T } from "../i18n";
 
 interface Props {
@@ -66,23 +67,24 @@ export function UpdatePill({ t, onToast }: Props) {
     : t.update_available_label;
 
   return (
-    <button
-      type="button"
-      className={"update-pill" + (busy ? " busy" : "")}
-      onClick={onClick}
-      disabled={busy}
-      title={t.update_available_title}
-    >
-      <span className="update-pill-shine" aria-hidden />
-      <span className="update-pill-sparkles" aria-hidden>
-        <span>✦</span>
-        <span>✦</span>
-        <span>✦</span>
-        <span>✦</span>
-        <span>✦</span>
-        <span>✦</span>
-      </span>
-      <span className="update-pill-text">{label}</span>
-    </button>
+    <Tooltip label={t.update_available_title}>
+      <button
+        type="button"
+        className={"update-pill" + (busy ? " busy" : "")}
+        onClick={onClick}
+        disabled={busy}
+      >
+        <span className="update-pill-shine" aria-hidden />
+        <span className="update-pill-sparkles" aria-hidden>
+          <span>✦</span>
+          <span>✦</span>
+          <span>✦</span>
+          <span>✦</span>
+          <span>✦</span>
+          <span>✦</span>
+        </span>
+        <span className="update-pill-text">{label}</span>
+      </button>
+    </Tooltip>
   );
 }

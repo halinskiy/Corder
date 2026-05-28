@@ -437,15 +437,16 @@ function ScreenVideo({
           className={"video-fs-overlay" + (backdropShown ? " shown" : "")}
           onClick={closeFullscreen}
         >
-          <button
-            type="button"
-            className="video-fs-close"
-            onClick={(e) => { e.stopPropagation(); closeFullscreen(); }}
-            aria-label="Close"
-            title="Close (Esc)"
-          >
-            <X size={20} strokeWidth={2.2} />
-          </button>
+          <Tooltip label="Close (Esc)">
+            <button
+              type="button"
+              className="video-fs-close"
+              onClick={(e) => { e.stopPropagation(); closeFullscreen(); }}
+              aria-label="Close"
+            >
+              <X size={20} strokeWidth={2.2} />
+            </button>
+          </Tooltip>
           {/* FLIP target: this wrapper is what we translate+scale from
               the card's rect to its natural centred size and back. */}
           <div className="video-fs-inner" ref={fsInnerRef}>

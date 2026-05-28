@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.2] — 2026-05-28
+
+### Added
+- Tooltips rolled out to more surfaces: transcript-toolbar Clarify (Users), Archive sidebar Restore, video fullscreen Close, and the Update pill — same 350 ms delay + design-system chip as the header toolbar.
+
+### Fixed
+- Tooltips no longer linger after click: clicking a tooltipped trigger hides the chip instantly and suppresses re-show until the cursor leaves and returns. (Was already partially fixed in 0.13.1; now applied across every Tooltip-wrapped surface.)
+
 ## [0.13.1] — 2026-05-28
 
 ### Fixed
