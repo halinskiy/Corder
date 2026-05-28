@@ -80,6 +80,16 @@ enum GoogleOAuth {
         // ── 5. Resolve the user's email + Google user id.
         let user = try await fetchUserInfo(accessToken: token.accessToken)
         FileLogger.log("GoogleOAuth: signed in as \(user.email) (\(user.id))")
+        // Publish to the loopback listener so the `/signed-in` tab's
+        // poll picks it up and injects the address under "Corder
+        // picked up your Google account." Persist immediately too so
+        // the profile popover gets the right identity even if the
+        // user closes the wizard before clicking through.
+        LoopbackListener.setLatestEmail(user.email)
+        AppSettings.setUserEmail(user.email)
+        if let name = user.name, !name.isEmpty {
+            AppSettings.setUserName(name)
+        }
         return Result(email: user.email,
                       googleUserId: user.id,
                       accessToken: token.accessToken,
@@ -167,6 +177,22 @@ private final class LoopbackListener {
 
     private var listener: NWListener?
     private var continuation: CheckedContinuation<String, Error>?
+
+    /// Shared bucket the `/signed-in/identity` endpoint reads to tell
+    /// the post-OAuth tab which Google account got picked up. Set
+    /// from `signIn(presenting:)` once `fetchUserInfo` completes;
+    /// the listener stays alive for ~2 s after the redirect so the
+    /// tab's JS poll has time to fetch it before we tear down.
+    nonisolated(unsafe) private static var latestEmail: String?
+    nonisolated(unsafe) private static let emailLock = NSLock()
+    static func setLatestEmail(_ email: String?) {
+        emailLock.lock(); defer { emailLock.unlock() }
+        latestEmail = email
+    }
+    fileprivate static func currentLatestEmail() -> String? {
+        emailLock.lock(); defer { emailLock.unlock() }
+        return latestEmail
+    }
 
     init() throws {}
 
@@ -262,6 +288,19 @@ private final class LoopbackListener {
             //   • Second hit is `/signed-in` (same listener still
             //     up for ~4 s). Serve the styled page, then close.
             //   • Anything else: tiny 404, close.
+            // JSON identity poll — called by the /signed-in tab's JS
+            // every 250ms until it gets an email (or the listener
+            // tears down). Cheap; static accessor + tiny payload.
+            if text.contains("GET /signed-in/identity") {
+                let email = LoopbackListener.currentLatestEmail() ?? ""
+                let json = #"{"email":"\#(email)"}"#
+                let body = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(json.utf8.count)\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n\(json)"
+                connection.send(content: body.data(using: .utf8),
+                                completion: .contentProcessed { _ in
+                                    connection.cancel()
+                                })
+                return
+            }
             if text.contains("GET /signed-in") {
                 let html = Self.signedInHTML
                 let body = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n\(html)"
@@ -489,9 +528,37 @@ private final class LoopbackListener {
       <div class="content">
         <div class="check" aria-hidden="true">✓</div>
         <h1>You're signed in</h1>
-        <p>Corder picked up your Google account. You can close this tab and head back to the app.</p>
+        <p>Corder picked up your Google account<span id="email-line"></span>. You can close this tab and head back to the app.</p>
         <div class="hint">Press <kbd>⌘W</kbd> to close.</div>
       </div>
+      <script>
+        // Poll the loopback listener for the resolved Google email
+        // and inject it into the copy so the user can verify which
+        // account they signed in with. The listener stays alive for
+        // ~2 s after the redirect; we stop polling as soon as we
+        // get a non-empty email back (or after ~3 s when the
+        // listener tears down).
+        (function () {
+          var attempts = 0;
+          var slot = document.getElementById("email-line");
+          function tick() {
+            attempts += 1;
+            fetch("/signed-in/identity", { cache: "no-store" })
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (j) {
+                if (j && j.email) {
+                  slot.textContent = " — " + j.email;
+                  return;
+                }
+                if (attempts < 12) { setTimeout(tick, 250); }
+              })
+              .catch(function () {
+                if (attempts < 12) { setTimeout(tick, 250); }
+              });
+          }
+          tick();
+        })();
+      </script>
     </body>
     </html>
     """

@@ -24,5 +24,16 @@
          the .app bundle) carrying this capability before the
          system trusts the entitlement. Wire that up next, then
          re-add the key. -->
+    <!-- TODO: Universal Links via
+         `com.apple.developer.associated-domains` + applinks:getcorder.com.
+         Pulled because self-signed dev builds need a provisioning
+         profile carrying that capability — without it launchd
+         rejects the binary (RBSRequestErrorDomain 5, NSPOSIXErrorDomain
+         163), same failure mode as the parked `applesignin` entitlement
+         above. Re-add once notarized Developer ID builds ship with
+         an embedded provisioning profile that includes the
+         associated-domains capability. Until then OAuth uses the
+         legacy `corder://` custom scheme (one-time "Open Corder.app?"
+         browser prompt). -->
 </dict>
 </plist>

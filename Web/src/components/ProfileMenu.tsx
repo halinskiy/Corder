@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, LifeBuoy, LogOut, Settings } from "lucide-react";
+import { Home, LifeBuoy, LogOut } from "lucide-react";
 import type { T } from "../i18n";
 import { getSettings, signOut } from "../api";
 
@@ -116,8 +116,6 @@ function glyphShape(variant: number): React.ReactNode {
   }
 }
 
-type Tier = "free" | "pro" | "max";
-
 /// Avatar button + dropdown. The menu is rendered fixed and anchored
 /// to the button's rect so it floats above everything (the header
 /// lives in an `overflow: hidden` column). Click-outside and Esc
@@ -140,21 +138,23 @@ export function ProfileMenu({
   const [open, setOpen] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [variant, setVariant] = React.useState(() => readStoredVariant(t.profile_name));
-  const [tier, setTier] = React.useState<Tier>("free");
+  const [userName, setUserName] = React.useState<string | null>(null);
+  const [userEmail, setUserEmail] = React.useState<string | null>(null);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const [pos, setPos] = React.useState<{ top: number; right: number } | null>(null);
 
-  /// Pull the current tier from the backend so the badge label and
-  /// colour reflect reality (Free/Pro/Max). Refreshed every time the
-  /// popover opens — cheap enough, and lets a CLI `defaults write`
-  /// flip the badge without a page reload.
+  /// Pull the signed-in identity (name + email) from the backend each
+  /// time the popover opens. Header reads these directly — no more
+  /// hard-coded "Kostiantyn Halynskyi" inside `i18n.ts`. The tier
+  /// chip moved out of this header (Kostya's feedback: visual noise
+  /// while we don't have a real paid surface yet).
   React.useEffect(() => {
     if (!open) return;
     (async () => {
       try {
         const s = await getSettings();
-        const v = (s.tier ?? (s.is_pro ? "pro" : "free")) as Tier;
-        if (v === "free" || v === "pro" || v === "max") setTier(v);
+        setUserName(s.user_name ?? null);
+        setUserEmail(s.user_email ?? null);
       } catch {}
     })();
   }, [open]);
@@ -190,24 +190,28 @@ export function ProfileMenu({
   };
 
   const goDashboard = () => { onOpenDashboard(); setOpen(false); setPickerOpen(false); };
-  const goSettings = () => { onOpenSettings(); setOpen(false); setPickerOpen(false); };
-  /// Hands the mailto: off to the native bridge so the system default
-  /// mail client opens (WKWebView's own link handler refuses mailto:
-  /// without a navigation action). Same `corderOpenExternal` channel
-  /// used by Sidebar's Upgrade-to-Pro and Donate buttons.
+  // `onOpenSettings` removed from the popover rows (header has
+  // its own gear icon). Reference it once so TS's
+  // noUnusedParameters check doesn't complain — the prop stays
+  // on the type to avoid cascading the rename through MainHeader
+  // / main.tsx call sites.
+  void onOpenSettings;
+
+  /// Opens the landing's /contact page in the system browser.
+  /// The page on getcorder.com carries the support form + the
+  /// right contact email, so the client doesn't have to ship its
+  /// own copy. `corderOpenExternal` hands the URL to
+  /// `NSWorkspace.shared.open` on the Swift side — WKWebView's
+  /// own link handler can't open external HTTP URLs without
+  /// extra plumbing.
   const goHelp = () => {
     try {
       (window as unknown as { corderOpenExternal?: (url: string) => void })
-        .corderOpenExternal?.("mailto:hegona3@gmail.com?subject=Corder%20help");
+        .corderOpenExternal?.("https://getcorder.com/contact/");
     } catch {}
     setOpen(false);
     setPickerOpen(false);
   };
-
-  const tierLabel =
-    tier === "max" ? (t.profile_tier_max ?? "Max")
-    : tier === "pro" ? (t.profile_tier_pro ?? "Pro")
-    : (t.profile_tier_free ?? "Free");
 
   return (
     <>
@@ -239,16 +243,21 @@ export function ProfileMenu({
               <AvatarGlyph variant={variant} />
             </button>
             <div className="profile-pop-id">
-              <div className="profile-pop-name">{t.profile_name}</div>
-              {/* Tier badge — Free / Pro / Max. Colour varies by tier:
-                  neutral grey for Free, gold for Pro, accent green for
-                  Max. The Upgrade-to-Pro CTA that used to sit at the
-                  bottom of this popover moved to the Sidebar's
-                  Upgrade-card (more discoverable, doesn't require
-                  opening the profile menu first). */}
-              <div className="profile-pop-sub">
-                <span className={`profile-tier-badge tier-${tier}`}>{tierLabel}</span>
+              {/* Real signed-in identity from the backend. Name
+                  falls back to the email's local part, then to a
+                  generic "Account" so the header never goes blank
+                  during the brief moment between the popover open
+                  and the settings fetch landing. */}
+              <div className="profile-pop-name">
+                {userName ?? userEmail?.split("@")[0] ?? "Account"}
               </div>
+              {/* Email under the name. The previous tier chip
+                  (FREE / PRO / MAX) lived here — pulled out per
+                  Kostya's feedback (visual noise without a real
+                  paid surface). Re-introduce when paid flows ship. */}
+              {userEmail && (
+                <div className="profile-pop-sub">{userEmail}</div>
+              )}
             </div>
           </div>
 
@@ -270,37 +279,32 @@ export function ProfileMenu({
             </div>
           )}
 
+          {/* Top group: navigation + support. Settings is gone
+              from here — there's already a Settings icon in the
+              MainHeader toolbar that fires the same handler, no
+              need to surface it twice. Get help took its slot,
+              filling out the navigation pair. */}
           <div className="profile-pop-sep" />
           <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
             <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
           </button>
-          <button className="profile-pop-item" onClick={goSettings} role="menuitem">
-            <Settings size={15} strokeWidth={2} /> {t.profile_account}
-          </button>
-
-          {/* Auxiliary group: Get help + Sign out. Same 8 px breathing
-              room as the Dashboard / Language / Settings group above,
-              created by the divider's symmetric `margin: 8px -8px`.
-              Get help opens a mailto handoff; Sign out clears local
-              account state (licence/email/name) and re-opens the
-              Welcome wizard so the user can sign in again as someone
-              else. There is no server-side session to invalidate yet;
-              this is purely a local-state reset. */}
-          <div className="profile-pop-sep" />
           <button className="profile-pop-item" onClick={goHelp} role="menuitem">
             <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
           </button>
+
+          {/* Auxiliary group: Sign out (+ legacy danger row slot,
+              currently empty — Delete account moved into Settings).
+              Same 8 px breathing room from the divider above. */}
+          <div className="profile-pop-sep" />
           <button
             className="profile-pop-item profile-pop-item-danger"
             onClick={async () => {
               setOpen(false);
               try { await signOut(); } catch {}
-              // Hard reload so the AppDelegate sees a fresh
-              // `onboardingCompleted = false` and re-presents the
-              // Welcome wizard before the Library window comes back.
-              try {
-                (window as unknown as { location: Location }).location.reload();
-              } catch {}
+              // The Swift sign-out path triggers a process relaunch
+              // (per-account on-disk paths can't be swapped live),
+              // so there's no point reloading here — the new
+              // process boots straight into the Welcome wizard.
             }}
             role="menuitem"
           >

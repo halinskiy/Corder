@@ -664,6 +664,57 @@ final class TranscriptionPipeline {
             meeting.status = .failed
             try? repo.updateMeeting(meeting)
         }
+        // Post-transcribe Supabase sync: push speakers + segments
+        // for cross-device read, and upload the playback mix +
+        // raw tracks to Storage. All best-effort — the local
+        // experience already works without any of this.
+        await syncToSupabase(meetingId: meetingId)
+    }
+
+    /// Mirror this meeting's transcript + audio to Supabase.
+    /// Idempotent — speakers/segments are wholesale-replaced server-
+    /// side, recordings_meta upserts on `(meeting_id, kind)`. Safe
+    /// to call repeatedly (e.g. after a re-transcribe).
+    private func syncToSupabase(meetingId: String) async {
+        let repo = await MainActor.run { AppContext.shared.repo }
+        let speakers = (try? repo.speakers(forMeeting: meetingId)) ?? []
+        let segments = (try? repo.segments(forMeeting: meetingId)) ?? []
+        // Map local Speaker.id (string UUID) → fresh UUID we'll
+        // push to the server, so segments can FK against the right
+        // remote speaker row.
+        var speakerUUIDs: [String: UUID] = [:]
+        for s in speakers {
+            speakerUUIDs[s.id] = UUID(uuidString: s.id) ?? UUID()
+        }
+        await MainActor.run {
+            SupabaseSync.replaceSpeakers(speakers, meetingId: meetingId)
+            SupabaseSync.replaceSegments(segments, meetingId: meetingId,
+                                         speakerIdByLocalId: speakerUUIDs)
+        }
+        // Audio upload. Mix is the playback file (always there once
+        // transcribed); mic/system are the raw tracks (kept until
+        // hard-delete). Each push is independent — a failure on one
+        // doesn't block the others.
+        let dir = AppPaths.recordingDir(for: meetingId)
+        let mix = dir.appendingPathComponent("audio.wav")
+        let mic = dir.appendingPathComponent("mic.wav")
+        let sys = dir.appendingPathComponent("system.wav")
+        let fm = FileManager.default
+        if fm.fileExists(atPath: mix.path) {
+            await SupabaseSync.uploadRecording(
+                meetingId: meetingId, kind: "mix",
+                fileURL: mix, durationMs: nil)
+        }
+        if fm.fileExists(atPath: mic.path) {
+            await SupabaseSync.uploadRecording(
+                meetingId: meetingId, kind: "mic",
+                fileURL: mic, durationMs: nil)
+        }
+        if fm.fileExists(atPath: sys.path) {
+            await SupabaseSync.uploadRecording(
+                meetingId: meetingId, kind: "system",
+                fileURL: sys, durationMs: nil)
+        }
     }
 
     /// Map a [Turn] list (either freshly transcribed by Gemini or pulled

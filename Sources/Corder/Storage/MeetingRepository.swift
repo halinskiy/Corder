@@ -6,15 +6,34 @@ struct MeetingRepository {
 
     func insertMeeting(_ m: Meeting) throws {
         try dbq.write { try m.insert($0) }
+        // Mirror to Supabase (fire-and-forget). Skipped while
+        // signed out — the local row stays, next sign-in's
+        // upsert push will catch it up.
+        Task { @MainActor in SupabaseSync.upsertMeeting(m) }
     }
 
     func updateMeeting(_ m: Meeting) throws {
         try dbq.write { try m.update($0) }
+        Task { @MainActor in SupabaseSync.upsertMeeting(m) }
     }
 
     func deleteMeeting(id: String) throws {
         try dbq.write { db in
             try db.execute(sql: "DELETE FROM meetings WHERE id = ?", arguments: [id])
+        }
+        Task { @MainActor in SupabaseSync.deleteMeeting(id: id) }
+    }
+
+    /// Wipe every meeting (plus its speakers/segments via the
+    /// ON DELETE CASCADE foreign keys) from the local cache.
+    /// Used when a different Supabase account signs in on the
+    /// same Mac — the cloud pull will rebuild the right rows for
+    /// the new user immediately after. Does NOT push to Supabase
+    /// (server data belongs to whichever user owned it; we're
+    /// only clearing the local mirror).
+    func purgeAllMeetings() throws {
+        try dbq.write { db in
+            try db.execute(sql: "DELETE FROM meetings")
         }
     }
 
@@ -120,12 +139,18 @@ struct MeetingRepository {
             try db.execute(sql: "UPDATE meetings SET archived_at = ? WHERE id = ?",
                            arguments: [archivedAt, meetingId])
         }
+        if let m = try meeting(id: meetingId) {
+            Task { @MainActor in SupabaseSync.upsertMeeting(m) }
+        }
     }
 
     func setPinned(meetingId: String, pinnedAt: Int64?) throws {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET pinned_at = ? WHERE id = ?",
                            arguments: [pinnedAt, meetingId])
+        }
+        if let m = try meeting(id: meetingId) {
+            Task { @MainActor in SupabaseSync.upsertMeeting(m) }
         }
     }
 
@@ -326,6 +351,9 @@ struct MeetingRepository {
             try db.execute(sql: "UPDATE meetings SET title = ? WHERE id = ?",
                            arguments: [title, meetingId])
         }
+        if let m = try meeting(id: meetingId) {
+            Task { @MainActor in SupabaseSync.upsertMeeting(m) }
+        }
     }
 
     func setSummary(meetingId: String, summary: String?) throws {
@@ -333,6 +361,7 @@ struct MeetingRepository {
             try db.execute(sql: "UPDATE meetings SET summary = ? WHERE id = ?",
                            arguments: [summary, meetingId])
         }
+        Task { @MainActor in SupabaseSync.setSummary(summary, meetingId: meetingId) }
     }
 
     func setDropboxArchive(meetingId: String, videoPath: String?, audioPath: String?, uploadedAt: Int64?) throws {

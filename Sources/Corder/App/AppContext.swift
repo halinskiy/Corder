@@ -111,6 +111,22 @@ enum AppSettings {
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
     private static let kWhisperLocalVariant   = "Corder.set.whisperLocalVariant"
     private static let kTranscriptCleanup = "Corder.set.transcriptCleanup"
+    /// Sticky permission grants. `CGPreflightScreenCaptureAccess()`
+    /// returns false right after a re-install of a previously-
+    /// authorised app — the OS keeps the TCC grant against the
+    /// bundle id but `preflight` is process-cached and reports
+    /// false until the first live screen-capture call. We snapshot
+    /// the grant state to UserDefaults the first time we observe
+    /// `granted` for either permission, and trust that snapshot
+    /// across sign-outs / re-installs. Cleared only if the user
+    /// explicitly revokes in System Settings (we then re-detect
+    /// `denied` and clear the flag).
+    private static let kMicGrantedOnce  = "Corder.perm.micGrantedOnce"
+    private static let kScreenGrantedOnce = "Corder.perm.screenGrantedOnce"
+    static var micGrantedSticky: Bool { UserDefaults.standard.bool(forKey: kMicGrantedOnce) }
+    static var screenGrantedSticky: Bool { UserDefaults.standard.bool(forKey: kScreenGrantedOnce) }
+    static func setMicGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kMicGrantedOnce) }
+    static func setScreenGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenGrantedOnce) }
 
     static var notificationsEnabled: Bool { flag(kNotifications) }
     static var captureVideo: Bool          { flag(kCaptureVideo) }
@@ -303,6 +319,73 @@ enum AppSettings {
             UserDefaults.standard.removeObject(forKey: kUserName)
         } else {
             UserDefaults.standard.set(cleaned, forKey: kUserName)
+        }
+    }
+
+    // Email used to sign in (Google OAuth `email` claim or the
+    // email field on email/password sign-in). Surfaced in the
+    // profile popover header under the display name. Optional —
+    // we never auto-derive it, the sign-in flow has to set it.
+    private static let kUserEmail = "Corder.set.userEmail"
+    static var userEmail: String? {
+        let raw = (UserDefaults.standard.string(forKey: kUserEmail) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+    static func setUserEmail(_ email: String?) {
+        let cleaned = (email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kUserEmail)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: kUserEmail)
+        }
+    }
+
+    /// Sticky "has this install seen at least one successful sign-in?"
+    /// flag. Stays true across Sign Out cycles so the post-OAuth
+    /// toast can say "Welcome back" on the second-and-later sign-ins
+    /// (only the very first time gets the bare "Welcome"). Cleared
+    /// only by a full UserDefaults wipe.
+    private static let kHasSignedInBefore = "Corder.user.hasSignedInBefore"
+    static var hasSignedInBefore: Bool { UserDefaults.standard.bool(forKey: kHasSignedInBefore) }
+    static func setHasSignedInBefore(_ v: Bool) { UserDefaults.standard.set(v, forKey: kHasSignedInBefore) }
+
+    /// One-time flag: have we pushed the pre-Supabase local meetings
+    /// to the cloud yet? Set true after the first successful backfill
+    /// pass; checked on every launch so re-runs of the backfill are
+    /// cheap no-ops. Cleared only by a full UserDefaults wipe (which
+    /// also wipes the local DB, so backfill would have nothing to do).
+    private static let kCloudBackfillDone = "Corder.user.cloudBackfillDone"
+    static var cloudBackfillDone: Bool { UserDefaults.standard.bool(forKey: kCloudBackfillDone) }
+    static func setCloudBackfillDone(_ v: Bool) { UserDefaults.standard.set(v, forKey: kCloudBackfillDone) }
+
+    /// Explicit opt-in for the one-time legacy-meetings backfill. On
+    /// a dev box where several Google accounts share one local
+    /// SQLite, the first sign-in shouldn't silently claim every
+    /// pre-Supabase recording as that account's — the user has to
+    /// say "yes, attach all my local recordings to THIS account".
+    /// Toggle from CLI: `defaults write com.3mpq.Corder Corder.user.cloudBackfillOptIn -bool true`.
+    /// Single-user-on-one-Mac case = set once and forget; UI surface
+    /// for it lives in Settings next session.
+    private static let kCloudBackfillOptIn = "Corder.user.cloudBackfillOptIn"
+    static var cloudBackfillOptedIn: Bool { UserDefaults.standard.bool(forKey: kCloudBackfillOptIn) }
+    static func setCloudBackfillOptedIn(_ v: Bool) { UserDefaults.standard.set(v, forKey: kCloudBackfillOptIn) }
+
+    /// Last Supabase user UUID we synced the local cache against.
+    /// When a different user signs in on the same Mac we wipe the
+    /// local meetings cache (otherwise account A would see account
+    /// B's recordings — the local SQLite is per-machine, not per-
+    /// user). Empty / nil means "fresh install, never synced".
+    private static let kLastSyncedUserId = "Corder.user.lastSyncedUserId"
+    static var lastSyncedUserId: String? {
+        let raw = (UserDefaults.standard.string(forKey: kLastSyncedUserId) ?? "")
+        return raw.isEmpty ? nil : raw
+    }
+    static func setLastSyncedUserId(_ id: String?) {
+        if let id, !id.isEmpty {
+            UserDefaults.standard.set(id, forKey: kLastSyncedUserId)
+        } else {
+            UserDefaults.standard.removeObject(forKey: kLastSyncedUserId)
         }
     }
 

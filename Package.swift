@@ -27,7 +27,12 @@ let package = Package(
         // is fetched on-demand the first time the user flips to the
         // `whisperLocal` provider, not bundled. Apple Silicon only —
         // Intel callers fall back to Gemini at the pipeline level.
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0")
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
+        // Supabase backend client (Auth + PostgREST + Storage + Realtime).
+        // Replaces the GRDB local DB / loopback Google OAuth /
+        // Cloudflare Worker signup chain. Used for account-scoped
+        // meetings, transcripts, and audio uploads.
+        .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.0.0")
     ],
     targets: [
         .executableTarget(
@@ -37,7 +42,8 @@ let package = Package(
                 .product(name: "Swifter", package: "swifter"),
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
-                .product(name: "WhisperKit", package: "WhisperKit")
+                .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "Supabase", package: "supabase-swift")
             ],
             resources: [
                 .copy("Resources/web"),

@@ -3320,6 +3320,41 @@ body.resizing { cursor: col-resize; user-select: none; }
    visual breath above it from the picker. */
 .wl-download-btn:disabled.is-loading { opacity: 1; }
 
+/* ── Tooltip ──────────────────────────────────────────────────────
+   Small floating chip rendered by the `<Tooltip>` component (see
+   `components/Tooltip.tsx`). Anchored via inline `top` + `left` and
+   `transform: translateX(-50%)` so the chip's horizontal centre
+   lines up with the anchor element's centre. Bottom and top
+   variants only differ in the `transform` translateY direction,
+   so the same base rule covers both. */
+.tooltip-pop {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 6px 10px;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  max-width: 280px;
+  animation: tooltip-fade 110ms ease-out;
+}
+.tooltip-pop-bottom { transform: translate(-50%, 0); }
+.tooltip-pop-top    { transform: translate(-50%, -100%); }
+@keyframes tooltip-fade {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to   { opacity: 1; }
+}
+.dark .tooltip-pop {
+  background: rgba(245, 245, 245, 0.94);
+  color: #1c1c1e;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
 /* ── SettingsSelect ────────────────────────────────────────────────
    Custom portal-popover dropdown used by Microphone / Transcription
    model / Language in Settings. Replaces the native <select> chrome

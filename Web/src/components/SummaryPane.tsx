@@ -3,6 +3,7 @@ import { RefreshCw, Search, Copy } from "lucide-react";
 import { MeetingDetail, summarize } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
+import { Tooltip } from "./Tooltip";
 
 declare global {
   interface Window {
@@ -125,33 +126,35 @@ export function SummaryPane({ detail, onToast, t }: Props) {
           />
         </div>
         <span className="toolbar-sep" />
-        <button
-          className="toolbar-icon-btn"
-          onClick={() => {
-            if (!summary) return;
-            try {
-              if (window.corderCopy) window.corderCopy(summary);
-              else navigator.clipboard?.writeText(summary);
-              onToast?.(t.toast_copied, "success");
-            } catch {
-              onToast?.(t.toast_copy_failed, "error");
-            }
-          }}
-          disabled={!summary}
-          title={t.btn_copy}
-          aria-label={t.btn_copy}
-        >
-          <Copy size={16} strokeWidth={2} />
-        </button>
-        <button
-          className="toolbar-icon-btn"
-          onClick={() => generate(true)}
-          disabled={loading}
-          title={t.summary_regenerate}
-          aria-label={t.summary_regenerate}
-        >
-          <RefreshCw size={16} strokeWidth={2} className={loading ? "summary-spin" : ""} />
-        </button>
+        <Tooltip label={t.btn_copy}>
+          <button
+            className="toolbar-icon-btn"
+            onClick={() => {
+              if (!summary) return;
+              try {
+                if (window.corderCopy) window.corderCopy(summary);
+                else navigator.clipboard?.writeText(summary);
+                onToast?.(t.toast_copied, "success");
+              } catch {
+                onToast?.(t.toast_copy_failed, "error");
+              }
+            }}
+            disabled={!summary}
+            aria-label={t.btn_copy}
+          >
+            <Copy size={16} strokeWidth={2} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t.summary_regenerate}>
+          <button
+            className="toolbar-icon-btn"
+            onClick={() => generate(true)}
+            disabled={loading}
+            aria-label={t.summary_regenerate}
+          >
+            <RefreshCw size={16} strokeWidth={2} className={loading ? "summary-spin" : ""} />
+          </button>
+        </Tooltip>
       </div>
       <div className="summary-content ovsb-scroll" ref={contentRef}>
         {renderMarkdown(summary, search)}

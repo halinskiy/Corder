@@ -1,6 +1,7 @@
 import React from "react";
 import { Copy, Users, Search } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
+import { Tooltip } from "./Tooltip";
 import { MainHeader } from "./MainHeader";
 import type { Lang, T } from "../i18n";
 
@@ -82,6 +83,9 @@ interface Props {
   /// button's `.active` state so a second click leaves the archive
   /// surface (toggle semantics replacing the old "< Library" back).
   archiveOpen?: boolean;
+  /// True when the user has no archived meetings — disables the
+  /// toolbar Archive button so it can't open an empty panel.
+  archiveEmpty?: boolean;
   /// Profile-menu "Settings" handoff — flips the right tab to Settings.
   onOpenSettings: () => void;
   /// Profile-menu "Dashboard" handoff — clears `activeId` upstream.
@@ -97,6 +101,11 @@ interface Props {
   /// re-transcribe happened (its local status stays "ready"), so it
   /// never re-polls and the page looked frozen.
   reloadSignal?: number;
+  /// Lifted "is the right-pane currently showing Settings?" callback.
+  /// MeetingView fires it on every `rightTab` change so the parent
+  /// MainHeader can light up its Settings toolbar button the same
+  /// way it does for Archive.
+  onSettingsOpenChange?: (open: boolean) => void;
   lang: Lang;
   onLangChange: (next: Lang) => void;
   /// Cumulative pointer dx while dragging the transcript/right-panel
@@ -109,12 +118,18 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, t }: Props) {
+export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, onSettingsOpenChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
   const [rightTab, setRightTab] = React.useState<"recording" | "settings" | "integrations">("recording");
+  // Tell the parent (main.tsx → MainHeader) when the right tab
+  // is Settings so the Settings toolbar button can light up
+  // active. Same pattern the Archive button uses.
+  React.useEffect(() => {
+    onSettingsOpenChange?.(rightTab === "settings");
+  }, [rightTab, onSettingsOpenChange]);
   // Profile-menu Settings handoff: bumping `openSettingsNonce` flips
   // the right tab to settings. Skip the initial mount tick so the
   // first render doesn't auto-open Settings on `openSettingsNonce = 0`.
@@ -377,7 +392,9 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
         )}
         onOpenArchive={onOpenArchive}
         archiveOpen={archiveOpen}
+        archiveEmpty={archiveEmpty}
         onOpenSettings={onOpenSettings}
+        settingsOpen={rightTab === "settings"}
         onOpenDashboard={onOpenDashboard}
         onToast={onToast}
         t={t}
@@ -451,15 +468,16 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
                   <Users size={16} strokeWidth={2} />
                 </button>
               )}
-              <button
-                className="toolbar-icon-btn"
-                onClick={onCopy}
-                disabled={detail.segments.length === 0}
-                title={t.btn_copy}
-                aria-label={t.btn_copy}
-              >
-                <Copy size={16} strokeWidth={2} />
-              </button>
+              <Tooltip label={t.btn_copy}>
+                <button
+                  className="toolbar-icon-btn"
+                  onClick={onCopy}
+                  disabled={detail.segments.length === 0}
+                  aria-label={t.btn_copy}
+                >
+                  <Copy size={16} strokeWidth={2} />
+                </button>
+              </Tooltip>
             </div>
             <TranscriptPane
               detail={detail}

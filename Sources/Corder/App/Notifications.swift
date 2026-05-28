@@ -36,6 +36,15 @@ enum NotificationsService {
         }
     }
 
+    /// Stable identifier reused across every Corder banner. macOS
+    /// Notification Center replaces an existing notification with the
+    /// same identifier instead of stacking a new one — exactly what
+    /// we want: Corder's banners are status updates ("transcription
+    /// ready", "silent recording archived", "network lost"), each
+    /// new one supersedes the previous, the Center shouldn't pile
+    /// them up into a list of stale items the user has to clear.
+    private static let bannerID = "corder.notification.live"
+
     /// Posts a banner with the given copy. `userInfo[.action]` is read by the
     /// app's UNUserNotificationCenterDelegate when the user clicks; the only
     /// supported action right now is `openLibrary`.
@@ -49,13 +58,27 @@ enum NotificationsService {
         content.body = body
         content.sound = .default
         content.userInfo = ["action": action.rawValue]
+        // `threadIdentifier` groups the banner in Notification Center
+        // so even when iOS-like grouping is on, every Corder banner
+        // lands in the same row instead of fanning out per identifier.
+        content.threadIdentifier = bannerID
+
+        let center = UNUserNotificationCenter.current()
+        // Strip the previous Corder banner BEFORE adding the new one
+        // so the Notification Center never carries two of ours at the
+        // same time (`add` with the same identifier is documented to
+        // replace, but Sonoma occasionally double-delivers if the
+        // previous request was already in the queue with a different
+        // pending content payload — the explicit remove avoids that).
+        center.removeDeliveredNotifications(withIdentifiers: [bannerID])
+        center.removePendingNotificationRequests(withIdentifiers: [bannerID])
 
         let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
+            identifier: bannerID,
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request) { error in
+        center.add(request) { error in
             if let error = error {
                 FileLogger.log("Notifications: post failed: \(error)")
             }

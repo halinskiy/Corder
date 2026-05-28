@@ -2,6 +2,7 @@ import React from "react";
 import { Moon, Archive as ArchiveIcon, Settings as SettingsIcon } from "lucide-react";
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
+import { Tooltip } from "./Tooltip";
 import { useTheme } from "../theme";
 import type { T } from "../i18n";
 
@@ -19,7 +20,9 @@ export function MainHeader({
   breadcrumb,
   onOpenArchive,
   archiveOpen,
+  archiveEmpty,
   onOpenSettings,
+  settingsOpen,
   onOpenDashboard,
   onToast,
   t,
@@ -31,10 +34,17 @@ export function MainHeader({
   /// Archive (the button itself is the toggle, replaces the old
   /// "< Library" back affordance).
   archiveOpen?: boolean;
+  /// True when the user's archive is empty — disables the Archive
+  /// toolbar button so it can't open a panel with nothing in it.
+  archiveEmpty?: boolean;
   /// Fires when the user clicks "Settings" in the profile popover.
   /// Parent decides what "open Settings" means in the current context
   /// (right-pane tab in MeetingView, right-section toggle on Dashboard).
   onOpenSettings: () => void;
+  /// True when the Right-pane is currently showing Settings. Lights
+  /// up the Settings toolbar icon as `.active`, mirroring how
+  /// `archiveOpen` lights up the Archive icon.
+  settingsOpen?: boolean;
   /// Fires when the user clicks "Dashboard" in the profile popover —
   /// always returns to the landing surface (parent clears activeId).
   onOpenDashboard: () => void;
@@ -52,23 +62,29 @@ export function MainHeader({
             to live — the language switcher moved into the profile
             popover (rare action, not worth a top-bar slot). The two
             shortcuts share the same icon-button shell. */}
-        <button
-          className="toolbar-icon-btn"
-          onClick={onOpenSettings}
-          title={t.profile_account}
-          aria-label={t.profile_account}
-        >
-          <SettingsIcon size={16} strokeWidth={2} />
-        </button>
-        <button
-          className={"toolbar-icon-btn" + (archiveOpen ? " active" : "")}
-          onClick={onOpenArchive}
-          title={t.archive_open_title}
-          aria-label={t.btn_archive}
-          aria-pressed={archiveOpen}
-        >
-          <ArchiveIcon size={16} strokeWidth={2} />
-        </button>
+        <Tooltip label={t.profile_account}>
+          <button
+            className={"toolbar-icon-btn" + (settingsOpen ? " active" : "")}
+            onClick={onOpenSettings}
+            aria-label={t.profile_account}
+            aria-pressed={settingsOpen}
+          >
+            <SettingsIcon size={16} strokeWidth={2} />
+          </button>
+        </Tooltip>
+        <Tooltip
+          label={archiveEmpty ? (t.archive_empty_tooltip ?? "Archive is empty")
+                              : t.archive_open_title}>
+          <button
+            className={"toolbar-icon-btn" + (archiveOpen ? " active" : "")}
+            onClick={onOpenArchive}
+            aria-label={t.btn_archive}
+            aria-pressed={archiveOpen}
+            disabled={archiveEmpty && !archiveOpen}
+          >
+            <ArchiveIcon size={16} strokeWidth={2} />
+          </button>
+        </Tooltip>
         <span className="toolbar-sep" />
         <ProfileMenu
           onToast={onToast}
@@ -84,13 +100,14 @@ export function MainHeader({
 function ThemeSwitch({ t }: { t: T }) {
   const { toggle } = useTheme();
   return (
-    <button
-      className="toolbar-icon-btn"
-      onClick={toggle}
-      title={t.btn_theme_title}
-      aria-label={t.btn_theme_title}
-    >
-      <Moon size={16} strokeWidth={2} />
-    </button>
+    <Tooltip label={t.btn_theme_title}>
+      <button
+        className="toolbar-icon-btn"
+        onClick={toggle}
+        aria-label={t.btn_theme_title}
+      >
+        <Moon size={16} strokeWidth={2} />
+      </button>
+    </Tooltip>
   );
 }

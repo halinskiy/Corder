@@ -59,6 +59,10 @@ interface Props {
   /// the Recent/sort view to Settings. Stats column on the left
   /// stays untouched — only the right section toggles.
   openSettingsNonce: number;
+  /// Fires whenever the Right pane flips between Recent and Settings.
+  /// Lifted state lives in main.tsx so the MainHeader can light up
+  /// its Settings toolbar button when this returns true.
+  onSettingsOpenChange?: (open: boolean) => void;
 }
 
 /// Home / landing surface (shown when no specific meeting is open).
@@ -67,7 +71,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecording, onStop, hotkeyLabel, t, lang, onLangChange, onResizeSplit, onResetSplit, openSettingsNonce }: Props) {
+export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecording, onStop, hotkeyLabel, t, lang, onLangChange, onResizeSplit, onResetSplit, openSettingsNonce, onSettingsOpenChange }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -128,6 +132,11 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
       setRightSection("settings");
     }
   }, [openSettingsNonce]);
+  // Mirror Right-pane state up to main.tsx so MainHeader's Settings
+  // toolbar button can light up `.active` the same way Archive does.
+  useEffect(() => {
+    onSettingsOpenChange?.(rightSection === "settings");
+  }, [rightSection, onSettingsOpenChange]);
 
   // Sort key — persisted across launches so the user's pick survives
   // a window close. Default is "duration" (longest meetings first):

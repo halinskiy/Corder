@@ -77,6 +77,17 @@ interface Strings {
   settings_autotitle_desc: string;
   settings_autosummary: string;
   settings_autosummary_desc: string;
+  /// "Delete account" row in Settings (danger zone). Optional so
+  /// untranslated locales fall back to the English literal.
+  settings_delete_account_label?: string;
+  settings_delete_account_desc?: string;
+  /// Strings for the API & MCP token reveal card in Settings.
+  settings_api_label?: string;
+  settings_api_desc?: string;
+  settings_api_reveal?: string;
+  settings_api_copy?: string;
+  settings_api_copied?: string;
+  settings_api_docs?: string;
   settings_sec_autodetect: string;
   settings_whitelist: string;
   settings_whitelist_desc: string;
@@ -198,6 +209,12 @@ interface Strings {
   /// support inbox. Optional so untranslated locales fall back to
   /// the English literal via `t.profile_help || "Get help"`.
   profile_help?: string;
+  /// "Delete account" row in ProfileMenu — irreversible hard
+  /// delete of all cloud data + local state. Optional fallback
+  /// to "Delete account" if locale hasn't translated.
+  profile_delete?: string;
+  /// Confirmation prompt before delete fires.
+  profile_delete_confirm?: string;
   profile_signout: string;
   profile_pick_avatar: string;
   profile_integrations: string;
@@ -309,6 +326,10 @@ interface Strings {
   update_available_title: string;
 
   archive_open_title: string;
+  /// Tooltip shown on the disabled Archive toolbar button when the
+  /// user has no archived meetings. Optional fallback "Archive is
+  /// empty" at the call site.
+  archive_empty_tooltip?: string;
   archive_title: string;
   archive_empty: string;
   archive_select_all: string;
@@ -375,6 +396,14 @@ const ru: Strings = {
   settings_autotitle_desc: "Генерировать короткий заголовок встречи из расшифровки.",
   settings_autosummary: "Авторезюме",
   settings_autosummary_desc: "Готовить структурированное резюме сразу после транскрибации.",
+  settings_delete_account_label: "Удалить аккаунт",
+  settings_delete_account_desc: "Безвозвратно удалит все записи, транскрипты, саммари и аудио из облака. Действие необратимо.",
+  settings_api_label: "Доступ к API",
+  settings_api_desc: "Токен для подключения Corder к MCP-клиентам (Claude Desktop, Cursor) или прямых вызовов REST API. Любой, у кого есть токен, может читать ваши встречи — храните как пароль.",
+  settings_api_reveal: "Показать MCP-токен",
+  settings_api_copy: "Копировать",
+  settings_api_copied: "Скопировано",
+  settings_api_docs: "Документация ↗",
   settings_sec_autodetect: "Автоопределение звонков",
   settings_whitelist: "Всегда предлагать запись",
   settings_whitelist_desc: "Приложения, для которых Corder всегда предлагает начать запись, когда они занимают микрофон.",
@@ -475,6 +504,8 @@ const ru: Strings = {
   profile_dashboard: "Дашборд",
   profile_account: "Settings",
   profile_help: "Поддержка",
+  profile_delete: "Удалить аккаунт",
+  profile_delete_confirm: "Удалить аккаунт и все записи? Действие необратимо.",
   profile_signout: "Выйти",
   profile_pick_avatar: "Сменить аватар",
   profile_integrations: "Интеграции",
@@ -562,6 +593,7 @@ const ru: Strings = {
   update_available_title: "Нажмите чтобы установить",
 
   archive_open_title: "Открыть архив",
+  archive_empty_tooltip: "Архив пуст",
   archive_title: "Архив",
   archive_empty: "Архив пуст.",
   archive_select_all: "Выбрать всё",
@@ -625,6 +657,14 @@ const en: Strings = {
   settings_autotitle_desc: "Generate a short meeting title from the transcript.",
   settings_autosummary: "Auto-summary",
   settings_autosummary_desc: "Generate a structured recap as soon as the transcript is ready.",
+  settings_delete_account_label: "Delete account",
+  settings_delete_account_desc: "Permanently removes every recording, transcript, summary, and audio file from the cloud. This cannot be undone.",
+  settings_api_label: "API access",
+  settings_api_desc: "Use this token to connect Corder to MCP clients (Claude Desktop, Cursor) or call the REST API directly. Anyone with the token can read your meetings — treat it like a password.",
+  settings_api_reveal: "Reveal MCP token",
+  settings_api_copy: "Copy",
+  settings_api_copied: "Copied",
+  settings_api_docs: "API docs ↗",
   settings_sec_autodetect: "Call auto-detect",
   settings_whitelist: "Always offer to record",
   settings_whitelist_desc: "Apps Corder always offers to record when they take the microphone.",
@@ -726,6 +766,8 @@ const en: Strings = {
   profile_account: "Settings",
   profile_language: "Language",
   profile_help: "Get help",
+  profile_delete: "Delete account",
+  profile_delete_confirm: "Delete your account and all recordings? This cannot be undone.",
   profile_signout: "Sign out",
   profile_pick_avatar: "Change avatar",
   profile_integrations: "Integrations",
@@ -813,6 +855,7 @@ const en: Strings = {
   update_available_title: "Click to install",
 
   archive_open_title: "Open archive",
+  archive_empty_tooltip: "Archive is empty",
   archive_title: "Archive",
   archive_empty: "Archive is empty.",
   archive_select_all: "Select all",
@@ -970,6 +1013,8 @@ const uk: Strings = {
   profile_dashboard: "Дашборд",
   profile_account: "Settings",
   profile_help: "Підтримка",
+  profile_delete: "Видалити акаунт",
+  profile_delete_confirm: "Видалити акаунт та всі записи? Дію не можна скасувати.",
   profile_signout: "Вийти",
   profile_pick_avatar: "Змінити аватар",
   profile_integrations: "Інтеграції",
@@ -1057,6 +1102,7 @@ const uk: Strings = {
   update_available_title: "Натисни, щоб встановити",
 
   archive_open_title: "Відкрити архів",
+  archive_empty_tooltip: "Архів порожній",
   archive_title: "Архів",
   archive_empty: "Архів порожній.",
   archive_select_all: "Вибрати все",

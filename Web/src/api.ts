@@ -227,6 +227,12 @@ export interface Settings {
   /** Paddle-issued licence key the user pasted into the Welcome wizard.
    *  Empty / null = Free tier. */
   licence_key?: string | null;
+  /** Display name from the sign-in provider. Shown as the top line in
+   *  the profile popover header. */
+  user_name?: string | null;
+  /** Email used to sign in. Shown under the name in the profile
+   *  popover header. */
+  user_email?: string | null;
   /** read-only: server-derived "this licence currently looks Pro" flag.
    *  Free tier when false. */
   is_pro?: boolean;
@@ -373,4 +379,23 @@ export async function triggerUpdateCheck(): Promise<void> {
 export async function signOut(): Promise<void> {
   const r = await fetch("/api/account/signout", { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Hard delete — wipes every meeting / speaker / segment / summary /
+ *  audio file owned by the signed-in user from Supabase + local
+ *  state, then relaunches the app on the Welcome wizard. GDPR
+ *  "right to be forgotten" path. */
+export async function deleteAccount(): Promise<void> {
+  const r = await fetch("/api/account/delete", { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Reveal the signed-in user's Supabase JWT for use with the public
+ *  REST API and MCP clients (Claude Desktop, Cursor, ...). Throws on
+ *  401 when the user isn't signed in. */
+export async function getMcpToken(): Promise<string> {
+  const r = await fetch("/api/account/mcp-token");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  return j.token as string;
 }

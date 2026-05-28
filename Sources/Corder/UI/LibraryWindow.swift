@@ -426,14 +426,18 @@ final class LibraryWindow: NSWindowController {
         let toolbarReserve: CGFloat = 320
         let contentH = win.contentView!.bounds.height
         let contentW = win.contentView!.bounds.width
-        // 90 pt is the header's CSS min-height (64) plus comfortable
-        // overlap into the content area below. The previous 64 pt
-        // ran out at the header's bottom border + any line-height
-        // overshoot, leaving 1-5 pt where WebKit grabbed mousedown
-        // for text selection. 90 fully covers the header band; the
-        // content under the header has its own top padding well
-        // above 26 pt, so the overlap doesn't steal any real clicks.
-        let headerHeight: CGFloat = 90
+        // 28 pt = native title-bar height (the strip with the
+        // traffic-light buttons). The earlier 90 pt covered the
+        // whole React `.main-header` band — which "fixed" drag in
+        // the lower header but ALSO swallowed every breadcrumb /
+        // toolbar-button click in that band (DragView's `mouseDown`
+        // starts the window drag synchronously, never letting the
+        // mousedown reach WebView). Now: native strip handles drag
+        // in the area where there are no React interactive elements
+        // (above the React header), and the JS bridge below handles
+        // drag-on-empty-area inside `.main-header` itself — clicks
+        // on breadcrumb crumbs / toolbar icons reach React.
+        let headerHeight: CGFloat = 28
         let dragView = DragView(frame: NSRect(
             x: 0,
             y: contentH - headerHeight,
@@ -536,6 +540,17 @@ final class LibraryWindow: NSWindowController {
     /// in that case ends up in Notification Center alone). Front-end
     /// listens on `window.addEventListener('corder-toast', ...)` and
     /// pipes through its existing toast queue.
+    /// Close the Library window if it's currently open. Used by the
+    /// sign-out flow + first-launch path so that nothing about the
+    /// signed-in app is visible behind the Welcome wizard. Named
+    /// `dismiss` rather than `close` to avoid colliding with the
+    /// `NSObject`/`NSWindow` `close()` selector on the superclass
+    /// chain (Swift's override resolver picks `close` to mean the
+    /// NS one and complains about the override signature).
+    func dismiss() {
+        window?.close()
+    }
+
     func postToast(title: String, body: String, kind: String = "info") {
         guard webView != nil, webView.url != nil else { return }
         let payload = ["title": title, "body": body, "kind": kind]
