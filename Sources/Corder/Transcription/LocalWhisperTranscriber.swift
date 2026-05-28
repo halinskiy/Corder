@@ -298,6 +298,13 @@ enum LocalWhisperTranscriber {
 
         if pipe == nil {
             FileLogger.log("LocalWhisper: loading WhisperKit from \(modelFolderURL(variant).path)")
+            // `download: true` so WhisperKit can fetch the tokenizer
+            // sidecar (lives in the HF repo `openai/whisper-large-v3`,
+            // not in `argmaxinc/whisperkit-coreml/<variant>` — they
+            // ship the Core ML packages, not the text tokenizer).
+            // Without it, init throws "Tokenizer configuration is
+            // missing" on the very first transcribe. `WhisperKit.download`
+            // is idempotent: model files already on disk are reused.
             let cfg = WhisperKitConfig(
                 model: variant.rawValue,
                 downloadBase: downloadBaseURL,
@@ -306,7 +313,7 @@ enum LocalWhisperTranscriber {
                 logLevel: .error,
                 prewarm: true,
                 load: true,
-                download: false
+                download: true
             )
             do {
                 pipe = try await WhisperKit(cfg)

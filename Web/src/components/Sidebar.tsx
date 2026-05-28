@@ -289,7 +289,17 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
                 <div className="meeting-meta">
                   <span className={`status-dot ${m.status}`} />
                   {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
-                  {m.status !== "ready" && <span>· {statusLabel(m.status, t)}</span>}
+                  {/* Drop the "transcribing" word from the meta — the
+                      hollow status dot already tells the user there's
+                      no transcript yet, and the literal word kept
+                      reading as "work in progress" even after the
+                      pipeline had already stopped (e.g. auto-transcribe
+                      off, or a backend stall). recording / failed
+                      still surface their label because those states
+                      benefit from a name. */}
+                  {m.status !== "ready" && m.status !== "transcribing" && (
+                    <span>· {statusLabel(m.status, t)}</span>
+                  )}
                   {m.speaker_count > 0 && (
                     <span className="meeting-people" title={t.participants(m.speaker_count)}>
                       <span className="meeting-people-count">{m.speaker_count}</span>

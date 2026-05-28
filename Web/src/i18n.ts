@@ -213,6 +213,10 @@ interface Strings {
   /// support inbox. Optional so untranslated locales fall back to
   /// the English literal via `t.profile_help || "Get help"`.
   profile_help?: string;
+  /// Profile menu row: forces Sparkle to refetch the appcast
+  /// immediately. Falls back to the English literal via
+  /// `t.profile_check_updates || "Check for updates"`.
+  profile_check_updates?: string;
   /// "Delete account" row in ProfileMenu — irreversible hard
   /// delete of all cloud data + local state. Optional fallback
   /// to "Delete account" if locale hasn't translated.
@@ -509,6 +513,7 @@ const ru: Strings = {
   profile_dashboard: "Дашборд",
   profile_account: "Settings",
   profile_help: "Поддержка",
+  profile_check_updates: "Проверить обновления",
   profile_delete: "Удалить аккаунт",
   profile_delete_confirm: "Удалить аккаунт и все записи? Действие необратимо.",
   profile_signout: "Выйти",
@@ -772,6 +777,7 @@ const en: Strings = {
   profile_account: "Settings",
   profile_language: "Language",
   profile_help: "Get help",
+  profile_check_updates: "Check for updates",
   profile_delete: "Delete account",
   profile_delete_confirm: "Delete your account and all recordings? This cannot be undone.",
   profile_signout: "Sign out",
@@ -1019,6 +1025,7 @@ const uk: Strings = {
   profile_dashboard: "Дашборд",
   profile_account: "Settings",
   profile_help: "Підтримка",
+  profile_check_updates: "Перевірити оновлення",
   profile_delete: "Видалити акаунт",
   profile_delete_confirm: "Видалити акаунт та всі записи? Дію не можна скасувати.",
   profile_signout: "Вийти",
