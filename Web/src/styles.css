@@ -1087,7 +1087,17 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .status-dot.ready { background: var(--status-ready); }
 .status-dot.recording { background: var(--status-fail); animation: pulse 1.6s ease-in-out infinite; }
-.status-dot.transcribing { background: var(--status-warn); animation: pulse 1.6s ease-in-out infinite; }
+/* "transcribing" rows used to wear a pulsing gold dot even after the
+   pipeline finished or stalled — confusing because the row visually
+   claimed work was in flight when it wasn't. Use a hollow white
+   circle with a thin border instead: reads as "no transcript yet"
+   without falsely implying motion. */
+.status-dot.transcribing {
+  background: transparent;
+  border: 1px solid var(--border-strong, rgba(0,0,0,0.25));
+  box-sizing: border-box;
+}
+.dark .status-dot.transcribing { border-color: rgba(255,255,255,0.35); }
 /* Softer-than-pure-red dot for failed rows — bright enough to spot in
    a list but doesn't shout. The previous 0.4-opacity dot read as
    "low priority". */

@@ -1,7 +1,7 @@
 import React from "react";
-import { Home, LifeBuoy, LogOut } from "lucide-react";
+import { Home, LifeBuoy, LogOut, RefreshCw } from "lucide-react";
 import type { T } from "../i18n";
-import { getSettings, signOut } from "../api";
+import { getSettings, signOut, triggerUpdateCheck } from "../api";
 
 const AVATAR_COUNT = 9;
 const AVATAR_STORAGE_KEY = "corder.avatarVariant";
@@ -213,6 +213,19 @@ export function ProfileMenu({
     setPickerOpen(false);
   };
 
+  /// Force Sparkle to refetch the appcast right now. Useful when
+  /// the user just installed an old build and doesn't want to wait
+  /// for Sparkle's lazy ~24 h schedule — or when the previous
+  /// background check ran before the new release was published.
+  /// The Swift route triggers the same `checkForUpdates` Sparkle
+  /// path the UpdatePill uses internally; if a newer version is
+  /// found, the standard Sparkle dialog pops up.
+  const checkUpdates = async () => {
+    setOpen(false);
+    setPickerOpen(false);
+    try { await triggerUpdateCheck(); } catch {}
+  };
+
   return (
     <>
       <button
@@ -290,6 +303,9 @@ export function ProfileMenu({
           </button>
           <button className="profile-pop-item" onClick={goHelp} role="menuitem">
             <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
+          </button>
+          <button className="profile-pop-item" onClick={checkUpdates} role="menuitem">
+            <RefreshCw size={15} strokeWidth={2} /> {t.profile_check_updates ?? "Check for updates"}
           </button>
 
           {/* Auxiliary group: Sign out (+ legacy danger row slot,
