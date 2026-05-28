@@ -31,10 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // bare 'recording' state to failed. Transcribing rows are recovered
         // separately below — they get re-enqueued, not failed.
         try? AppContext.shared.repo.resetStuckMeetings()
-        // First-launch seed — populates the Library with a handful
-        // of canned demo meetings so the dashboard isn't empty.
-        // Runs once per user (guarded by AppSettings.demoDataSeeded).
-        DemoSeeder.seedIfNeeded(repo: AppContext.shared.repo)
+        // Sweep any leftover demo rows from earlier builds that used
+        // to ship a canned dashboard. Real users want an empty Library
+        // on first launch, not someone else's "Daily standup" sample.
+        DemoSeeder.removeAll(repo: AppContext.shared.repo)
         // If a transcription was in flight when the previous process died
         // (forced quit, rebuild during dev, machine sleep), pick it up
         // again automatically. The audio files (mic.wav / system.wav) are

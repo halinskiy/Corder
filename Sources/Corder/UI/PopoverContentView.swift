@@ -21,7 +21,10 @@ struct PopoverContentView: View {
     private static let accountURL = URL(string: "https://getcorder.com/account")!
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        // Outer gap + width + padding all live on `PopoverShell` so
+        // both popover surfaces (this one + InviteOfferView in
+        // MenuBarController) keep identical geometry on every tweak.
+        VStack(alignment: .leading, spacing: PopoverShell.outerSpacing) {
             if locked {
                 lockedSection
             } else {
@@ -82,8 +85,8 @@ struct PopoverContentView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(20)
-        .frame(width: 320)
+        .padding(PopoverShell.outerPadding)
+        .frame(width: PopoverShell.width)
         .background(Color(NSColor.windowBackgroundColor))
     }
 
@@ -91,7 +94,7 @@ struct PopoverContentView: View {
 
     @ViewBuilder
     private var idleSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: PopoverShell.sectionSpacing) {
             IdleStatus(lang: ctx.language)
             Button {
                 MeetingDetector.shared.userStartedRecordingManually()
@@ -116,7 +119,7 @@ struct PopoverContentView: View {
     /// opens / re-focuses the wizard, no red recording dot.
     @ViewBuilder
     private var lockedSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: PopoverShell.sectionSpacing) {
             LockedStatus(lang: ctx.language)
             Button {
                 WelcomeWindowController.shared.presentManually()
@@ -133,7 +136,7 @@ struct PopoverContentView: View {
     // MARK: - Recording
 
     private func recordingSection(startedAt: Date) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: PopoverShell.sectionSpacing) {
             RecordingStatus(startedAt: startedAt, lang: ctx.language)
             // Warning card appears between the status pill and the
             // Stop button when nothing audible has happened for > 10
@@ -511,4 +514,3 @@ private struct FlatButtonView: View {
         }
     }
 }
-

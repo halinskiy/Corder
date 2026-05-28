@@ -59,6 +59,10 @@ enum L {
         "notif_net_restored_body": "Retrying any meetings that failed while offline.",
         "notif_net_lost_title": "No internet",
         "notif_net_lost_body": "Recording continues locally. Transcription will need a connection when you stop.",
+        // Pill that appears under Start/Stop in the popover while the
+        // on-device Whisper model is pre-fetching. Just the label —
+        // the progress fill is visual, no narration needed.
+        "whisper_prefetch_label": "Downloading model",
     ]
     private static let ru: [String: String] = [
         "idle": "Запись не идёт",
@@ -92,6 +96,7 @@ enum L {
         "notif_net_restored_body": "Повторяю встречи, упавшие без сети.",
         "notif_net_lost_title": "Нет интернета",
         "notif_net_lost_body": "Запись идёт локально. Для расшифровки понадобится сеть, когда остановишь.",
+        "whisper_prefetch_label": "Скачиваем модель",
     ]
 
     /// Convenience for native notifications: resolves against the

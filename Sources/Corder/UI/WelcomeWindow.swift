@@ -629,6 +629,8 @@ private struct WelcomeView: View {
                 email: $licenceInput,
                 password: $passwordInput,
                 inlineError: $signInError,
+                emailError: $emailError,
+                passwordError: $passwordError,
                 onSubmit: { currentCTA.action() },
                 onSuccess: { result in onFinish(result) }
             )
@@ -639,6 +641,12 @@ private struct WelcomeView: View {
     /// Inline validation message shown under the password field
     /// when the user hits "Sign in" with bad data. `nil` hides it.
     @State private var signInError: String? = nil
+    /// Per-field validation errors raised when the user taps "Sign in
+    /// with email" with bad input. Cleared the moment the corresponding
+    /// field is edited so the message disappears as soon as the user
+    /// starts fixing it.
+    @State private var emailError: String? = nil
+    @State private var passwordError: String? = nil
 
     /// Thin shim — forwards to the shared state's `advance`. Local
     /// callers (CTA actions, permission grant flows) call this so
@@ -667,33 +675,41 @@ private struct WelcomeView: View {
     }
 
     /// Sign-in step CTA — always tappable. Invalid input doesn't
-    /// disable the button; it lights up an inline error message
-    /// under the password field instead. Goes "inactive" (grey but
-    /// still clickable) when both fields are empty so the page
-    /// doesn't loudly invite a tap before there's anything to send.
+    /// disable the button OR grey it out; the slab is always the
+    /// brand-green "ready" state and bad input surfaces as per-field
+    /// inline errors instead. Avoids the "I tapped a dead button"
+    /// confusion Kostya called out — every tap gets feedback.
     private var signInCTA: (label: String, action: () -> Void, disabled: Bool, inactive: Bool) {
         let trimmedEmail = licenceInput
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        let inactive = trimmedEmail.isEmpty && passwordInput.isEmpty
         return ("Sign in with email", {
-            if let issue = validationIssue(email: trimmedEmail, password: passwordInput) {
-                signInError = issue
-                return
+            let (eErr, pErr) = validateFields(email: trimmedEmail, password: passwordInput)
+            emailError = eErr
+            passwordError = pErr
+            if eErr == nil && pErr == nil {
+                submitSignIn(email: trimmedEmail)
             }
-            signInError = nil
-            submitSignIn(email: trimmedEmail)
-        }, false, inactive)
+        }, false, false)
     }
 
-    /// Returns a human-readable error if the inputs aren't usable;
-    /// nil when the form is ready to submit.
-    private func validationIssue(email: String, password: String) -> String? {
-        if email.isEmpty { return "Enter your email." }
-        if !isValidEmailFormat(email) { return "That doesn't look like an email address." }
-        if password.isEmpty { return "Enter a password." }
-        if password.count < 6 { return "Password must be at least 6 characters." }
-        return nil
+    /// Per-field validation. Returns (emailError, passwordError) — nil
+    /// when the value is fine. Short strings on purpose so they fit
+    /// under a 320-wide capsule without wrapping.
+    private func validateFields(email: String, password: String) -> (String?, String?) {
+        var emailIssue: String? = nil
+        var passwordIssue: String? = nil
+        if email.isEmpty {
+            emailIssue = "Enter your email."
+        } else if !isValidEmailFormat(email) {
+            emailIssue = "That doesn't look like an email."
+        }
+        if password.isEmpty {
+            passwordIssue = "Enter a password."
+        } else if password.count < 6 {
+            passwordIssue = "At least 6 characters."
+        }
+        return (emailIssue, passwordIssue)
     }
 
     /// Signs the user in (or up) through Supabase Auth. We attempt
@@ -1012,6 +1028,12 @@ private struct SignInInteractive: View {
     /// field. Bound to the WelcomeView so the CTA action can
     /// raise it and the field auto-clears it on input change.
     @Binding var inlineError: String?
+    /// Per-field validation errors. Bound to the WelcomeView so the
+    /// CTA can populate them on bad input and the field auto-clears
+    /// them on edit. Field renders with a red border + an inline
+    /// caption when its error is non-nil.
+    @Binding var emailError: String?
+    @Binding var passwordError: String?
     /// Fired when the user presses Return inside either field.
     /// Forwards to the bottom CTA's action.
     let onSubmit: () -> Void
@@ -1033,8 +1055,36 @@ private struct SignInInteractive: View {
         VStack(spacing: 10) {
                 Spacer(minLength: 0)
 
-                emailField
-                passwordField
+                // Field + inline error are wrapped in a tight inner
+                // VStack so the message hugs its capsule (4 pt gap)
+                // instead of inheriting the 10 pt rhythm of the outer
+                // form. Left padding (18 pt) lines the error text up
+                // exactly with the placeholder inside the capsule:
+                // the capsule has a 1 pt stroke + the TextField
+                // carries `.padding(.horizontal, 18)` inside, so 18 pt
+                // of leading padding on the caption hits the same
+                // x-position as "you@example.com".
+                VStack(alignment: .leading, spacing: 4) {
+                    emailField
+                    if let emailError {
+                        Text(emailError)
+                            .font(.system(size: 12))
+                            .foregroundColor(.red.opacity(0.85))
+                            .padding(.leading, 18)
+                    }
+                }
+                .frame(maxWidth: 320)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    passwordField
+                    if let passwordError {
+                        Text(passwordError)
+                            .font(.system(size: 12))
+                            .foregroundColor(.red.opacity(0.85))
+                            .padding(.leading, 18)
+                    }
+                }
+                .frame(maxWidth: 320)
 
                 if let inlineError {
                     Text(inlineError)
@@ -1076,8 +1126,8 @@ private struct SignInInteractive: View {
             // Inline validation clears as soon as the user edits
             // either field — they're trying to fix what we just
             // complained about.
-            .onChange(of: email)    { _, _ in inlineError = nil }
-            .onChange(of: password) { _, _ in inlineError = nil }
+            .onChange(of: email)    { _, _ in inlineError = nil; emailError = nil }
+            .onChange(of: password) { _, _ in inlineError = nil; passwordError = nil }
     }
 
     // MARK: - Provider buttons
@@ -1171,12 +1221,14 @@ private struct SignInInteractive: View {
     }
 
     private var emailBorderColour: Color {
+        if emailError != nil { return Color.red.opacity(0.7) }
         if focusedField == .email { return brandAccent }
         if emailHovered { return Color.black.opacity(0.24) }
         return Color.black.opacity(0.12)
     }
 
     private var passwordBorderColour: Color {
+        if passwordError != nil { return Color.red.opacity(0.7) }
         if focusedField == .password { return brandAccent }
         if passwordHovered { return Color.black.opacity(0.24) }
         return Color.black.opacity(0.12)
@@ -1196,16 +1248,23 @@ private struct SignInInteractive: View {
         FileLogger.log("WelcomeWindow: Google sign-in button tapped")
         Task { @MainActor in
             do {
-                // Legacy custom URL scheme. Triggers a one-time
-                // "Open Corder.app?" browser prompt; Universal Links
-                // (`https://getcorder.com/auth/callback`) would
-                // skip that prompt but need
-                // `com.apple.developer.associated-domains` in the
-                // entitlements — which requires an embedded
-                // provisioning profile, which we don't have on
-                // self-signed dev builds. Switch back when we ship
-                // a notarized build with profile.
-                let redirect = URL(string: "corder://auth/callback")!
+                // Loopback redirect to the in-app server's
+                // `/auth/callback` route. Why not `corder://`:
+                // browsers don't render a normal HTML page after a
+                // custom-scheme redirect (they hand the URL to the
+                // OS and leave the current tab on the previous URL),
+                // so the user sees Google's chooser hanging with a
+                // progress bar forever instead of "You're signed in".
+                // The loopback URL renders our styled success page,
+                // and the server-side route hands the code to
+                // `auth.session(from:)` so the wizard still wakes up
+                // via `.corderSupabaseSignedIn`.
+                //
+                // Supabase Dashboard → URL Configuration → Redirect
+                // URLs must list `http://127.0.0.1:*` (or the specific
+                // port) for this to pass the allowlist.
+                let port = AppContext.shared.server.port
+                let redirect = URL(string: "http://127.0.0.1:\(port)/auth/callback")!
                 let url = try SupabaseClientHolder.shared.auth.getOAuthSignInURL(
                     provider: .google,
                     redirectTo: redirect

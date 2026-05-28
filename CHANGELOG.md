@@ -16,6 +16,30 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.3] — 2026-05-28
+
+### Added
+- On-device Whisper model auto-prefetch on first launch — Free-tier default. No more 3-5 min cold-start wait on the first recording.
+- Transcription-model picker pinned under the Dashboard "Ready when you are" Start button. The first time the user presses Start it reveals itself and stays revealed forever. Mode 1: progress pill while the model is downloading; mode 2: chevron picker (Turbo / Small / Base / Tiny) once it's on disk. Picking a different size kicks off its download.
+- Google sign-in landing page: the Welcome wizard's Google OAuth now redirects to a styled in-app `/auth/callback` route (3mpq + Corder marks, green check, "You're signed in", ⌘W hint) instead of leaving the browser hanging on Google's account chooser. (Supabase Dashboard → Redirect URLs needs `http://127.0.0.1:*` for the loopback to pass the allowlist.)
+- `PopoverShell` — single source of truth for menu-bar popover geometry (width, padding, outer / section spacing). PopoverContentView, InviteOfferView, LoadingStateView all read from it so a tweak lands on every surface at once.
+
+### Changed
+- Welcome wizard's "Sign in with email" button is always brand-green active. Bad input lights up per-field inline errors (red border + red caption under the offending capsule) instead of greying out the CTA.
+- Settings → Transcription model card removed. The picker now lives only under the Dashboard primary button — single source of truth, no risk of the two surfaces drifting.
+- Settings → Auto-transcribe / Auto-title / Auto-summary moved above Microphone.
+- API access description trimmed to "Use this token to connect Corder to MCP clients".
+- Delete account description trimmed to "Permanently removes your account. This cannot be undone."
+- Dashboard idle subtitle shortened to "Start a recording in the background."
+- Recording subtitle shortened to "Corder keeps recording in the background."
+- Menu-bar popover layout tightened — 8 pt closer to the divider on both sides so it reads as a single grouped card.
+- Settings toolbar gear is a toggle: a second tap returns to Recent/Recording (same affordance as the Archive button).
+- Demo seed rows removed from first launch — new installs land on a clean, empty Library instead of canned "Daily standup" samples.
+
+### Fixed
+- WhisperKit model-folder path was off by one segment; `isModelDownloaded` reported "ready" the instant WhisperKit created placeholder packages, before the bytes finished streaming. Now it checks the in-flight progress flag, looks for `.incomplete` markers, and requires all `.mlmodelc` packages to be non-empty.
+- `corder-mcp` published to npm. Install: `npx -y corder-mcp` (Claude Desktop / Cursor / Claude Code configs in the README).
+
 ## [0.13.2] — 2026-05-28
 
 ### Added

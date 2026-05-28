@@ -23,11 +23,35 @@ final class TranscriptionPipeline {
     /// running for a few more seconds in the background.
     private var activeTasks: [String: Task<Void, Never>] = [:]
 
-    /// No-op kept for backwards compatibility with `AppDelegate`.
-    /// Whisper used to need a 1.5 GB cold-start download; Gemini Flash is
-    /// stateless on our side, so there's nothing to warm up any more.
+    /// Called once at app launch. When the active provider is
+    /// `.whisperLocal` (the Free-tier default) and the picked variant
+    /// isn't on disk yet, kick off a background pre-fetch so the first
+    /// recording transcribes without a 3-5 min cold-start download.
+    /// Other providers (Gemini, cloud Whisper) are stateless on our
+    /// side — nothing to warm up.
     func prewarm() {
-        FileLogger.log("TranscriptionPipeline.prewarm: no-op (cloud-only)")
+        guard AppSettings.transcriptionProvider == .whisperLocal else {
+            FileLogger.log("TranscriptionPipeline.prewarm: provider is not whisperLocal — skip")
+            return
+        }
+        guard LocalWhisperTranscriber.isAvailable() else {
+            FileLogger.log("TranscriptionPipeline.prewarm: WhisperKit unavailable on this arch — skip")
+            return
+        }
+        let variant = AppSettings.whisperLocalVariant
+        if LocalWhisperTranscriber.isModelDownloaded(variant) {
+            FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) already on disk — skip")
+            return
+        }
+        FileLogger.log("TranscriptionPipeline.prewarm: pre-fetching \(variant.rawValue) in background")
+        Task { @MainActor in
+            do {
+                try await LocalWhisperTranscriber.downloadOnly(variant)
+                FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) ready")
+            } catch {
+                FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) download failed — \(error)")
+            }
+        }
     }
 
     /// Schedule a transcription as a tracked Task so it can be cancelled

@@ -6,6 +6,7 @@ import { formatDate, formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
+import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
 
 /// Same filled-bust glyph the sidebar uses next to each meeting's
 /// speaker count — duplicated here (not exported from Sidebar.tsx) so
@@ -102,18 +103,28 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   /// `isRecording` actually transitions we clear `busy`.
   const [busy, setBusy] = useState(false);
   const lastRecRef = useRef(isRecording);
+  // Monotonic counter bumped on every transition into a recording
+  // state — covers Start from the Dashboard button, the menu-bar
+  // popover, the global hotkey, and the auto-detect invite. The
+  // child `WhisperPrefetchPill` reads this to latch its "revealed"
+  // flag once and persist it across sessions.
+  const [prefetchRevealedSince, setPrefetchRevealedSince] = useState(0);
   useEffect(() => {
     if (lastRecRef.current !== isRecording) {
       lastRecRef.current = isRecording;
       setBusy(false);
+      if (isRecording) setPrefetchRevealedSince((n) => n + 1);
     }
   }, [isRecording]);
   const handlePrimary = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
-      if (isRecording) await onStop();
-      else await onStart();
+      if (isRecording) {
+        await onStop();
+      } else {
+        await onStart();
+      }
     } catch {
       // The API helpers already toast on failure; just unstick the
       // button so the user can try again.
@@ -129,7 +140,10 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   useEffect(() => {
     if (openSettingsNonce !== lastSettingsNonceRef.current) {
       lastSettingsNonceRef.current = openSettingsNonce;
-      setRightSection("settings");
+      // Toggle: tapping the Settings gear a second time returns to
+      // Recent (same affordance as the Archive button — clicking the
+      // lit-up icon takes you back).
+      setRightSection((cur) => cur === "settings" ? "recent" : "settings");
     }
   }, [openSettingsNonce]);
   // Mirror Right-pane state up to main.tsx so MainHeader's Settings
@@ -264,6 +278,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
                       : (isRecording ? t.rec_stop : t.dashboard_start)}
                   </span>
                 </button>
+                <WhisperPrefetchPill t={t} revealedSince={prefetchRevealedSince} />
               </div>
               <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
             </div>

@@ -268,7 +268,7 @@ final class MenuBarController {
 private struct LoadingStateView: View {
     let lang: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: PopoverShell.outerSpacing) {
             HStack(spacing: 12) {
                 ProgressView().scaleEffect(0.7)
                 Text(L.t("starting_recording", lang: lang))
@@ -284,8 +284,8 @@ private struct LoadingStateView: View {
                     .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
             )
         }
-        .padding(20)
-        .frame(width: 320)
+        .padding(PopoverShell.outerPadding)
+        .frame(width: PopoverShell.width)
         .background(Color(NSColor.windowBackgroundColor))
     }
 }
@@ -302,11 +302,12 @@ private struct InviteOfferView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        // Exact composition of PopoverContentView's idle state:
-        //   VStack(spacing:18) { [status card + primary] (spacing:14),
-        //                         hairline, [secondary] }
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 14) {
+        // Geometry tokens live on `PopoverShell` so the main popover
+        // (PopoverContentView) and this invite surface stay byte-
+        // identical when a number moves. Don't reintroduce literals
+        // here.
+        VStack(alignment: .leading, spacing: PopoverShell.outerSpacing) {
+            VStack(alignment: .leading, spacing: PopoverShell.sectionSpacing) {
                 // Status card — same metrics as IdleStatus
                 // (h16 / v14, rounded-8, primary.opacity(0.10) border).
                 VStack(alignment: .leading, spacing: 1) {
@@ -348,8 +349,8 @@ private struct InviteOfferView: View {
             }
             .buttonStyle(FlatButtonStyle(role: .secondary))
         }
-        .padding(20)
-        .frame(width: 320)
+        .padding(PopoverShell.outerPadding)
+        .frame(width: PopoverShell.width)
         .background(Color(NSColor.windowBackgroundColor))
     }
 }

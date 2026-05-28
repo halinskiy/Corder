@@ -104,6 +104,16 @@ enum Routes {
         server.post["/api/account/signout"] = { _ in accountSignOut() }
         server.post["/api/account/delete"] = { _ in accountDelete() }
         server.get["/api/account/mcp-token"] = { _ in mcpToken() }
+        // Supabase OAuth landing. The Welcome wizard configures
+        // `redirectTo` pointed at this route on the local server, so
+        // Google → Supabase → 302 → this page. We pull the `code`
+        // out of the query, hand a synthesised `corder://auth/callback`
+        // URL to `auth.session(from:)`, and serve the same styled
+        // "You're signed in" page the loopback flow used to. The
+        // browser shows the success page; Corder picks up the session
+        // and the wizard closes itself via the
+        // `.corderSupabaseSignedIn` notification.
+        server.get["/auth/callback"] = { req in authCallback(req: req) }
     }
 
     /// Drop local account state. No server session to invalidate yet;
@@ -137,6 +147,189 @@ enum Routes {
         }
         return jsonResponse(["token": token])
     }
+
+    /// Supabase OAuth landing page (Google sign-in). Serves the
+    /// styled "You're signed in" HTML and, in parallel, hands the
+    /// callback URL to `Supabase.auth.session(from:)` so the wizard
+    /// sees a live session. The browser stays on this tab showing
+    /// the success page; the user closes it manually (⌘W).
+    private static func authCallback(req: HttpRequest) -> HttpResponse {
+        // Reconstruct the full URL the browser hit (Swifter strips it
+        // into path + query params). The SDK only needs scheme, host,
+        // path, and the query string in shape — we synthesise the
+        // canonical `corder://auth/callback` URL with the same query
+        // so the same code path used by the URL-scheme handler
+        // (AppDelegate.application(_:open:)) finishes the exchange.
+        var queryItems: [URLQueryItem] = req.queryParams.map { URLQueryItem(name: $0.0, value: $0.1) }
+        var comps = URLComponents()
+        comps.scheme = "corder"
+        comps.host = "auth"
+        comps.path = "/callback"
+        if !queryItems.isEmpty { comps.queryItems = queryItems }
+        if let url = comps.url {
+            Task { @MainActor in
+                do {
+                    try await SupabaseClientHolder.shared.auth.session(from: url)
+                    FileLogger.log("authCallback: Supabase session established")
+                    NotificationCenter.default.post(
+                        name: .corderSupabaseSignedIn, object: nil)
+                } catch {
+                    FileLogger.log("authCallback: session(from:) failed — \(error)")
+                }
+            }
+        }
+        _ = queryItems
+        let html = signedInHTML
+        return .raw(200, "OK", [
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+        ]) { try $0.write(Array(html.utf8)) }
+    }
+
+    /// Styled "You're signed in" page served from `/auth/callback`.
+    /// Inline CSS + inline SVG so the page renders identically with
+    /// no extra requests (Supabase Auth's callback tab is closed
+    /// seconds later — not worth an asset). Brand row at the top
+    /// (3mpq + Corder marks), green check + headline centred, ⌘W
+    /// hint chip at the bottom.
+    private static let signedInHTML = """
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <title>Signed in to Corder</title>
+      <meta name="viewport" content="width=device-width,initial-scale=1" />
+      <style>
+        :root {
+          color-scheme: dark;
+          --bg: #0e0f10;
+          --fg: #f5f5f5;
+          --fg-muted: #9b9b9b;
+          --accent: #1F7A4F;
+          --border: rgba(255,255,255,0.10);
+          --logo-3mpq: #ffffff;
+        }
+        html, body {
+          margin: 0; padding: 0;
+          background: var(--bg);
+          color: var(--fg);
+          font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+            "Inter", "Helvetica Neue", sans-serif;
+          -webkit-font-smoothing: antialiased;
+          min-height: 100%;
+        }
+        .brand {
+          position: absolute;
+          top: 40px; left: 0; right: 0;
+          display: flex; justify-content: center; align-items: center;
+          gap: 10px;
+        }
+        .brand .mark {
+          width: 24px !important; height: 24px !important;
+          flex: 0 0 24px !important;
+          display: flex; align-items: center; justify-content: center;
+          overflow: hidden; box-sizing: border-box;
+        }
+        .brand .mark.corder {
+          background: #ffffff;
+          border-radius: 5px;
+          border: 1px solid var(--border);
+          gap: 3px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+          margin-left: 2px;
+        }
+        .brand .mark.corder .bar {
+          width: 3.5px; height: 12px;
+          background: #111111; border-radius: 1.75px;
+        }
+        .brand .mark.three { color: var(--logo-3mpq); }
+        .brand .mark.three svg {
+          width: 24px !important; height: 24px !important;
+          display: block;
+        }
+        .brand .mark.three svg path { fill: currentColor; }
+        .brand .sep {
+          width: 1px; height: 14px;
+          background: currentColor; opacity: 0.18;
+          color: var(--fg);
+          flex: 0 0 1px;
+        }
+        .content {
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 48px 24px;
+          box-sizing: border-box;
+          text-align: center;
+        }
+        .check {
+          width: 44px; height: 44px;
+          border-radius: 50%;
+          background: var(--accent);
+          color: white;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 22px; line-height: 1;
+        }
+        h1 {
+          margin: 28px 0 0;
+          font-size: 26px;
+          font-weight: 300;
+          letter-spacing: -0.01em;
+        }
+        p {
+          margin: 8px 0 0;
+          color: var(--fg-muted);
+          font-size: 15px;
+          line-height: 1.55;
+          max-width: 340px;
+        }
+        .hint {
+          position: absolute;
+          left: 0; right: 0; bottom: 32px;
+          text-align: center;
+          font-size: 13px;
+          color: var(--fg-muted);
+        }
+        kbd {
+          font-family: inherit;
+          background: var(--accent);
+          color: #ffffff;
+          padding: 2px 7px;
+          border-radius: 5px;
+          font-size: 12px;
+          font-weight: 500;
+          opacity: 1;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="brand" aria-hidden="true">
+        <div class="mark three" aria-label="3mpq">
+          <svg width="64" height="64" viewBox="0 0 536 536" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+            <path d="M447.208 451.089C460.632 466.532 473.891 481.802 487.488 497.41C471.374 507.65 455.935 517.385 439.822 527.621C432.773 519.063 425.892 510.669 419.012 502.448C414.817 497.245 410.285 492.207 406.258 486.836C403.906 483.649 401.558 483.649 398.202 484.993C378.395 491.874 358.091 497.41 336.944 498.249C285.589 500.264 241.279 484.825 205.869 446.224C203.015 443.036 202.513 440.853 204.524 436.991C216.944 414.001 229.028 390.839 241.785 366.504C261.419 421.552 300.02 440.853 356.244 428.938C344.832 415.342 333.756 402.251 322.175 388.49C337.783 378.418 352.888 368.519 368.496 358.282C379.234 370.867 389.643 383.119 400.213 395.539C408.944 385.804 413.978 374.729 416.495 362.811C422.034 336.967 421.027 311.456 412.131 286.615C398.202 247.512 362.788 225.192 321.336 228.885C319.321 229.05 317.306 229.219 314.287 229.387C323.014 212.604 331.404 196.828 339.798 180.884C340.468 179.542 341.307 178.367 341.978 177.024C349.195 163.43 349.195 163.43 364.634 166.619C440.493 182.731 493.361 248.351 494.031 327.232C494.368 373.051 480.772 413.832 449.725 448.239C448.886 448.741 448.216 449.58 447.208 451.089Z"/>
+            <path d="M33.5054 499.428C33.5054 387.317 33.5054 276.048 33.5054 164.272C102.316 164.272 170.79 164.272 239.768 164.272C239.768 184.58 239.768 205.055 239.768 226.034C196.468 226.034 153.336 226.034 109.868 226.034C109.868 249.53 109.868 272.187 109.868 295.514C150.818 295.514 191.266 295.514 233.558 295.514C232.55 300.885 232.719 305.919 230.872 309.949C223.658 324.549 215.602 338.816 208.216 353.416C206.369 357.109 203.684 357.611 200.159 357.611C172.469 357.443 144.776 357.611 117.085 357.611C114.903 357.611 112.553 357.611 109.868 357.611C109.868 384.298 109.868 410.479 109.868 436.994C127.658 436.994 145.112 436.994 163.07 436.994C162.399 438.84 162.231 440.185 161.559 441.361C152.161 459.317 142.762 477.442 133.029 495.233C131.854 497.248 128.665 499.428 126.483 499.428C96.9449 499.765 67.407 499.597 37.7012 499.597C36.5262 499.765 35.3516 499.597 33.5054 499.428Z"/>
+            <path d="M355.736 150.343C361.946 138.426 367.987 126.679 374.197 115.098C390.644 84.0497 407.259 52.8333 423.541 21.617C425.387 18.0928 427.234 16.75 431.26 16.75C452.408 16.9178 473.555 16.75 494.867 16.75C496.545 16.75 498.223 16.9178 499.901 17.0856C507.624 18.4284 509.635 23.7987 504.433 29.505C496.211 38.2321 487.653 46.6236 479.259 55.0151C452.07 82.2035 424.211 108.553 398.199 136.58C385.778 150.007 372.856 153.699 355.736 150.343Z"/>
+            <path d="M79.4908 40.0757C106.008 40.0757 124.133 58.7048 124.133 86.2289C124.133 112.914 105.504 132.046 79.6586 132.214C53.8129 132.382 35.016 113.082 34.8479 86.3967C34.6801 59.376 53.3092 40.2435 79.4908 40.0757Z"/>
+            <path d="M194.615 40.0757C220.797 40.0757 238.753 58.8726 238.753 86.061C238.753 113.249 220.126 132.214 193.776 132.214C168.098 132.214 149.469 112.578 149.469 86.061C149.469 59.2082 168.266 40.0757 194.615 40.0757Z"/>
+          </svg>
+        </div>
+        <div class="sep" aria-hidden="true"></div>
+        <div class="mark corder" aria-label="Corder">
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="check" aria-hidden="true">✓</div>
+        <h1>You're signed in</h1>
+        <p>Corder picked up your Google account. You can close this tab and head back to the app.</p>
+        <div class="hint">Press <kbd>⌘W</kbd> to close.</div>
+      </div>
+    </body>
+    </html>
+    """
 
     /// Hard-delete: wipe every row + every Storage object owned by
     /// the signed-in user, then sign out + relaunch. Triggered by
