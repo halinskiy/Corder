@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Search } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  downloadWhisperLocal,
+  downloadWhisperLocal, deleteAccount, getMcpToken,
   type Settings, type InstalledApp, type AudioInputDevice,
   type WhisperLocalModel,
 } from "../api";
@@ -232,6 +232,175 @@ export function SettingsPane({
           t={t}
         />
       </SoloCard>
+
+      {/* API & MCP token — read-only token reveal so the user can
+          plug Corder into Claude Desktop, Cursor, ChatGPT, or
+          curl directly against the Supabase REST API. Same
+          `.hk-block` shell as the danger row below; the CTA flips
+          to the token + Copy button on click. */}
+      <div className="settings-divider" />
+      <SoloCard>
+        <ApiTokenRow
+          label={t.settings_api_label ?? "API access"}
+          desc={t.settings_api_desc
+            ?? "Use this token to connect Corder to MCP clients (Claude Desktop, Cursor) or call the REST API directly. Anyone with the token can read your meetings — treat it like a password."}
+          reveal={t.settings_api_reveal ?? "Reveal MCP token"}
+          copied={t.settings_api_copied ?? "Copied"}
+          copy={t.settings_api_copy ?? "Copy"}
+          docsLabel={t.settings_api_docs ?? "API docs ↗"}
+          disabled={!loaded}
+        />
+      </SoloCard>
+
+      {/* Danger zone — visually separated from the rest of the
+          settings by the same `.settings-divider` we use for the
+          hotkey/app-list section above, then a `.hk-block` shell
+          so it looks like a normal Settings row (label + desc +
+          full-width control). The CTA itself is `.clarify-btn.danger`
+          to make the irreversible nature of the action read at a
+          glance. */}
+      <div className="settings-divider" />
+      <SoloCard>
+        <DangerZoneRow
+          label={t.settings_delete_account_label ?? "Delete account"}
+          desc={t.settings_delete_account_desc
+            ?? "Permanently removes every recording, transcript, summary, and audio file from the cloud. This cannot be undone."}
+          cta={t.profile_delete ?? "Delete account"}
+          confirmText={t.profile_delete_confirm
+            ?? "Delete your account and all recordings? This cannot be undone."}
+          disabled={!loaded}
+        />
+      </SoloCard>
+    </div>
+  );
+}
+
+/// Settings row for the personal API/MCP token reveal. Idle state
+/// shows just the label/desc + a "Reveal" button. Clicking it
+/// fetches the JWT from the Swift backend, swaps the button for a
+/// monospace token strip + a Copy button + a link to the API docs
+/// on getcorder.com. Token re-fetches on every reveal so the user
+/// can grab a fresh one when the previous one expired.
+function ApiTokenRow({
+  label, desc, reveal, copy, copied, docsLabel, disabled,
+}: {
+  label: string;
+  desc: string;
+  reveal: string;
+  copy: string;
+  copied: string;
+  docsLabel: string;
+  disabled?: boolean;
+}) {
+  const [token, setToken] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [justCopied, setJustCopied] = React.useState(false);
+  return (
+    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
+         aria-label={label}>
+      <div className="settings-row-label">{label}</div>
+      <div className="settings-row-desc">{desc}</div>
+      {token == null ? (
+        <button
+          type="button"
+          className="clarify-btn"
+          style={{ width: "100%", marginTop: 8 }}
+          disabled={disabled || busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const t = await getMcpToken();
+              setToken(t);
+            } catch {
+              // Stays in reveal-button state; user re-tries.
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "…" : reveal}
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          <input
+            type="text"
+            readOnly
+            value={token}
+            onFocus={(e) => e.currentTarget.select()}
+            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              className="clarify-btn"
+              style={{ flex: 1 }}
+              onClick={() => {
+                const w = window as unknown as { corderCopy?: (s: string) => void };
+                try {
+                  if (w.corderCopy) w.corderCopy(token);
+                  else navigator.clipboard?.writeText(token);
+                  setJustCopied(true);
+                  window.setTimeout(() => setJustCopied(false), 1200);
+                } catch {}
+              }}
+            >
+              {justCopied ? copied : copy}
+            </button>
+            <button
+              type="button"
+              className="clarify-btn"
+              style={{ flex: 1 }}
+              onClick={() => {
+                const w = window as unknown as { corderOpenExternal?: (u: string) => void };
+                w.corderOpenExternal?.("https://getcorder.com/docs/api/");
+              }}
+            >
+              {docsLabel}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/// Settings row for irreversible destructive actions (Delete
+/// account today; future "Wipe local cache", etc.). Same
+/// `.hk-block` shell as HotkeyRow so it slots into the same
+/// vertical rhythm — `settings-row-label` heading, muted
+/// `settings-row-desc` explanation, full-width red CTA pinned to
+/// the bottom of the card. Confirms with the native `confirm()`
+/// dialog before firing the irreversible call.
+function DangerZoneRow({
+  label, desc, cta, confirmText, disabled,
+}: {
+  label: string;
+  desc: string;
+  cta: string;
+  confirmText: string;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  return (
+    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
+         aria-label={label}>
+      <div className="settings-row-label">{label}</div>
+      <div className="settings-row-desc">{desc}</div>
+      <button
+        type="button"
+        className="clarify-btn danger"
+        style={{ width: "100%", marginTop: 8 }}
+        disabled={disabled || busy}
+        onClick={async () => {
+          if (!window.confirm(confirmText)) return;
+          setBusy(true);
+          try { await deleteAccount(); } catch {}
+          // The Swift side relaunches the app, so no UI cleanup
+          // here — the new process boots into the Welcome wizard.
+        }}
+      >
+        {busy ? "…" : cta}
+      </button>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import AppKit
 import UserNotifications
+@preconcurrency import Supabase
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,6 +9,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         FileLogger.log("AppDelegate: applicationDidFinishLaunching")
+        // Multi-account local layout: if there's still a legacy
+        // flat `corder.db` at supportRoot AND we already know
+        // which user owns this Mac (email persisted from previous
+        // sign-in), migrate the legacy files into that user's
+        // account folder BEFORE any GRDB connection opens. Done
+        // here so AppContext.shared.repo's lazy init reads from
+        // the right path on the very first access. Idempotent —
+        // re-runs notice the destination already has a corder.db
+        // and bail out without touching anything.
+        if let email = AppSettings.userEmail, !email.isEmpty {
+            AppPaths.migrateLegacyIfNeeded(forEmail: email)
+        }
+        try? AppPaths.ensureExists()
         // Salvage recordings interrupted by a crash BEFORE the cleanup
         // below deletes them: any with usable audio on disk are flipped
         // to 'transcribing' (and picked up by the auto-resume pass), so
@@ -123,12 +137,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyCode: UInt32(AppSettings.recordHotkeyKeyCode),
             modifiers: UInt32(AppSettings.recordHotkeyModifiers))
 
-        // First-run wizard. Opens only when `AppSettings.onboardingCompleted`
-        // is false; the Done step on the final screen flips the flag. We
-        // defer past the menu-bar install so the wizard window doesn't
-        // race with the status item appearing on slow launches.
-        DispatchQueue.main.async {
-            WelcomeWindowController.shared.presentIfNeeded()
+        // Surface SOMETHING visible on launch. The "signed in?"
+        // decision used to read the local `onboardingCompleted`
+        // UserDefaults flag; now it asks Supabase for an active
+        // session — that's the real source of truth once auth
+        // moved server-side. The flag is still flipped by the
+        // wizard for backward-compat with surfaces that haven't
+        // been ported yet, but it's not the decision input here.
+        //
+        // Session restore is async (SDK reads disk + may refresh
+        // the access token); we do the check inside a Task so the
+        // launch path doesn't block.
+        Task { @MainActor in
+            let session = try? await SupabaseClientHolder.shared.auth.session
+            if session == nil {
+                LibraryWindow.shared.dismiss()
+                WelcomeWindowController.shared.presentManually()
+            } else {
+                // Mirror the resolved identity into local UserDefaults
+                // so the profile popover etc. don't need to await
+                // Supabase on every read.
+                if let user = SupabaseClientHolder.shared.auth.currentUser {
+                    if let email = user.email, !email.isEmpty {
+                        AppSettings.setUserEmail(email)
+                    }
+                    let meta = user.userMetadata
+                    let name = (meta["full_name"]?.stringValue
+                                ?? meta["name"]?.stringValue) as String?
+                    if let name, !name.isEmpty {
+                        AppSettings.setUserName(name)
+                    }
+                    AppSettings.setOnboardingCompleted(true)
+                    AppSettings.setHasSignedInBefore(true)
+                }
+                LibraryWindow.shared.show(serverURL: AppContext.shared.server.baseURL)
+                // Backfill pre-Supabase meetings into the cloud the
+                // first time we launch under a signed-in user. No-op
+                // after the sticky flag is set. Runs in the
+                // background so it never blocks the Library window
+                // becoming interactive.
+                Task.detached {
+                    await SupabaseSync.backfillIfNeeded(repo: AppContext.shared.repo)
+                }
+            }
         }
     }
 
@@ -276,6 +327,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FileLogger.log(String(format: "purgeStaleOriginals: removed %d original tracks across %d cached meetings, freed %.1f MB",
                                   purged, ids.count, mb))
         }
+    }
+
+    // MARK: - Custom URL scheme (Supabase OAuth callback)
+
+    /// `corder://auth/callback#…` lands here after Supabase finishes
+    /// the Google OAuth exchange. The hash fragment carries the
+    /// access + refresh tokens; Supabase's SDK parses them via
+    /// `auth.session(from:)` and persists the session, after which
+    /// `auth.currentUser` is non-nil and the Welcome wizard sees the
+    /// signed-in state.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard url.scheme?.lowercased() == "corder" else { continue }
+            FileLogger.log("AppDelegate: incoming URL \(url)")
+            Task { @MainActor in
+                do {
+                    try await SupabaseClientHolder.shared.auth.session(from: url)
+                    FileLogger.log("AppDelegate: Supabase session established from callback URL")
+                    // Notify any UI observing the sign-in state. The
+                    // wizard subscribes to this notification to flip
+                    // its bottom-CTA from "Continue with Google" to a
+                    // finished state and to call its own onSuccess.
+                    NotificationCenter.default.post(name: .corderSupabaseSignedIn, object: nil)
+                } catch {
+                    FileLogger.log("AppDelegate: Supabase session(from:) failed — \(error)")
+                }
+            }
+        }
+    }
+}
+
+extension Notification.Name {
+    /// Fired after `SupabaseClient.auth.session(from:)` successfully
+    /// consumes an OAuth callback URL and the user is signed in. The
+    /// Welcome wizard listens for this to finish its sign-in step
+    /// without polling `auth.currentUser`.
+    static let corderSupabaseSignedIn = Notification.Name("CorderSupabaseSignedIn")
+}
+
+/// Quit + relaunch the app. Used after sign-in / sign-out so the
+/// next process boots with the right per-account on-disk paths
+/// (the GRDB connection in AppContext.shared.dbq is `lazy` and
+/// binds to whatever `AppPaths.databaseURL` returned on first
+/// access — there's no way to swap it in place without tearing
+/// the SwiftUI/Swifter graph apart).
+@MainActor
+enum CorderRelaunch {
+    static func now() {
+        let path = Bundle.main.bundlePath
+        let task = Process()
+        task.launchPath = "/usr/bin/open"
+        task.arguments = ["-n", path]
+        do { try task.run() }
+        catch { FileLogger.log("CorderRelaunch: spawn failed — \(error)") }
+        NSApp.terminate(nil)
     }
 }
 

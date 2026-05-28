@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import Swifter
 import AppKit
+@preconcurrency import Supabase
 
 enum Routes {
     static func register(server: HttpServer, repo: MeetingRepository) {
@@ -101,6 +102,8 @@ enum Routes {
         server.get["/api/update-status"] = { _ in updateStatus() }
         server.post["/api/update-check"] = { _ in updateCheck() }
         server.post["/api/account/signout"] = { _ in accountSignOut() }
+        server.post["/api/account/delete"] = { _ in accountDelete() }
+        server.get["/api/account/mcp-token"] = { _ in mcpToken() }
     }
 
     /// Drop local account state. No server session to invalidate yet;
@@ -108,17 +111,91 @@ enum Routes {
     /// reads on next launch. After the call the React app reloads, the
     /// menu-bar app sees `onboardingCompleted = false`, and the Welcome
     /// wizard re-opens. Pre-existing recordings are NOT touched.
-    private static func accountSignOut() -> HttpResponse {
+    /// Reveal the signed-in user's Supabase access token so they can
+    /// plug Corder into MCP clients (Claude Desktop / Cursor / etc.)
+    /// or hit the public REST API directly. The token is the same
+    /// JWT the Supabase SDK already has in memory — we just surface
+    /// it to the UI. Expires ~1h; clients re-read this endpoint when
+    /// they get a 401. Returns 401 itself when signed out.
+    private static func mcpToken() -> HttpResponse {
+        let semaphore = DispatchSemaphore(value: 0)
+        var token: String?
         Task { @MainActor in
+            defer { semaphore.signal() }
+            do {
+                let session = try await SupabaseClientHolder.shared.auth.session
+                token = session.accessToken
+            } catch {
+                FileLogger.log("mcpToken: no active session — \(error)")
+            }
+        }
+        semaphore.wait()
+        guard let token = token else {
+            return .raw(401, "Unauthorized", ["Content-Type": "application/json"]) {
+                try $0.write(Array(#"{"error":"not signed in"}"#.utf8))
+            }
+        }
+        return jsonResponse(["token": token])
+    }
+
+    /// Hard-delete: wipe every row + every Storage object owned by
+    /// the signed-in user, then sign out + relaunch. Triggered by
+    /// the red "Delete account" button in the profile popover.
+    /// GDPR-style: after this, there's no PII left under the
+    /// user's id (the `auth.users` row remains as an empty shell;
+    /// killing it requires the service-role key, which we don't
+    /// ship in the client).
+    private static func accountDelete() -> HttpResponse {
+        Task { @MainActor in
+            do {
+                try await SupabaseSync.deleteEverything()
+                FileLogger.log("accountDelete: cloud data wiped, signed out")
+            } catch {
+                FileLogger.log("accountDelete: failed — \(error)")
+            }
+            // Also clear local UserDefaults so the relaunched
+            // process starts fresh (welcome wizard reopens).
             AppSettings.setLicenceKey(nil)
             AppSettings.setUserName(nil)
+            AppSettings.setUserEmail(nil)
+            AppSettings.setUserTier(.free)
+            AppSettings.setOnboardingCompleted(false)
+            AppSettings.setOnboardingStep(0)
+            AppSettings.setHasSignedInBefore(false)
+            LibraryWindow.shared.dismiss()
+            CorderRelaunch.now()
+        }
+        return .ok(.text(#"{"ok":true}"#))
+    }
+
+    private static func accountSignOut() -> HttpResponse {
+        Task { @MainActor in
+            // Tell Supabase to invalidate the session AND clear the
+            // local refresh token. Best-effort: if the network is
+            // down the SDK still wipes the local session keys, which
+            // is what gates the UI; the dangling server session can
+            // expire on its own.
+            do {
+                try await SupabaseClientHolder.shared.auth.signOut()
+            } catch {
+                FileLogger.log("AccountAPI: Supabase signOut failed (\(error)) — clearing local state anyway")
+            }
+            AppSettings.setLicenceKey(nil)
+            AppSettings.setUserName(nil)
+            AppSettings.setUserEmail(nil)
             AppSettings.setUserTier(.free)
             AppSettings.setOnboardingCompleted(false)
             AppSettings.setOnboardingStep(0)
             FileLogger.log("AccountAPI: signed out, wizard will re-open on next launch")
-            // Re-present the Welcome wizard so the user can sign in
-            // again without restarting the app.
-            WelcomeWindowController.shared.presentManually()
+            // Gate the rest of Corder behind sign-in: close the
+            // Library window so the signed-in surface isn't visible
+            // behind the wizard, then re-present the wizard so the
+            // user can sign in again without restarting the app.
+            LibraryWindow.shared.dismiss()
+            // Relaunch so the next process picks up the `_guest`
+            // account folder (empty DB), instead of staying bound
+            // to the previous user's per-account GRDB connection.
+            CorderRelaunch.now()
         }
         return .ok(.text(#"{"ok":true}"#))
     }
@@ -508,6 +585,8 @@ enum Routes {
                     is_system_default: $0.isSystemDefault)
             },
             licence_key: AppSettings.licenceKey,
+            user_name: AppSettings.userName,
+            user_email: AppSettings.userEmail,
             is_pro: AppSettings.isPro,
             tier: AppSettings.userTier.rawValue,
             onboarding_completed: AppSettings.onboardingCompleted,
@@ -1031,6 +1110,21 @@ enum Routes {
                     return .internalServerError
                 }
             }
+            // Supabase Storage fallback: the typical second-device case.
+            // Mac B pulled the meeting metadata from Supabase but no
+            // local audio was ever recorded on it. Download the cloud
+            // copy once into the canonical local path so the Range
+            // branch below can serve scrubs straight from disk on
+            // every subsequent request.
+            if !FileManager.default.fileExists(atPath: url.path),
+               kind == .audio {
+                FileLogger.log("serveMedia: cache miss for \(id), trying Supabase Storage")
+                let downloaded = hydrateSupabaseAudio(meetingId: id, localURL: url)
+                if !downloaded {
+                    FileLogger.log("serveMedia: Supabase Storage hydrate failed for \(id)")
+                    return .notFound
+                }
+            }
 
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
@@ -1090,6 +1184,46 @@ enum Routes {
                 ok = true
             } catch {
                 FileLogger.log("hydrateDropboxFile: \(remote) → \(localURL.lastPathComponent) failed: \(error)")
+            }
+        }
+        semaphore.wait()
+        return ok
+    }
+
+    /// Pull a meeting's mix audio from Supabase Storage to the local
+    /// `audio.wav` path. The "cross-device cache miss" case: Mac B
+    /// signed in, pulled metadata, but has no local recording. The
+    /// upload path stores objects at `<user_id>/<meeting_id>/mix.wav`
+    /// — we ask the storage client for that key, write it to disk,
+    /// then the regular Range branch serves the file. Returns false
+    /// on any failure (missing object, not signed in, network).
+    private static func hydrateSupabaseAudio(meetingId: String, localURL: URL) -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        Task.detached { @MainActor in
+            defer { semaphore.signal() }
+            guard let uid = SupabaseClientHolder.shared.auth.currentUser?.id else {
+                FileLogger.log("hydrateSupabaseAudio: not signed in")
+                return
+            }
+            do {
+                try FileManager.default.createDirectory(
+                    at: localURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true)
+                // Lowercase UUID — Postgres `auth.uid()::text` returns
+                // lowercase, and our Storage RLS policy compares
+                // `split_part(name, '/', 1)` against it strictly.
+                // Swift's default `uuidString` is UPPERCASE → mismatch
+                // → 403 unauthorized. Match the SQL convention.
+                let key = "\(uid.uuidString.lowercased())/\(meetingId)/mix.wav"
+                let data = try await SupabaseClientHolder.shared.storage
+                    .from("recordings")
+                    .download(path: key)
+                try data.write(to: localURL)
+                ok = true
+                FileLogger.log("hydrateSupabaseAudio: pulled \(key) (\(data.count) bytes)")
+            } catch {
+                FileLogger.log("hydrateSupabaseAudio: \(meetingId) failed — \(error)")
             }
         }
         semaphore.wait()

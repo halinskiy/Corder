@@ -7,6 +7,7 @@ import {
 } from "../api";
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
+import { Tooltip } from "./Tooltip";
 
 interface Props {
   detail: MeetingDetail;
@@ -419,15 +420,16 @@ function ScreenVideo({
             </svg>
           </div>
         )}
-        <button
-          type="button"
-          className="screen-video-fs-btn"
-          onClick={(e) => { e.stopPropagation(); openFullscreen(); }}
-          aria-label="Fullscreen"
-          title="Fullscreen"
-        >
-          <Maximize2 size={15} strokeWidth={2.2} />
-        </button>
+        <Tooltip label="Fullscreen">
+          <button
+            type="button"
+            className="screen-video-fs-btn"
+            onClick={(e) => { e.stopPropagation(); openFullscreen(); }}
+            aria-label="Fullscreen"
+          >
+            <Maximize2 size={15} strokeWidth={2.2} />
+          </button>
+        </Tooltip>
       </div>
 
       {expanded && createPortal(

@@ -16,6 +16,41 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.0] — 2026-05-28
+
+### Added
+- API access card in Settings: reveal your personal MCP token, copy it, open the API docs. Lets you plug Corder into Claude Desktop, Cursor, ChatGPT desktop or any MCP-aware client.
+- `@corder/mcp` MCP server (Node, npm) — exposes `list_meetings`, `get_meeting`, `search_transcripts`, `get_summary`, `list_speakers` tools to any MCP client. Reads scoped to the signed-in user via Supabase row-level security.
+- Tooltips on toolbar buttons (Settings, Archive, Theme, Copy, Refresh, Fullscreen) — fast 350 ms delay, design-system styling.
+- Archive button in the toolbar is now disabled when there's nothing archived, with a "Archive is empty" tooltip.
+
+### Changed
+- Welcome wizard email/password path now uses Supabase Auth (sign-in falls back to sign-up on first attempt) so the cloud account is real from the very first session.
+
+### Fixed
+- Profile menu no longer carries a duplicate Settings row — the toolbar gear is the only canonical entry.
+
+## [0.12.0] — 2026-05-28
+
+### Added
+- Cloud sync via Supabase: meetings, speakers, segments, summaries and audio files mirror automatically. Sign in on a second Mac and your library shows up.
+- Account-scoped on-disk layout: every signed-in Google account has its own per-account folder, so multiple Google accounts on one Mac can't see each other's recordings.
+- Welcome wizard now signs in through Supabase (Google OAuth + email/password), with a real session restore on launch.
+- Delete account row in Settings (red CTA, confirmation prompt). Cascades through every meeting, speaker, segment, summary and Storage object owned by the user.
+- Get help row in the profile popover opens https://getcorder.com/contact/ in the system browser.
+- MainHeader's Settings toolbar button now lights up `.active` while the Settings pane is open, matching the Archive toggle.
+
+### Changed
+- Notifications: every banner Corder posts now replaces the previous one in Notification Center instead of stacking up.
+- Welcome email fires only on first sign-in, not on every Google login. Branded Corder logo replaces the legacy avatar.
+- Profile popover refactored: Dashboard + Get help on top, Sign out on the bottom with a divider; Settings moved out (toolbar gear is the canonical entry).
+
+### Fixed
+- Profile popover header reads the signed-in email / display name from Supabase instead of the hard-coded placeholder.
+- Header drag no longer swallows clicks on breadcrumb / toolbar buttons. The Native title-bar strip is back to 28 pt.
+- Rating banner buttons aligned to the design system; chevron stays visible on hover in custom dropdowns.
+- DMG installer background re-rendered with the same Tahoe-style glass icon the Dock shows.
+
 ## [0.11.0] — 2026-05-27
 
 ### Added

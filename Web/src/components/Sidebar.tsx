@@ -56,16 +56,20 @@ interface Props {
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
   lang: Lang;
-  /// Current paid-tier rung. `max` hides the bottom Upgrade card
-  /// entirely; `free` / `pro` show it. Plumbed from main.tsx where
-  /// settings are loaded; falls back to `free` when unknown so the
-  /// CTA is shown by default (safer than silently hiding it).
+  /// Current paid-tier rung. Kept on the props for future use even
+  /// though the upgrade card is gone — callers in main.tsx already
+  /// pass it through, removing it here would cascade through other
+  /// files for no benefit.
+  /// Plumbed from main.tsx; consumed by no surface right now (the
+  /// Upgrade card that used to read it was removed). Left on the
+  /// prop bag so a future "Free-tier only" affordance has a
+  /// wiring point that doesn't need to recompute the value.
   tier?: "free" | "pro" | "max";
 }
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang, tier }: Props) {
+export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; value: string } | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -301,11 +305,10 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
         ))}
         <div className="sidebar-list-spacer" />
       </div>
-      {/* Upgrade-to-Max CTA pinned at the bottom of the sidebar — only
-          shown for Free/Pro tiers. Tapping anywhere on the card opens
-          the public landing page's pricing section in the default
-          browser via the WKWebView bridge. */}
-      {tier !== "max" && <UpgradeCard t={t} />}
+      {/* Upgrade CTA card removed — it overpowered the sidebar and the
+          tier badge inside the profile popover already conveys plan
+          state without selling. Re-introduce only if conversion data
+          points at it. */}
       <OverlayScrollbar scrollRef={listRef} dividerRef={sidebarRef} name="corder-sb-list" />
       {menu && (
         isBatchMenu ? (
@@ -359,31 +362,6 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
         )
       )}
     </aside>
-  );
-}
-
-/// Upgrade card sitting at the bottom of the sidebar. Same shape as
-/// a meeting row but with an accent left-border + a tinted background
-/// to read as a real-money CTA. The whole card is the click target so
-/// the user doesn't have to aim at a tiny button.
-function UpgradeCard({ t }: { t: T }) {
-  const onClick = React.useCallback(() => {
-    try {
-      (window as unknown as { corderOpenExternal?: (url: string) => void })
-        .corderOpenExternal?.("https://halinskiy.github.io/corder-landing/#pricing");
-    } catch {}
-  }, []);
-  return (
-    <button
-      type="button"
-      className="upgrade-card"
-      onClick={onClick}
-      title={t.upgrade_card_cta ?? "Upgrade"}
-    >
-      <div className="upgrade-card-title">{t.upgrade_card_title ?? "Unlock Max"}</div>
-      <div className="upgrade-card-body">{t.upgrade_card_body ?? "Unlimited recordings, all ASR providers, priority support"}</div>
-      <div className="upgrade-card-cta">{t.upgrade_card_cta ?? "Upgrade"}</div>
-    </button>
   );
 }
 

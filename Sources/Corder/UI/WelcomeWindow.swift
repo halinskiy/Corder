@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import AVFoundation
 import CoreGraphics
+@preconcurrency import Supabase
 
 /// Welcome / onboarding window shown on first launch (and any later
 /// launch where the user closed it before finishing). Five steps:
@@ -50,6 +51,36 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
     func presentManually() { present() }
 
     private func present() {
+        // Bootstrap the sticky permission flags from "previous use"
+        // evidence: if there are any meetings in the local DB then
+        // the user MUST have granted Screen Recording + Microphone
+        // at some point — capture would have failed otherwise. This
+        // covers the sign-out / re-install case where TCC remembers
+        // the grant but `CGPreflightScreenCaptureAccess` (process-
+        // cached) reports false until the first live capture call.
+        let priorMeetings = (try? AppContext.shared.repo.listMeetings())?.count ?? 0
+        if priorMeetings > 0 {
+            if !AppSettings.micGrantedSticky    { AppSettings.setMicGrantedSticky(true) }
+            if !AppSettings.screenGrantedSticky { AppSettings.setScreenGrantedSticky(true) }
+        }
+
+        // Re-evaluate the right starting step EVERY time the wizard
+        // surfaces (cold first run AND every sign-out re-open). The
+        // shared `wizardState` keeps the previous step otherwise,
+        // which was wrong after sign-out: the wizard would re-open
+        // on `.permissions` even though the user had granted both
+        // mic + screen back on their first install.
+        let mic = currentMicStatus()
+        let screen = currentScreenStatus()
+        FileLogger.log("WelcomeWindow.present: mic=\(mic) screen=\(screen) priorMeetings=\(priorMeetings) savedStep=\(AppSettings.onboardingStep)")
+        if mic == .granted, screen == .granted {
+            wizardState.step = .signin
+            AppSettings.setOnboardingStep(WizardStep.signin.rawValue)
+        } else {
+            wizardState.step = .permissions
+            AppSettings.setOnboardingStep(WizardStep.permissions.rawValue)
+        }
+
         if let w = window {
             NSApp.activate(ignoringOtherApps: true)
             w.makeKeyAndOrderFront(nil)
@@ -60,8 +91,31 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
             onFinish: { [weak self] result in
                 AppSettings.setOnboardingCompleted(true)
                 AppSettings.setOnboardingStep(0)
+                // Persist the signed-in email so the profile popover
+                // can show it under the display name (replaces the
+                // hard-coded "Kostiantyn Halynskyi"). Sign-out clears
+                // this in `accountSignOut`.
+                if let email = result?.email, !email.isEmpty {
+                    AppSettings.setUserEmail(email)
+                }
+                if let name = result?.displayName, !name.isEmpty {
+                    AppSettings.setUserName(name)
+                }
                 FileLogger.log("WelcomeWindow: onboarding completed (provider=\(result?.provider ?? "n/a"))")
+                // Multi-account local storage: each Supabase user
+                // owns their own folder under `accounts/<email-hash>/`.
+                // GRDB binds the DB path on first access and we
+                // can't swap it live, so the only correct path on
+                // sign-in is to relaunch — the new process boots
+                // pointing at the right account folder, migrates
+                // the legacy flat-layout files in if needed, and
+                // pulls from cloud during AppDelegate launch.
+                if let email = result?.email, !email.isEmpty {
+                    AppPaths.migrateLegacyIfNeeded(forEmail: email)
+                }
                 self?.close()
+                CorderRelaunch.now()
+                return
                 // Land the user in the main app: open the Library
                 // window and fire a welcome toast. We do this on the
                 // next runloop tick so the wizard's close animation
@@ -70,20 +124,14 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
                     LibraryWindow.shared.show(
                         serverURL: AppContext.shared.server.baseURL)
                     if let result {
-                        let name = result.displayName
-                            ?? AppSettings.userName
-                            ?? result.email.flatMap { $0.split(separator: "@").first.map(String.init) }
-                        let title: String
-                        let body: String
-                        if let name, !name.isEmpty {
-                            title = "Welcome, \(name)!"
-                            body  = "You're signed in to Corder."
-                        } else {
-                            title = "You're signed in"
-                            body  = "Welcome to Corder."
-                        }
+                        // Short, no em-dash. First sign-in this
+                        // install ever saw gets a bare "Welcome";
+                        // every later sign-in is "Welcome back".
+                        // `wasFirstSignIn` was captured BEFORE the
+                        // sign-in handler flipped the sticky flag.
+                        let title = result.wasFirstSignIn ? "Welcome" : "Welcome back"
                         LibraryWindow.shared.postToast(
-                            title: title, body: body, kind: "success")
+                            title: title, body: "", kind: "success")
                     }
                 }
             },
@@ -277,6 +325,12 @@ struct SignInResult {
     let provider: String          // "google" | "apple" | "email"
     let displayName: String?      // Google `name` claim / Apple full name
     let email: String?
+    /// True when this is the first sign-in this install has ever
+    /// seen. Drives the post-onboarding toast copy ("Welcome" vs.
+    /// "Welcome back") AND the welcome-email send gate (only fires
+    /// when true). Snapshotted BEFORE we flip
+    /// `AppSettings.hasSignedInBefore = true`.
+    let wasFirstSignIn: Bool
 }
 
 // MARK: - Step enum
@@ -304,21 +358,55 @@ private enum WizardStep: Int, CaseIterable {
 private enum WizardPermission { case unknown, granted, denied }
 
 private func currentMicStatus() -> WizardPermission {
+    let live: WizardPermission
     switch AVCaptureDevice.authorizationStatus(for: .audio) {
-    case .authorized:           return .granted
-    case .denied, .restricted:  return .denied
-    case .notDetermined:        return .unknown
-    @unknown default:           return .unknown
+    case .authorized:           live = .granted
+    case .denied, .restricted:  live = .denied
+    case .notDetermined:        live = .unknown
+    @unknown default:           live = .unknown
     }
+    // Snapshot grants so a re-install / sign-out cycle keeps
+    // remembering "this user already said yes". Mic status is
+    // usually reliable, but we sync the sticky flag for symmetry
+    // with the screen path below.
+    if live == .granted {
+        AppSettings.setMicGrantedSticky(true)
+        return .granted
+    }
+    if live == .denied {
+        AppSettings.setMicGrantedSticky(false)
+        return .denied
+    }
+    // `notDetermined` after a previous grant means the OS forgot
+    // (rare). Trust the sticky snapshot if we have one.
+    return AppSettings.micGrantedSticky ? .granted : .unknown
 }
 
 private func currentScreenStatus() -> WizardPermission {
-    // `CGPreflightScreenCaptureAccess` returns the live grant state.
-    // Unlike microphone, the OS doesn't expose a "not determined"
-    // bucket here — preflight returns false both before the first
-    // prompt and after a denial, so the UI defers a hard "denied"
-    // label until we've actually invoked the request once.
-    CGPreflightScreenCaptureAccess() ? .granted : .unknown
+    // `CGPreflightScreenCaptureAccess` reads a PROCESS-cached
+    // value that the OS only refreshes after the first live
+    // screen-capture call. On a fresh process for an already-
+    // authorised bundle id (the typical "I re-installed Corder
+    // and TCC remembers me" case), preflight returns false even
+    // though the System Settings toggle is ON. That's why a sign-
+    // out / re-install cycle was re-asking the user for a grant
+    // they'd already given.
+    //
+    // Workaround: snapshot grants to UserDefaults the first time
+    // preflight returns true (or the user finishes the wizard
+    // having granted Screen Recording), then trust that snapshot
+    // until we get a NEW preflight true reading. Snapshot only
+    // gets cleared if the user explicitly invalidates it via
+    // some other path (none today — System Settings revocation
+    // doesn't notify us; the next failing capture will reveal it).
+    if CGPreflightScreenCaptureAccess() {
+        AppSettings.setScreenGrantedSticky(true)
+        return .granted
+    }
+    if AppSettings.screenGrantedSticky {
+        return .granted
+    }
+    return .unknown
 }
 
 // Earlier drafts had a `liveScreenStatus()` helper that called
@@ -370,8 +458,21 @@ fileprivate final class WizardState: ObservableObject {
     @Published var signInLoading: Bool = false
 
     init() {
-        let initial = WizardStep(rawValue: AppSettings.onboardingStep) ?? .permissions
-        self.step = initial
+        let saved = WizardStep(rawValue: AppSettings.onboardingStep) ?? .permissions
+        // If the user already has BOTH the mic + screen-recording
+        // grants (typical re-install case where TCC entries survived
+        // an `rm -rf /Applications/Corder.app`), skip the permissions
+        // step entirely — there's nothing to ask for, and showing
+        // two "Allow" cards next to system permissions the user
+        // already gave once reads as "Corder forgot what I told it".
+        if saved == .permissions,
+           currentMicStatus() == .granted,
+           currentScreenStatus() == .granted {
+            self.step = .signin
+            AppSettings.setOnboardingStep(WizardStep.signin.rawValue)
+        } else {
+            self.step = saved
+        }
     }
 
     func advance(to next: WizardStep) {
@@ -595,42 +696,35 @@ private struct WelcomeView: View {
         return nil
     }
 
-    /// POSTs the email to the backend signup endpoint and stores
-    /// it locally. Endpoint TODO: `api.getcorder.com/signup` once
-    /// the Cloudflare Worker is live — until then the call no-ops
-    /// on network failure, the local persist still works so we
-    /// have the value to retry later.
+    /// Signs the user in (or up) through Supabase Auth. We attempt
+    /// `signInWithPassword` first; on `Invalid login credentials`
+    /// we treat the email as new and fall back to `signUp` (Supabase
+    /// either creates the user + sends a confirmation email, or, if
+    /// "Confirm email" is OFF in the project, returns a live session
+    /// immediately). Welcome email is owned by Supabase Auth now —
+    /// the old Cloudflare Worker `/signup` POST is gone.
     private func submitSignIn(email: String) {
-        AppSettings.setLicenceKey(email)
         FileLogger.log("WelcomeWindow: sign-in submitted for \(email)")
-
-        // Fire-and-forget POST to /signup. We don't gate the user on
-        // it — there's no backend yet, and even when there is, email
-        // verification adds friction without protecting any local
-        // function (records are on disk, Pro flows go through Paddle
-        // which does its own email verification). Close the wizard
-        // immediately; the POST resolves in the background.
-        if let url = URL(string: "https://corder-api.empqwork.workers.dev/signup") {
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            let body: [String: Any] = [
-                "email":    email,
-                "password": passwordInput,
-                "source":   "corder-mac-wizard",
-            ]
-            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-            URLSession.shared.dataTask(with: req) { _, resp, err in
-                if let err = err {
-                    FileLogger.log("WelcomeWindow: signup POST failed: \(err)")
-                } else {
-                    let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                    FileLogger.log("WelcomeWindow: signup POST status \(code)")
+        let pw = passwordInput
+        Task { @MainActor in
+            let client = SupabaseClientHolder.shared.auth
+            do {
+                _ = try await client.signIn(email: email, password: pw)
+            } catch {
+                FileLogger.log("WelcomeWindow: signIn failed (\(error)), attempting signUp")
+                do {
+                    _ = try await client.signUp(email: email, password: pw)
+                } catch {
+                    FileLogger.log("WelcomeWindow: signUp also failed: \(error)")
+                    return
                 }
-            }.resume()
+            }
+            let wasFirst = !AppSettings.hasSignedInBefore
+            AppSettings.setUserEmail(email)
+            AppSettings.setHasSignedInBefore(true)
+            onFinish(.init(provider: "email", displayName: nil, email: email,
+                           wasFirstSignIn: wasFirst))
         }
-
-        onFinish(.init(provider: "email", displayName: nil, email: email))
     }
 }
 
@@ -929,6 +1023,7 @@ private struct SignInInteractive: View {
     @FocusState private var focusedField: Field?
     @State private var emailHovered: Bool = false
     @State private var passwordHovered: Bool = false
+    @State private var googleHovered: Bool = false
 
     private enum Field { case email, password }
 
@@ -988,7 +1083,14 @@ private struct SignInInteractive: View {
     // MARK: - Provider buttons
 
     private var googleButton: some View {
-        Button(action: openGoogleOAuth) {
+        // Secondary-button hover treatment: hovered = a touch darker
+        // fill + darker outline. Matches the `button:hover` rule in
+        // the Web design system (`var(--bg-hover)` + `#b8b8b4`), the
+        // visual reference Kostya pointed at for parity.
+        let fill: Color   = googleHovered ? Color(white: 0.96) : .white
+        let stroke: Color = googleHovered ? Color.black.opacity(0.24)
+                                          : Color.black.opacity(0.12)
+        return Button(action: openGoogleOAuth) {
             HStack(spacing: 10) {
                 GoogleG()
                     .frame(width: 16, height: 16)
@@ -999,13 +1101,15 @@ private struct SignInInteractive: View {
             .frame(maxWidth: .infinity)
             .frame(height: 48)
             .frame(maxWidth: 320)
-            .background(Capsule().fill(Color.white))
-            .overlay(Capsule().stroke(Color.black.opacity(0.12), lineWidth: 1))
+            .background(Capsule().fill(fill))
+            .overlay(Capsule().stroke(stroke, lineWidth: 1))
             .clipShape(Capsule())
             .contentShape(Capsule())
+            .animation(.easeOut(duration: 0.12), value: googleHovered)
         }
         .buttonStyle(.plain)
         .onHover { h in
+            googleHovered = h
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
@@ -1013,50 +1117,57 @@ private struct SignInInteractive: View {
     // MARK: - Email + password
 
     private var emailField: some View {
-        TextField("you@example.com", text: $email)
-            .textFieldStyle(.plain)
-            .font(.system(size: 14))
-            .textContentType(.emailAddress)
-            .disableAutocorrection(true)
-            .focused($focusedField, equals: .email)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .frame(maxWidth: 320)
-            .background(Capsule().fill(Color.white))
-            .overlay(Capsule().stroke(emailBorderColour, lineWidth: 1))
-            .contentShape(Capsule())
-            .onTapGesture { focusedField = .email }
-            .onSubmit {
-                // Return inside the email field jumps focus to
-                // password; if password's already filled the
-                // signin fires from there.
-                if password.isEmpty { focusedField = .password }
-                else                { onSubmit() }
-            }
-            .onHover { h in
-                emailHovered = h
-                if h { NSCursor.iBeam.push() } else { NSCursor.pop() }
-            }
+        // ZStack so the white capsule background catches taps across
+        // the FULL pill area, not just the narrow strip where the
+        // `TextField` itself paints. A native `IBeamCursorOverlay`
+        // sits on top with `addCursorRect` so the I-beam appears
+        // anywhere inside the pill (the SwiftUI `.onHover` +
+        // `NSCursor.iBeam.push()` chain accumulates the cursor
+        // stack and stops switching the cursor reliably after a
+        // few in/out cycles).
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(Color.white)
+                .overlay(Capsule().stroke(emailBorderColour, lineWidth: 1))
+            TextField("you@example.com", text: $email)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .textContentType(.emailAddress)
+                .disableAutocorrection(true)
+                .focused($focusedField, equals: .email)
+                .padding(.horizontal, 18)
+                .onSubmit {
+                    if password.isEmpty { focusedField = .password }
+                    else                { onSubmit() }
+                }
+            IBeamCursorOverlay()
+        }
+        .frame(maxWidth: 320)
+        .frame(height: 48)
+        .contentShape(Capsule())
+        .onTapGesture { focusedField = .email }
+        .onHover { h in emailHovered = h }
     }
 
     private var passwordField: some View {
-        SecureField("Password", text: $password)
-            .textFieldStyle(.plain)
-            .font(.system(size: 14))
-            .textContentType(.password)
-            .focused($focusedField, equals: .password)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .frame(maxWidth: 320)
-            .background(Capsule().fill(Color.white))
-            .overlay(Capsule().stroke(passwordBorderColour, lineWidth: 1))
-            .contentShape(Capsule())
-            .onTapGesture { focusedField = .password }
-            .onSubmit { onSubmit() }
-            .onHover { h in
-                passwordHovered = h
-                if h { NSCursor.iBeam.push() } else { NSCursor.pop() }
-            }
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(Color.white)
+                .overlay(Capsule().stroke(passwordBorderColour, lineWidth: 1))
+            SecureField("Password", text: $password)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .textContentType(.password)
+                .focused($focusedField, equals: .password)
+                .padding(.horizontal, 18)
+                .onSubmit { onSubmit() }
+            IBeamCursorOverlay()
+        }
+        .frame(maxWidth: 320)
+        .frame(height: 48)
+        .contentShape(Capsule())
+        .onTapGesture { focusedField = .password }
+        .onHover { h in passwordHovered = h }
     }
 
     private var emailBorderColour: Color {
@@ -1071,34 +1182,90 @@ private struct SignInInteractive: View {
         return Color.black.opacity(0.12)
     }
 
-    // MARK: - Google
+    // MARK: - Google (via Supabase Auth)
 
-    /// Kicks off the full Google Desktop OAuth flow — loopback
-    /// listener + browser open + token exchange + userinfo. On
-    /// success flips the wizard into the confirmation card; on
-    /// failure logs and stays put.
+    /// Kicks off Supabase's Google OAuth flow: ask the SDK for the
+    /// authorize URL, open it in the user's default browser, then
+    /// wait for `AppDelegate.application(_:open:)` to consume the
+    /// `corder://auth/callback#…` redirect and post
+    /// `.corderSupabaseSignedIn`. Replaces the older
+    /// `GoogleOAuth.signIn` (loopback listener + manual token
+    /// exchange + Cloudflare Worker /signup) — Supabase now owns
+    /// the auth session, the welcome email, and the user row.
     private func openGoogleOAuth() {
         FileLogger.log("WelcomeWindow: Google sign-in button tapped")
         Task { @MainActor in
             do {
-                let res = try await GoogleOAuth.signIn()
-                AppSettings.setLicenceKey(res.email)
-                AppSettings.setUserName(res.name)
-                postSignup(payload: [
-                    "provider":       "google",
-                    "google_user_id": res.googleUserId,
-                    "email":          res.email,
-                    "name":           res.name as Any,
-                    "source":         "corder-mac-wizard",
-                ])
+                // Legacy custom URL scheme. Triggers a one-time
+                // "Open Corder.app?" browser prompt; Universal Links
+                // (`https://getcorder.com/auth/callback`) would
+                // skip that prompt but need
+                // `com.apple.developer.associated-domains` in the
+                // entitlements — which requires an embedded
+                // provisioning profile, which we don't have on
+                // self-signed dev builds. Switch back when we ship
+                // a notarized build with profile.
+                let redirect = URL(string: "corder://auth/callback")!
+                let url = try SupabaseClientHolder.shared.auth.getOAuthSignInURL(
+                    provider: .google,
+                    redirectTo: redirect
+                )
+                NSWorkspace.shared.open(url)
+                // Wait for AppDelegate to post the signed-in
+                // notification (fired after `auth.session(from:)`
+                // succeeds in the URL callback). A real timeout
+                // (60 s) so a user who cancels the browser tab
+                // doesn't leave the wizard stuck.
+                let signedIn = await Self.waitForSupabaseSignedIn(timeoutNanos: 60_000_000_000)
+                guard signedIn else {
+                    FileLogger.log("WelcomeWindow: Supabase Google sign-in timed out")
+                    return
+                }
+                guard let user = SupabaseClientHolder.shared.auth.currentUser else {
+                    FileLogger.log("WelcomeWindow: signed-in notification fired but currentUser is nil")
+                    return
+                }
+                let email = user.email ?? ""
+                let metadata = user.userMetadata
+                let name = (metadata["full_name"]?.stringValue
+                            ?? metadata["name"]?.stringValue) as String?
+                if !email.isEmpty { AppSettings.setUserEmail(email) }
+                if let name, !name.isEmpty { AppSettings.setUserName(name) }
+                let wasFirst = !AppSettings.hasSignedInBefore
+                AppSettings.setHasSignedInBefore(true)
                 onSuccess(.init(
                     provider: "google",
-                    displayName: res.name,
-                    email: res.email
+                    displayName: name,
+                    email: email.isEmpty ? nil : email,
+                    wasFirstSignIn: wasFirst
                 ))
             } catch {
-                FileLogger.log("GoogleOAuth: signIn failed: \(error)")
+                FileLogger.log("WelcomeWindow: Supabase Google sign-in failed: \(error)")
             }
+        }
+    }
+
+    /// Wait for the AppDelegate to post `.corderSupabaseSignedIn`
+    /// (or hit the timeout). Returns true on signal, false on
+    /// timeout. Uses a notification-listener task race so cancelling
+    /// the wizard doesn't leak the observer.
+    @MainActor
+    private static func waitForSupabaseSignedIn(timeoutNanos: UInt64) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                for await _ in NotificationCenter.default.notifications(
+                    named: .corderSupabaseSignedIn).prefix(1) {
+                    return true
+                }
+                return false
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: timeoutNanos)
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
         }
     }
 
@@ -1141,3 +1308,48 @@ private struct GoogleG: View {
         }
     }
 }
+
+
+/// Transparent NSView overlay that forces the I-beam cursor across
+/// its entire bounds via an `NSTrackingArea` with `.cursorUpdate`.
+/// Drop this on top of any SwiftUI input pill that needs the I-beam
+/// to appear in the padding area too — not just inside the text
+/// strip that `TextField`/`SecureField` paint.
+///
+/// Why not `addCursorRect`: cursor rects only fire while the view
+/// is part of the hit-test chain. We deliberately return `nil` from
+/// `hitTest(_:)` so clicks pass through to the SwiftUI tap-gesture
+/// underneath (which moves focus into the field); with hit-test
+/// returning nil, AppKit skips cursor rects. Tracking areas are
+/// independent of hit-testing — `cursorUpdate(_:)` fires on
+/// mouse-enter / mouse-move regardless.
+struct IBeamCursorOverlay: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { IBeamView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private final class IBeamView: NSView {
+    private var trackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area = trackingArea { removeTrackingArea(area) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.cursorUpdate, .activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited, .mouseMoved],
+            owner: self,
+            userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.iBeam.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.iBeam.set() }
+    override func mouseMoved(with event: NSEvent)   { NSCursor.iBeam.set() }
+    override func mouseExited(with event: NSEvent)  { NSCursor.arrow.set() }
+
+    /// Pass-through hit testing — clicks land on the SwiftUI tap
+    /// gesture under the overlay (focus the field), not on this view.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+

@@ -91,6 +91,11 @@ function App() {
   // MeetingView listens (flips `rightTab` to settings). One counter
   // for both; consumers compare against a stored previous value.
   const [openSettingsNonce, setOpenSettingsNonce] = React.useState(0);
+  /// Lifted "is the right-pane currently showing Settings?" flag —
+  /// kept up here (not inside Dashboard / MeetingView) so the
+  /// MainHeader's Settings toolbar button can pick up the active
+  /// state and render `.active` the same way the Archive button does.
+  const [settingsOpenUI, setSettingsOpenUI] = React.useState(false);
   // Last meeting the user actually opened — keeps MeetingView mounted
   // across Dashboard↔Meeting flips so its `detail` survives and the
   // skeleton doesn't flash on every return. See the render block below.
@@ -157,7 +162,11 @@ function App() {
   React.useEffect(() => {
     const onNativeToast = (e: Event) => {
       const d = (e as CustomEvent).detail as { title?: string; body?: string; kind?: string };
-      const msg = [d?.title, d?.body].filter(Boolean).join(" — ");
+      // Use whichever piece is set; never join with an em-dash
+      // (project-wide style rule). When both are present, the title
+      // wins as the user-visible string — body becomes the implicit
+      // context that lives in the native banner / log lines only.
+      const msg = (d?.title && d.title.trim()) || (d?.body && d.body.trim()) || "";
       if (!msg) return;
       const kind = d?.kind === "error" ? "error" : "success";
       showToast(msg, kind);
@@ -460,7 +469,9 @@ function App() {
                     breadcrumb={<span className="breadcrumb-current">{t.breadcrumb_dashboard}</span>}
                     onOpenArchive={() => setArchiveOpen((v) => !v)}
                     archiveOpen={archiveOpen}
+                    archiveEmpty={archived.length === 0}
                     onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
+                    settingsOpen={settingsOpenUI}
                     onOpenDashboard={() => setActiveId(null)}
                     onToast={showToast}
                     t={t}
@@ -483,6 +494,7 @@ function App() {
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     openSettingsNonce={openSettingsNonce}
+                    onSettingsOpenChange={setSettingsOpenUI}
                   />
                 </>
               )}
@@ -508,6 +520,7 @@ function App() {
                     onDeleted={handleArchived}
                     onOpenArchive={() => setArchiveOpen((v) => !v)}
                     archiveOpen={archiveOpen}
+                    archiveEmpty={archived.length === 0}
                     onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
                     onOpenDashboard={() => setActiveId(null)}
                     onToast={showToast}
@@ -521,6 +534,7 @@ function App() {
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     onPlayingChange={(playing) => setPlayingId(playing && activeId ? activeId : null)}
                     onBackToDashboard={() => setActiveId(null)}
+                    onSettingsOpenChange={setSettingsOpenUI}
                     t={t}
                   />
                 </div>

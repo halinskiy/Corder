@@ -97,6 +97,14 @@ enum DTO {
         /// also reads `is_pro` for the derived state — keeping both
         /// avoids re-implementing the format rule in TypeScript.
         let licence_key: String?
+        /// Display name harvested from the sign-in provider (Google
+        /// `name` claim / Apple full name / user-entered). Drives the
+        /// profile popover header; nil when no name was provided.
+        let user_name: String?
+        /// Email used to sign in. Drives the line under the name in
+        /// the profile popover. nil when the user signed in without
+        /// an email (e.g. trial path, if we add one).
+        let user_email: String?
         /// Read-only: server-derived "this licence currently looks Pro"
         /// flag. MVP rule lives in `AppSettings.isValidLicenceFormat`
         /// (≥ 20 alphanumeric/dash/underscore).
