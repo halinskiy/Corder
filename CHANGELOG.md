@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.1] — 2026-05-28
+
+### Fixed
+- Header drag is finally rock-solid. Replaced the old hybrid (28 pt native strip + async JS-bridge for the rest) with a single full-coverage native overlay. The page reports the exact bounding rect of every interactive toolbar button via a `headerHits` bridge, and the overlay's hit-test passes events through only over those rects — drag works in every other pixel (between buttons, over breadcrumb text, all the way down to the bottom border) while hover and click on the real buttons remain native.
+- Tooltips no longer linger over the button you just clicked. Click on the trigger hides the chip immediately and suppresses re-show until the cursor leaves and re-enters.
+
 ## [0.13.0] — 2026-05-28
 
 ### Added
