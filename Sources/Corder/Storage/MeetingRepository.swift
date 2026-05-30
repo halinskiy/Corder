@@ -41,6 +41,31 @@ struct MeetingRepository {
         try dbq.read { try Meeting.fetchOne($0, key: id) }
     }
 
+    /// Sum of recorded seconds since `sinceMs` for each transcription
+    /// class. `nil`-class rows (legacy meetings transcribed before the
+    /// v18 column shipped) are counted under "advanced" — we'd rather
+    /// over-credit than silently let billable runs slip through.
+    /// `archivedAt` rows still count: archive ≠ refund.
+    func usageSecondsByClass(sinceMs: Int64) throws -> [String: Int64] {
+        try dbq.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT COALESCE(transcription_class, 'advanced') AS cls,
+                       COALESCE(SUM(duration_ms), 0) AS dur_ms
+                  FROM meetings
+                 WHERE transcribed_at IS NOT NULL
+                   AND transcribed_at >= ?
+                 GROUP BY cls
+                """, arguments: [sinceMs])
+            var out: [String: Int64] = ["advanced": 0, "local": 0]
+            for r in rows {
+                let cls: String = r["cls"] ?? "advanced"
+                let durMs: Int64 = r["dur_ms"] ?? 0
+                out[cls, default: 0] += durMs / 1000
+            }
+            return out
+        }
+    }
+
     func listMeetings() throws -> [Meeting] {
         try dbq.read { db in
             try Meeting

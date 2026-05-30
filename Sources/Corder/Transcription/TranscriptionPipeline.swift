@@ -23,6 +23,17 @@ final class TranscriptionPipeline {
     /// running for a few more seconds in the background.
     private var activeTasks: [String: Task<Void, Never>] = [:]
 
+    /// Runtime override of the user-picked provider. Set at the top
+    /// of `transcribe()` to either honour the user setting or, if
+    /// the monthly Advanced cap is exhausted, downshift to local.
+    /// Everything downstream that needs to branch on provider reads
+    /// `currentProvider` — which falls back to the user setting if
+    /// nothing is active (e.g. prewarm-time reads at launch).
+    private var activeProvider: TranscriptionProvider?
+    private var currentProvider: TranscriptionProvider {
+        activeProvider ?? AppSettings.transcriptionProvider
+    }
+
     /// Called once at app launch. When the active provider is
     /// `.whisperLocal` (the Free-tier default) and the picked variant
     /// isn't on disk yet, kick off a background pre-fetch so the first
@@ -112,6 +123,11 @@ final class TranscriptionPipeline {
 
     func transcribe(meetingId: String) async {
         FileLogger.log("transcribe(): START for \(meetingId)")
+        // Reset the runtime provider override no matter how this
+        // returns — exception, cancel, or normal completion — so a
+        // following transcribe() always begins by re-evaluating the
+        // user setting + cap.
+        defer { activeProvider = nil }
         let repo = AppContext.shared.repo
         guard var meeting = (try? repo.meeting(id: meetingId)) else {
             FileLogger.log("transcribe(): meeting \(meetingId) not found in DB")
@@ -123,6 +139,45 @@ final class TranscriptionPipeline {
         TranscriptionErrors.clear(meetingId: meetingId)
 
         meeting.status = .transcribing
+        if meeting.transcribingStartedAt == nil {
+            meeting.transcribingStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        }
+
+        // Resolve which provider this transcribe call ACTUALLY uses.
+        // If the user picked an "advanced" (cloud) model AND the
+        // monthly cap has already been hit, silently fall back to
+        // on-device Whisper for this run instead of charging the
+        // user beyond their plan. We don't mutate `AppSettings`
+        // (the user's preference is intact for next month) — the
+        // helper just stashes the runtime choice so every read
+        // inside this method goes through `currentProvider`.
+        let userPick = AppSettings.transcriptionProvider
+        let effective: TranscriptionProvider
+        if userPick.usageClass == "advanced",
+           let limit = AppSettings.userTier.advancedMonthlyLimitSeconds {
+            let cal = Calendar(identifier: .gregorian)
+            let now = Date()
+            let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+            let sinceMs = Int64(monthStart.timeIntervalSince1970 * 1000)
+            let bucket = (try? repo.usageSecondsByClass(sinceMs: sinceMs)) ?? [:]
+            let simAdv = Int64(UserDefaults.standard.integer(forKey: "Corder.set.simAdvancedUsedSeconds"))
+            let usedAdv = (bucket["advanced"] ?? 0) + simAdv
+            if usedAdv >= Int64(limit), LocalWhisperTranscriber.isAvailable() {
+                FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s) — falling back to whisperLocal for this run")
+                effective = .whisperLocal
+            } else {
+                effective = userPick
+            }
+        } else {
+            effective = userPick
+        }
+        self.activeProvider = effective
+
+        // Tag the row with the usage class for the EFFECTIVE
+        // provider (so cap-fallback runs credit the local bucket,
+        // not the cap'd advanced one). The Dashboard Usage bars
+        // and the /api/usage aggregator key off this.
+        meeting.transcriptionClass = effective.usageClass
         try? repo.updateMeeting(meeting)
 
         do {
@@ -249,7 +304,7 @@ final class TranscriptionPipeline {
             // and aren't replayable here — the prefix bump forces a
             // re-transcribe through the new polish stage.
             let providerTag: String = {
-                switch AppSettings.transcriptionProvider {
+                switch currentProvider {
                 case .gemini:        return ""
                 case .whisper:       return "whisper:v2:"
                 case .whisperLocal:
@@ -378,7 +433,7 @@ final class TranscriptionPipeline {
                     // LLM polish applies to both cloud and local Whisper
                     // — the polish stage only touches text and doesn't
                     // care where the raw turns came from.
-                    if AppSettings.transcriptionProvider != .gemini {
+                    if currentProvider != .gemini {
                         let lang = AppLanguage.current
                         rawUserTurns = await WhisperCleanup.polish(rawUserTurns, language: lang)
                         rawOtherTurns = await WhisperCleanup.polish(rawOtherTurns, language: lang)
@@ -393,14 +448,14 @@ final class TranscriptionPipeline {
                     usingDualTrack = true
                     rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
                     rawUserTurns = []
-                    if AppSettings.transcriptionProvider != .gemini {
+                    if currentProvider != .gemini {
                         rawOtherTurns = await WhisperCleanup.polish(
                             rawOtherTurns, language: AppLanguage.current)
                     }
                 }
             } else {
                 FileLogger.log("transcribe(): legacy single-stream (no mic+system on disk) — falling back to mix")
-                switch AppSettings.transcriptionProvider {
+                switch currentProvider {
                 case .gemini:
                     do {
                         legacyTurns = try await GeminiTranscriber.transcribe(audioURL: mixURL, mode: .diarize)
@@ -1178,7 +1233,7 @@ final class TranscriptionPipeline {
     /// provider is a real failure and propagates.
     private func geminiRawTurns(wavURL: URL,
                                 meetingId: String) async throws -> [GeminiTranscriber.Turn] {
-        switch AppSettings.transcriptionProvider {
+        switch currentProvider {
         case .gemini:
             do {
                 return try await GeminiTranscriber.transcribe(

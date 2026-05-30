@@ -1274,10 +1274,13 @@ input[type="text"]:focus, input[type="search"]:focus {
    - recent meetings = the same `.settings-rows` shell with clickable
      `.settings-row` items, so the right column has ONE outline, not
      N borders touching the panel edges. */
-.dashboard-left {
-  /* `.transcript-wrap` already carries the gradient that renders the
-     1 px hairline flush to the right edge. The dashboard just needs
-     its own scrolling content area inside it. */
+/* Two-class selector to outrank the later `.transcript-wrap` rule,
+   which sets `overflow: hidden` — without bumping specificity here
+   the dashboard column was clipping the Usage card off the bottom
+   of the window with no way to scroll. Same OverlayScrollbar
+   pattern as the Transcript pane — `.ovsb-scroll` kills the
+   native bar, the `<OverlayScrollbar>` component renders the thumb. */
+.transcript-wrap.dashboard-left {
   overflow-y: auto;
 }
 .dashboard-left-inner {
@@ -1302,11 +1305,11 @@ input[type="text"]:focus, input[type="search"]:focus {
    horizontal padding actually applies. 22 px mirrors `.settings-pane`
    exactly so Recent and Settings have the same edge breathing room. */
 .right-panel.dashboard-right {
-  /* 22 22 22 horizontal/top + 130 bottom — identical to `.settings-pane`
-     so Recent and Settings have the same edge breathing room AND the
-     same HUD-clear bottom gutter (the floating blob is 110 px tall +
-     margin; without 130 px here the last Recent card sits behind it). */
-  padding: 22px 22px 130px;
+  /* 20 20 20 horizontal/top + 130 bottom — same 20 px as
+     `.dashboard-left-inner` so the Stats and Longest columns share
+     identical edge breathing room. 130 bottom keeps the last
+     Recent card clear of the floating HUD (110 px tall + margin). */
+  padding: 20px 20px 130px;
   gap: 0;
 }
 
@@ -2161,29 +2164,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-input);
 }
 .rating-email::placeholder { color: var(--fg-muted); }
-/* Stacked — Send over Skip — but each button stays at the base
-   `button` pill size (8×14, 13 px, 999 px radius). NOT `.clarify-btn`
-   (which is the big 14×16 CTA used in EmptyDeleteBanner) and NOT
-   full-width: a full-width pill in a 480-ish-wide banner reads as a
-   "submit-form" CTA, way more visual weight than a rating prompt
-   needs. The pair sits flush-left under the email field. */
-.rating-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-start;
-  margin-top: 2px;
-}
-.rating-actions .rating-btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.rating-actions .rating-btn-primary:hover {
-  background: var(--accent-hover, var(--accent));
-  border-color: var(--accent-hover, var(--accent));
-}
-.rating-actions .rating-btn-primary:disabled { opacity: 0.5; }
+/* Rating Send / Skip — reuse the product's `.clarify-actions
+   .clarify-actions-stack` + `.clarify-btn` system that
+   EmptyDeleteBanner and SpeakersClarifyBanner already use, so the
+   pair reads as the same primary/secondary CTA pattern (full-width,
+   accent over outlined) as everywhere else in the app. No custom
+   shrunk pill style — the design-system check rule applies here. */
 
 /* Full-width single big card button (Settings: hotkey capture, +Add).
    Fixed height so the label swapping (combo ⇄ "Press a combo…") never
@@ -4128,3 +4114,87 @@ body.resizing { cursor: col-resize; user-select: none; }
   50%      { box-shadow: 0 0 0 6px rgba(14, 124, 68, 0.18); }
 }
 .update-pill:disabled { opacity: 1; } /* keep the green visible while busy */
+
+/* ===== Usage card (Dashboard, under Stats) =================== */
+
+/* Same outlined frame + width as the Stats card above; the only
+   delta is an extra 14 px top margin so the two cards read as
+   siblings, not one fused block. Each row hosts a single pill in
+   the SAME `.wl-download-btn.is-loading` style we use for the
+   Whisper model download bar — the user wanted bar parity, not a
+   new bar shape. */
+.dash-usage-card {
+  margin-top: 14px;
+}
+.dash-usage-cell {
+  padding: 14px 16px;
+}
+.dash-usage-cell + .dash-usage-cell {
+  border-top: 1px solid var(--border);
+}
+/* Header band — same `.clarify-body` (18 / 300) headline + `.dash-sub`
+   muted line we use for "Ready when you are. / Start a recording in
+   the background." so the Usage card opens with the same visual
+   voice as the hero card above it. Sits on its own padding band
+   above the row pills; hairline divider underneath separates it
+   from the first row. */
+.dash-usage-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+/* The pill inside the cell IS `.wl-download-btn.is-loading` — same
+   height, same accent fill, same dual-label readability across the
+   filled/unfilled boundary as the Whisper download pill. We override
+   only the cosmetics that don't apply in a non-interactive status
+   context: kill flex-grow (the cell is block, not a flex row, so
+   the default `flex: 1 1 72px` from .clarify-btn would otherwise
+   blow the pill up to 72+ px tall), kill the hover border swap
+   (it's not a button), and keep margin-top:0 (the wrapping cell
+   owns spacing). */
+.dash-usage-bar {
+  /* Block-level flex container so width:100% fills the cell (the
+     base `.clarify-btn` uses inline-flex, which sizes to its
+     children — and all our children are position:absolute, so the
+     pill collapsed to padding-only without this). Explicit
+     min-height matches the Start-recording pill geometry (padding
+     13 + content line height) so the bar visually matches the
+     primary CTA above the Stats card. */
+  display: flex;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 0;
+  cursor: default;
+}
+/* Custom label layer for the usage pills. We DON'T reuse
+   `.wl-download-btn-label` because that class is centred for the
+   single-string Whisper-downloader use case and overriding it for
+   our two-span space-between layout fought the cascade. This is
+   the same dual-render trick (dark base + white clip overlay)
+   minus that legacy. */
+.dash-usage-bar .dash-usage-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  color: var(--fg);
+  z-index: 1;
+  pointer-events: none;
+  font: inherit;
+}
+.dash-usage-bar .dash-usage-bar-text-fill {
+  color: #fff;
+  z-index: 2;
+  /* Reveal the white version only over the accent fill on the
+     left. Same `--wl-progress` variable the green block is sized
+     by, so the colour boundary never drifts apart from the fill
+     edge. */
+  clip-path: inset(0 calc(100% - var(--wl-progress, 0%)) 0 0);
+}
+.dash-usage-bar:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}

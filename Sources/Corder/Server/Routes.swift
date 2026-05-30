@@ -67,6 +67,7 @@ enum Routes {
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
+        server.get["/api/usage"] = { _ in usageGet(repo: repo) }
         // Whisper Local model download — kicks off a background fetch
         // for the requested variant id (no body needed beyond `id`).
         // The /api/settings GET is the single source of truth for
@@ -552,7 +553,8 @@ enum Routes {
                                    text_boost: $0.textBoost)
                 },
                 expected_other_speakers: m.expectedOtherSpeakers,
-                has_video: hasVideo
+                has_video: hasVideo,
+                transcribing_started_at: m.transcribingStartedAt
             )
             return jsonResponse(dto)
         } catch {
@@ -834,6 +836,43 @@ enum Routes {
 
     private static func settingsGet() -> HttpResponse {
         return jsonResponse(currentSettings())
+    }
+
+    /// Monthly usage rollup. Window = current calendar month; resets
+    /// at 00:00 of the first day next month. "advanced" sums the
+    /// cloud-billed minutes (Gemini + Whisper-cloud), "local" sums
+    /// on-device WhisperKit minutes (always unlimited).
+    ///
+    /// Two UserDefaults knobs let us visually QA the bars without
+    /// burning real cloud minutes:
+    ///   defaults write com.3mpq.Corder Corder.set.simAdvancedUsedSeconds 1800
+    ///   defaults write com.3mpq.Corder Corder.set.simLocalUsedSeconds 600
+    /// They're additive on top of the real DB count and zero by
+    /// default, so production behaviour is unchanged.
+    private static func usageGet(repo: MeetingRepository) -> HttpResponse {
+        let cal = Calendar(identifier: .gregorian)
+        let now = Date()
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+        let nextMonthStart = cal.date(byAdding: .month, value: 1, to: monthStart) ?? now
+        let sinceMs = Int64(monthStart.timeIntervalSince1970 * 1000)
+        let resetsMs = Int64(nextMonthStart.timeIntervalSince1970 * 1000)
+        let bucket = (try? repo.usageSecondsByClass(sinceMs: sinceMs)) ?? ["advanced": 0, "local": 0]
+        let tier = AppSettings.userTier
+        let simAdv = Int64(UserDefaults.standard.integer(forKey: "Corder.set.simAdvancedUsedSeconds"))
+        let simLoc = Int64(UserDefaults.standard.integer(forKey: "Corder.set.simLocalUsedSeconds"))
+        let dto = DTO.Usage(
+            plan: tier.rawValue,
+            advanced: .init(
+                used_seconds: (bucket["advanced"] ?? 0) + simAdv,
+                limit_seconds: tier.advancedMonthlyLimitSeconds
+            ),
+            local: .init(
+                used_seconds: (bucket["local"] ?? 0) + simLoc,
+                limit_seconds: nil
+            ),
+            resets_at_ms: resetsMs
+        )
+        return jsonResponse(dto)
     }
 
     /// Installed apps for the Settings picker. Scans the usual app

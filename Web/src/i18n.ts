@@ -268,6 +268,12 @@ interface Strings {
   no_meeting_selected_body: string;
   dashboard_heading: string;
   dashboard_subtitle: string;
+  /// Usage card under the Stats block. Rows: cloud transcription
+  /// (capped per plan) + local Whisper (always unlimited).
+  usage_title?: string;
+  usage_subtitle?: string;
+  usage_advanced?: string;
+  usage_local?: string;
   /// Subtitle shown under the headline while a recording is in
   /// progress. Optional so locales that haven't translated it yet
   /// fall back to the start-mode `dashboard_subtitle` and the banner
@@ -562,6 +568,10 @@ const ru: Strings = {
   dashboard_heading: "Готов когда ты.",
   dashboard_subtitle: "Начните запись в фоне.",
   dashboard_subtitle_recording: "Corder продолжит писать в фоне.",
+  usage_title: "Расход за месяц",
+  usage_subtitle: "Минуты транскрипции в этом месяце.",
+  usage_advanced: "Продвинутая транскрипция",
+  usage_local: "Локальные модели",
   rec_starting: "Запускаю…",
   rec_stopping: "Останавливаю…",
   sidebar_today: "Сегодня",
@@ -826,6 +836,10 @@ const en: Strings = {
   dashboard_heading: "Ready when you are.",
   dashboard_subtitle: "Start a recording in the background.",
   dashboard_subtitle_recording: "Corder keeps recording in the background.",
+  usage_title: "Monthly usage",
+  usage_subtitle: "Transcription minutes this month.",
+  usage_advanced: "Advanced transcription",
+  usage_local: "Local Models",
   rec_starting: "Starting…",
   rec_stopping: "Stopping…",
   sidebar_today: "Today",
@@ -1074,6 +1088,10 @@ const uk: Strings = {
   dashboard_heading: "Готовий, коли ти.",
   dashboard_subtitle: "Почніть запис у фоні.",
   dashboard_subtitle_recording: "Corder продовжить писати у фоні.",
+  usage_title: "Витрати за місяць",
+  usage_subtitle: "Хвилини транскрипції за цей місяць.",
+  usage_advanced: "Просунута транскрипція",
+  usage_local: "Локальні моделі",
   rec_starting: "Запускаю…",
   rec_stopping: "Зупиняю…",
   sidebar_today: "Сьогодні",

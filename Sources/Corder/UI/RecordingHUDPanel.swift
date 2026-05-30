@@ -50,12 +50,16 @@ final class RecordingHUDPanel {
 
     func show() {
         wantsVisible = true
+        FileLogger.log("RecordingHUDPanel.show: wantsVisible=true librarySuppressed=\(librarySuppressed)")
         if librarySuppressed { return }
         ensureVisible()
     }
 
     private func ensureVisible() {
-        if window?.isVisible == true { return }
+        if window?.isVisible == true {
+            FileLogger.log("RecordingHUDPanel.ensureVisible: already visible — skip")
+            return
+        }
         // Host the SwiftUI view inside HUDHostingView so the pointing-hand
         // cursor sticks even though `isMovableByWindowBackground` would
         // otherwise have AppKit's drag handler reset it. addCursorRect
@@ -128,6 +132,7 @@ final class RecordingHUDPanel {
         window = panel
 
         installCursorMonitor()
+        FileLogger.log("RecordingHUDPanel.ensureVisible: panel ordered front at origin=(\(origin.x),\(origin.y)) size=\(Self.windowSize) level=\(panel.level.rawValue) visible=\(panel.isVisible)")
     }
 
     func hide() {
@@ -171,6 +176,7 @@ final class RecordingHUDPanel {
     /// recording — the user is looking at the Library, where the inline
     /// blob covers the same affordance.
     func setLibrarySuppressed(_ suppressed: Bool) {
+        FileLogger.log("RecordingHUDPanel.setLibrarySuppressed(\(suppressed)) [was=\(librarySuppressed), wantsVisible=\(wantsVisible)]")
         guard librarySuppressed != suppressed else { return }
         librarySuppressed = suppressed
         if suppressed {

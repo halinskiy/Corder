@@ -7,6 +7,8 @@ import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
+import { UsageBars } from "./UsageBars";
+import { OverlayScrollbar } from "./OverlayScrollbar";
 
 /// Same filled-bust glyph the sidebar uses next to each meeting's
 /// speaker count — duplicated here (not exported from Sidebar.tsx) so
@@ -103,6 +105,11 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   /// `isRecording` actually transitions we clear `busy`.
   const [busy, setBusy] = useState(false);
   const lastRecRef = useRef(isRecording);
+  /// Same overlay scrollbar wiring as the Transcript pane: pass
+  /// just the scroll container, no dividerRef — the thumb centres
+  /// on the container's own right edge (the column seam carrying
+  /// the hairline from `.transcript-wrap`).
+  const dashLeftRef = useRef<HTMLDivElement | null>(null);
   // Monotonic counter bumped on every transition into a recording
   // state — covers Start from the Dashboard button, the menu-bar
   // popover, the global hotkey, and the auto-detect invite. The
@@ -234,7 +241,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
         </div>
       </div>
       <div className="detail-body">
-        <div className="transcript-wrap dashboard-left">
+        <div className="transcript-wrap dashboard-left ovsb-scroll" ref={dashLeftRef}>
           <div className="dashboard-left-inner">
             {/* Same outline-card as EmptyDeleteBanner: `.trans-banner`
                 shell with the `.clarify-banner` size override. */}
@@ -300,7 +307,12 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
                 <div className="dash-stat-value">{thisWeek}</div>
               </div>
             </div>
+
+            {/* Usage — monthly transcription minutes by class. Same
+                outlined card visual as Stats. */}
+            <UsageBars t={t} reloadSignal={total} />
           </div>
+          <OverlayScrollbar scrollRef={dashLeftRef} name="corder-sb-dashboard" />
         </div>
 
         {/* Right column hosts either the Recent/sort list or the

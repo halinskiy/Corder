@@ -84,6 +84,19 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set());
   const [anchorId, setAnchorId] = React.useState<string | null>(null);
 
+  // A single click on a row stores its id in `selectedIds` so the row
+  // wears the active style. When the user navigates back to the
+  // Dashboard (activeId becomes null) that selection should clear too —
+  // otherwise the sidebar keeps the old row highlighted even though
+  // nothing is open. Multi-select (Cmd/Shift) is a separate code path
+  // and survives — only the implicit single-row selection is wiped.
+  React.useEffect(() => {
+    if (activeId === null) {
+      setSelectedIds((cur) => (cur.size === 0 ? cur : new Set()));
+      setAnchorId(null);
+    }
+  }, [activeId]);
+
   const commitRename = async () => {
     if (!editing) return;
     const { id, value } = editing;

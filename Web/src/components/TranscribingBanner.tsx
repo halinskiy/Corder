@@ -5,6 +5,13 @@ import type { T } from "../i18n";
 
 interface Props {
   meetingId: string;
+  /// Unix-ms timestamp the backend stamped when the pipeline first
+  /// flipped this meeting into `transcribing`. The banner counter
+  /// elapses from this mark — that way the user sees real backend
+  /// time, not "00:00" every time they open the meeting view.
+  /// `null` for legacy rows; we fall back to "now" so the counter
+  /// still ticks instead of going negative.
+  startedAtMs: number | null;
   onCancelled: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
@@ -17,11 +24,11 @@ interface Props {
 /// between recording / transcribing / failed / empty states. The
 /// spinner sits inline next to the headline so the "this is moving"
 /// signal is part of the title, not a separate row that grows the card.
-export function TranscribingBanner({ meetingId, onCancelled, onToast, t }: Props) {
-  // Timer starts when the banner mounts. Approximate (we don't know
-  // exactly when the pipeline started its current chunk), but matches
-  // the user's mental model: "I clicked Re-transcribe at 00:00".
-  const startedAt = React.useRef(Date.now()).current;
+export function TranscribingBanner({ meetingId, startedAtMs, onCancelled, onToast, t }: Props) {
+  // Backend mark when the pipeline went into .transcribing. Falling
+  // back to Date.now() for legacy rows that don't carry the field —
+  // keeps the timer monotonic rather than negative.
+  const startedAt = startedAtMs ?? Date.now();
   const [now, setNow] = React.useState(Date.now());
   const [stopping, setStopping] = React.useState(false);
   React.useEffect(() => {
