@@ -79,34 +79,16 @@ function UsageRow({ label, used, limit }: RowProps) {
   const widthVar = `${remainingPct}%`;
   const value = unlimited ? "unlimited" : `${fmtRemaining(remainingSec)} left`;
 
-  // Dual-render the same label / value pair so the colour can flip
-  // dark → white across the fill boundary. Both layers share
-  // identical box geometry; only the clip-path on the white layer
-  // differs. Custom `.dash-usage-bar-text` (not the download
-  // button's own label class) so we keep the geometry fully under
-  // our control — the download button's label is centred inline,
-  // ours is space-between absolute-fill.
-  const inner = (
-    <>
-      <span className="dash-usage-name">{label}</span>
-      <span className="dash-usage-amount">{value}</span>
-    </>
-  );
-
+  // No progress bar — pure two-column row identical to the Stats
+  // card above (Recordings / Total recorded / This week). Same
+  // `dash-stat-row` shell so the typography, padding and hairline
+  // dividers match without us having to redeclare any of it.
+  void remainingPct;
+  void widthVar;
   return (
-    <div className="dash-usage-cell">
-      <div
-        className="clarify-btn wl-download-btn is-loading dash-usage-bar"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(remainingPct)}
-        style={{ ["--wl-progress" as string]: widthVar }}
-      >
-        <div className="wl-download-btn-fill" aria-hidden />
-        <div className="dash-usage-bar-text">{inner}</div>
-        <div className="dash-usage-bar-text dash-usage-bar-text-fill" aria-hidden>{inner}</div>
-      </div>
+    <div className="dash-stat-row">
+      <div className="settings-row-label">{label}</div>
+      <div className="dash-stat-value">{value}</div>
     </div>
   );
 }

@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.7] — 2026-05-30
+
+### Changed
+- Monthly usage card simplified: drop the progress pills, render `Advanced transcription · 59 min left` and `Local Models · unlimited` as plain `dash-stat-row` lines so the card reads as a continuation of Recordings / Total recorded / This week above.
+
+### Fixed
+- Dashboard left column was clipping at the wrong height; OverlayScrollbar thumb could extend up to the window header. Column now pins to `height: 100%` so the thumb tracks the actual visible viewport.
+- Stats and Longest columns now share the same 20 px inner padding (Longest was 22 px before).
+
 ## [0.13.6] — 2026-05-30
 
 ### Added
