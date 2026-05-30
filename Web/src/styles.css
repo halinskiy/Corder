@@ -1282,6 +1282,12 @@ input[type="text"]:focus, input[type="search"]:focus {
    native bar, the `<OverlayScrollbar>` component renders the thumb. */
 .transcript-wrap.dashboard-left {
   overflow-y: auto;
+  /* Pin to the grid row so content can't stretch the column past
+     the visible viewport — without this the column grew to fit
+     its content and OverlayScrollbar reported a thumb that
+     extended past the visible area (up to the window header). */
+  height: 100%;
+  min-height: 0;
 }
 .dashboard-left-inner {
   /* Left-aligned column (NOT centred) — matches `.transcript-wrap`'s
@@ -4124,14 +4130,15 @@ body.resizing { cursor: col-resize; user-select: none; }
    Whisper model download bar — the user wanted bar parity, not a
    new bar shape. */
 .dash-usage-card {
-  margin-top: 14px;
+  /* No extra margin — `.dashboard-left-inner` already enforces an
+     18 px gap between every card via its flex `gap`, same gap
+     "Ready when you are." has down to Stats. Adding a top margin
+     made the seam between Stats and Usage visibly larger than
+     the one above it. */
 }
-.dash-usage-cell {
-  padding: 14px 16px;
-}
-.dash-usage-cell + .dash-usage-cell {
-  border-top: 1px solid var(--border);
-}
+/* Usage rows reuse `.dash-stat-row` directly — no extra geometry
+   needed. The card around them keeps a distinct header so the
+   section is identifiable as "what's left this month". */
 /* Header band — same `.clarify-body` (18 / 300) headline + `.dash-sub`
    muted line we use for "Ready when you are. / Start a recording in
    the background." so the Usage card opens with the same visual
@@ -4151,49 +4158,6 @@ body.resizing { cursor: col-resize; user-select: none; }
    blow the pill up to 72+ px tall), kill the hover border swap
    (it's not a button), and keep margin-top:0 (the wrapping cell
    owns spacing). */
-.dash-usage-bar {
-  /* Block-level flex container so width:100% fills the cell (the
-     base `.clarify-btn` uses inline-flex, which sizes to its
-     children — and all our children are position:absolute, so the
-     pill collapsed to padding-only without this). Explicit
-     min-height matches the Start-recording pill geometry (padding
-     13 + content line height) so the bar visually matches the
-     primary CTA above the Stats card. */
-  display: flex;
-  flex: 0 0 auto;
-  width: 100%;
-  min-height: 46px;
-  margin-top: 0;
-  cursor: default;
-}
-/* Custom label layer for the usage pills. We DON'T reuse
-   `.wl-download-btn-label` because that class is centred for the
-   single-string Whisper-downloader use case and overriding it for
-   our two-span space-between layout fought the cascade. This is
-   the same dual-render trick (dark base + white clip overlay)
-   minus that legacy. */
-.dash-usage-bar .dash-usage-bar-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 16px;
-  gap: 12px;
-  color: var(--fg);
-  z-index: 1;
-  pointer-events: none;
-  font: inherit;
-}
-.dash-usage-bar .dash-usage-bar-text-fill {
-  color: #fff;
-  z-index: 2;
-  /* Reveal the white version only over the accent fill on the
-     left. Same `--wl-progress` variable the green block is sized
-     by, so the colour boundary never drifts apart from the fill
-     edge. */
-  clip-path: inset(0 calc(100% - var(--wl-progress, 0%)) 0 0);
-}
 .dash-usage-bar:hover {
   background: var(--bg);
   border-color: var(--accent);
