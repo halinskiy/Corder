@@ -202,27 +202,42 @@ enum Routes {
       <style>
         :root {
           color-scheme: dark;
-          --bg: #0e0f10;
+          --bg: #161616;
           --fg: #f5f5f5;
           --fg-muted: #9b9b9b;
           --accent: #1F7A4F;
           --border: rgba(255,255,255,0.10);
           --logo-3mpq: #ffffff;
         }
-        html, body {
+        html { height: 100%; background: var(--bg); }
+        body {
           margin: 0; padding: 0;
-          background: var(--bg);
+          min-height: 100vh;
+          background-color: var(--bg);
+          background-image: radial-gradient(circle, #333 1px, transparent 1px);
+          background-size: 24px 24px;
+          background-attachment: fixed;
           color: var(--fg);
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
             "Inter", "Helvetica Neue", sans-serif;
           -webkit-font-smoothing: antialiased;
-          min-height: 100%;
         }
         .brand {
           position: absolute;
           top: 40px; left: 0; right: 0;
           display: flex; justify-content: center; align-items: center;
           gap: 10px;
+        }
+        .brand a {
+          display: inline-flex; align-items: center; justify-content: center;
+          color: inherit; text-decoration: none;
+          border-radius: 6px;
+          transition: opacity 0.15s ease;
+        }
+        .brand a:hover { opacity: 0.75; }
+        .brand a:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 3px;
         }
         .brand .mark {
           width: 24px !important; height: 24px !important;
@@ -305,7 +320,8 @@ enum Routes {
       </style>
     </head>
     <body>
-      <div class="brand" aria-hidden="true">
+      <div class="brand">
+        <a href="https://halinskiy.github.io/3mpq-studio/" target="_blank" rel="noopener" aria-label="3mpq Studio">
         <div class="mark three" aria-label="3mpq">
           <svg width="64" height="64" viewBox="0 0 536 536" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
             <path d="M447.208 451.089C460.632 466.532 473.891 481.802 487.488 497.41C471.374 507.65 455.935 517.385 439.822 527.621C432.773 519.063 425.892 510.669 419.012 502.448C414.817 497.245 410.285 492.207 406.258 486.836C403.906 483.649 401.558 483.649 398.202 484.993C378.395 491.874 358.091 497.41 336.944 498.249C285.589 500.264 241.279 484.825 205.869 446.224C203.015 443.036 202.513 440.853 204.524 436.991C216.944 414.001 229.028 390.839 241.785 366.504C261.419 421.552 300.02 440.853 356.244 428.938C344.832 415.342 333.756 402.251 322.175 388.49C337.783 378.418 352.888 368.519 368.496 358.282C379.234 370.867 389.643 383.119 400.213 395.539C408.944 385.804 413.978 374.729 416.495 362.811C422.034 336.967 421.027 311.456 412.131 286.615C398.202 247.512 362.788 225.192 321.336 228.885C319.321 229.05 317.306 229.219 314.287 229.387C323.014 212.604 331.404 196.828 339.798 180.884C340.468 179.542 341.307 178.367 341.978 177.024C349.195 163.43 349.195 163.43 364.634 166.619C440.493 182.731 493.361 248.351 494.031 327.232C494.368 373.051 480.772 413.832 449.725 448.239C448.886 448.741 448.216 449.58 447.208 451.089Z"/>
@@ -315,11 +331,14 @@ enum Routes {
             <path d="M194.615 40.0757C220.797 40.0757 238.753 58.8726 238.753 86.061C238.753 113.249 220.126 132.214 193.776 132.214C168.098 132.214 149.469 112.578 149.469 86.061C149.469 59.2082 168.266 40.0757 194.615 40.0757Z"/>
           </svg>
         </div>
+        </a>
         <div class="sep" aria-hidden="true"></div>
+        <a href="https://getcorder.com/" target="_blank" rel="noopener" aria-label="Corder">
         <div class="mark corder" aria-label="Corder">
           <div class="bar"></div>
           <div class="bar"></div>
         </div>
+        </a>
       </div>
       <div class="content">
         <div class="check" aria-hidden="true">✓</div>

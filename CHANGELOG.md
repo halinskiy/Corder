@@ -16,6 +16,30 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.5] — 2026-05-30
+
+### Added
+- Sign-in step now detects whether the email belongs to an existing account before you submit and swaps the title between **Sign In** and **Sign Up** with a soft squeeze animation. New accounts get a "Confirm password" field that slides in beneath Password — no more silent account creation.
+- The Google sign-in success page (the browser tab that says "You're signed in") now has the dot-grid background from 3mpq.studio and both logos are clickable: 3mpq → studio, Corder → getcorder.com.
+
+### Changed
+- Welcome-window title for the sign-in step is no longer "Almost there" — it reflects the action you're about to take (Sign In or Sign Up).
+
+## [0.13.4] — 2026-05-29
+
+### Added
+- "Check for updates" row in the profile menu.
+- Whisper model picker on the Dashboard, revealed once you press Start (from any source).
+
+### Changed
+- Single source of truth for the transcription model is the Dashboard; the picker is removed from Settings.
+- Tighter copy in Settings (API access, Delete account) and the Dashboard subtitle.
+- Recordings show a neutral hollow status dot while transcribing instead of a pulsing gold one.
+
+### Fixed
+- On-device Whisper now finds its tokenizer correctly on first run (no more "Tokenizer configuration is missing").
+- `isModelDownloaded` no longer reports ready while the model is still streaming bytes.
+
 ## [0.13.3] — 2026-05-28
 
 ### Added
