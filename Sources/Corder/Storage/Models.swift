@@ -47,6 +47,16 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     /// title in the unseen accent. Stamped on the first GET
     /// `/api/meetings/:id` after the row finishes transcribing.
     var viewedAt: Int64? = nil
+    /// Timestamp the pipeline first moved this meeting into
+    /// `.transcribing`. Read by the Transcribing banner so the inline
+    /// elapsed counter starts at the real backend mark, not at "0"
+    /// every time the user re-opens the meeting view.
+    var transcribingStartedAt: Int64? = nil
+    /// Two-tier usage class. "advanced" = a cloud model billed for
+    /// compute (Gemini, Whisper-cloud); "local" = on-device WhisperKit
+    /// (zero compute cost). Drives the Usage bars on the Dashboard
+    /// and the cap-check in `TranscriptionPipeline`.
+    var transcriptionClass: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -69,6 +79,8 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case pinnedAt = "pinned_at"
         case outputBluetoothAtStart = "output_bluetooth_at_start"
         case viewedAt = "viewed_at"
+        case transcribingStartedAt = "transcribing_started_at"
+        case transcriptionClass = "transcription_class"
     }
 }
 

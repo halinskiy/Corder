@@ -465,6 +465,42 @@ enum SourceMode: String {
 /// absent. `AppSettings.isPro` is `true` for both `.pro` and `.max`.
 enum UserTier: String { case free, pro, max }
 
+extension UserTier {
+    /// TEST MODE: a single 60-minute cap for every tier, regardless
+    /// of subscription. We use this to validate the cap-then-fallback
+    /// path end-to-end before paid plans ship — once Paddle is wired
+    /// up, restore the per-tier ladder commented out below.
+    static let testAdvancedCapSeconds: Int = 60 * 60
+
+    /// Per-tier monthly cap on "advanced" transcription seconds —
+    /// the cloud models (Gemini, Whisper-cloud) that cost real
+    /// compute. Returning `nil` means unlimited (the Max tier).
+    /// On-device `whisperLocal` is unmetered for every tier.
+    var advancedMonthlyLimitSeconds: Int? {
+        // TEMP — same low cap for everyone so the auto-fallback to
+        // local Whisper can be observed without burning real cloud
+        // budget. Replace with the switch when monetisation goes live.
+        return Self.testAdvancedCapSeconds
+        // switch self {
+        // case .free: return 60 * 60     // 1 hour / month
+        // case .pro:  return 1500 * 60   // 25 hours / month
+        // case .max:  return nil         // unlimited
+        // }
+    }
+}
+
+extension TranscriptionProvider {
+    /// Two-tier classification used by `/api/usage` and the Dashboard
+    /// Usage bars. Cloud models map to "advanced" (billed per minute);
+    /// on-device WhisperKit maps to "local" (free for all tiers).
+    var usageClass: String {
+        switch self {
+        case .gemini, .whisper: return "advanced"
+        case .whisperLocal:     return "local"
+        }
+    }
+}
+
 /// ASR provider selector. Three providers in the wild now:
 ///   • `.gemini`         — Gemini 2.5 Flash (cloud, default). $0.30/h-ish.
 ///   • `.whisper`        — OpenAI whisper-1 + gpt-4o-mini polish (cloud).

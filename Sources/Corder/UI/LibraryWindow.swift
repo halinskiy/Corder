@@ -713,10 +713,12 @@ extension LibraryWindow: NSWindowDelegate {
     // the user clicks into another app). When the window is minimised
     // its inline blob is gone, so the floating HUD must come back.
     func windowDidMiniaturize(_ notification: Notification) {
+        FileLogger.log("LibraryWindow.windowDidMiniaturize")
         RecordingHUDPanel.shared.setLibrarySuppressed(false)
     }
 
     func windowDidDeminiaturize(_ notification: Notification) {
+        FileLogger.log("LibraryWindow.windowDidDeminiaturize")
         RecordingHUDPanel.shared.setLibrarySuppressed(true)
     }
 }

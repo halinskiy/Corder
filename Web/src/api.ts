@@ -50,6 +50,30 @@ export interface MeetingDetail {
   /// archived to Dropbox. The RightPanel uses it to decide
   /// whether to render the screen-capture preview above the audio.
   has_video?: boolean;
+  /// Unix-ms timestamp the backend pipeline first moved the meeting
+  /// into `transcribing`. The Transcribing banner uses it for the
+  /// inline elapsed counter so it reflects real backend work, not
+  /// the moment the user opened MeetingView.
+  transcribing_started_at?: number | null;
+}
+
+export interface UsageBucket {
+  used_seconds: number;
+  /// `null` = unlimited (no cap drawn; bar renders a shimmer).
+  limit_seconds: number | null;
+}
+
+export interface Usage {
+  plan: "free" | "pro" | "max";
+  advanced: UsageBucket;
+  local: UsageBucket;
+  resets_at_ms: number;
+}
+
+export async function getUsage(): Promise<Usage> {
+  const r = await fetch("/api/usage");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
 }
 
 export async function listMeetings(): Promise<MeetingSummary[]> {

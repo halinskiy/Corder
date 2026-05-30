@@ -5,8 +5,10 @@ import type { T } from "../i18n";
 interface Props {
   t: T;
   /// Called when the user clicks Send (rating > 0). Rating is the
-  /// 1-5 star pick, comment/email are trimmed-or-null.
-  onSubmit: (rating: number, comment: string, email: string | null) => void;
+  /// 1-5 star pick, comment is trimmed (may be empty). Email is
+  /// added by the parent from the signed-in account — we don't
+  /// ask the user for it here.
+  onSubmit: (rating: number, comment: string) => void;
   /// Called when the user clicks the X corner button or the Skip
   /// button under the form. The banner is removed and re-surfaces
   /// after 7 days (parent-managed in localStorage).
@@ -27,7 +29,6 @@ export function RatingBanner({ t, onSubmit, onDismiss }: Props) {
   const [rating, setRating] = React.useState(0);
   const [hoverRating, setHoverRating] = React.useState(0);
   const [comment, setComment] = React.useState("");
-  const [email, setEmail] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   // Fallback to English literals when a locale hasn't translated the
@@ -36,7 +37,6 @@ export function RatingBanner({ t, onSubmit, onDismiss }: Props) {
   // in JSX would render nothing. Hardcoded fallbacks are intentional.
   const title = t.rating_title || "How is Corder treating you?";
   const commentPh = t.rating_comment_placeholder || "What can we improve? (optional)";
-  const emailPh = t.rating_email_placeholder || "Email (optional)";
   const submitLabel = t.rating_submit || "Send";
   const skipLabel = t.rating_skip || "Skip";
   // Only ask for written feedback when the rating leaves room for
@@ -48,12 +48,7 @@ export function RatingBanner({ t, onSubmit, onDismiss }: Props) {
   const handleSubmit = () => {
     if (busy || rating === 0) return;
     setBusy(true);
-    const trimmedEmail = email.trim();
-    // Cheap RFC-ish check, same as the Worker's. An obviously bad
-    // string is dropped to null so the server logs "anonymous"
-    // instead of recording garbage in the reply-to.
-    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail) ? trimmedEmail : null;
-    onSubmit(rating, comment.trim(), validEmail);
+    onSubmit(rating, comment.trim());
   };
 
   const stars = [1, 2, 3, 4, 5];
@@ -111,29 +106,15 @@ export function RatingBanner({ t, onSubmit, onDismiss }: Props) {
               disabled={busy}
             />
           )}
-          <input
-            className="rating-email"
-            type="email"
-            placeholder={emailPh}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={busy}
-          />
-          <div className="rating-actions">
+          <div className="clarify-actions clarify-actions-stack">
             <button
               type="button"
-              className="rating-btn-primary"
+              className="clarify-btn accent"
               onClick={handleSubmit}
               disabled={busy || rating === 0}
+              aria-busy={busy}
             >
-              {submitLabel}
-            </button>
-            <button
-              type="button"
-              onClick={onDismiss}
-              disabled={busy}
-            >
-              {skipLabel}
+              <span>{submitLabel}</span>
             </button>
           </div>
         </>

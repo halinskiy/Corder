@@ -16,6 +16,20 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.6] — 2026-05-30
+
+### Added
+- **Monthly usage card** on the Dashboard: two progress bars — Advanced transcription (cloud, capped per plan) and Local Models (always unlimited). Bars start full and drain as you consume minutes; the right-hand value shows "X left" or "unlimited".
+- **Advanced cap with auto-fallback to on-device Whisper.** When the monthly cloud quota is exhausted, the next recording silently transcribes through the local model — no error, no manual switch. For this release the cap is a flat **60 min for every tier** so the fallback path is testable; tier-specific caps come back with paid plans.
+- **Transcribing timer** now reflects backend start time (when the pipeline first flipped to `.transcribing`), not when you opened the meeting view — no more "00:00" every time you switch to a session.
+
+### Changed
+- Selecting a meeting then returning to the Dashboard clears the sidebar's highlight (was sticking on the last opened row).
+- Rating prompt: email field removed (we use your signed-in email automatically), Skip button removed (close via the X), Send is the single primary CTA — same outlined-card style as every other banner.
+
+### Fixed
+- Dashboard left column was clipping the new Usage card off the bottom of the window with no way to scroll. Native scrollbar restored.
+
 ## [0.13.5] — 2026-05-30
 
 ### Added

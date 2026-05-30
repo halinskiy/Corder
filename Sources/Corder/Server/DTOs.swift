@@ -35,10 +35,35 @@ enum DTO {
         /// uses this to decide whether to render the `<video>` block
         /// above the audio player.
         let has_video: Bool
+        /// Unix-ms timestamp the pipeline first flipped this meeting
+        /// into `.transcribing`. The Transcribing banner uses it for
+        /// the inline elapsed counter so the timer reflects the
+        /// backend's real start, not a fresh "00:00" on every
+        /// MeetingView mount. `nil` for legacy rows (banner falls
+        /// back to "now").
+        let transcribing_started_at: Int64?
     }
 
     struct ExpectedSpeakersRequest: Codable {
         let count: Int?
+    }
+
+    /// `GET /api/usage` — drives the Dashboard Usage bars. The
+    /// frontend renders a real fill when `limit_seconds` is non-null
+    /// and a shimmer when it's null (unlimited). `resets_at` is the
+    /// first instant of next calendar month in Unix-ms — same for
+    /// both classes (single billing window).
+    struct Usage: Codable {
+        let plan: String                       // "free" | "pro" | "max"
+        let advanced: Bucket
+        let local: Bucket
+        let resets_at_ms: Int64
+
+        struct Bucket: Codable {
+            let used_seconds: Int64
+            /// `nil` = unlimited.
+            let limit_seconds: Int?
+        }
     }
 
     struct Settings: Codable {

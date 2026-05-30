@@ -1,5 +1,5 @@
 import React from "react";
-import { MeetingDetail, SegmentDTO, SpeakerDTO, RecordingState, renameSpeaker } from "../api";
+import { MeetingDetail, SegmentDTO, SpeakerDTO, RecordingState, renameSpeaker, getSettings } from "../api";
 import { RecordingBanner } from "./RecordingBanner";
 import { RecordingPlaceholder } from "./RecordingPlaceholder";
 import { TranscribingBanner } from "./TranscribingBanner";
@@ -132,17 +132,24 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   const showRating = shouldShowRatingBanner(ratingState);
 
-  const handleRatingSubmit = React.useCallback((rating: number, comment: string, email: string | null) => {
-    // Fire-and-forget so the UI flips instantly. We don't await the
-    // response — the user has already seen "Thanks!" via the toast
-    // and the banner is gone. Network failures are intentionally
-    // silent: a retry would be confusing and the data is low-stakes.
-    const body = JSON.stringify({ rating, comment, email, source: "corder-mac", version: RATING_APP_VERSION });
-    void fetch(RATING_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    }).catch(() => { /* swallow */ });
+  const handleRatingSubmit = React.useCallback((rating: number, comment: string) => {
+    // Fire-and-forget so the UI flips instantly. The signed-in
+    // user's email comes from /api/settings (best-effort: anonymous
+    // if not signed in or the call fails). We don't await the
+    // response — the user has already seen "Thanks!" via the toast.
+    void (async () => {
+      let email: string | null = null;
+      try {
+        const s = await getSettings();
+        email = (s.user_email ?? null) || null;
+      } catch { /* anonymous */ }
+      const body = JSON.stringify({ rating, comment, email, source: "corder-mac", version: RATING_APP_VERSION });
+      void fetch(RATING_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }).catch(() => { /* swallow */ });
+    })();
     const next: RatingState = { state: "submitted", transcriptsViewed: ratingState.transcriptsViewed };
     writeRatingState(next);
     setRatingState(next);
@@ -240,6 +247,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
         ) : detail.status === "transcribing" ? (
           <TranscribingBanner
             meetingId={detail.id}
+            startedAtMs={detail.transcribing_started_at ?? null}
             onCancelled={onRecordingStopped}
             onToast={onToast}
             t={t}

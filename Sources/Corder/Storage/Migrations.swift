@@ -193,6 +193,26 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN viewed_at INTEGER;")
             try db.execute(sql: "UPDATE meetings SET viewed_at = ended_at WHERE ended_at IS NOT NULL;")
         }
+        // Timestamp the meeting first entered the .transcribing state.
+        // Drives the inline elapsed counter in the Transcribing banner
+        // so it reflects the BACKEND start, not when the user happened
+        // to open the meeting view. Legacy rows stay NULL; the banner
+        // falls back to `ended_at` (close enough — that's seconds
+        // before the pipeline kicks off) and finally to "now" if both
+        // are absent.
+        m.registerMigration("v17_transcribing_started_at") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN transcribing_started_at INTEGER;")
+        }
+        // Two-tier usage class for the meeting: "advanced" = a cloud
+        // model billed for compute (Gemini / Whisper-cloud), "local" =
+        // on-device WhisperKit (zero cost). `nil` for legacy rows; the
+        // /api/usage aggregator treats null as advanced for safety
+        // (better to over-count than to silently free-tier billable
+        // calls) but stops at `transcribed_at IS NOT NULL` so unread
+        // legacy rows don't double-count.
+        m.registerMigration("v18_transcription_class") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN transcription_class TEXT;")
+        }
 
         return m
     }
