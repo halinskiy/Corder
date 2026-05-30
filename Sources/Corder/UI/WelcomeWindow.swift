@@ -482,6 +482,15 @@ fileprivate final class WizardState: ObservableObject {
     }
 }
 
+/// Whether the email currently in the field maps to an existing
+/// Supabase account. `.unknown` is the safe default (before the
+/// user blurs, or while the lookup is in flight, or if the
+/// `/check-email` call failed). The CTA label + the visibility of
+/// the Confirm-password field are driven by this.
+enum AuthMode {
+    case unknown, signIn, signUp
+}
+
 enum SlideDirection {
     case forward, backward
     var transition: AnyTransition {
@@ -513,6 +522,12 @@ private struct WelcomeView: View {
     @State private var licenceInput: String = AppSettings.licenceKey ?? ""
     @State private var micStatus: WizardPermission = currentMicStatus()
     @State private var screenStatus: WizardPermission = currentScreenStatus()
+    /// "Press" animation on the wizard title — mirrors the landing
+    /// page's `.hero-rec-pill--squeeze` (scale 0.94, 100 ms each
+    /// way, ease-in-out `cubic-bezier(.4,0,.2,1)`). Fires when the
+    /// title text swaps Sign In ↔ Sign Up so the user sees that
+    /// something actually changed.
+    @State private var titleScale: CGFloat = 1
 
     /// Top section height — title + subtitle live inside this band;
     /// the divider sits at the bottom of it. 232 leaves ≈ 26 px
@@ -534,6 +549,10 @@ private struct WelcomeView: View {
                     Text(currentTitle)
                         .font(.system(size: 20, weight: .light))
                         .lineLimit(1)
+                        .id(currentTitle)
+                        .transition(.opacity)
+                        .scaleEffect(titleScale, anchor: .leading)
+                        .onChange(of: authMode) { _, _ in pulseTitle() }
                     Text(currentSubtitle)
                         // 14 pt to match the input fields — same
                         // type-scale as the body of the form.
@@ -604,7 +623,7 @@ private struct WelcomeView: View {
     private var currentTitle: String {
         switch state.step {
         case .permissions: return "Allow Corder access"
-        case .signin:      return "Almost there"
+        case .signin:      return authMode == .signUp ? "Sign Up" : "Sign In"
         }
     }
 
@@ -628,10 +647,15 @@ private struct WelcomeView: View {
             SignInInteractive(
                 email: $licenceInput,
                 password: $passwordInput,
+                confirmPassword: $confirmPasswordInput,
                 inlineError: $signInError,
                 emailError: $emailError,
                 passwordError: $passwordError,
+                confirmPasswordError: $confirmPasswordError,
+                authMode: $authMode,
                 onSubmit: { currentCTA.action() },
+                onEmailBlur: { rawEmail in checkEmailExists(rawEmail) },
+                onEmailChange: { resetAuthModeIfEmailChanged() },
                 onSuccess: { result in onFinish(result) }
             )
         }
@@ -647,6 +671,24 @@ private struct WelcomeView: View {
     /// starts fixing it.
     @State private var emailError: String? = nil
     @State private var passwordError: String? = nil
+    @State private var confirmPasswordError: String? = nil
+    /// Confirm-password input — only meaningful when `authMode == .signUp`.
+    /// Hidden + cleared whenever the email changes so a typo in the
+    /// email doesn't leave the confirm field stuck open with stale
+    /// content.
+    @State private var confirmPasswordInput: String = ""
+    /// Drives the CTA label (Sign In vs Sign Up) and the Confirm-
+    /// password field visibility. `.unknown` is the safe default — we
+    /// treat the form as Sign In until the on-blur `/check-email`
+    /// call comes back, but a `.unknown` submit ALSO tries Sign In
+    /// first and only flips to Sign Up on `invalid_credentials` (no
+    /// silent account creation).
+    @State private var authMode: AuthMode = .unknown
+    /// Normalised email string for which `authMode` was last set.
+    /// Any change to the email field that diverges from this clears
+    /// `authMode` back to `.unknown` and hides the Confirm field, so
+    /// fixing a typo doesn't leave a stale Sign-Up state pinned.
+    @State private var lastCheckedEmail: String = ""
 
     /// Thin shim — forwards to the shared state's `advance`. Local
     /// callers (CTA actions, permission grant flows) call this so
@@ -678,27 +720,40 @@ private struct WelcomeView: View {
     /// disable the button OR grey it out; the slab is always the
     /// brand-green "ready" state and bad input surfaces as per-field
     /// inline errors instead. Avoids the "I tapped a dead button"
-    /// confusion Kostya called out — every tap gets feedback.
+    /// confusion Kostya called out — every tap gets feedback. Label
+    /// follows `authMode`: Sign Up when we've confirmed the email is
+    /// new, Sign In otherwise.
     private var signInCTA: (label: String, action: () -> Void, disabled: Bool, inactive: Bool) {
         let trimmedEmail = licenceInput
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        return ("Sign in with email", {
-            let (eErr, pErr) = validateFields(email: trimmedEmail, password: passwordInput)
+        let label = (authMode == .signUp) ? "Sign up with email" : "Sign in with email"
+        return (label, {
+            let (eErr, pErr, cErr) = validateFields(
+                email: trimmedEmail,
+                password: passwordInput,
+                confirmPassword: confirmPasswordInput,
+                isSignUp: authMode == .signUp
+            )
             emailError = eErr
             passwordError = pErr
-            if eErr == nil && pErr == nil {
-                submitSignIn(email: trimmedEmail)
+            confirmPasswordError = cErr
+            if eErr == nil && pErr == nil && cErr == nil {
+                submitAuth(email: trimmedEmail)
             }
         }, false, false)
     }
 
-    /// Per-field validation. Returns (emailError, passwordError) — nil
-    /// when the value is fine. Short strings on purpose so they fit
-    /// under a 320-wide capsule without wrapping.
-    private func validateFields(email: String, password: String) -> (String?, String?) {
+    /// Per-field validation. Returns (emailError, passwordError,
+    /// confirmError) — nil when the value is fine. Short strings on
+    /// purpose so they fit under a 320-wide capsule without wrapping.
+    /// `confirmError` is only ever populated when `isSignUp` is true
+    /// (the Confirm field is hidden otherwise and shouldn't gate
+    /// submit).
+    private func validateFields(email: String, password: String, confirmPassword: String, isSignUp: Bool) -> (String?, String?, String?) {
         var emailIssue: String? = nil
         var passwordIssue: String? = nil
+        var confirmIssue: String? = nil
         if email.isEmpty {
             emailIssue = "Enter your email."
         } else if !isValidEmailFormat(email) {
@@ -709,37 +764,143 @@ private struct WelcomeView: View {
         } else if password.count < 6 {
             passwordIssue = "At least 6 characters."
         }
-        return (emailIssue, passwordIssue)
+        if isSignUp {
+            if confirmPassword.isEmpty {
+                confirmIssue = "Confirm your password."
+            } else if confirmPassword != password {
+                confirmIssue = "Passwords don't match."
+            }
+        }
+        return (emailIssue, passwordIssue, confirmIssue)
     }
 
-    /// Signs the user in (or up) through Supabase Auth. We attempt
-    /// `signInWithPassword` first; on `Invalid login credentials`
-    /// we treat the email as new and fall back to `signUp` (Supabase
-    /// either creates the user + sends a confirmation email, or, if
-    /// "Confirm email" is OFF in the project, returns a live session
-    /// immediately). Welcome email is owned by Supabase Auth now —
-    /// the old Cloudflare Worker `/signup` POST is gone.
-    private func submitSignIn(email: String) {
-        FileLogger.log("WelcomeWindow: sign-in submitted for \(email)")
+    /// Mode-aware submit:
+    ///   • .signUp  → `signUp` directly (Confirm has already passed validation).
+    ///   • .signIn  → `signIn`, surface a "Wrong password" inline error on fail.
+    ///   • .unknown → try `signIn`; on `invalid credentials` flip
+    ///     `authMode` to `.signUp` so the Confirm field slides in,
+    ///     and ask the user to press the CTA again — no silent
+    ///     account creation.
+    private func submitAuth(email: String) {
+        FileLogger.log("WelcomeWindow: auth submitted for \(email) mode=\(authMode)")
         let pw = passwordInput
+        let mode = authMode
         Task { @MainActor in
             let client = SupabaseClientHolder.shared.auth
-            do {
-                _ = try await client.signIn(email: email, password: pw)
-            } catch {
-                FileLogger.log("WelcomeWindow: signIn failed (\(error)), attempting signUp")
+            switch mode {
+            case .signUp:
                 do {
                     _ = try await client.signUp(email: email, password: pw)
                 } catch {
-                    FileLogger.log("WelcomeWindow: signUp also failed: \(error)")
+                    FileLogger.log("WelcomeWindow: signUp failed: \(error)")
+                    signInError = "Couldn't create your account. Try again."
                     return
                 }
+                finishEmailFlow(email: email)
+            case .signIn, .unknown:
+                do {
+                    _ = try await client.signIn(email: email, password: pw)
+                    finishEmailFlow(email: email)
+                } catch {
+                    FileLogger.log("WelcomeWindow: signIn failed: \(error)")
+                    if mode == .unknown {
+                        authMode = .signUp
+                        lastCheckedEmail = email
+                        signInError = "We didn't find this email. Confirm your password to create an account."
+                    } else {
+                        passwordError = "Wrong password."
+                    }
+                }
             }
-            let wasFirst = !AppSettings.hasSignedInBefore
-            AppSettings.setUserEmail(email)
-            AppSettings.setHasSignedInBefore(true)
-            onFinish(.init(provider: "email", displayName: nil, email: email,
-                           wasFirstSignIn: wasFirst))
+        }
+    }
+
+    private func finishEmailFlow(email: String) {
+        let wasFirst = !AppSettings.hasSignedInBefore
+        AppSettings.setUserEmail(email)
+        AppSettings.setHasSignedInBefore(true)
+        onFinish(.init(provider: "email", displayName: nil, email: email,
+                       wasFirstSignIn: wasFirst))
+    }
+
+    /// Called by `SignInInteractive` when the email field loses focus
+    /// (and the value differs from `lastCheckedEmail`). Posts to the
+    /// Worker's `/check-email` and updates `authMode`. On error we
+    /// stay in `.unknown` so the submit fallback path still works.
+    fileprivate func checkEmailExists(_ rawEmail: String) {
+        let email = rawEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !email.isEmpty, isValidEmailFormat(email) else { return }
+        guard email != lastCheckedEmail else { return }
+        FileLogger.log("WelcomeWindow: checkEmailExists(\(email))")
+        guard let url = URL(string: "https://corder-api.empqwork.workers.dev/check-email") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["email": email], options: [])
+        req.timeoutInterval = 6
+        URLSession.shared.dataTask(with: req) { data, _, err in
+            if let err = err {
+                FileLogger.log("WelcomeWindow: /check-email error \(err)")
+                return
+            }
+            guard let data,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let ok = obj["ok"] as? Bool, ok,
+                  let exists = obj["exists"] as? Bool else {
+                FileLogger.log("WelcomeWindow: /check-email bad response")
+                return
+            }
+            Task { @MainActor in
+                // Only apply if the user hasn't edited the email out
+                // from under us mid-request. Stale callbacks would
+                // pin the wrong mode otherwise.
+                let current = self.licenceInput
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                guard current == email else { return }
+                self.lastCheckedEmail = email
+                withAnimation(.easeOut(duration: 0.18)) {
+                    self.authMode = exists ? .signIn : .signUp
+                }
+                if !exists {
+                    self.signInError = nil
+                } else {
+                    self.confirmPasswordInput = ""
+                    self.confirmPasswordError = nil
+                }
+            }
+        }.resume()
+    }
+
+    /// 100 ms squeeze-to-0.94, swap, then 100 ms expand-to-1. Matches
+    /// the timing + easing of `.hero-rec-pill--squeeze` on the
+    /// landing page (`cubic-bezier(.4,0,.2,1)`, the same curve
+    /// SwiftUI's `.easeInOut` produces). The text crossfades on the
+    /// peak of the squeeze because `Text(currentTitle).id(...)` lets
+    /// SwiftUI treat each value as a separate view and applies the
+    /// `.transition(.opacity)` modifier we attached.
+    private func pulseTitle() {
+        withAnimation(.easeInOut(duration: 0.1)) { titleScale = 0.94 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeInOut(duration: 0.1)) { titleScale = 1 }
+        }
+    }
+
+    /// Called by SignInInteractive whenever the email field text
+    /// changes. We reset `authMode` to `.unknown` and hide the
+    /// Confirm field so a fresh email doesn't inherit the previous
+    /// email's mode (fixing a typo would otherwise leave the form
+    /// stuck on Sign Up).
+    fileprivate func resetAuthModeIfEmailChanged() {
+        let current = licenceInput
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if current != lastCheckedEmail {
+            withAnimation(.easeOut(duration: 0.18)) {
+                authMode = .unknown
+            }
+            confirmPasswordInput = ""
+            confirmPasswordError = nil
         }
     }
 }
@@ -1024,6 +1185,7 @@ private struct PermissionsCardsInteractive: View {
 private struct SignInInteractive: View {
     @Binding var email: String
     @Binding var password: String
+    @Binding var confirmPassword: String
     /// Inline validation message shown beneath the password
     /// field. Bound to the WelcomeView so the CTA action can
     /// raise it and the field auto-clears it on input change.
@@ -1034,9 +1196,22 @@ private struct SignInInteractive: View {
     /// caption when its error is non-nil.
     @Binding var emailError: String?
     @Binding var passwordError: String?
-    /// Fired when the user presses Return inside either field.
+    @Binding var confirmPasswordError: String?
+    /// Drives Sign In ↔ Sign Up label swap + Confirm-password
+    /// field visibility. Owned by WelcomeView; this view only reads
+    /// it (and clears it indirectly via `onEmailChange`).
+    @Binding var authMode: AuthMode
+    /// Fired when the user presses Return inside any field.
     /// Forwards to the bottom CTA's action.
     let onSubmit: () -> Void
+    /// Fired when the email field loses focus AND the value differs
+    /// from the last checked email. The WelcomeView posts to
+    /// `/check-email` and updates `authMode`.
+    let onEmailBlur: (String) -> Void
+    /// Fired on every email keystroke so WelcomeView can reset
+    /// `authMode` (and hide the Confirm field) when the user starts
+    /// editing a new email after we'd already classified one.
+    let onEmailChange: () -> Void
     /// Carries the sign-in result up to the WelcomeWindowController
     /// so it can close the wizard, open the Library, and surface a
     /// "Welcome, <name>" toast.
@@ -1045,9 +1220,10 @@ private struct SignInInteractive: View {
     @FocusState private var focusedField: Field?
     @State private var emailHovered: Bool = false
     @State private var passwordHovered: Bool = false
+    @State private var confirmHovered: Bool = false
     @State private var googleHovered: Bool = false
 
-    private enum Field { case email, password }
+    private enum Field { case email, password, confirm }
 
     var body: some View {
         // Vertically centred. Email + password on top (primary
@@ -1085,6 +1261,22 @@ private struct SignInInteractive: View {
                     }
                 }
                 .frame(maxWidth: 320)
+
+                if authMode == .signUp {
+                    VStack(alignment: .leading, spacing: 4) {
+                        confirmPasswordField
+                        if let confirmPasswordError {
+                            Text(confirmPasswordError)
+                                .font(.system(size: 12))
+                                .foregroundColor(.red.opacity(0.85))
+                                .padding(.leading, 18)
+                        }
+                    }
+                    .frame(maxWidth: 320)
+                    .transition(
+                        .opacity.combined(with: .move(edge: .top))
+                    )
+                }
 
                 if let inlineError {
                     Text(inlineError)
@@ -1126,8 +1318,29 @@ private struct SignInInteractive: View {
             // Inline validation clears as soon as the user edits
             // either field — they're trying to fix what we just
             // complained about.
-            .onChange(of: email)    { _, _ in inlineError = nil; emailError = nil }
-            .onChange(of: password) { _, _ in inlineError = nil; passwordError = nil }
+            .onChange(of: email) { _, newValue in
+                inlineError = nil
+                emailError = nil
+                onEmailChange()
+            }
+            .onChange(of: password) { _, _ in
+                inlineError = nil
+                passwordError = nil
+                // Keep confirm validation honest as the primary
+                // password changes — if the two diverge mid-typing,
+                // the inline caption needs to clear once they line
+                // up again.
+                if authMode == .signUp { confirmPasswordError = nil }
+            }
+            .onChange(of: confirmPassword) { _, _ in confirmPasswordError = nil }
+            .onChange(of: focusedField) { oldValue, newValue in
+                // Email blur → ping /check-email so the form can
+                // swap between Sign In and Sign Up before the user
+                // submits.
+                if oldValue == .email && newValue != .email {
+                    onEmailBlur(email)
+                }
+            }
     }
 
     // MARK: - Provider buttons
@@ -1210,7 +1423,13 @@ private struct SignInInteractive: View {
                 .textContentType(.password)
                 .focused($focusedField, equals: .password)
                 .padding(.horizontal, 18)
-                .onSubmit { onSubmit() }
+                .onSubmit {
+                    if authMode == .signUp && confirmPassword.isEmpty {
+                        focusedField = .confirm
+                    } else {
+                        onSubmit()
+                    }
+                }
             IBeamCursorOverlay()
         }
         .frame(maxWidth: 320)
@@ -1218,6 +1437,27 @@ private struct SignInInteractive: View {
         .contentShape(Capsule())
         .onTapGesture { focusedField = .password }
         .onHover { h in passwordHovered = h }
+    }
+
+    private var confirmPasswordField: some View {
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(Color.white)
+                .overlay(Capsule().stroke(confirmBorderColour, lineWidth: 1))
+            SecureField("Confirm password", text: $confirmPassword)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .textContentType(.newPassword)
+                .focused($focusedField, equals: .confirm)
+                .padding(.horizontal, 18)
+                .onSubmit { onSubmit() }
+            IBeamCursorOverlay()
+        }
+        .frame(maxWidth: 320)
+        .frame(height: 48)
+        .contentShape(Capsule())
+        .onTapGesture { focusedField = .confirm }
+        .onHover { h in confirmHovered = h }
     }
 
     private var emailBorderColour: Color {
@@ -1231,6 +1471,13 @@ private struct SignInInteractive: View {
         if passwordError != nil { return Color.red.opacity(0.7) }
         if focusedField == .password { return brandAccent }
         if passwordHovered { return Color.black.opacity(0.24) }
+        return Color.black.opacity(0.12)
+    }
+
+    private var confirmBorderColour: Color {
+        if confirmPasswordError != nil { return Color.red.opacity(0.7) }
+        if focusedField == .confirm { return brandAccent }
+        if confirmHovered { return Color.black.opacity(0.24) }
         return Color.black.opacity(0.12)
     }
 
