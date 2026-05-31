@@ -21,10 +21,11 @@ import { SettingsSelect, SettingsSelectOption } from "./SettingsSelect";
 /// the picker until first Start was confusing on a cold install
 /// (Pro / Max users especially, whose cloud model never needs a
 /// download). Polls `/api/settings` once a second.
-export function WhisperPrefetchPill({ t }: { t: T }) {
+export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string, k?: "success" | "error") => void }) {
   const [models, setModels] = React.useState<WhisperLocalModel[]>([]);
   const [variant, setVariant] = React.useState<string | undefined>(undefined);
   const [provider, setProvider] = React.useState<string | undefined>(undefined);
+  const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
 
   React.useEffect(() => {
     let alive = true;
@@ -35,12 +36,14 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
         setVariant(s.whisper_local_variant);
         setModels(s.whisper_local_models ?? []);
         setProvider(s.transcription_provider);
+        setTier((s.tier === "pro" || s.tier === "max") ? s.tier : "free");
       } catch { /* keep last-known; next poll recovers */ }
     };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => { alive = false; window.clearInterval(id); };
   }, []);
+  const paid = tier === "pro" || tier === "max";
 
   // Build a flat option list combining the cloud providers and every
   // available local variant. The value embeds the provider in front
@@ -51,20 +54,24 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
     meta?: string;
     provider: "gemini" | "whisper" | "whisperLocal";
     variant?: string;
+    disabled?: boolean;
   };
   // Gemini Flash was removed from the picker — Whisper Cloud is the
   // only cloud option we offer now (cheaper per-minute, better-quality
   // English, no proxy round-trip through Google). The `transcription_provider="gemini"`
   // value stays valid in the backend for back-compat with any cached
   // settings, but it's no longer selectable.
-  const cloudChoices: Choice[] = [
-    {
-      value: "whisper",
-      label: t.model_whisper_cloud ?? "Whisper Cloud",
-      meta: t.model_cloud ?? "cloud",
-      provider: "whisper",
-    },
-  ];
+  // Free users see ONLY local models in the picker — cloud Whisper
+  // isn't listed (even as a locked option). It reappears the moment
+  // tier flips to Pro / Max.
+  const cloudChoices: Choice[] = paid
+    ? [{
+        value: "whisper",
+        label: t.model_whisper_cloud ?? "Whisper Cloud",
+        meta: t.model_cloud ?? "cloud",
+        provider: "whisper",
+      }]
+    : [];
   const localChoices: Choice[] = models.map((m) => ({
     value: `local:${m.id}`,
     label: m.label,
@@ -79,8 +86,10 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
     // Legacy `gemini` accounts get coerced to `whisper` in the UI so
     // the picker shows a valid selection. The backend reconciles on
     // the next /api/settings POST.
-    if (provider === "whisper" || provider === "gemini") return "whisper";
-    return cloudChoices[0]!.value;
+    if ((provider === "whisper" || provider === "gemini") && paid) return "whisper";
+    // Free users have no cloud option — fall back to the first
+    // available local variant (or the first option overall).
+    return allChoices[0]?.value ?? "";
   })();
 
   const onPickChoice = React.useCallback(async (next: string) => {
@@ -110,6 +119,7 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
     value: c.value,
     label: c.label,
     meta: c.meta,
+    disabled: c.disabled,
   }));
 
   // Active local model awaiting download → progress bar instead of picker.
@@ -140,6 +150,7 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
       <SettingsSelect<string>
         value={currentValue}
         options={options}
+        onLockedClick={() => onToast?.(t.toast_pro_required ?? "Upgrade to Pro or Max to use cloud models.", "error")}
         onChange={(v) => { void onPickChoice(v); }}
         ariaLabel={t.settings_asr_label ?? "Transcription model"}
       />

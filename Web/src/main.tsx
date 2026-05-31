@@ -96,16 +96,28 @@ function App() {
   // case and an empty-state in the latter.
   const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
-  // Imperative trigger — bumped by the profile menu's "Settings" item.
-  // Dashboard listens (toggles its right section to Settings) and
-  // MeetingView listens (flips `rightTab` to settings). One counter
-  // for both; consumers compare against a stored previous value.
+  // Lifted "which Settings slice is open" — null = not in Settings.
+  // Lives up here so Settings PERSIST across Dashboard ↔ Meeting
+  // flips: opening Settings on Dashboard and then clicking a
+  // session keeps the right pane on Settings until the user
+  // explicitly closes it (or flips to Advanced). Same shape as
+  // `archiveOpen` already does for the archive overlay.
+  const [settingsSection, setSettingsSection] = React.useState<null | "general" | "advanced">(null);
+  const settingsOpenUI = settingsSection !== null;
+  // Bumped each time the user taps the gear (header / profile menu)
+  // so consumers (Dashboard / MeetingView) can react with toggle
+  // semantics — same nonce pattern as before, but now it only feeds
+  // the "open / close Settings" toggle in main.tsx.
   const [openSettingsNonce, setOpenSettingsNonce] = React.useState(0);
-  /// Lifted "is the right-pane currently showing Settings?" flag —
-  /// kept up here (not inside Dashboard / MeetingView) so the
-  /// MainHeader's Settings toolbar button can pick up the active
-  /// state and render `.active` the same way the Archive button does.
-  const [settingsOpenUI, setSettingsOpenUI] = React.useState(false);
+  const lastSettingsNonceRef = React.useRef(openSettingsNonce);
+  React.useEffect(() => {
+    if (openSettingsNonce === lastSettingsNonceRef.current) return;
+    lastSettingsNonceRef.current = openSettingsNonce;
+    // Toggle: if Settings already open (in either slice), close;
+    // otherwise open on General — Advanced stays one click away in
+    // the tab strip.
+    setSettingsSection((cur) => (cur === null ? "general" : null));
+  }, [openSettingsNonce]);
   // Last meeting the user actually opened — keeps MeetingView mounted
   // across Dashboard↔Meeting flips so its `detail` survives and the
   // skeleton doesn't flash on every return. See the render block below.
@@ -487,6 +499,7 @@ function App() {
                     t={t}
                   />
                   <Dashboard
+                    onToast={showToast}
                     meetings={visibleMeetings}
                     statsMeetings={statsMeetings}
                     onPick={pickMeeting}
@@ -504,7 +517,9 @@ function App() {
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     openSettingsNonce={openSettingsNonce}
-                    onSettingsOpenChange={setSettingsOpenUI}
+                    settingsSection={settingsSection}
+                    onSettingsSectionChange={setSettingsSection}
+                    onSettingsOpenChange={() => {}}
                   />
                 </>
               )}
@@ -545,13 +560,15 @@ function App() {
                     onRecordingStopped={() => { setRecState({ active: false }); refresh(); }}
                     reloadSignal={retranscribeNonce}
                     openSettingsNonce={openSettingsNonce}
+                    settingsSection={settingsSection}
+                    onSettingsSectionChange={setSettingsSection}
                     lang={lang}
                     onLangChange={handleLangChange}
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     onPlayingChange={(playing) => setPlayingId(playing && activeId ? activeId : null)}
                     onBackToDashboard={() => setActiveId(null)}
-                    onSettingsOpenChange={setSettingsOpenUI}
+                    onSettingsOpenChange={() => {}}
                     t={t}
                   />
                 </div>

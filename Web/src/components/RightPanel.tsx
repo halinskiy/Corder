@@ -804,6 +804,17 @@ function SpeakerTimeline({
   t: T;
   lang: Lang;
 }) {
+  // Hooks must run before any conditional return — moving the early
+  // `if (...) return null` below this state/effect block fixes a
+  // "Rendered fewer hooks than expected" crash that took the whole
+  // Library window down to a white screen.
+  const [profileName, setProfileName] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    getSettings().then((s) => { if (alive) setProfileName((s.user_name ?? "").trim() || null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [detail.id]);
+
   const totalMs = detail.duration_ms || 0;
   if (totalMs === 0 || detail.segments.length === 0) return null;
 
@@ -815,16 +826,6 @@ function SpeakerTimeline({
 
   const activeSpeakers = detail.speakers.filter((sp) => (totals.get(sp.id) || 0) > 0);
   if (activeSpeakers.length === 0) return null;
-
-  // Same `profileName` lookup as TranscriptPane — keeps Timeline
-  // labels in sync with the transcript-side rendering of the
-  // first-person speaker.
-  const [profileName, setProfileName] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    let alive = true;
-    getSettings().then((s) => { if (alive) setProfileName((s.user_name ?? "").trim() || null); }).catch(() => {});
-    return () => { alive = false; };
-  }, [detail.id]);
 
   const cursorPct = Math.min(100, Math.max(0, (currentTimeSec * 1000 / totalMs) * 100));
 

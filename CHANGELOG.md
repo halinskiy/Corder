@@ -16,6 +16,31 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.27] — 2026-05-31
+
+### Added
+- **News banner on the Dashboard** — outline card pinned above "Ready when you are." that surfaces in-app announcements (survey invites, release call-outs) without a new build. Dismissible × kills it forever in localStorage. First item ships with the tester survey.
+- **Custom Sparkle update window** — replaces Sparkle's default sheet with a Corder-branded modal (3D spring entrance, animated star backdrop streaming toward centre, single big "Update" CTA → "Downloading…" → "Install and relaunch"). Release notes collapsed by default, expand via "Show details".
+- **Theme picker in General Settings** — same `.hk-block` shell as Microphone, three-option dropdown (Follow system / Light / Dark). The view-transition radial wipe still fires; origin is the trigger pill's centre. "Follow system" auto-switches when macOS appearance changes.
+- **Tier-switch dropdown** in the test Upgrade block — pick Pro or Max, the Upgrade button uses your selection. Downgrade has only one destination so the dropdown hides on paid tiers.
+- **Profile-name inline rename** — click your name in the popover header to edit it. Persists via `/api/settings` (`user_name`) and is auto-substituted wherever a transcript / Timeline used to read "you" or "I".
+
+### Changed
+- **Upgrade block copy** simplified: "Upgrade" / "Downgrade" headlines, "Pro Features" / "Max Features" / "Free Features" sublines.
+- **Tab-strip back-chips removed** — General / Advanced no longer carry a `<` glyph; the chip is the click target.
+- **Tier flip spinner** holds for at least 2.5 s so the avatar / picker have time to repaint before the loading state disappears.
+- **Rating-prompt threshold** lowered to 1 ready transcript (was 3) so feedback prompts show up sooner.
+- **Gemini Flash removed from the model picker.** Whisper Cloud is the single cloud option, gated on Pro/Max. Free sees only local models.
+- **Provider override clears on EVERY Free ↔ Paid transition** (not just on upgrade) so a downgraded user doesn't stay pinned to Whisper Cloud the Worker will 403.
+
+### Fixed
+- **White-screen on Library load** caused by Rules-of-Hooks violation in SpeakerTimeline (`useState` after early return). Hooks now run before any conditional return.
+- **WhisperPrefetchPill crash** when `cloudChoices` was empty for Free — `cloudChoices[0]!.value` blew up. Falls back to the first local variant.
+- **OAuth callback port rotation** — `LocalServer` now persists the last successful port and tries to re-bind it on launch so Google's redirect doesn't end up on a dead port.
+- **Menu-bar popover used to show the signed-in surface for a signed-out user** — `locked` now also checks `currentUser != nil` from Supabase.
+- **`SupabaseTierSync`** treats absent `app_metadata.tier` as Free (instead of "keep local") so server-side downgrades reflect immediately.
+- **Settings persist across Dashboard ↔ Meeting flips** — opening Settings on Dashboard and clicking a session no longer closes it.
+
 ## [0.13.26] — 2026-05-31
 
 ### Added

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronLeft, Check, Loader2 } from "lucide-react";
-import { MeetingSummary } from "../api";
+import { ChevronDown, Check, Loader2 } from "lucide-react";
+import { MeetingSummary, getSettings } from "../api";
+import { NewsBanner } from "./NewsBanner";
 import { formatDate, formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
@@ -13,6 +14,28 @@ import { OverlayScrollbar } from "./OverlayScrollbar";
 /// Same filled-bust glyph the sidebar uses next to each meeting's
 /// speaker count — duplicated here (not exported from Sidebar.tsx) so
 /// the Recent rows render the same chip without crossing components.
+/// Small wrapper that polls /api/settings once on mount + every 5 s
+/// to expose the current tier to children (NewsBanner). Cheap GET,
+/// reuses the shared backend cache. Kept local because no other
+/// Dashboard child needs the tier yet.
+function DashTier({ render }: { render: (tier: "free" | "pro" | "max") => React.ReactNode }) {
+  const [tier, setTier] = useState<"free" | "pro" | "max">("free");
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const s = await getSettings();
+        if (!alive) return;
+        setTier(s.tier === "pro" || s.tier === "max" ? s.tier : "free");
+      } catch {}
+    };
+    void tick();
+    const id = window.setInterval(tick, 5000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, []);
+  return <>{render(tier)}</>;
+}
+
 function UserFilledIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
@@ -62,10 +85,18 @@ interface Props {
   /// the Recent/sort view to Settings. Stats column on the left
   /// stays untouched — only the right section toggles.
   openSettingsNonce: number;
-  /// Fires whenever the Right pane flips between Recent and Settings.
-  /// Lifted state lives in main.tsx so the MainHeader can light up
-  /// its Settings toolbar button when this returns true.
+  /// Lifted Settings state — null = Settings not open, "general" /
+  /// "advanced" = which slice. Lives in main.tsx so opening Settings
+  /// here and then clicking a meeting keeps the right pane on
+  /// Settings (Костя: «настройки должны быть поверх пока не выключу»).
+  settingsSection: null | "general" | "advanced";
+  onSettingsSectionChange: (next: null | "general" | "advanced") => void;
+  /// Legacy no-op kept for prop-shape compat. Replaced by deriving
+  /// the flag from `settingsSection !== null` upstream.
   onSettingsOpenChange?: (open: boolean) => void;
+  /// Passed through to WhisperPrefetchPill so a Free user clicking
+  /// the locked Whisper-Cloud option gets a one-line nudge toast.
+  onToast?: (msg: string, kind?: "success" | "error") => void;
 }
 
 /// Home / landing surface (shown when no specific meeting is open).
@@ -74,7 +105,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecording, onStop, hotkeyLabel, t, lang, onLangChange, onResizeSplit, onResetSplit, openSettingsNonce, onSettingsOpenChange }: Props) {
+export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecording, onStop, hotkeyLabel, t, lang, onLangChange, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, onToast }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -180,23 +211,25 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   // Right section toggle: the Recent/sort list or the Settings pane.
   // Driven by the profile menu's Settings item via `openSettingsNonce`.
   // Stats column on the LEFT stays untouched in either mode.
-  const [rightSection, setRightSection] = useState<"recent" | "settings-general" | "settings-advanced">("recent");
-  const inSettings = rightSection === "settings-general" || rightSection === "settings-advanced";
-  const lastSettingsNonceRef = useRef(openSettingsNonce);
-  useEffect(() => {
-    if (openSettingsNonce !== lastSettingsNonceRef.current) {
-      lastSettingsNonceRef.current = openSettingsNonce;
-      // Toggle: tapping the Settings gear a second time returns to
-      // Recent. Opening always lands on the General slice; Advanced is
-      // one click away inside the right-column strip.
-      setRightSection((cur) => (cur === "settings-general" || cur === "settings-advanced") ? "recent" : "settings-general");
-    }
-  }, [openSettingsNonce]);
-  // Mirror Right-pane state up to main.tsx so MainHeader's Settings
-  // toolbar button can light up `.active` the same way Archive does.
-  useEffect(() => {
-    onSettingsOpenChange?.(inSettings);
-  }, [inSettings, onSettingsOpenChange]);
+  // Settings open / which slice is now LIFTED into main.tsx so the
+  // state survives Dashboard ↔ Meeting flips. The local rightSection
+  // is derived: "recent" when settingsSection is null, otherwise the
+  // matching settings-* value.
+  const rightSection: "recent" | "settings-general" | "settings-advanced" =
+    settingsSection === "general"  ? "settings-general"
+  : settingsSection === "advanced" ? "settings-advanced"
+                                   : "recent";
+  const inSettings = settingsSection !== null;
+  const setRightSection = (next: "recent" | "settings-general" | "settings-advanced") => {
+    onSettingsSectionChange(
+      next === "settings-general"  ? "general"
+    : next === "settings-advanced" ? "advanced"
+                                   : null
+    );
+  };
+  // Nonce is consumed in main.tsx now; this useRef just keeps the
+  // ref name from going unused while we transition.
+  void openSettingsNonce;
 
   // Sort key — persisted across launches so the user's pick survives
   // a window close. Default is "duration" (longest meetings first):
@@ -267,22 +300,17 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
             // plain sibling tab. Same pattern as MeetingView's strip.
             <>
               <span
-                className={"tab dash-settings-back" + (rightSection === "settings-general" ? " active" : "")}
+                className={"tab" + (rightSection === "settings-general" ? " active" : "")}
                 role="button"
-                onClick={() => setRightSection(
-                  rightSection === "settings-general" ? "recent" : "settings-general"
-                )}
-                title={t.tab_general_settings ?? "General Settings"}
-                aria-label={t.tab_general_settings ?? "General Settings"}
+                onClick={() => setRightSection("settings-general")}
               >
-                <ChevronLeft size={14} strokeWidth={2} />
-                <span>{t.tab_general_settings ?? "General Settings"}</span>
+                {t.tab_general_settings ?? "General"}
               </span>
               <span
                 className={"tab" + (rightSection === "settings-advanced" ? " active" : "")}
                 onClick={() => setRightSection("settings-advanced")}
               >
-                {t.tab_advanced_settings ?? "Advanced Settings"}
+                {t.tab_advanced_settings ?? "Advanced"}
               </span>
             </>
           )}
@@ -291,6 +319,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
       <div className="detail-body">
         <div className="transcript-wrap dashboard-left ovsb-scroll" ref={dashLeftRef}>
           <div className="dashboard-left-inner">
+            <DashTier render={(tier) => <NewsBanner tier={tier} t={t} />} />
             {/* Same outline-card as EmptyDeleteBanner: `.trans-banner`
                 shell with the `.clarify-banner` size override. */}
             <div className="trans-banner clarify-banner dash-banner">
@@ -333,7 +362,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
                       : (isRecording ? t.rec_stop : t.dashboard_start)}
                   </span>
                 </button>
-                <WhisperPrefetchPill t={t} />
+                <WhisperPrefetchPill t={t} onToast={onToast} />
               </div>
               <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
             </div>

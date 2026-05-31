@@ -97,9 +97,14 @@ interface Props {
   onOpenSettings: () => void;
   /// Profile-menu "Dashboard" handoff — clears `activeId` upstream.
   onOpenDashboard: () => void;
-  /// Bumped whenever the profile menu's Settings item is clicked. The
-  /// view watches changes (not value) and flips `rightTab = "settings"`.
+  /// Bumped whenever the profile menu's Settings item is clicked.
+  /// Consumed in main.tsx to flip `settingsSection`; passed here
+  /// only for prop-shape compatibility — MeetingView watches
+  /// `settingsSection` itself now.
   openSettingsNonce: number;
+  /// Lifted Settings state — see Dashboard.tsx for rationale.
+  settingsSection: null | "general" | "advanced";
+  onSettingsSectionChange: (next: null | "general" | "advanced") => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   recordingState: RecordingState;
   onRecordingStopped: () => void;
@@ -125,13 +130,25 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, onSettingsOpenChange, t }: Props) {
+export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, onSettingsOpenChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
-  const [rightTab, setRightTab] = React.useState<"recording" | "settings-general" | "settings-advanced" | "integrations">("recording");
-  const inSettings = rightTab === "settings-general" || rightTab === "settings-advanced";
+  // Local rightTab is now derived from the lifted `settingsSection`
+  // (Settings open survives navigation). "recording" is the default
+  // when no settings slice is active.
+  const rightTab: "recording" | "settings-general" | "settings-advanced" | "integrations" =
+    settingsSection === "general"  ? "settings-general"
+  : settingsSection === "advanced" ? "settings-advanced"
+                                   : "recording";
+  const inSettings = settingsSection !== null;
+  const setRightTab = (next: "recording" | "settings-general" | "settings-advanced" | "integrations") => {
+    if (next === "settings-general")  { onSettingsSectionChange("general"); return; }
+    if (next === "settings-advanced") { onSettingsSectionChange("advanced"); return; }
+    // recording / integrations → close Settings
+    onSettingsSectionChange(null);
+  };
   // Download view replaces the Recording-tab content in place; the
   // tab strip then shows `← Download` instead of `Recording`. Lifted
   // from RightPanel so the strip can render the back-chip without a
@@ -145,18 +162,9 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   React.useEffect(() => {
     onSettingsOpenChange?.(inSettings);
   }, [inSettings, onSettingsOpenChange]);
-  // Profile-menu Settings handoff: bumping `openSettingsNonce` flips
-  // the right tab to settings. Skip the initial mount tick so the
-  // first render doesn't auto-open Settings on `openSettingsNonce = 0`.
-  const lastSettingsNonceRef = React.useRef(openSettingsNonce);
-  React.useEffect(() => {
-    if (openSettingsNonce !== lastSettingsNonceRef.current) {
-      lastSettingsNonceRef.current = openSettingsNonce;
-      // Toggle: a second tap on the Settings gear returns to the
-      // Recording tab — same affordance as the Archive button.
-      setRightTab((cur) => (cur === "settings-general" || cur === "settings-advanced") ? "recording" : "settings-general");
-    }
-  }, [openSettingsNonce]);
+  // Nonce → settingsSection toggle lives in main.tsx now; touch the
+  // value here so eslint doesn't flag it unused.
+  void openSettingsNonce;
   // Left-column tab: Transcript (default) | Summary. Summary is rendered
   // by `SummaryPane`, which lazily fetches `/summarize` on first open.
   const [leftTab, setLeftTab] = React.useState<"transcript" | "summary" | "chapters">("transcript");
@@ -467,22 +475,17 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               // chip), clicking it from Advanced switches to General.
               <>
                 <span
-                  className={"tab dash-settings-back" + (rightTab === "settings-general" ? " active" : "")}
+                  className={"tab" + (rightTab === "settings-general" ? " active" : "")}
                   role="button"
-                  onClick={() => setRightTab(
-                    rightTab === "settings-general" ? "recording" : "settings-general"
-                  )}
-                  title={t.tab_general_settings ?? "General Settings"}
-                  aria-label={t.tab_general_settings ?? "General Settings"}
+                  onClick={() => setRightTab("settings-general")}
                 >
-                  <ChevronLeft size={14} strokeWidth={2} />
-                  <span>{t.tab_general_settings ?? "General Settings"}</span>
+                  {t.tab_general_settings ?? "General"}
                 </span>
                 <span
                   className={"tab" + (rightTab === "settings-advanced" ? " active" : "")}
                   onClick={() => setRightTab("settings-advanced")}
                 >
-                  {t.tab_advanced_settings ?? "Advanced Settings"}
+                  {t.tab_advanced_settings ?? "Advanced"}
                 </span>
               </>
             ) : downloadOpen ? (

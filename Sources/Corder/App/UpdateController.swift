@@ -21,40 +21,49 @@ final class UpdateController: NSObject {
     static let shared = UpdateController()
 
     private let delegate = UpdaterDelegateBridge()
-    private let controller: SPUStandardUpdaterController
+    private let userDriver = CorderUpdateDriver()
+    private let updater: SPUUpdater
 
     private override init() {
-        // `startingUpdater: true` kicks off the background scheduler.
-        // We plug our own delegate so we get notified whenever the
-        // appcast resolves a newer version; that signal feeds the pill
-        // shown in the React toolbar.
+        // We replaced `SPUStandardUpdaterController` with a hand-built
+        // `SPUUpdater` so we can plug our own `SPUUserDriver` (the
+        // Corder-branded update modal in `Update/UpdateView.swift`).
+        // Sparkle still owns the appcast / download / installer
+        // pipeline; only the visible chrome is ours.
         let bridge = self.delegate
-        self.controller = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: bridge,
-            userDriverDelegate: nil
+        let driver = self.userDriver
+        self.updater = SPUUpdater(
+            hostBundle: Bundle.main,
+            applicationBundle: Bundle.main,
+            userDriver: driver,
+            delegate: bridge
         )
         super.init()
+        do {
+            try updater.start()
+        } catch {
+            FileLogger.log("UpdateController: SPUUpdater.start failed: \(error.localizedDescription)")
+        }
         // Sparkle's scheduled check fires only after the configured
         // interval (24h) has elapsed since the last successful check —
         // which means a freshly installed copy doesn't hit the appcast
         // until tomorrow. Force a silent check ~2 s after launch so the
         // pill can light up right away on a meaningful release cadence.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.controller.updater.checkForUpdatesInBackground()
+            self?.updater.checkForUpdatesInBackground()
         }
     }
 
     /// Hook a "Check for Updates…" menu item OR the React toolbar
     /// pill to this selector. Sparkle owns the rest of the UX.
     @objc func checkForUpdates(_ sender: Any?) {
-        controller.checkForUpdates(sender)
+        updater.checkForUpdates()
     }
 
     /// Silent re-check on demand (no "you're up to date" dialog) — used
     /// by the React UI before deciding whether to render the pill.
     func checkInBackground() {
-        controller.updater.checkForUpdatesInBackground()
+        updater.checkForUpdatesInBackground()
     }
 }
 

@@ -9,11 +9,20 @@ struct PopoverContentView: View {
     @ObservedObject var ctx: AppContext = .shared
     let onOpenLibrary: () -> Void
 
-    /// Until the user finishes the Welcome wizard we treat the app
-    /// as "locked": recording and the Library are unavailable, and
-    /// the popover redirects the user to the wizard (primary) and
-    /// the account site (secondary).
-    private var locked: Bool { !AppSettings.onboardingCompleted }
+    /// Until the user finishes the Welcome wizard AND has a live
+    /// Supabase session we treat the app as "locked": recording and
+    /// the Library are unavailable, and the popover redirects the
+    /// user to the wizard (primary) and the account site (secondary).
+    /// Reading `currentUser` is synchronous — the SDK keeps the
+    /// restored session in memory after launch — so it's cheap to
+    /// re-check on every popover open. Without this guard the
+    /// popover showed the signed-in surface for a user whose OAuth
+    /// callback never reached the app (port-rotation bug).
+    private var locked: Bool {
+        if !AppSettings.onboardingCompleted { return true }
+        if SupabaseClientHolder.shared.auth.currentUser == nil { return true }
+        return false
+    }
 
     /// Account portal — `getcorder.com/account`. Falls back to the
     /// landing root if the account page isn't built yet on launch

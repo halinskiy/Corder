@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { X, Search } from "lucide-react";
+import { X, Search, Loader2 } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
   deleteAccount, getMcpToken, setTestTier,
@@ -763,89 +763,137 @@ function TierTestRow({
   const tier = (s?.tier ?? "free");
   const paid = tier === "pro" || tier === "max";
   const [busy, setBusy] = React.useState(false);
+  // Which plan the user wants to upgrade INTO. Surfaced as a secondary
+  // dropdown under the primary CTA, same shape as the model picker
+  // (`Whisper Turbo • 1.5 GB`) under Start recording. Hidden once the
+  // user IS on a paid tier — Downgrade has only one destination.
+  const [pickedPlan, setPickedPlan] = React.useState<"pro" | "max">("max");
   const click = async () => {
     setBusy(true);
+    // Floor on how long the spinner stays visible. Avatar / picker /
+    // other tier-derived surfaces refresh via their own 1-3 s poll;
+    // dropping the spinner the instant the POST returns made the
+    // UI feel like nothing happened (Костя: «она мгновенно
+    // пропадает, а аватар ещё не успел поменяться»). 2.5 s buys
+    // enough headroom for every consumer's next tick.
+    const minSpinUntil = Date.now() + 2500;
     try {
-      const next = await setTestTier(paid ? "free" : "max");
-      // Optimistically reflect locally — the next /api/settings poll
-      // will reconcile if the server disagrees.
+      const next = await setTestTier(paid ? "free" : pickedPlan);
       const narrowed: "free" | "pro" | "max" =
         next === "max" || next === "pro" ? next : "free";
       patch({ tier: narrowed });
+      try {
+        const fresh = await getSettings();
+        const reconciled: "free" | "pro" | "max" =
+          fresh.tier === "max" || fresh.tier === "pro" ? fresh.tier : "free";
+        patch({ tier: reconciled });
+      } catch { /* next poll catches up */ }
     } catch {
       // Silent fail keeps the row visible for retry.
-    } finally {
-      setBusy(false);
     }
+    const remaining = Math.max(0, minSpinUntil - Date.now());
+    if (remaining > 0) {
+      await new Promise((r) => window.setTimeout(r, remaining));
+    }
+    setBusy(false);
   };
+  const planLabel = pickedPlan === "max"
+    ? (t.settings_tier_plan_max ?? "Max")
+    : (t.settings_tier_plan_pro ?? "Pro");
   return (
     <div className={"hk-block mic-block" + (s == null ? " is-loading" : "")} aria-label={paid ? "Downgrade" : "Upgrade"}>
       <div className="settings-row-label">
         {paid
-          ? (t.settings_tier_downgrade_label ?? "You're on Max")
-          : (t.settings_tier_upgrade_label ?? "Upgrade for cloud transcription")}
+          ? (t.settings_tier_downgrade_label ?? "Downgrade")
+          : (t.settings_tier_upgrade_label ?? "Upgrade")}
       </div>
       <div className="settings-row-desc">
         {paid
-          ? (t.settings_tier_downgrade_desc ?? "Drop back to Free.")
-          : (t.settings_tier_upgrade_desc ?? "Whisper + Gemini in the cloud, no API keys.")}
+          ? (t.settings_tier_downgrade_desc ?? "Free Features")
+          : (
+              pickedPlan === "max"
+                ? (t.settings_tier_upgrade_desc_max ?? "Max Features")
+                : (t.settings_tier_upgrade_desc_pro ?? "Pro Features")
+            )}
       </div>
       <button
         type="button"
-        className={"clarify-btn bigbtn-full " + (paid ? "danger" : "accent")}
+        className={"clarify-btn bigbtn-full tier-flip-btn " + (paid ? "danger" : "accent")}
         style={{ marginTop: 8 }}
         disabled={busy || s == null}
+        aria-busy={busy}
         onClick={click}
       >
-        {busy ? "…" : (paid ? (t.settings_tier_downgrade_btn ?? "Downgrade") : (t.settings_tier_upgrade_btn ?? "Upgrade"))}
+        {busy ? (
+          <Loader2
+            size={18}
+            strokeWidth={2.5}
+            className="tier-flip-spin"
+            aria-hidden
+          />
+        ) : (
+          <span>
+            {paid
+              ? (t.settings_tier_downgrade_btn ?? "Downgrade")
+              : (t.settings_tier_upgrade_btn ?? "Upgrade")}
+          </span>
+        )}
       </button>
+      {!paid && (
+        <div style={{ marginTop: 8 }}>
+          <SettingsSelect<"pro" | "max">
+            value={pickedPlan}
+            options={[
+              { value: "pro", label: t.settings_tier_plan_pro ?? "Pro" },
+              { value: "max", label: t.settings_tier_plan_max ?? "Max" },
+            ]}
+            onChange={setPickedPlan}
+            ariaLabel={planLabel}
+            disabled={busy}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-/// Theme toggle row — same visual shell as a regular `Toggle`
-/// (label + desc + .set-switch), but driven by `useTheme` so the
-/// click reuses the View-Transition wipe whose origin is the actual
-/// pointer position. Label flips direction so it always reads "what
-/// you'll GET" — "Switch to dark" in light mode, "Switch to light"
-/// in dark mode. No icon by design — this is a Settings row, not a
-/// toolbar chip.
+/// Theme block — same shell as `MicDevicePicker` (label + desc +
+/// SettingsSelect). Three options: System (follow macOS),
+/// Light, Dark. The view-transition radial wipe still fires; the
+/// origin is the centre of the SettingsSelect trigger pill (we
+/// stash a ref on it so the option-click handler can grab a real
+/// rect even though the option lives in a portal).
 function ThemeToggleRow({ t }: { t: T }) {
-  const { isDark, toggle } = useTheme();
+  const { mode, isDark, setMode } = useTheme();
+  const triggerRef = React.useRef<HTMLDivElement | null>(null);
   const label = isDark
     ? (t.settings_theme_label_to_light ?? "Switch to light theme")
     : (t.settings_theme_label_to_dark ?? "Switch to dark theme");
   const desc = isDark
     ? (t.settings_theme_desc_dark ?? "Currently dark.")
     : (t.settings_theme_desc_light ?? "Currently light.");
+  const options: SettingsSelectOption<"system" | "light" | "dark">[] = [
+    { value: "system", label: t.settings_theme_opt_system ?? "Follow system" },
+    { value: "light",  label: t.settings_theme_opt_light  ?? "Light" },
+    { value: "dark",   label: t.settings_theme_opt_dark   ?? "Dark" },
+  ];
   return (
-    <div
-      className="settings-row"
-      role="switch"
-      aria-checked={isDark}
-      aria-label={label}
-      tabIndex={0}
-      onClick={(e) => toggle(e)}
-      onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          // Synthesise a click at the row centre so the wipe origin
-          // is consistent for keyboard users.
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          toggle({
-            clientX: r.left + r.width / 2,
-            clientY: r.top + r.height / 2,
-          } as unknown as React.MouseEvent);
-        }
-      }}
-    >
-      <div className="settings-row-text">
-        <div className="settings-row-label">{label}</div>
-        <div className="settings-row-desc">{desc}</div>
-      </div>
-      <span className={"set-switch" + (isDark ? " on" : "")} aria-hidden>
-        <span className="set-switch-thumb" />
-      </span>
+    <div className="hk-block mic-block" aria-label={label} ref={triggerRef}>
+      <div className="settings-row-label">{label}</div>
+      <div className="settings-row-desc">{desc}</div>
+      <SettingsSelect<"system" | "light" | "dark">
+        value={mode}
+        options={options}
+        onChange={(next) => {
+          // Origin = the trigger pill's centre — close enough to
+          // "from where you clicked" without wiring an event through
+          // the SettingsSelect portal.
+          const r = triggerRef.current?.getBoundingClientRect();
+          const origin = r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined;
+          setMode(next, origin);
+        }}
+        ariaLabel={label}
+      />
     </div>
   );
 }
