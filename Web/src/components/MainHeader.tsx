@@ -1,9 +1,45 @@
 import React from "react";
-import { Moon, Archive as ArchiveIcon, Settings as SettingsIcon, Bug } from "lucide-react";
+import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug } from "lucide-react";
+
+/// Filled (solid) twins of the Lucide outline icons used in the
+/// toolbar's active state. Lucide ships only outlines; layering a
+/// `fill="currentColor"` over the outline produced a busy "double
+/// stroke" look (the inner outline strokes painted on top of the
+/// fill), so the active variants are inline solid copies of the same
+/// glyph silhouette — Heroicons Solid v2 paths re-traced to the
+/// Lucide 24×24 grid. No extra dependency; only used in two places.
+function SettingsFilled({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+    >
+      <path fillRule="evenodd" clipRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" />
+    </svg>
+  );
+}
+function ArchiveFilled({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+    >
+      <path d="M3.375 3C2.339 3 1.5 3.84 1.5 4.875v.75c0 1.036.84 1.875 1.875 1.875h17.25c1.035 0 1.875-.84 1.875-1.875v-.75C22.5 3.839 21.66 3 20.625 3H3.375Z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M3.087 9l.54 9.176A3 3 0 0 0 6.62 21h10.757a3 3 0 0 0 2.995-2.824L20.913 9H3.087Zm6.163 3.75A.75.75 0 0 1 10 12h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1-.75-.75Z" />
+    </svg>
+  );
+}
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
-import { useTheme } from "../theme";
 import { submitLogs } from "../api";
 import type { T } from "../i18n";
 
@@ -63,7 +99,9 @@ export function MainHeader({
       <div className="toolbar">
         <UpdatePill t={t} onToast={onToast} />
         <SubmitLogsButton t={t} onToast={onToast} />
-        <ThemeSwitch t={t} />
+        {/* ThemeSwitch moved into Settings → General as a real toggle
+            row; the toolbar slot was visual noise next to controls the
+            user touches once a year. */}
         {/* Settings now sits in the toolbar where the LangPicker used
             to live — the language switcher moved into the profile
             popover (rare action, not worth a top-bar slot). The two
@@ -75,7 +113,7 @@ export function MainHeader({
             aria-label={t.profile_account}
             aria-pressed={settingsOpen}
           >
-            <SettingsIcon size={16} strokeWidth={2} />
+            {settingsOpen ? <SettingsFilled size={16} /> : <SettingsIcon size={16} strokeWidth={2} />}
           </button>
         </Tooltip>
         <Tooltip
@@ -88,7 +126,7 @@ export function MainHeader({
             aria-pressed={archiveOpen}
             disabled={archiveEmpty && !archiveOpen}
           >
-            <ArchiveIcon size={16} strokeWidth={2} />
+            {archiveOpen ? <ArchiveFilled size={16} /> : <ArchiveIcon size={16} strokeWidth={2} />}
           </button>
         </Tooltip>
         <span className="toolbar-sep" />
@@ -100,29 +138,6 @@ export function MainHeader({
         />
       </div>
     </div>
-  );
-}
-
-function ThemeSwitch({ t }: { t: T }) {
-  const { isDark, toggle } = useTheme();
-  // Tooltip shows what the user will GET if they click (Apple's
-  // pattern), not the current state. In light mode → "Dark theme",
-  // in dark mode → "Light theme". Falls back to the legacy
-  // single-string key on locales that haven't translated the
-  // directional pair yet.
-  const label = isDark
-    ? (t.btn_theme_to_light ?? t.btn_theme_title)
-    : (t.btn_theme_to_dark ?? t.btn_theme_title);
-  return (
-    <Tooltip label={label}>
-      <button
-        className="toolbar-icon-btn"
-        onClick={toggle}
-        aria-label={label}
-      >
-        <Moon size={16} strokeWidth={2} />
-      </button>
-    </Tooltip>
   );
 }
 
@@ -142,39 +157,55 @@ function SubmitLogsButton({
     opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }
   ) => void;
 }) {
-  const [busy, setBusy] = React.useState(false);
-  // 10-second send-with-undo, same UX as the archive flow. The
-  // actual `submitLogs()` POST fires when the countdown elapses,
-  // not when the button is clicked — so an accidental click never
-  // ships the log. Undo cancels the timer and nothing leaves the Mac.
-  const pendingRef = React.useRef<number | null>(null);
   // Rate-limit to 1 report per hour. A user mashing the Bug icon
   // used to fill the maintainer's inbox in seconds; the localStorage
   // timestamp is enforced here client-side. A second guard lives on
   // the Worker (TODO) so this can't be bypassed by a fresh install.
   const SUBMIT_COOLDOWN_MS = 60 * 60 * 1000;
   const LAST_SUBMIT_KEY = "corder.lastSubmitLogsAt";
+  const readCooldownEnd = (): number => {
+    try {
+      const lastAt = parseInt(localStorage.getItem(LAST_SUBMIT_KEY) ?? "0", 10) || 0;
+      return lastAt + SUBMIT_COOLDOWN_MS;
+    } catch { return 0; }
+  };
+  // 10-second send-with-undo, same UX as the archive flow. The
+  // actual `submitLogs()` POST fires when the countdown elapses,
+  // not when the button is clicked — so an accidental click never
+  // ships the log. Undo cancels the timer and nothing leaves the Mac.
+  const pendingRef = React.useRef<number | null>(null);
+  // `now` is the only state driving visibility — bumped every 30 s and
+  // on every send/undo. The button stays unmounted whenever
+  //   `now < cooldownEnd` (post-send rate-limit) OR a send is in flight
+  //   (`pendingRef !== null`).
+  const [now, setNow] = React.useState(() => Date.now());
+  const [pending, setPending] = React.useState(false);
+  React.useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const cooldownEnd = readCooldownEnd();
+  const inCooldown = now < cooldownEnd;
+  // The button DISAPPEARS the instant the user clicks it: while the
+  // 10-s undo window is open, while the POST is in flight, and for the
+  // full 60-min cooldown after a successful send. Undo bumps `now` so
+  // the button reappears without waiting for the 30-s tick.
+  if (pending || inCooldown) return null;
+
   const onClick = () => {
-    if (busy || pendingRef.current !== null) return;
-    let lastAt = 0;
-    try { lastAt = parseInt(localStorage.getItem(LAST_SUBMIT_KEY) ?? "0", 10) || 0; } catch {}
-    const sinceMs = Date.now() - lastAt;
-    if (sinceMs < SUBMIT_COOLDOWN_MS) {
-      const minutesLeft = Math.max(1, Math.ceil((SUBMIT_COOLDOWN_MS - sinceMs) / 60_000));
-      onToast(
-        (t.submit_logs_cooldown ?? "You can send a new report in ~{m} min.").replace("{m}", String(minutesLeft)),
-        "error"
-      );
-      return;
-    }
+    if (pendingRef.current !== null) return;
     const cancel = () => {
       if (pendingRef.current !== null) {
         window.clearTimeout(pendingRef.current);
         pendingRef.current = null;
       }
-      setBusy(false);
+      setPending(false);
+      // Force an immediate re-evaluation of `inCooldown` so the button
+      // pops back in without waiting for the next 30-s tick.
+      setNow(Date.now());
     };
-    setBusy(true);
+    setPending(true);
     pendingRef.current = window.setTimeout(async () => {
       pendingRef.current = null;
       try {
@@ -182,9 +213,16 @@ function SubmitLogsButton({
         try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
         onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
       } catch {
+        // Failed send still costs a cooldown so a flapping endpoint
+        // can't be hammered. If the user really wants to retry sooner
+        // they can clear the localStorage entry.
+        try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
         onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
       } finally {
-        setBusy(false);
+        // Re-render to flip from `pending` to `inCooldown` (button
+        // stays hidden — only the gating reason changes).
+        setPending(false);
+        setNow(Date.now());
       }
     }, 10_000);
     onToast(
@@ -203,7 +241,6 @@ function SubmitLogsButton({
         className="toolbar-icon-btn"
         onClick={onClick}
         aria-label={t.submit_logs_title ?? "Send a bug report"}
-        disabled={busy}
       >
         <Bug size={16} strokeWidth={2} />
       </button>

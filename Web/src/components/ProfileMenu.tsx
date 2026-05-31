@@ -161,6 +161,23 @@ export function ProfileMenu({
   const [variant, setVariant] = React.useState(() => readStoredVariant(t.profile_name));
   const [userName, setUserName] = React.useState<string | null>(null);
   const [userEmail, setUserEmail] = React.useState<string | null>(null);
+  // null = not editing; string = in-progress edit value. Same pattern
+  // as the MeetingView breadcrumb rename inline-input.
+  const [nameEdit, setNameEdit] = React.useState<string | null>(null);
+  const commitName = React.useCallback(async () => {
+    if (nameEdit === null) return;
+    const v = nameEdit.trim();
+    setNameEdit(null);
+    if (v === (userName ?? "")) return;
+    // Optimistic — POST then trust the server-echoed value on the
+    // next /api/settings poll to reconcile.
+    setUserName(v.length > 0 ? v : null);
+    try {
+      await import("../api").then((m) => m.setSettings({ user_name: v }));
+    } catch {
+      /* next poll snaps state back if the write failed */
+    }
+  }, [nameEdit, userName]);
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
   const paid = tier === "pro" || tier === "max";
 
@@ -310,9 +327,29 @@ export function ProfileMenu({
                   build, which made no sense. */}
               {userEmail ? (
                 <>
-                  <div className="profile-pop-name">
-                    {userName ?? userEmail.split("@")[0] ?? "Account"}
-                  </div>
+                  {nameEdit !== null ? (
+                    <input
+                      className="profile-pop-name profile-pop-name-edit"
+                      autoFocus
+                      value={nameEdit}
+                      placeholder={userEmail.split("@")[0] ?? "Account"}
+                      onChange={(e) => setNameEdit(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); void commitName(); }
+                        else if (e.key === "Escape") { e.preventDefault(); setNameEdit(null); }
+                      }}
+                      onBlur={() => { void commitName(); }}
+                    />
+                  ) : (
+                    <div
+                      className="profile-pop-name profile-pop-name-rename"
+                      role="button"
+                      title={t.profile_name_rename ?? "Rename"}
+                      onClick={() => setNameEdit(userName ?? "")}
+                    >
+                      {userName ?? userEmail.split("@")[0] ?? "Account"}
+                    </div>
+                  )}
                   <div className="profile-pop-sub">{userEmail}</div>
                 </>
               ) : (

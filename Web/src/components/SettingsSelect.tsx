@@ -11,6 +11,11 @@ export interface SettingsSelectOption<V extends string = string> {
   label: string;
   meta?: string;
   disabled?: boolean;
+  /// Optional leading visual (icon, flag chip, etc.) painted to the
+  /// left of `label` in both the trigger pill and each option row.
+  /// Used by Settings → Language to surface a country flag per option;
+  /// other call sites can leave it undefined.
+  leading?: React.ReactNode;
 }
 
 /// Reusable single-select dropdown that visually matches the rest of
@@ -149,6 +154,9 @@ export function SettingsSelect<V extends string = string>({
         aria-expanded={open}
         aria-label={ariaLabel}
       >
+        {active?.leading && (
+          <span className="settings-select-leading">{active.leading}</span>
+        )}
         <span className="settings-select-trigger-label">
           {activeLabel}
           {active?.meta && (
@@ -185,6 +193,9 @@ export function SettingsSelect<V extends string = string>({
                 aria-selected={isActive}
                 onClick={() => pick(o)}
               >
+                {o.leading && (
+                  <span className="settings-select-leading">{o.leading}</span>
+                )}
                 <span className="settings-select-item-label">{o.label}</span>
                 {o.meta && (
                   <span className="settings-select-item-meta">{o.meta}</span>

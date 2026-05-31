@@ -1,5 +1,32 @@
 import type { Lang } from "./i18n";
 
+/// First-person speaker placeholders the Swift pipeline writes into
+/// `speakers.custom_name` ("you" by default). We replace them with
+/// the signed-in user's display name everywhere the UI surfaces a
+/// speaker label — Transcript, Timeline, anywhere a transcript-row
+/// shows who said what — so the user reads their actual name, not a
+/// placeholder. Case-insensitive list covers historical variants.
+const FIRST_PERSON_PLACEHOLDERS = new Set(["you", "i", "me"]);
+
+/// Resolve the on-screen label for a speaker. `customName` wins, but
+/// if it's a first-person placeholder AND we know the signed-in
+/// user's display name, swap it in. Falls back to the diarization
+/// label ("Speaker 1") and finally to a generic "Speaker" sentinel.
+export function displaySpeakerName(
+  customName: string | null | undefined,
+  diarLabel: string | null | undefined,
+  profileName: string | null | undefined,
+): string {
+  const cn = (customName ?? "").trim();
+  if (cn) {
+    if (FIRST_PERSON_PLACEHOLDERS.has(cn.toLowerCase()) && profileName && profileName.trim()) {
+      return profileName.trim();
+    }
+    return cn;
+  }
+  return (diarLabel ?? "").trim() || "Speaker";
+}
+
 const SHORT_M_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 const LONG_M_RU = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
 const SHORT_M_EN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];

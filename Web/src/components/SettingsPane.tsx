@@ -3,11 +3,12 @@ import { createPortal } from "react-dom";
 import { X, Search } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  deleteAccount, getMcpToken,
+  deleteAccount, getMcpToken, setTestTier,
   type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
 import { LANGS, type Lang, type T } from "../i18n";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
+import { useTheme } from "../theme";
 
 /// Settings page (right column, next to "Recording"). Toggles are
 /// REAL: loaded from and persisted to /api/settings. Each change posts
@@ -21,6 +22,7 @@ export function SettingsPane({
   t,
   lang,
   onLangChange,
+  section = "general",
 }: {
   t: T;
   /// Current UI language. Surfaced here so the Language block can
@@ -30,6 +32,11 @@ export function SettingsPane({
   /// Settings stay in sync).
   lang: Lang;
   onLangChange: (next: Lang) => void;
+  /// Which slice of Settings to render. The parent surface owns the
+  /// tab strip (General / Advanced) so it can sit alongside the
+  /// Recording back-chip in MeetingView / Dashboard headers, instead
+  /// of duplicating navigation inside this pane.
+  section?: "general" | "advanced";
 }) {
   const [s, setS] = React.useState<Settings | null>(null);
   const [apps, setApps] = React.useState<InstalledApp[]>([]);
@@ -89,192 +96,183 @@ export function SettingsPane({
   // backend default, so no flicker to "off" then back).
   const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
 
-  // Each plain toggle gets its OWN framed card — the uppercase category
-  // labels (NOTIFICATIONS / CAPTURE / TRANSCRIPTION) read as form
-  // chrome that the user explicitly didn't want. Settings now feels
-  // like a vertical stack of independent setting cards. The two
-  // compound sections (Auto-detect lists, Shortcut) keep their titles
-  // because they bundle multiple sub-elements that need a frame.
+  // General vs Advanced split: the "every-day" settings (notifications,
+  // mic, language, hotkey, app lists, telemetry, danger zone) live in
+  // General. Toggles that flip core capture / pipeline behaviour
+  // (video, auto-transcribe / -title / -summary / -chapters) and the
+  // API-token reveal live in Advanced. The tab strip itself is owned
+  // by the parent surface (MeetingView / Dashboard right-column
+  // header), so this pane just renders the selected slice.
+
   return (
     <div className="settings-pane">
-      <SoloCard>
-        <Toggle
-          label={t.settings_notifications}
-          desc={t.settings_notifications_desc}
-          checked={on("notifications")}
-          disabled={!loaded}
-          onChange={(v) => patch({ notifications: v })}
-        />
-      </SoloCard>
+      <div style={{ display: section === "general" ? "contents" : "none" }}>
+        <SoloCard>
+          <ThemeToggleRow t={t} />
+        </SoloCard>
 
-      <SoloCard>
-        <Toggle
-          label={t.settings_video}
-          desc={t.settings_video_desc}
-          checked={on("capture_video")}
-          disabled={!loaded}
-          onChange={(v) => patch({ capture_video: v })}
-        />
-      </SoloCard>
+        <SoloCard>
+          <Toggle
+            label={t.settings_notifications}
+            desc={t.settings_notifications_desc}
+            checked={on("notifications")}
+            disabled={!loaded}
+            onChange={(v) => patch({ notifications: v })}
+          />
+        </SoloCard>
 
-      <SoloCard>
-        <Toggle
-          label={t.settings_autotranscribe}
-          desc={t.settings_autotranscribe_desc}
-          checked={on("auto_transcribe")}
-          disabled={!loaded}
-          onChange={(v) => patch({ auto_transcribe: v })}
-        />
-      </SoloCard>
+        <SoloCard>
+          <Toggle
+            label={t.settings_telemetry_title ?? "Help improve Corder"}
+            desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts to the maintainer once a day."}
+            checked={(s?.telemetry as boolean | undefined) ?? true}
+            disabled={!loaded}
+            onChange={(v) => patch({ telemetry: v })}
+          />
+        </SoloCard>
 
-      <SoloCard>
-        <Toggle
-          label={t.settings_autotitle}
-          desc={t.settings_autotitle_desc}
-          checked={on("auto_title")}
-          disabled={!loaded}
-          onChange={(v) => patch({ auto_title: v })}
-        />
-      </SoloCard>
+        {/* Microphone picker. Pre-feature behaviour ("System default")
+            stays available as the first option and is the value used
+            when `mic_device_uid` is empty/null. The choice applies to
+            the NEXT recording — we don't hot-swap a live AVAudioEngine
+            binding (would need a stop/start cycle). */}
+        <SoloCard>
+          <MicDevicePicker
+            devices={s?.audio_input_devices ?? []}
+            value={s?.mic_device_uid ?? ""}
+            disabled={!loaded}
+            onChange={(uid) => patch({ mic_device_uid: uid })}
+            t={t}
+          />
+        </SoloCard>
 
-      <SoloCard>
-        <Toggle
-          label={t.settings_autosummary}
-          desc={t.settings_autosummary_desc}
-          checked={on("auto_summary")}
-          disabled={!loaded}
-          onChange={(v) => patch({ auto_summary: v })}
-        />
-      </SoloCard>
+        {/* Language picker — same `.hk-block` shell as Microphone. */}
+        <SoloCard>
+          <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
+        </SoloCard>
 
-      <SoloCard>
-        <Toggle
-          label={t.settings_auto_chapters_title ?? "Auto-chapters"}
-          desc={t.settings_auto_chapters_desc ?? "Split a finished transcript into Loom-style chapters with clickable timestamps."}
-          checked={on("auto_chapters")}
-          disabled={!loaded}
-          onChange={(v) => patch({ auto_chapters: v })}
-        />
-      </SoloCard>
+        <div className="settings-divider" />
+        <SoloCard>
+          <HotkeyRow
+            label={s?.record_hotkey_label ?? "⌘⇧F"}
+            conflict={s?.record_hotkey_conflict ?? null}
+            ok={s?.record_hotkey_ok ?? true}
+            disabled={!loaded}
+            onSet={(code, mods) => {
+              patch({ record_hotkey_code: code, record_hotkey_mods: mods });
+              window.setTimeout(refetch, 450);
+            }}
+            t={t}
+          />
+        </SoloCard>
 
-      <SoloCard>
-        <Toggle
-          label={t.settings_telemetry_title ?? "Help improve Corder"}
-          desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts (recordings, transcribe success/fail, Mac model, app version) to the maintainer once a day. No transcripts, no audio, no email — your account is hashed before it leaves the Mac."}
-          checked={(s?.telemetry as boolean | undefined) ?? true}
-          disabled={!loaded}
-          onChange={(v) => patch({ telemetry: v })}
-        />
-      </SoloCard>
+        <div className="settings-divider" />
+        <SoloCard>
+          <TierTestRow t={t} s={s} patch={patch} />
+        </SoloCard>
+      </div>
 
-      {/* Microphone picker. Pre-feature behaviour ("System default")
-          stays available as the first option and is the value used
-          when `mic_device_uid` is empty/null. The choice applies to
-          the NEXT recording — we don't hot-swap a live AVAudioEngine
-          binding (would need a stop/start cycle). */}
-      <SoloCard>
-        <MicDevicePicker
-          devices={s?.audio_input_devices ?? []}
-          value={s?.mic_device_uid ?? ""}
-          disabled={!loaded}
-          onChange={(uid) => patch({ mic_device_uid: uid })}
-          t={t}
-        />
-      </SoloCard>
+      <div style={{ display: section === "advanced" ? "contents" : "none" }}>
+        <SoloCard>
+          <Toggle
+            label={t.settings_video}
+            desc={t.settings_video_desc}
+            checked={on("capture_video")}
+            disabled={!loaded}
+            onChange={(v) => patch({ capture_video: v })}
+          />
+        </SoloCard>
 
-      {/* Transcription model picker used to live here, but it now
-          lives under the Dashboard primary button (see
-          `WhisperPrefetchPill`): same control, single source of
-          truth, no risk of the two surfaces showing different
-          values. Don't reintroduce a separate picker in Settings. */}
+        <SoloCard>
+          <Toggle
+            label={t.settings_autotranscribe}
+            desc={t.settings_autotranscribe_desc}
+            checked={on("auto_transcribe")}
+            disabled={!loaded}
+            onChange={(v) => patch({ auto_transcribe: v })}
+          />
+        </SoloCard>
 
-      {/* Language picker. Same `.hk-block` shell as Microphone
-          so the two "single select with explainer" rows read identically.
-          The block deliberately uses
-          our SettingsSelect (NO search field) instead of the full
-          LangPicker (with flags + search): search makes sense for the
-          20-locale popover that lives in the header, but in a
-          settings row a chevron + a short scrollable list reads
-          consistent with Microphone and Transcription model. */}
-      <SoloCard>
-        <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
-      </SoloCard>
+        <SoloCard>
+          <Toggle
+            label={t.settings_autotitle}
+            desc={t.settings_autotitle_desc}
+            checked={on("auto_title")}
+            disabled={!loaded}
+            onChange={(v) => patch({ auto_title: v })}
+          />
+        </SoloCard>
 
-      <div className="settings-divider" />
-      <SoloCard>
-        <HotkeyRow
-          label={s?.record_hotkey_label ?? "⌘⇧F"}
-          conflict={s?.record_hotkey_conflict ?? null}
-          ok={s?.record_hotkey_ok ?? true}
-          disabled={!loaded}
-          onSet={(code, mods) => {
-            patch({ record_hotkey_code: code, record_hotkey_mods: mods });
-            window.setTimeout(refetch, 450);
-          }}
-          t={t}
-        />
-      </SoloCard>
+        <SoloCard>
+          <Toggle
+            label={t.settings_autosummary}
+            desc={t.settings_autosummary_desc}
+            checked={on("auto_summary")}
+            disabled={!loaded}
+            onChange={(v) => patch({ auto_summary: v })}
+          />
+        </SoloCard>
 
-      <SoloCard>
-        <AppListEditor
-          title={t.settings_whitelist}
-          items={s?.meeting_whitelist ?? []}
-          apps={apps}
-          disabled={!loaded}
-          onChange={(next) => patch({ meeting_whitelist: next })}
-          t={t}
-        />
-      </SoloCard>
+        <SoloCard>
+          <Toggle
+            label={t.settings_auto_chapters_title ?? "Auto-chapters"}
+            desc={t.settings_auto_chapters_desc ?? "Split a finished transcript."}
+            checked={on("auto_chapters")}
+            disabled={!loaded}
+            onChange={(v) => patch({ auto_chapters: v })}
+          />
+        </SoloCard>
 
-      <SoloCard>
-        <AppListEditor
-          title={t.settings_blacklist}
-          items={s?.meeting_blacklist ?? []}
-          apps={apps}
-          disabled={!loaded}
-          onChange={(next) => patch({ meeting_blacklist: next })}
-          t={t}
-        />
-      </SoloCard>
+        <div className="settings-divider" />
+        <SoloCard>
+          <ApiTokenRow
+            label={t.settings_api_label ?? "API access"}
+            desc={t.settings_api_desc
+              ?? "Use this token to connect Corder to MCP clients (Claude Desktop, Cursor) or call the REST API directly. Anyone with the token can read your meetings — treat it like a password."}
+            reveal={t.settings_api_reveal ?? "Reveal MCP token"}
+            copied={t.settings_api_copied ?? "Copied"}
+            copy={t.settings_api_copy ?? "Copy"}
+            docsLabel={t.settings_api_docs ?? "API docs ↗"}
+            disabled={!loaded}
+          />
+        </SoloCard>
 
-      {/* API & MCP token — read-only token reveal so the user can
-          plug Corder into Claude Desktop, Cursor, ChatGPT, or
-          curl directly against the Supabase REST API. Same
-          `.hk-block` shell as the danger row below; the CTA flips
-          to the token + Copy button on click. */}
-      <div className="settings-divider" />
-      <SoloCard>
-        <ApiTokenRow
-          label={t.settings_api_label ?? "API access"}
-          desc={t.settings_api_desc
-            ?? "Use this token to connect Corder to MCP clients (Claude Desktop, Cursor) or call the REST API directly. Anyone with the token can read your meetings — treat it like a password."}
-          reveal={t.settings_api_reveal ?? "Reveal MCP token"}
-          copied={t.settings_api_copied ?? "Copied"}
-          copy={t.settings_api_copy ?? "Copy"}
-          docsLabel={t.settings_api_docs ?? "API docs ↗"}
-          disabled={!loaded}
-        />
-      </SoloCard>
+        <div className="settings-divider" />
+        <SoloCard>
+          <AppListEditor
+            title={t.settings_whitelist}
+            items={s?.meeting_whitelist ?? []}
+            apps={apps}
+            disabled={!loaded}
+            onChange={(next) => patch({ meeting_whitelist: next })}
+            t={t}
+          />
+        </SoloCard>
 
-      {/* Danger zone — visually separated from the rest of the
-          settings by the same `.settings-divider` we use for the
-          hotkey/app-list section above, then a `.hk-block` shell
-          so it looks like a normal Settings row (label + desc +
-          full-width control). The CTA itself is `.clarify-btn.danger`
-          to make the irreversible nature of the action read at a
-          glance. */}
-      <div className="settings-divider" />
-      <SoloCard>
-        <DangerZoneRow
-          label={t.settings_delete_account_label ?? "Delete account"}
-          desc={t.settings_delete_account_desc
-            ?? "Permanently removes every recording, transcript, summary, and audio file from the cloud. This cannot be undone."}
-          cta={t.profile_delete ?? "Delete account"}
-          confirmText={t.profile_delete_confirm
-            ?? "Delete your account and all recordings? This cannot be undone."}
-          disabled={!loaded}
-        />
-      </SoloCard>
+        <SoloCard>
+          <AppListEditor
+            title={t.settings_blacklist}
+            items={s?.meeting_blacklist ?? []}
+            apps={apps}
+            disabled={!loaded}
+            onChange={(next) => patch({ meeting_blacklist: next })}
+            t={t}
+          />
+        </SoloCard>
+
+        <div className="settings-divider" />
+        <SoloCard>
+          <DangerZoneRow
+            label={t.settings_delete_account_label ?? "Delete account"}
+            desc={t.settings_delete_account_desc
+              ?? "Permanently removes every recording, transcript, summary, and audio file from the cloud. This cannot be undone."}
+            cta={t.profile_delete ?? "Delete account"}
+            confirmText={t.profile_delete_confirm
+              ?? "Delete your account and all recordings? This cannot be undone."}
+            disabled={!loaded}
+          />
+        </SoloCard>
+      </div>
     </div>
   );
 }
@@ -486,6 +484,7 @@ function LanguageBlock({
     value: l.code,
     label: l.native,
     meta: l.name !== l.native ? l.name : undefined,
+    leading: <span className={`fi fi-${l.cc} settings-flag`} aria-hidden />,
   }));
   return (
     <div className="hk-block mic-block" aria-label={t.profile_language ?? "Language"}>
@@ -748,6 +747,108 @@ function HotkeyRow({
 }
 
 
+
+/// Test-mode tier switch — Upgrade flips `app_metadata.tier=max`,
+/// Downgrade flips it back to free. Hits a Worker endpoint that
+/// calls Supabase admin with the service role, then refreshes the
+/// local session so the change shows up everywhere without a
+/// relaunch. INTERIM: removed before real billing ships.
+function TierTestRow({
+  t, s, patch,
+}: {
+  t: T;
+  s: Settings | null;
+  patch: (p: Settings) => void;
+}) {
+  const tier = (s?.tier ?? "free");
+  const paid = tier === "pro" || tier === "max";
+  const [busy, setBusy] = React.useState(false);
+  const click = async () => {
+    setBusy(true);
+    try {
+      const next = await setTestTier(paid ? "free" : "max");
+      // Optimistically reflect locally — the next /api/settings poll
+      // will reconcile if the server disagrees.
+      const narrowed: "free" | "pro" | "max" =
+        next === "max" || next === "pro" ? next : "free";
+      patch({ tier: narrowed });
+    } catch {
+      // Silent fail keeps the row visible for retry.
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={"hk-block mic-block" + (s == null ? " is-loading" : "")} aria-label={paid ? "Downgrade" : "Upgrade"}>
+      <div className="settings-row-label">
+        {paid
+          ? (t.settings_tier_downgrade_label ?? "You're on Max")
+          : (t.settings_tier_upgrade_label ?? "Upgrade for cloud transcription")}
+      </div>
+      <div className="settings-row-desc">
+        {paid
+          ? (t.settings_tier_downgrade_desc ?? "Drop back to Free.")
+          : (t.settings_tier_upgrade_desc ?? "Whisper + Gemini in the cloud, no API keys.")}
+      </div>
+      <button
+        type="button"
+        className={"clarify-btn bigbtn-full " + (paid ? "danger" : "accent")}
+        style={{ marginTop: 8 }}
+        disabled={busy || s == null}
+        onClick={click}
+      >
+        {busy ? "…" : (paid ? (t.settings_tier_downgrade_btn ?? "Downgrade") : (t.settings_tier_upgrade_btn ?? "Upgrade"))}
+      </button>
+    </div>
+  );
+}
+
+/// Theme toggle row — same visual shell as a regular `Toggle`
+/// (label + desc + .set-switch), but driven by `useTheme` so the
+/// click reuses the View-Transition wipe whose origin is the actual
+/// pointer position. Label flips direction so it always reads "what
+/// you'll GET" — "Switch to dark" in light mode, "Switch to light"
+/// in dark mode. No icon by design — this is a Settings row, not a
+/// toolbar chip.
+function ThemeToggleRow({ t }: { t: T }) {
+  const { isDark, toggle } = useTheme();
+  const label = isDark
+    ? (t.settings_theme_label_to_light ?? "Switch to light theme")
+    : (t.settings_theme_label_to_dark ?? "Switch to dark theme");
+  const desc = isDark
+    ? (t.settings_theme_desc_dark ?? "Currently dark.")
+    : (t.settings_theme_desc_light ?? "Currently light.");
+  return (
+    <div
+      className="settings-row"
+      role="switch"
+      aria-checked={isDark}
+      aria-label={label}
+      tabIndex={0}
+      onClick={(e) => toggle(e)}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          // Synthesise a click at the row centre so the wipe origin
+          // is consistent for keyboard users.
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          toggle({
+            clientX: r.left + r.width / 2,
+            clientY: r.top + r.height / 2,
+          } as unknown as React.MouseEvent);
+        }
+      }}
+    >
+      <div className="settings-row-text">
+        <div className="settings-row-label">{label}</div>
+        <div className="settings-row-desc">{desc}</div>
+      </div>
+      <span className={"set-switch" + (isDark ? " on" : "")} aria-hidden>
+        <span className="set-switch-thumb" />
+      </span>
+    </div>
+  );
+}
 
 /// Controlled + persisted. The whole row is the hit target
 /// (hover-highlights like a sidebar session; click anywhere toggles).

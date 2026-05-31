@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { Download, Maximize2, X, ChevronLeft } from "lucide-react";
+import { Download, Maximize2, X } from "lucide-react";
 import {
   MeetingDetail, audioSrc, videoSrc,
   transcriptSrc, transcriptMdSrc, transcriptJsonSrc, bundleSrc,
@@ -8,6 +8,9 @@ import {
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { Tooltip } from "./Tooltip";
+import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
+import { displaySpeakerName } from "../format";
+import { getSettings } from "../api";
 
 interface Props {
   detail: MeetingDetail;
@@ -15,26 +18,22 @@ interface Props {
   onTimeUpdate: (sec: number) => void;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
+  /// Download mode is a sibling of "Recording" inside this column —
+  /// state lives in the parent so the tab strip's `← Download`
+  /// back-chip can drive it without a ref-chain.
+  downloadOpen: boolean;
+  onDownloadChange: (open: boolean) => void;
   t: T;
   lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "ru" }: Props) {
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, downloadOpen, onDownloadChange, t, lang = "ru" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
-  // Download view replaces the Recording-tab content in place. The
-  // <audio> element underneath stays MOUNTED (display:none on the
-  // wrapper) so playback (and the transcript pane's seek-by-click)
-  // keeps working while the user is picking a file to save.
-  const [downloadOpen, setDownloadOpen] = React.useState(false);
   return (
     <div className="right-panel">
       {downloadOpen && (
-        <DownloadView
-          detail={detail}
-          onBack={() => setDownloadOpen(false)}
-          t={t}
-        />
+        <DownloadView detail={detail} t={t} />
       )}
       <div style={{ display: downloadOpen ? "none" : "contents" }}>
         {detail.has_video && (
@@ -49,7 +48,7 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
           detail={detail}
           audioRef={audioRef}
           onTimeUpdate={onTimeUpdate}
-          onOpenDownload={() => setDownloadOpen(true)}
+          onOpenDownload={() => onDownloadChange(true)}
           t={t}
         />
         <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
@@ -64,39 +63,57 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
 /// banners). The audio element lives a sibling level up and stays
 /// mounted while this view is on screen, so playback continues.
 function DownloadView({
-  detail, onBack, t,
+  detail, t,
 }: {
   detail: MeetingDetail;
-  onBack: () => void;
   t: T;
 }) {
-  const rows: Array<{ label: string; href: string; file: string; show: boolean }> = [
-    { label: t.download_video,      href: videoSrc(detail.id),         file: `corder-${detail.id}.mov`,  show: !!detail.has_video },
-    { label: t.download_audio,      href: audioSrc(detail.id),         file: `corder-${detail.id}.wav`,  show: true },
-    { label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: detail.segments.length > 0 },
-    { label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: detail.segments.length > 0 },
-    { label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: detail.segments.length > 0 },
-    { label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: true },
+  type Row = { value: string; label: string; href: string; file: string; show: boolean };
+  const rows: Row[] = [
+    { value: "video",      label: t.download_video,      href: videoSrc(detail.id),         file: `corder-${detail.id}.mov`,  show: !!detail.has_video },
+    { value: "audio",      label: t.download_audio,      href: audioSrc(detail.id),         file: `corder-${detail.id}.wav`,  show: true },
+    { value: "transcript", label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: detail.segments.length > 0 },
+    { value: "markdown",   label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: detail.segments.length > 0 },
+    { value: "json",       label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: detail.segments.length > 0 },
+    { value: "bundle",     label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: true },
   ];
+  const visible = rows.filter((r) => r.show);
+  const [picked, setPicked] = React.useState<string>(visible[0]?.value ?? "audio");
+  const active = visible.find((r) => r.value === picked) ?? visible[0];
+  const options: SettingsSelectOption<string>[] = visible.map((r) => ({
+    value: r.value,
+    label: r.label,
+  }));
   return (
-    <div className="inline-view">
-      <button className="inline-view-back" onClick={onBack} aria-label={t.audio_card_title}>
-        <ChevronLeft size={16} strokeWidth={2} />
-        <span>{t.audio_card_title}</span>
-      </button>
-      <div className="inline-view-title">{t.download_title}</div>
-      <div className="inline-view-body">{t.download_body}</div>
-      <div className="inline-view-actions">
-        {rows.filter((r) => r.show).map((r) => (
-          <a
-            key={r.label}
-            className="clarify-btn bigbtn-full"
-            href={r.href}
-            download={r.file}
-          >
-            {r.label}
-          </a>
-        ))}
+    <div className="inline-view download-view">
+      <div className="hk-block mic-block download-block" aria-label={t.download_title}>
+        <div className="settings-row-label">{t.download_title}</div>
+        <div className="settings-row-desc">
+          {t.download_format_desc ?? "Pick which file to save."}
+        </div>
+        <SettingsSelect
+          value={picked}
+          options={options}
+          onChange={setPicked}
+          ariaLabel={t.download_title}
+        />
+        <button
+          type="button"
+          className="clarify-btn accent bigbtn-full download-cta"
+          onClick={() => {
+            if (!active?.href) return;
+            // `<a href download>` in WKWebView silently no-ops on
+            // some macOS versions — the `download` attribute isn't
+            // honoured. Forcing a navigation to the same-origin file
+            // endpoint is the path that DOES reliably trip
+            // `WebDownloadDelegate.decidePolicyFor → .download` and
+            // opens the native Save panel.
+            window.location.assign(active.href);
+          }}
+          disabled={!active}
+        >
+          {t.download_title}
+        </button>
       </div>
     </div>
   );
@@ -799,6 +816,16 @@ function SpeakerTimeline({
   const activeSpeakers = detail.speakers.filter((sp) => (totals.get(sp.id) || 0) > 0);
   if (activeSpeakers.length === 0) return null;
 
+  // Same `profileName` lookup as TranscriptPane — keeps Timeline
+  // labels in sync with the transcript-side rendering of the
+  // first-person speaker.
+  const [profileName, setProfileName] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    getSettings().then((s) => { if (alive) setProfileName((s.user_name ?? "").trim() || null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [detail.id]);
+
   const cursorPct = Math.min(100, Math.max(0, (currentTimeSec * 1000 / totalMs) * 100));
 
   const onBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -817,7 +844,7 @@ function SpeakerTimeline({
         const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
         const sum = totals.get(sp.id) || 0;
         const pct = Math.round((sum / totalMs) * 100);
-        const name = sp.custom_name?.trim() || sp.label;
+        const name = displaySpeakerName(sp.custom_name, sp.label, profileName);
         const color = sp.color_hex && /^#[0-9a-f]{6}$/i.test(sp.color_hex)
           ? sp.color_hex
           : colorForSpeaker(name);

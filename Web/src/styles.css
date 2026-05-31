@@ -78,8 +78,32 @@
    line you're pointing at clearly lifts off the dark page. */
 .dark .segment-line:hover { background: rgba(255, 255, 255, 0.07); }
 .dark .meeting-item.active,
-.dark .toolbar-icon-btn.active,
-.dark .toolbar-icon-btn.active:hover { background: var(--bg-active); }
+.dark .toolbar-icon-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* Children inside an active session set their OWN `color: var(--fg-…)`
+   which beats the parent's `color: #fff`, leaving title/meta/preview as
+   muted grey on the green fill — unreadable. Force white for every text
+   slot inside the active session in dark theme. */
+.dark .meeting-item.active .meeting-title,
+.dark .meeting-item.active .meeting-meta,
+.dark .meeting-item.active .meeting-meta > span,
+.dark .meeting-item.active .meeting-preview,
+.dark .meeting-item.active .meeting-people {
+  color: #fff;
+}
+/* Unseen-title accent green also collapses on the green fill — fall
+   back to plain white so the bold weight stays visible. */
+.dark .meeting-item.unseen.active .meeting-title { color: #fff; }
+.dark .toolbar-icon-btn.active:hover {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+  color: #fff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-pressed) 35%, transparent);
+}
 .dark .audio-scrub::before { background: var(--bg-active); }
 /* Currently-playing transcript line: the light mint is glaring on dark.
    A low accent tint marks position without shouting. */
@@ -240,7 +264,11 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 }
 .avatar-btn:hover {
   background: var(--bg-elev);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  /* Tier-neutral halo — was accent-green, but Free avatars are
+     outlined-only and a green ring on them advertised a tier the user
+     hasn't bought. Soft fg-based halo reads as "interactive" without
+     implying paid status. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 10%, transparent);
   filter: brightness(1.05);
 }
 /* No photo yet → clean white (page-bg) button instead of the grey
@@ -287,7 +315,8 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   transition: box-shadow 140ms ease, filter 140ms ease;
 }
 .avatar-pickable:hover {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  /* Neutral halo (see `.avatar-btn:hover` rationale). */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 10%, transparent);
   filter: brightness(1.05);
 }
 
@@ -301,8 +330,11 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--accent) 80%, #000);
-  color: #fff;
+  /* Translucent white wash so the underlying glyph still reads — the
+     overlay is a HINT ("click to shuffle"), not a curtain. Was a near-
+     opaque dark-green plate that hid the avatar entirely. */
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--fg);
   opacity: 0;
   border-radius: inherit;
   transition: opacity 140ms ease;
@@ -332,7 +364,10 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   overflow: hidden;
   padding: 0;
   cursor: pointer;
-  background: var(--accent);
+  /* Picker cell is a tier-neutral preview surface; each glyph SVG
+     paints its own circle (paid → accent, free → transparent ring),
+     so the cell background must stay clear. */
+  background: transparent;
   /* Cell itself doesn't transform on hover — the inner .avatar-svg
      grows instead (see the shared rule above). Halo + brightness
      still come from the cell. Keeps the picker grid stable while
@@ -342,7 +377,7 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   position: relative;
 }
 .avatar-picker-cell:hover {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 12%, transparent);
   filter: brightness(1.06);
 }
 .avatar-picker-cell.is-active {
@@ -458,7 +493,11 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--accent);
+  /* Same reasoning as `.avatar-btn-svg` and `.avatar-pickable` — the
+     SVG paints its own circle (accent for paid, transparent for free).
+     Hard-coding accent here used to win against the tier-aware fill
+     and Free users still saw a green chip in the popover head. */
+  background: transparent;
   /* No resting outline — matches the toolbar avatar (`.avatar-btn`)
      and the picker cells. `.avatar-pickable` paints its own hover
      halo on top. Block layout (not flex) so the SVG child fills the
@@ -1250,6 +1289,30 @@ input[type="text"]:focus, input[type="search"]:focus {
   transition: background 80ms ease;
 }
 .breadcrumb-rename:hover { background: var(--bg-hover); }
+/* Profile-popover inline name editor — same hover/edit affordance as
+   the header breadcrumb so the rename gesture reads identical. */
+.profile-pop-name-rename {
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin: -1px -6px;
+  transition: background 80ms ease;
+}
+.profile-pop-name-rename:hover { background: var(--bg-hover); }
+.profile-pop-name-edit {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin: -2px 0;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+}
 .breadcrumb-edit {
   font-size: 15px;
   font-weight: 600;
@@ -1890,19 +1953,25 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: default;
   pointer-events: none;
 }
-/* Active state — barely darker than hover so it reads as "currently
-   engaged" without shouting. Same delta as the sidebar's active row
-   (#ececea hover → #e8e8e5 active). */
+/* Active state — accent-green fill, white glyph, 2-px accent ring
+   painted as an OUTSIDE outline via box-shadow. The ring is the same
+   colour as the fill so it reads as "the button just got bigger" — a
+   clear "this is engaged, click again to close" affordance instead of
+   the previous near-invisible #f4f4f0 grey delta. Hover stays alive
+   even while active so the button still feels clickable; it just goes
+   one tone darker (accent-pressed) like every other green CTA. */
 .toolbar-icon-btn.active {
-  /* Hover is #fafaf8; active sits one tick darker so it's perceptible
-     but stays in the same near-white range. No hover treatment — once
-     the banner is open the button is "currently doing its job", an extra
-     hover state would just look noisy. */
-  background: #f4f4f0;
-  border-color: var(--border-strong);
-  color: var(--fg);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
-.toolbar-icon-btn.active:hover { background: #f4f4f0; }
+.toolbar-icon-btn.active:hover {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+  color: #fff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-pressed) 35%, transparent);
+}
 /* The header Archive button is a labelled pill, not a round icon, but
    it sits in the same row as the icon buttons. They use the muted
    content colour (var(--fg-muted)); .ghost defaulted to full --fg,
@@ -1916,15 +1985,24 @@ body.resizing { cursor: col-resize; user-select: none; }
    full-contrast content + strong border so a hovered header button is
    unmistakably lit. Scoped to .main-header so other .toolbar-icon-btn
    uses (download rows) keep their subtler hover. */
-.main-header .toolbar-icon-btn:hover,
-.main-header button.ghost:hover {
+.main-header .toolbar-icon-btn:not(.active):hover,
+.main-header button.ghost:not(.active):hover {
   background: #f4f4f0;
   color: var(--fg);
   border-color: var(--border-strong);
 }
-.dark .main-header .toolbar-icon-btn:hover,
-.dark .main-header button.ghost:hover {
+.dark .main-header .toolbar-icon-btn:not(.active):hover,
+.dark .main-header button.ghost:not(.active):hover {
   background: var(--bg-active);
+}
+/* Header-scoped active:hover — accent-pressed wins over the generic
+   `.main-header .toolbar-icon-btn:hover` neutral fill above. */
+.main-header .toolbar-icon-btn.active:hover,
+.main-header button.ghost.active:hover {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+  color: #fff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-pressed) 35%, transparent);
 }
 
 /* Entry animation removed: the earlier keyframe + `is-fresh` one-shot
@@ -3427,13 +3505,31 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: center;
-  /* Pad the label so the chevron's reserved space on the right is
-     mirrored on the left — keeps the active label visually centred
-     under the row label, matching the old `text-align-last: center`. */
-  padding-left: 24px;
+  /* Always left-aligned now (was centred). Matches the Language row's
+     "leading flag + label + chevron" rhythm so every Settings dropdown
+     reads the same regardless of whether it carries a leading slot. */
+  text-align: left;
+  padding-left: 0;
 }
 .settings-select-trigger-meta { color: var(--fg-muted); font-weight: 400; }
+/* Leading slot (icon / flag chip) for SettingsSelect option rows and
+   the active-option preview inside the trigger. Same flag pill style
+   as `.lang-picker-flag` so Settings → Language and the header
+   LangPicker read as the same control. */
+.settings-select-leading {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.settings-flag {
+  display: inline-block;
+  width: 22px;
+  height: 16px;
+  border-radius: 2px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 1px var(--border);
+}
 .settings-select-chevron {
   flex-shrink: 0;
   color: var(--fg-muted);
@@ -3886,7 +3982,10 @@ body.resizing { cursor: col-resize; user-select: none; }
    in the right-panel's regular rhythm: same 20 px horizontal margin
    as `.screen-video-card` / `.audio-controls`. */
 .inline-view {
-  margin: 16px 20px 18px;
+  /* Download-view overrides this with 14/20/0 so it lines up flush
+     with `.timeline-card`. Other inline views (if any return) get
+     the default symmetric margin. */
+  margin: 14px 20px 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3928,6 +4027,22 @@ body.resizing { cursor: col-resize; user-select: none; }
   flex-direction: column;
   gap: 8px;
   margin-top: 4px;
+}
+/* Download view — single bordered card matching `.timeline-card` so
+   it sits flush with the Recording-tab geometry (same 20 px outer
+   margin, same 1 px outline, same 8 px radius). Internal padding
+   mirrors `.hk-block` from Settings. Compact CTA gap so the block
+   doesn't feel enterprise-form-sparse. */
+.download-view { margin: 14px 20px 0; }
+.download-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 14px 16px;
+}
+.download-block .download-cta {
+  margin-top: 8px;
+  text-decoration: none;
 }
 
 /* ── Integrations pane (sibling tab of Settings) ─────────────────── */
@@ -4190,42 +4305,43 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 /* ===== Chapters tab ============================================ */
 
-/* Same horizontal padding as the transcript body (20 px) so the
-   left edge of the title text lines up with transcript paragraphs
-   when the user flips between tabs. */
-.chapters-list {
-  list-style: none;
-  padding: 12px 20px 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* Each chapter is a vertical stack: an h3-sized timestamp PILL on
+   top (the only hot target), the body title below as a normal
+   paragraph. Same `.md-h3`/`.md-p` rhythm Summary uses, so flipping
+   between the two tabs reads as one surface. */
+.chapter-block {
+  display: block;
+  padding: 8px 0 14px;
 }
-.chapter-row {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  padding: 10px 12px;
-  border-radius: 8px;
+/* Thin divider between chapters spanning the full content width —
+   no inset so it reaches the same edges as the Summary headings. */
+.chapter-block + .chapter-block {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+/* Timestamp pill — uses the same type as `.md-h3` (16/500, fg) so
+   it sits at section-heading weight in the visual hierarchy. Hover
+   highlights ONLY this chip (not the whole row), making it the
+   obvious click target. Tabular-nums keeps the column flush. */
+.chapter-time {
+  appearance: none;
+  border: 0;
+  background: transparent;
   cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin: 0 -8px 6px;
+  display: inline-block;
   transition: background 80ms ease;
 }
-.chapter-row:hover {
-  background: var(--bg-hover);
-}
-/* Timestamp = mono, accent green so it reads as a clickable
-   timecode (mirrors how transcript paragraphs colour speaker
-   chips on hover). Tabular-nums keeps the column flush. */
-.chapter-time {
-  flex: 0 0 auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  min-width: 56px;
-}
-.chapter-title {
-  font-size: 15px;
-  line-height: 1.45;
-  color: var(--fg);
+.chapter-time:hover { background: var(--bg-hover); }
+/* Title = body paragraph (matches Summary's `.md-p`). */
+.chapter-block .md-p.chapter-title {
+  margin: 0;
 }

@@ -1,5 +1,6 @@
 import React from "react";
 import { MeetingDetail, SegmentDTO, SpeakerDTO, RecordingState, renameSpeaker, getSettings } from "../api";
+import { displaySpeakerName } from "../format";
 import { RecordingBanner } from "./RecordingBanner";
 import { RecordingPlaceholder } from "./RecordingPlaceholder";
 import { TranscribingBanner } from "./TranscribingBanner";
@@ -112,6 +113,17 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     detail.speakers.forEach((s) => map.set(s.id, s));
     return map;
   }, [detail.speakers]);
+
+  // Signed-in user's display name — used to replace the "you" /
+  // "I" first-person placeholders the Swift pipeline writes into the
+  // user speaker's `custom_name` so the transcript reads with the
+  // user's real identity, not a placeholder.
+  const [profileName, setProfileName] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    getSettings().then((s) => { if (alive) setProfileName((s.user_name ?? "").trim() || null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [detail.id]);
 
   // Rating prompt: count UNIQUE ready-with-segments transcripts the
   // user has seen, surface the banner once we cross the threshold.
@@ -299,7 +311,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
       )}
       {filteredGroups.map((g, gi) => {
         const sp = speakerById.get(g.speakerId);
-        const name = sp?.custom_name?.trim() || sp?.label || "Speaker";
+        const name = displaySpeakerName(sp?.custom_name, sp?.label, profileName);
         const color = avatarColor(name);
         return (
           <div key={gi} className="segment-group">

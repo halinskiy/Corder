@@ -180,22 +180,23 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   // Right section toggle: the Recent/sort list or the Settings pane.
   // Driven by the profile menu's Settings item via `openSettingsNonce`.
   // Stats column on the LEFT stays untouched in either mode.
-  const [rightSection, setRightSection] = useState<"recent" | "settings">("recent");
+  const [rightSection, setRightSection] = useState<"recent" | "settings-general" | "settings-advanced">("recent");
+  const inSettings = rightSection === "settings-general" || rightSection === "settings-advanced";
   const lastSettingsNonceRef = useRef(openSettingsNonce);
   useEffect(() => {
     if (openSettingsNonce !== lastSettingsNonceRef.current) {
       lastSettingsNonceRef.current = openSettingsNonce;
       // Toggle: tapping the Settings gear a second time returns to
-      // Recent (same affordance as the Archive button — clicking the
-      // lit-up icon takes you back).
-      setRightSection((cur) => cur === "settings" ? "recent" : "settings");
+      // Recent. Opening always lands on the General slice; Advanced is
+      // one click away inside the right-column strip.
+      setRightSection((cur) => (cur === "settings-general" || cur === "settings-advanced") ? "recent" : "settings-general");
     }
   }, [openSettingsNonce]);
   // Mirror Right-pane state up to main.tsx so MainHeader's Settings
   // toolbar button can light up `.active` the same way Archive does.
   useEffect(() => {
-    onSettingsOpenChange?.(rightSection === "settings");
-  }, [rightSection, onSettingsOpenChange]);
+    onSettingsOpenChange?.(inSettings);
+  }, [inSettings, onSettingsOpenChange]);
 
   // Sort key — persisted across launches so the user's pick survives
   // a window close. Default is "duration" (longest meetings first):
@@ -248,7 +249,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
           <span className="tab active">{t.dashboard_tab_stats}</span>
         </div>
         <div className="detail-tab-col detail-tab-col-right">
-          {rightSection === "recent" ? (
+          {!inSettings ? (
             // Clickable label + chevron — opens a popover with the
             // three sort options. The label IS the currently selected
             // sort, so the active tab reads as both "what list this
@@ -260,21 +261,30 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
               activeLabel={activeSortLabel}
             />
           ) : (
-            // Settings mode — leading ChevronLeft makes the affordance
-            // unambiguous: the user opened Settings from the profile
-            // menu, and this strip is how they get back to the Recent
-            // list. The label still doubles as the back trigger so the
-            // whole chip is one big click target, not just the icon.
-            <span
-              className="tab active dash-settings-back"
-              role="button"
-              onClick={() => setRightSection("recent")}
-              title={t.dashboard_tab_recent}
-              aria-label={t.dashboard_tab_recent}
-            >
-              <ChevronLeft size={14} strokeWidth={2} />
-              <span>{t.tab_settings}</span>
-            </span>
+            // Settings mode — `← General Settings` doubles as back
+            // affordance (returns to Recent when clicked while
+            // General is already active), `Advanced Settings` is a
+            // plain sibling tab. Same pattern as MeetingView's strip.
+            <>
+              <span
+                className={"tab dash-settings-back" + (rightSection === "settings-general" ? " active" : "")}
+                role="button"
+                onClick={() => setRightSection(
+                  rightSection === "settings-general" ? "recent" : "settings-general"
+                )}
+                title={t.tab_general_settings ?? "General Settings"}
+                aria-label={t.tab_general_settings ?? "General Settings"}
+              >
+                <ChevronLeft size={14} strokeWidth={2} />
+                <span>{t.tab_general_settings ?? "General Settings"}</span>
+              </span>
+              <span
+                className={"tab" + (rightSection === "settings-advanced" ? " active" : "")}
+                onClick={() => setRightSection("settings-advanced")}
+              >
+                {t.tab_advanced_settings ?? "Advanced Settings"}
+              </span>
+            </>
           )}
         </div>
       </div>
@@ -428,8 +438,11 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
             </div>
           )}
         </div>
-        <div style={{ display: rightSection === "settings" ? "contents" : "none" }}>
-          <SettingsPane t={t} lang={lang} onLangChange={onLangChange} />
+        <div style={{ display: rightSection === "settings-general" ? "contents" : "none" }}>
+          <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="general" />
+        </div>
+        <div style={{ display: rightSection === "settings-advanced" ? "contents" : "none" }}>
+          <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="advanced" />
         </div>
       </div>
     </div>
