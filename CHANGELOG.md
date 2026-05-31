@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.9] — 2026-05-31
+
+### Changed
+- Monthly usage card hidden for now — re-enabled when paid plans go live and per-tier caps mean something again. The Bug-icon button still ships logs to the maintainer, the model picker still ships under Start; only the usage rollup is gone from the Dashboard for the moment.
+
+### Fixed
+- Submit-logs reports now also land as a GitHub Issue in a private maintainer inbox (next to the existing Resend email), so triage isn't bottlenecked on inbox scrolling and long logs aren't lost mid-quote.
+
 ## [0.13.8] — 2026-05-31
 
 ### Added
