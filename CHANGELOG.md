@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.25] — 2026-05-31
+
+### Fixed
+- **App icon depth** — the squircle plate had no outer margin, so on dark Dock backgrounds it read as a flat sticker without shadow. Rebuilt the iconset against the Apple Icon Template (824 px squircle on a 1024 canvas, 100 px outer margin) and baked a soft drop-shadow into the alpha. Looks like a real macOS app on every theme now.
+
 ## [0.13.24] — 2026-05-31
 
 ### Fixed
