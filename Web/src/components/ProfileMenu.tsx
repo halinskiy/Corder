@@ -54,19 +54,19 @@ function AvatarGlyph({ variant, paid }: { variant: number; paid: boolean }) {
       }}
       aria-hidden
     >
-      <rect width="40" height="40" fill={fillBg} />
-      {/* 1 px inner ring to match the .toolbar-icon-btn outline.
-          Drawn at viewBox-inset 0.5 so the stroke isn't clipped. */}
-      <rect
-        x="0.5"
-        y="0.5"
-        width="39"
-        height="39"
+      <circle cx="20" cy="20" r="20" fill={fillBg} />
+      <g fill={fillGlyph}>{glyphShape(variant, fillGlyph)}</g>
+      {/* Ring drawn LAST so glyphs (half-moon cut-out, diagonal bar)
+          can't paint over it. Circle, not rect — the avatar frame is
+          round, a rectangular stroke gets clipped by border-radius. */}
+      <circle
+        cx="20"
+        cy="20"
+        r="19.5"
         fill="none"
         stroke={stroke}
         strokeWidth="1"
       />
-      <g fill={fillGlyph}>{glyphShape(variant, fillGlyph)}</g>
     </svg>
   );
 }
@@ -113,7 +113,7 @@ function glyphShape(variant: number, glyphFill: string): React.ReactNode {
       // from centre, which sat ON the clip boundary and the tip
       // read as "cut off" at the top of the avatar. height=28
       // leaves ~4 px breathing room from the circle's edge.
-      return <rect x="17" y="6" width="6" height="28" rx="2" transform="rotate(45 20 20)" />;
+      return <rect x="17" y="9" width="6" height="22" rx="2" transform="rotate(45 20 20)" />;
     case 7:
       // Outer ring + inner dot — drawn as two concentric paths via
       // a `stroke` ring (not even-odd, which is flaky in WebKit).
