@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import Swifter
 import AppKit
+import UserNotifications
 @preconcurrency import Supabase
 
 enum Routes {
@@ -110,6 +111,40 @@ enum Routes {
         server.post["/api/open-welcome"] = { _ in
             Task { @MainActor in WelcomeWindowController.shared.presentManually() }
             return .ok(.text("ok"))
+        }
+        // Deep-link into System Settings → Notifications → Corder.
+        // macOS denies re-request after the user said no, so the
+        // only way back to "allow" is a trip through System Settings.
+        // The `notifications?id=<bundle>` URL anchor pre-scrolls to
+        // our row on macOS 13+.
+        server.post["/api/open-notification-settings"] = { _ in
+            Task { @MainActor in
+                let bundleID = Bundle.main.bundleIdentifier ?? "com.3mpq.Corder"
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            return .ok(.text("ok"))
+        }
+        // Used by the Settings notification row to render the
+        // current macOS authorization status (allowed / denied /
+        // not determined) without a private API. Reads from
+        // `UNUserNotificationCenter`, which is async; we hop and
+        // serialise to a flat string the React side switches on.
+        server.get["/api/notification-status"] = { _ in
+            let sem = DispatchSemaphore(value: 0)
+            var status = "unknown"
+            UNUserNotificationCenter.current().getNotificationSettings { s in
+                switch s.authorizationStatus {
+                case .authorized, .provisional, .ephemeral: status = "allowed"
+                case .denied:                                status = "denied"
+                case .notDetermined:                         status = "notDetermined"
+                @unknown default:                            status = "unknown"
+                }
+                sem.signal()
+            }
+            _ = sem.wait(timeout: .now() + 2)
+            return jsonResponse(["status": status])
         }
         server.post["/api/account/signout"] = { _ in accountSignOut() }
         server.post["/api/account/delete"] = { _ in accountDelete() }
