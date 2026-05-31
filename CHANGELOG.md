@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.11] — 2026-05-31
+
+### Fixed
+- **`noKey` failed transcription** when a cloud provider was picked but its API key wasn't on disk. The pipeline now checks for the key file BEFORE the call and silently falls back to on-device Whisper for the run instead of failing the meeting (same code path as the monthly-cap fallback).
+- **Rating prompt no longer pesters.** Shows at most ONCE per user, pinned to the first meeting it appeared on — closing the X or sending feedback dismisses it for good. Revisiting that meeting later or opening any other meeting never re-surfaces it. Threshold also bumped back from 1 to 3 ready transcripts so the prompt doesn't appear on a test recording.
+
 ## [0.13.10] — 2026-05-31
 
 ### Fixed
