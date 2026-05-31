@@ -8,7 +8,7 @@
   --bg-input: #ffffff;
   --border: #ececea;
   --border-strong: #d8d8d4;
-  --fg: #0e0e0d;
+  --fg: #212121;
   --fg-muted: #6b6b68;
   --fg-dim: #a0a09c;
   /* Primary accent — Corder's green. Used for selected pills, CTA fills,
@@ -32,7 +32,7 @@
   --status-warn: #b07b1a;
   --status-fail: #b8443c;
   /* Recessed timeline channel — overridden in dark. */
-  --tl-track: rgba(14, 14, 13, 0.05);
+  --tl-track: rgba(33, 33, 33, 0.05);
 }
 
 /* Dark theme. Same warm-neutral family as the light palette, just
@@ -2867,7 +2867,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .tl-bar {
   position: relative;
   height: 9px;
-  background: var(--tl-track, rgba(14, 14, 13, 0.05));
+  background: var(--tl-track, rgba(33, 33, 33, 0.05));
   border-radius: 999px;
   cursor: pointer;
   /* Clip segments/cursor so a near-total-duration block never bleeds

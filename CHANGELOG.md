@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.24] — 2026-05-31
+
+### Fixed
+- **App icon** had a transparent background, so on macOS < 26 the Dock / Finder / DMG installer rendered only the two black capsule glyphs without the white squircle plate. Regenerated the iconset from the canonical brand SVG (white 22.4 %-rx squircle + black capsules) — looks identical on every macOS now.
+- **Installer DMG is now signed + notarized + stapled** as a container, not just the `.app` inside it. The 0.13.23 DMG itself was unsigned, so Gatekeeper blocked it with "Move to Trash" on a fresh download. Updates via Sparkle were unaffected.
+
+### Changed
+- **Body text colour** nudged from `#0E0E0D` to `#212121` for a softer, less surgical black against white panels.
+- **Profile avatar outline** is now a circle stroke drawn on top of the glyph, so the half-moon cut-out and diagonal bar variants no longer break the ring.
+
 ## [0.13.23] — 2026-05-31
 
 ### Changed
