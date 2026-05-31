@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.22] — 2026-05-31
+
+### Added
+- **Help-improve-Corder telemetry** (opt-in, off by default). New toggle in Settings; when on, the app ships a small diagnostic envelope once per 24h with version, macOS version, Mac model, RAM, tier, and aggregate counts (meetings transcribed, ready vs failed, cloud vs local). Email is SHA-256-hashed into an anonymous id before it leaves the Mac; no transcript text, no audio, no raw email. Lands in a Cloudflare D1 database (`corder-telemetry`) the maintainer can query with `wrangler d1 execute`.
+
 ## [0.13.21] — 2026-05-31
 
 ### Changed

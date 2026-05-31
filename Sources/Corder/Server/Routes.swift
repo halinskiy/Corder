@@ -833,6 +833,7 @@ enum Routes {
             auto_title: AppSettings.autoTitle,
             auto_summary: AppSettings.autoSummary,
             auto_chapters: AppSettings.autoChapters,
+            telemetry: AppSettings.telemetryEnabled,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
@@ -1088,6 +1089,7 @@ enum Routes {
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
             if let v = parsed.auto_summary     { AppSettings.setAutoSummary(v) }
             if let v = parsed.auto_chapters    { AppSettings.setAutoChapters(v) }
+            if let v = parsed.telemetry        { AppSettings.setTelemetryEnabled(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
             if let c = parsed.record_hotkey_code, let m = parsed.record_hotkey_mods {

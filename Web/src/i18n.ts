@@ -63,6 +63,8 @@ interface Strings {
   chapters_pending_body?: string;
   settings_auto_chapters_title?: string;
   settings_auto_chapters_desc?: string;
+  settings_telemetry_title?: string;
+  settings_telemetry_desc?: string;
   tab_settings: string;
   tab_integrations: string;
   toast_soon: string;
@@ -422,6 +424,8 @@ const ru: Strings = {
   chapters_pending_body: "Транскрипт готов — главы появятся на следующем проходе. Если нет — нажмите Re-transcribe в тулбаре встречи.",
   settings_auto_chapters_title: "Автоглавы",
   settings_auto_chapters_desc: "Разбивать готовый транскрипт на главы в стиле Loom с кликабельными таймкодами.",
+  settings_telemetry_title: "Помочь улучшить Corder",
+  settings_telemetry_desc: "Раз в сутки отправлять анонимные счётчики (количество записей, успешные/неуспешные транскрипции, модель Mac, версия) разработчику. Без транскриптов, аудио и e-mail — аккаунт хешируется до отправки.",
   tab_settings: "Настройки",
   settings_draft_note: "Черновик, настройки дорабатываются.",
   settings_sec_notifications: "Уведомления",
@@ -709,6 +713,8 @@ const en: Strings = {
   chapters_pending_body: "The transcript is ready — chapters land here on the next pipeline sweep. If they don't show up, re-transcribe from the meeting toolbar.",
   settings_auto_chapters_title: "Auto-chapters",
   settings_auto_chapters_desc: "Split a finished transcript into Loom-style chapters with clickable timestamps.",
+  settings_telemetry_title: "Help improve Corder",
+  settings_telemetry_desc: "Send anonymous diagnostic counts (recordings, transcribe success/fail, Mac model, app version) to the maintainer once a day. No transcripts, no audio, no email — your account is hashed before it leaves the Mac.",
   tab_settings: "Settings",
   settings_draft_note: "Draft. Settings still in progress.",
   settings_sec_notifications: "Notifications",
@@ -1006,6 +1012,8 @@ const uk: Strings = {
   chapters_pending_body: "Транскрипт готовий — розділи з'являться на наступному проході. Якщо ні — натисніть Re-transcribe.",
   settings_auto_chapters_title: "Автоматичні розділи",
   settings_auto_chapters_desc: "Розділяти готовий транскрипт на розділи у стилі Loom з клікабельними таймкодами.",
+  settings_telemetry_title: "Допомогти покращити Corder",
+  settings_telemetry_desc: "Раз на добу надсилати анонімні лічильники (записи, успіх/збій транскрипції, модель Mac, версія) розробнику. Без транскриптів, аудіо та e-mail — акаунт хешується до надсилання.",
   tab_settings: "Налаштування",
   settings_draft_note: "Чернетка, налаштування ще доопрацьовуються.",
   settings_sec_notifications: "Сповіщення",

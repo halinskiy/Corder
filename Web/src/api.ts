@@ -250,6 +250,7 @@ export interface Settings {
   auto_title?: boolean;
   auto_summary?: boolean;
   auto_chapters?: boolean;
+  telemetry?: boolean;
   /** user-managed bundle ids for the call auto-detector. */
   meeting_whitelist?: string[];
   meeting_blacklist?: string[];
