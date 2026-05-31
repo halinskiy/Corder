@@ -137,11 +137,14 @@ enum AppSettings {
     static var autoTitle: Bool             { flag(kAutoTitle) }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
-    /// Opt-in diagnostic telemetry. Default OFF on purpose — the
-    /// user must explicitly turn it on in Settings before anything
-    /// leaves the Mac. No transcripts, no PII.
+    /// Diagnostic telemetry. Default ON during the test period —
+    /// we need real-world signal from every install to fix
+    /// transcription failures we can't reproduce locally. Will
+    /// flip back to default-OFF before the paid plans ship.
+    /// No transcripts, no raw email; everything sent through
+    /// `TelemetryService` is aggregate + a SHA-256 anonymous id.
     static var telemetryEnabled: Bool {
-        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? false
+        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? true
     }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }

@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.23] — 2026-05-31
+
+### Changed
+- **Help-improve-Corder telemetry** is now **ON by default during the test period** so we get real-world signal on transcription failures we can't reproduce locally. Toggle still in Settings — flip it off and nothing leaves your Mac. Will revert to default-off before paid plans ship.
+
 ## [0.13.22] — 2026-05-31
 
 ### Added
