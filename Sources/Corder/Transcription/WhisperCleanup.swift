@@ -32,7 +32,8 @@ enum WhisperCleanup {
     /// tokens, fast, native multilingual. We post chat-completions
     /// rather than the responses API so the surface matches every
     /// other Corder OpenAI call and we can stream later if needed.
-    private static let endpoint = "https://api.openai.com/v1/chat/completions"
+    private static let directEndpoint = "https://api.openai.com/v1/chat/completions"
+    private static let proxyEndpoint = "https://corder-api.empqwork.workers.dev/transcribe/whisper-cleanup"
     private static let model = "gpt-4o-mini"
 
     /// Per-call turn budget. 50 short turns ≈ 3-5 k tokens of input,
@@ -65,8 +66,16 @@ enum WhisperCleanup {
             FileLogger.log("WhisperCleanup: only \(totalChars) chars of text, skipping API call")
             return turns
         }
-        guard let key = readAPIKey() else {
-            FileLogger.log("WhisperCleanup: no OpenAI key, returning turns unchanged")
+
+        // Resolve routing once for the whole transcript. When the
+        // user is signed in we proxy through the Worker (server-side
+        // OpenAI key, tier-gated). Signed-out builds still need a
+        // local key file as before — and on that path a missing key
+        // is the silent skip it always was.
+        let jwt = await Self.jwt()
+        let key = readAPIKey() ?? ""
+        if jwt.isEmpty && key.isEmpty {
+            FileLogger.log("WhisperCleanup: no OpenAI key and not signed in, returning turns unchanged")
             return turns
         }
 
@@ -82,11 +91,17 @@ enum WhisperCleanup {
             let batch = Array(turns[idx..<end])
             batchNo += 1
             let polished = await polishBatch(batch, language: language,
-                                             apiKey: key, batchNo: batchNo)
+                                             apiKey: key, jwt: jwt, batchNo: batchNo)
             out.append(contentsOf: polished)
             idx = end
         }
         return out
+    }
+
+    private static func jwt() async -> String {
+        await MainActor.run {
+            SupabaseClientHolder.shared.auth.currentSession?.accessToken ?? ""
+        }
     }
 
     // MARK: - Single batch
@@ -97,6 +112,7 @@ enum WhisperCleanup {
     private static func polishBatch(_ batch: [GeminiTranscriber.Turn],
                                     language: String?,
                                     apiKey: String,
+                                    jwt: String,
                                     batchNo: Int) async -> [GeminiTranscriber.Turn] {
         guard !batch.isEmpty else { return batch }
 
@@ -143,9 +159,12 @@ enum WhisperCleanup {
             return batch
         }
 
-        var req = URLRequest(url: URL(string: endpoint)!)
+        let useProxy = !jwt.isEmpty
+        let endpointURL = useProxy ? proxyEndpoint : directEndpoint
+        let authValue = useProxy ? "Bearer \(jwt)" : "Bearer \(apiKey)"
+        var req = URLRequest(url: URL(string: endpointURL)!)
         req.httpMethod = "POST"
-        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue(authValue, forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 90
         req.httpBody = body
