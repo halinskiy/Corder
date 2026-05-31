@@ -51,6 +51,24 @@ if [ -f "$ROOT/Resources/icons/AppIcon.icns" ]; then
     cp "$ROOT/Resources/icons/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
+# Asset Catalog with light + dark icon variants (both pointing at
+# the same canonical white squircle). Without an explicit dark
+# variant macOS Tahoe (26+) auto-tints the icon on dark mode — the
+# Corder squircle goes near-black and the bars vanish. Shipping a
+# dark variant that's IDENTICAL to the light one is the documented
+# opt-out: the system uses ours instead of the auto-tinted one, and
+# the logo stays canonical white in every appearance.
+if [ -d "$ROOT/Resources/icons/Assets.xcassets" ] && command -v actool >/dev/null 2>&1; then
+    actool "$ROOT/Resources/icons/Assets.xcassets" \
+        --compile "$APP/Contents/Resources/" \
+        --platform macosx \
+        --minimum-deployment-target 14.0 \
+        --app-icon AppIcon \
+        --output-format human-readable-text \
+        --output-partial-info-plist /tmp/corder-actool-fragment.plist \
+        >/dev/null 2>&1 || echo "WARN: actool compile failed; falling back to .icns only"
+fi
+
 # 3b. Embed the Developer ID provisioning profile (if shipped). Required
 # for entitlements that the system validates against the profile —
 # notably `com.apple.developer.applesignin`. The file lives at
