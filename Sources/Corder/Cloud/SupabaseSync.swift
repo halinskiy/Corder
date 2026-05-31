@@ -309,6 +309,21 @@ enum SupabaseSync {
                                 kind: String,
                                 fileURL: URL,
                                 durationMs: Int64?) async -> String? {
+        // Audio backup is temporarily off. Supabase Storage Free
+        // plan caps single-shot upload at 50 MB and a typical
+        // 7-min recording's `system.wav` is ~80 MB → 413 every
+        // time. Migration to Cloudflare R2 (no per-file cap, ∞
+        // egress, free 10 GB) is queued; once R2 is enabled in the
+        // Dashboard the env flag below flips and uploads resume.
+        // Until then: recordings stay local-only (transcript still
+        // syncs to Supabase via the `meetings` / `speakers` /
+        // `segments` tables; only the playback audio is missing
+        // from the cloud mirror).
+        let cloudAudioEnabled = UserDefaults.standard.object(forKey: "Corder.set.cloudAudioBackup") as? Bool ?? false
+        if !cloudAudioEnabled {
+            FileLogger.log("SupabaseSync.uploadRecording(\(kind)) skipped — cloud audio backup disabled pending R2 migration")
+            return nil
+        }
         guard let uid = userId() else { return nil }
         let ext = fileURL.pathExtension
         // RLS on `storage.objects` compares the first path segment to

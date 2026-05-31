@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.16] — 2026-05-31
+
+### Fixed
+- **Whisper Cloud polish (`gpt-4o-mini`) now works for Pro / Max** without a local OpenAI key. `WhisperCleanup` was silently returning unchanged turns whenever the local key file was absent — it now routes through the same Worker proxy (`/transcribe/whisper-cleanup`) with JWT auth and the server-side OpenAI key.
+
+### Changed
+- **Cloud audio backup temporarily disabled.** Supabase Storage Free plan rejects single-shot uploads over 50 MB, so every recording's `system.wav` (~80 MB on a 7-min call) was failing 413 each cycle. Recordings stay local-only; the transcript still syncs to Supabase. Will flip back on the moment we migrate to Cloudflare R2 (no per-file cap, ∞ egress, free 10 GB).
+
 ## [0.13.15] — 2026-05-31
 
 ### Fixed
