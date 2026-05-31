@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.20] — 2026-05-31
+
+### Fixed
+- **Free avatar background**: the toolbar and popover-header avatars hard-coded a CSS `background: var(--accent)`, which won against the tier-aware SVG fill — so a Free user still saw a green chip with a black glyph instead of the intended transparent + outline treatment. Background removed; the SVG paints its own (accent for Pro/Max, transparent for Free).
+
 ## [0.13.19] — 2026-05-31
 
 ### Added
