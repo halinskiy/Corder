@@ -248,8 +248,19 @@ enum SupabaseSync {
                 .execute()
             if !speakers.isEmpty {
                 let rows: [SpeakerRow] = speakers.enumerated().map { idx, s in
-                    SpeakerRow(
-                        id: UUID(uuidString: s.id) ?? UUID(),
+                    // CRITICAL: use the SAME UUID the segment-side
+                    // lookup will see. Re-resolving `UUID(uuidString:)
+                    // ?? UUID()` here would yield a fresh random ID
+                    // whenever `s.id` isn't a valid UUID string,
+                    // leaving segments pointing at a non-existent
+                    // speaker row → FK 23503. The caller's
+                    // `speakerIdByLocalId` is the single source of
+                    // truth; fall back to a deterministic same-call
+                    // UUID only as a last resort (and store it in
+                    // the map so the segment side will agree).
+                    let resolved = speakerIdByLocalId[s.id] ?? UUID(uuidString: s.id) ?? UUID()
+                    return SpeakerRow(
+                        id: resolved,
                         meeting_id: meetingId,
                         label: s.label,
                         display_name: s.customName,
