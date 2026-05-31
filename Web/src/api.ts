@@ -88,6 +88,12 @@ export async function submitLogs(): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+/// Opens the native Welcome wizard at the sign-in step. The
+/// frontend has no auth surface of its own — the wizard owns it.
+export async function openWelcome(): Promise<void> {
+  await fetch("/api/open-welcome", { method: "POST" });
+}
+
 export async function listMeetings(): Promise<MeetingSummary[]> {
   const r = await fetch("/api/meetings");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

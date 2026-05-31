@@ -1,7 +1,7 @@
 import React from "react";
 import { Home, LifeBuoy, LogOut, RefreshCw, Shuffle } from "lucide-react";
 import type { T } from "../i18n";
-import { getSettings, signOut, triggerUpdateCheck } from "../api";
+import { getSettings, signOut, triggerUpdateCheck, openWelcome } from "../api";
 
 const AVATAR_COUNT = 9;
 const AVATAR_STORAGE_KEY = "corder.avatarVariant";
@@ -27,15 +27,18 @@ function readStoredVariant(seed: string): number {
 /// built from primitive SVG elements (<circle>, <rect>, <polygon>) +
 /// straight-line paths so they render reliably in WKWebView (the
 /// arc-only paths I tried first didn't paint on the tester's machine).
-function AvatarGlyph({ variant }: { variant: number }) {
-  /// Both width/height attributes AND an inline style are set on
-  /// the SVG. The attributes cover renderers that read SVG size
-  /// from the element; the inline `style` covers ones that only
-  /// honour CSS. Inline style beats any stylesheet, so cascade
-  /// order can't quietly drop the size declaration. We arrived at
-  /// this combo after the popover variant kept rendering at viewBox
-  /// natural size (40×40 tile in the corner of a 48 px round chip)
-  /// every time we let CSS classes own the dimensions.
+function AvatarGlyph({ variant, paid }: { variant: number; paid: boolean }) {
+  /// Tier-aware. Paid (Pro / Max) gets the canonical accent-green
+  /// fill with a white glyph. Free gets a transparent surface with
+  /// a dark glyph and a hairline outline — mirrors the secondary
+  /// button treatment so a Free avatar reads as "outlined / not
+  /// upgraded yet". The `var(--avatar-cutout)` variable is what
+  /// the half-moon case (variant 2) paints over its overlapping
+  /// rect — paid = accent, free = bg so the cut-out blends into
+  /// the surface.
+  const fillBg = paid ? "var(--accent)" : "transparent";
+  const fillGlyph = paid ? "#fff" : "var(--fg)";
+  const stroke = paid ? "var(--accent)" : "var(--border-strong)";
   return (
     <svg
       viewBox="0 0 40 40"
@@ -43,16 +46,33 @@ function AvatarGlyph({ variant }: { variant: number }) {
       height="100%"
       preserveAspectRatio="xMidYMid meet"
       className="avatar-svg"
-      style={{ display: "block", width: "100%", height: "100%" }}
+      style={{
+        display: "block",
+        width: "100%",
+        height: "100%",
+        ["--avatar-cutout" as string]: paid ? "var(--accent)" : "var(--bg)",
+      }}
       aria-hidden
     >
-      <rect width="40" height="40" fill="var(--accent)" />
-      <g fill="#fff">{glyphShape(variant)}</g>
+      <rect width="40" height="40" fill={fillBg} />
+      {/* 1 px inner ring to match the .toolbar-icon-btn outline.
+          Drawn at viewBox-inset 0.5 so the stroke isn't clipped. */}
+      <rect
+        x="0.5"
+        y="0.5"
+        width="39"
+        height="39"
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1"
+      />
+      <g fill={fillGlyph}>{glyphShape(variant, fillGlyph)}</g>
     </svg>
   );
 }
 
-function glyphShape(variant: number): React.ReactNode {
+function glyphShape(variant: number, glyphFill: string): React.ReactNode {
+  void glyphFill; // each <path>/<rect> below inherits via the parent <g fill=…>
   switch (variant % AVATAR_COUNT) {
     case 0:
       // Single bold dot
@@ -66,13 +86,14 @@ function glyphShape(variant: number): React.ReactNode {
         </>
       );
     case 2:
-      // Half-moon (rectangle clipped by a circle isn't reliable in
-      // every renderer — use a polygon arc approximation drawn as
-      // a half-disc via two paths: a full circle minus a rect).
+      // Half-moon: full disc with the right half cut out by a rect
+      // painted in the SURFACE colour (accent for paid, bg for free).
+      // Pulling the cut-out colour from a CSS variable means the
+      // glyph file doesn't have to know which tier it's rendering for.
       return (
         <>
           <circle cx="20" cy="20" r="11" />
-          <rect x="20" y="9" width="13" height="22" fill="var(--accent)" />
+          <rect x="20" y="9" width="13" height="22" fill="var(--avatar-cutout)" />
         </>
       );
     case 3:
@@ -96,9 +117,10 @@ function glyphShape(variant: number): React.ReactNode {
     case 7:
       // Outer ring + inner dot — drawn as two concentric paths via
       // a `stroke` ring (not even-odd, which is flaky in WebKit).
+      // Ring colour follows the glyph (white on paid, dark on free).
       return (
         <>
-          <circle cx="20" cy="20" r="11" fill="none" stroke="#fff" strokeWidth="3" />
+          <circle cx="20" cy="20" r="11" fill="none" stroke="currentColor" strokeWidth="3" />
           <circle cx="20" cy="20" r="4" />
         </>
       );
@@ -139,6 +161,21 @@ export function ProfileMenu({
   const [variant, setVariant] = React.useState(() => readStoredVariant(t.profile_name));
   const [userName, setUserName] = React.useState<string | null>(null);
   const [userEmail, setUserEmail] = React.useState<string | null>(null);
+  const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
+  const paid = tier === "pro" || tier === "max";
+
+  // Pull tier on mount so the header avatar can render its
+  // accent-vs-outlined treatment without waiting for the popover
+  // to open. Refreshed alongside the in-popover settings read.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const s = await getSettings();
+        if (s.tier === "pro" || s.tier === "max") setTier(s.tier);
+        else setTier("free");
+      } catch {}
+    })();
+  }, []);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const [pos, setPos] = React.useState<{ top: number; right: number } | null>(null);
 
@@ -154,6 +191,8 @@ export function ProfileMenu({
         const s = await getSettings();
         setUserName(s.user_name ?? null);
         setUserEmail(s.user_email ?? null);
+        if (s.tier === "pro" || s.tier === "max") setTier(s.tier);
+        else setTier("free");
       } catch {}
     })();
   }, [open]);
@@ -241,7 +280,7 @@ export function ProfileMenu({
         title={t.profile_title}
         aria-label={t.profile_title}
       >
-        <AvatarGlyph variant={variant} />
+        <AvatarGlyph variant={variant} paid={paid} />
       </button>
       {open && pos && (
         <div
@@ -258,26 +297,29 @@ export function ProfileMenu({
               title={t.profile_pick_avatar}
               aria-label={t.profile_pick_avatar}
             >
-              <AvatarGlyph variant={variant} />
+              <AvatarGlyph variant={variant} paid={paid} />
               <span className="avatar-shuffle-overlay" aria-hidden>
                 <Shuffle size={18} strokeWidth={2} />
               </span>
             </button>
             <div className="profile-pop-id">
-              {/* Real signed-in identity from the backend. Name
-                  falls back to the email's local part, then to a
-                  generic "Account" so the header never goes blank
-                  during the brief moment between the popover open
-                  and the settings fetch landing. */}
-              <div className="profile-pop-name">
-                {userName ?? userEmail?.split("@")[0] ?? "Account"}
-              </div>
-              {/* Email under the name. The previous tier chip
-                  (FREE / PRO / MAX) lived here — pulled out per
-                  Kostya's feedback (visual noise without a real
-                  paid surface). Re-introduce when paid flows ship. */}
-              {userEmail && (
-                <div className="profile-pop-sub">{userEmail}</div>
+              {/* Signed-in identity, or a sign-in CTA when the
+                  account is empty. The previous placeholder text
+                  was getting served as a real "account" — the
+                  popover even surfaced Sign-out on a signed-out
+                  build, which made no sense. */}
+              {userEmail ? (
+                <>
+                  <div className="profile-pop-name">
+                    {userName ?? userEmail.split("@")[0] ?? "Account"}
+                  </div>
+                  <div className="profile-pop-sub">{userEmail}</div>
+                </>
+              ) : (
+                <>
+                  <div className="profile-pop-name">{t.profile_signed_out_title ?? "Not signed in"}</div>
+                  <div className="profile-pop-sub">{t.profile_signed_out_body ?? "Sign in to access your account."}</div>
+                </>
               )}
             </div>
           </div>
@@ -289,9 +331,20 @@ export function ProfileMenu({
               need to surface it twice. Get help took its slot,
               filling out the navigation pair. */}
           <div className="profile-pop-sep" />
-          <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
-            <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
-          </button>
+          {!userEmail && (
+            <button
+              className="profile-pop-item"
+              onClick={async () => { setOpen(false); try { await openWelcome(); } catch {} }}
+              role="menuitem"
+            >
+              <Home size={15} strokeWidth={2} /> {t.profile_sign_in ?? "Sign in"}
+            </button>
+          )}
+          {userEmail && (
+            <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
+              <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
+            </button>
+          )}
           <button className="profile-pop-item" onClick={goHelp} role="menuitem">
             <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
           </button>
@@ -302,21 +355,25 @@ export function ProfileMenu({
           {/* Auxiliary group: Sign out (+ legacy danger row slot,
               currently empty — Delete account moved into Settings).
               Same 8 px breathing room from the divider above. */}
-          <div className="profile-pop-sep" />
-          <button
-            className="profile-pop-item profile-pop-item-danger"
-            onClick={async () => {
-              setOpen(false);
-              try { await signOut(); } catch {}
-              // The Swift sign-out path triggers a process relaunch
-              // (per-account on-disk paths can't be swapped live),
-              // so there's no point reloading here — the new
-              // process boots straight into the Welcome wizard.
-            }}
-            role="menuitem"
-          >
-            <LogOut size={15} strokeWidth={2} /> {t.profile_signout}
-          </button>
+          {userEmail && (
+            <>
+              <div className="profile-pop-sep" />
+              <button
+                className="profile-pop-item profile-pop-item-danger"
+                onClick={async () => {
+                  setOpen(false);
+                  try { await signOut(); } catch {}
+                  // The Swift sign-out path triggers a process relaunch
+                  // (per-account on-disk paths can't be swapped live),
+                  // so there's no point reloading here — the new
+                  // process boots straight into the Welcome wizard.
+                }}
+                role="menuitem"
+              >
+                <LogOut size={15} strokeWidth={2} /> {t.profile_signout}
+              </button>
+            </>
+          )}
         </div>
       )}
     </>

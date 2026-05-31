@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.18] — 2026-05-31
+
+### Added
+- **Send-a-bug-report with Undo.** Click the Bug icon → toast at the bottom counts down 10 s with an Undo button (same UX as Archive). The log is only sent when the countdown elapses, so an accidental click never leaves the Mac.
+- **Auto-RAM-aware default Whisper variant.** Fresh installs on Macs with ≤ 8 GB RAM default to `Base` (~150 MB, ~500 MB RAM at inference) instead of `Turbo` (1.5 GB on disk, ~3 GB RAM → swap-thrashes 8 GB M1s). Picker still lets the user upgrade.
+- **Sign-in CTA in the profile popover** when the account is signed out. Previously the popover read as a "logged in" surface even on a fresh install — Sign out was visible, Sign in wasn't.
+- **Tier-aware avatar.** Pro / Max gets the canonical accent-green chip with a white glyph; Free gets a transparent surface with a dark glyph and a hairline outline (mirrors the secondary-button treatment).
+
+### Changed
+- **Update pill** label is now just "Update available" — no version number (the version still shows inside the Sparkle dialog when you click).
+- **Update pill detection is more eager.** The `/api/update-status` poll now nudges Sparkle to do a silent background appcast check whenever the React UI hasn't seen a verdict yet — the pill no longer waits up to a day for Sparkle's scheduled check.
+
 ## [0.13.17] — 2026-05-31
 
 ### Added
