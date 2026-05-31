@@ -795,6 +795,30 @@ final class TranscriptionPipeline {
             FileLogger.log("Corder transcription error: \(error)")
             meeting.status = .failed
             try? repo.updateMeeting(meeting)
+            // Surface a Library-window toast for the failure. We
+            // classify on the error description: anything that
+            // matches the on-device-Whisper-couldn't-load family
+            // (OOM, model load fail, MIL network read fail,
+            // dealloc race) gets a SPECIFIC message that tells the
+            // user how to recover (switch to a lighter variant).
+            // Everything else gets a generic retry-via-toolbar
+            // hint. Toast is best-effort — if the Library window
+            // isn't open, system Notifications also fire from
+            // elsewhere in the pipeline.
+            let raw = String(describing: error).lowercased()
+            let lowMem = raw.contains("memory") || raw.contains("oom")
+                || raw.contains("mil network") || raw.contains("deallocated")
+                || raw.contains("load failed") || raw.contains("init failed")
+            let title: String
+            let body: String
+            if lowMem {
+                title = "Transcription failed: your Mac couldn't run the model"
+                body = "Open Settings → Transcription model and pick a lighter Whisper variant (Small or Base). Re-transcribe from the meeting toolbar."
+            } else {
+                title = "Transcription failed"
+                body = "Open the meeting and tap Re-transcribe. If it keeps failing, send a bug report from the toolbar."
+            }
+            LibraryWindow.shared.postToast(title: title, body: body, kind: "error")
         }
         // Post-transcribe Supabase sync: push speakers + segments
         // for cross-device read, and upload the playback mix +
