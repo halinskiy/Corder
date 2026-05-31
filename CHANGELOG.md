@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.12] — 2026-05-31
+
+### Added
+- **Cloud Whisper now works out of the box for Pro / Max** — Corder no longer ships its own API keys, and Pro / Max users no longer need to drop an OpenAI key into `~/.config/corder/`. The audio goes through `corder-api.empqwork.workers.dev/transcribe/whisper`, the Cloudflare Worker holds the OpenAI key server-side, and `app_metadata.tier` is the gate. Free-tier users transparently fall back to on-device Whisper as before.
+
 ## [0.13.11] — 2026-05-31
 
 ### Fixed

@@ -34,13 +34,21 @@ final class TranscriptionPipeline {
         activeProvider ?? AppSettings.transcriptionProvider
     }
 
-    /// True when the on-disk key file for the given cloud provider
-    /// is present and non-empty. Used to decide whether to fall
-    /// back to local Whisper before we even attempt the API call —
-    /// otherwise the user gets a meeting in `.failed` with a
-    /// `noKey` error that they can't fix without going into the
-    /// Settings panel.
+    /// True when the cloud provider can serve this transcribe call —
+    /// either via the Cloudflare Worker proxy (any signed-in user
+    /// whose `app_metadata.tier` clears the Worker's check) OR via
+    /// a legacy on-disk key file. Returning false here pushes the
+    /// pipeline into the local-Whisper fallback before we even try
+    /// the API call, so the user never sees a meeting `.failed` with
+    /// `noKey` for a provider they can't configure themselves.
     private func cloudKeyAvailable(for provider: TranscriptionProvider) -> Bool {
+        // Worker proxy currently covers Whisper Cloud only. Gemini
+        // still needs a local key (Files-API upload chain isn't
+        // proxied yet); when we add that, drop this guard.
+        if provider == .whisper,
+           SupabaseClientHolder.shared.auth.currentSession != nil {
+            return true
+        }
         let path: String
         switch provider {
         case .gemini:        path = "\(NSHomeDirectory())/.config/corder/gemini_key"
