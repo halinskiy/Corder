@@ -555,6 +555,7 @@ enum Routes {
                 },
                 expected_other_speakers: m.expectedOtherSpeakers,
                 has_video: hasVideo,
+                chapters: m.chapters,
                 transcribing_started_at: m.transcribingStartedAt
             )
             return jsonResponse(dto)
@@ -778,6 +779,7 @@ enum Routes {
             auto_transcribe: AppSettings.autoTranscribe,
             auto_title: AppSettings.autoTitle,
             auto_summary: AppSettings.autoSummary,
+            auto_chapters: AppSettings.autoChapters,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
@@ -1032,6 +1034,7 @@ enum Routes {
             if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
             if let v = parsed.auto_summary     { AppSettings.setAutoSummary(v) }
+            if let v = parsed.auto_chapters    { AppSettings.setAutoChapters(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
             if let c = parsed.record_hotkey_code, let m = parsed.record_hotkey_mods {

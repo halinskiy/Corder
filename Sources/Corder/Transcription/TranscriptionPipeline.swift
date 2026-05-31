@@ -707,6 +707,28 @@ final class TranscriptionPipeline {
                 }
             }
 
+            // 3c. Optional auto-chapters — Loom-style chapter markers
+            //     for the new third tab. Same invariants as title /
+            //     summary: bills once, can be re-triggered by clearing
+            //     the cached `chapters` column. Feeds the model the
+            //     per-segment start_ms so chapter timestamps can
+            //     map cleanly to seek points.
+            if AppSettings.autoChapters,
+               meeting.status == .ready,
+               (meeting.chapters?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
+                let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
+                if !segs.isEmpty {
+                    let timed = segs.map { ($0.startMs, $0.text) }
+                    if let chapters = await GeminiChapters.generate(timedLines: timed),
+                       !chapters.isEmpty,
+                       let data = try? JSONEncoder().encode(chapters),
+                       let json = String(data: data, encoding: .utf8) {
+                        try? repo.setChapters(meetingId: meetingId, chapters: json)
+                        FileLogger.log("transcribe(): generated \(chapters.count) chapters for \(meetingId)")
+                    }
+                }
+            }
+
             // 4. Optional Dropbox archive.
             if DropboxService.shared.isConfigured {
                 let mid = meetingId

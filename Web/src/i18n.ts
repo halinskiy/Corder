@@ -56,6 +56,13 @@ interface Strings {
 
   tab_transcript: string;
   tab_summary: string;
+  tab_chapters?: string;
+  chapters_empty_title?: string;
+  chapters_empty_body?: string;
+  chapters_pending_title?: string;
+  chapters_pending_body?: string;
+  settings_auto_chapters_title?: string;
+  settings_auto_chapters_desc?: string;
   tab_settings: string;
   tab_integrations: string;
   toast_soon: string;
@@ -397,6 +404,13 @@ const ru: Strings = {
   toast_soon: "Скоро",
   tab_transcript: "Транскрипт",
   tab_summary: "Саммари",
+  tab_chapters: "Главы",
+  chapters_empty_title: "Главы появятся здесь",
+  chapters_empty_body: "Как только готов транскрипт, мы автоматически разделим его на главы.",
+  chapters_pending_title: "Генерируем главы…",
+  chapters_pending_body: "Транскрипт готов — главы появятся на следующем проходе. Если нет — нажмите Re-transcribe в тулбаре встречи.",
+  settings_auto_chapters_title: "Автоглавы",
+  settings_auto_chapters_desc: "Разбивать готовый транскрипт на главы в стиле Loom с кликабельными таймкодами.",
   tab_settings: "Настройки",
   settings_draft_note: "Черновик, настройки дорабатываются.",
   settings_sec_notifications: "Уведомления",
@@ -670,6 +684,13 @@ const en: Strings = {
   toast_soon: "Coming soon",
   tab_transcript: "Transcript",
   tab_summary: "Summary",
+  tab_chapters: "Chapters",
+  chapters_empty_title: "Chapters appear here",
+  chapters_empty_body: "After the transcript is ready we'll split it into chapters automatically.",
+  chapters_pending_title: "Generating chapters…",
+  chapters_pending_body: "The transcript is ready — chapters land here on the next pipeline sweep. If they don't show up, re-transcribe from the meeting toolbar.",
+  settings_auto_chapters_title: "Auto-chapters",
+  settings_auto_chapters_desc: "Split a finished transcript into Loom-style chapters with clickable timestamps.",
   tab_settings: "Settings",
   settings_draft_note: "Draft. Settings still in progress.",
   settings_sec_notifications: "Notifications",
@@ -953,6 +974,13 @@ const uk: Strings = {
   toast_soon: "Скоро",
   tab_transcript: "Транскрипт",
   tab_summary: "Самарі",
+  tab_chapters: "Розділи",
+  chapters_empty_title: "Розділи з'являться тут",
+  chapters_empty_body: "Як тільки транскрипт буде готовий, ми автоматично поділимо його на розділи.",
+  chapters_pending_title: "Створюємо розділи…",
+  chapters_pending_body: "Транскрипт готовий — розділи з'являться на наступному проході. Якщо ні — натисніть Re-transcribe.",
+  settings_auto_chapters_title: "Автоматичні розділи",
+  settings_auto_chapters_desc: "Розділяти готовий транскрипт на розділи у стилі Loom з клікабельними таймкодами.",
   tab_settings: "Налаштування",
   settings_draft_note: "Чернетка, налаштування ще доопрацьовуються.",
   settings_sec_notifications: "Сповіщення",
