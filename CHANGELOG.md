@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.14] — 2026-05-31
+
+### Fixed
+- **SupabaseSync `segments_speaker_id_fkey` (Postgres 23503)** — actually fixed this time. The 0.13.8 fix bundled speakers + segments into one ordered task but still resolved speaker UUIDs twice (once for the speakers insert, once for the segments map) via `UUID(uuidString: s.id) ?? UUID()` — which yields a fresh random UUID every call when `s.id` isn't a valid UUID string ("user-1", "other-1" etc.). Speakers landed with random A, segments pointed at random B, FK barfed. Now the speaker insert reads the SAME pre-resolved UUID the segments map uses, so the two sides always agree.
+
 ## [0.13.13] — 2026-05-31
 
 ### Added
