@@ -14,7 +14,15 @@ enum GeminiTitler {
 
     static func generate(transcript: String) async -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let key = GeminiTranscriber.apiKey else { return nil }
+        guard !trimmed.isEmpty else { return nil }
+        // Match GeminiTranscriber's routing: a signed-in user goes
+        // through the Worker proxy (server-side Google key, JWT
+        // auth). A local key file is required ONLY when no Supabase
+        // session is around (dev / signed-out builds).
+        let jwt = await GeminiTranscriber.jwtForProxy()
+        let key = GeminiTranscriber.apiKey ?? ""
+        if jwt.isEmpty && key.isEmpty { return nil }
+        let base = await GeminiTranscriber.endpointBaseForProxy()
 
         // Cap the input — a title only needs the gist, and the opening
         // minutes carry the topic. Keeps the call fast and cheap.
@@ -56,11 +64,14 @@ enum GeminiTitler {
             ]
         ]
 
-        guard let url = URL(string: "\(endpoint)/models/\(model):generateContent?key=\(key)"),
+        guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
               let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !jwt.isEmpty {
+            req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+        }
         req.timeoutInterval = 30
         req.httpBody = payload
 

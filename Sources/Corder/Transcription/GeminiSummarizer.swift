@@ -14,7 +14,14 @@ enum GeminiSummarizer {
 
     static func generate(transcript: String) async -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let key = GeminiTranscriber.apiKey else { return nil }
+        guard !trimmed.isEmpty else { return nil }
+        // Same routing as GeminiTranscriber / GeminiTitler — go
+        // through the Worker proxy when signed in so Pro / Max users
+        // get auto-summary without needing a local Google API key.
+        let jwt = await GeminiTranscriber.jwtForProxy()
+        let key = GeminiTranscriber.apiKey ?? ""
+        if jwt.isEmpty && key.isEmpty { return nil }
+        let base = await GeminiTranscriber.endpointBaseForProxy()
 
         // Summaries need broad context; cap generously but bound it so a
         // 3-hour transcript can't blow the request up.
@@ -110,11 +117,14 @@ enum GeminiSummarizer {
             ]
         ]
 
-        guard let url = URL(string: "\(endpoint)/models/\(model):generateContent?key=\(key)"),
+        guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
               let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !jwt.isEmpty {
+            req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+        }
         req.timeoutInterval = 90
         req.httpBody = payload
 

@@ -67,10 +67,18 @@ enum GeminiTranscriber {
     /// passed. Both paths share `/v1beta` so the rest of the URL
     /// builders downstream don't have to change.
     private static func endpointBase() async -> String {
-        let jwt = await Self.currentJWT()
+        await Self.endpointBaseForProxy()
+    }
+    /// Same routing decision as the transcribe path. Exposed
+    /// (internal) so the text-only Gemini helpers (`GeminiTitler`,
+    /// `GeminiSummarizer`) can hit the Worker too — otherwise
+    /// auto-title / auto-summary silently no-op for every Pro / Max
+    /// user (no local key on disk).
+    static func endpointBaseForProxy() async -> String {
+        let jwt = await jwtForProxy()
         return jwt.isEmpty ? directEndpoint : proxyEndpoint
     }
-    private static func currentJWT() async -> String {
+    static func jwtForProxy() async -> String {
         await MainActor.run { _currentJWTSync() }
     }
     @MainActor
@@ -82,7 +90,7 @@ enum GeminiTranscriber {
     /// key from the query string and rejects unexpected Auth
     /// headers on the resumable-upload start path.
     private static func proxyAuthHeader() async -> String? {
-        let jwt = await currentJWT()
+        let jwt = await jwtForProxy()
         return jwt.isEmpty ? nil : "Bearer \(jwt)"
     }
 
@@ -146,7 +154,7 @@ enum GeminiTranscriber {
         // Signed-in users get cloud Gemini through the Worker proxy
         // (server-side Google key, JWT auth). Signed-out builds /
         // dev shells still need a local key in ~/.config/corder/gemini_key.
-        let jwt = await Self.currentJWT()
+        let jwt = await Self.jwtForProxy()
         let key = apiKey ?? ""
         if jwt.isEmpty && key.isEmpty { throw GError.missingAPIKey }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
