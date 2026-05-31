@@ -59,13 +59,21 @@ interface Strings {
   tab_chapters?: string;
   chapters_empty_title?: string;
   chapters_empty_body?: string;
+  chapters_empty_ready_body?: string;
   chapters_pending_title?: string;
   chapters_pending_body?: string;
+  chapters_loading?: string;
+  chapters_generate?: string;
+  chapters_regenerate?: string;
+  chapters_error?: string;
+  chapters_search?: string;
   settings_auto_chapters_title?: string;
   settings_auto_chapters_desc?: string;
   settings_telemetry_title?: string;
   settings_telemetry_desc?: string;
   tab_settings: string;
+  tab_general_settings?: string;
+  tab_advanced_settings?: string;
   tab_integrations: string;
   toast_soon: string;
   settings_draft_note: string;
@@ -199,12 +207,23 @@ interface Strings {
   /// to the legacy `btn_theme_title`.
   btn_theme_to_dark?: string;
   btn_theme_to_light?: string;
+  settings_theme_label_to_dark?: string;
+  settings_theme_label_to_light?: string;
+  settings_theme_desc_light?: string;
+  settings_theme_desc_dark?: string;
+  settings_tier_upgrade_label?: string;
+  settings_tier_upgrade_desc?: string;
+  settings_tier_upgrade_btn?: string;
+  settings_tier_downgrade_label?: string;
+  settings_tier_downgrade_desc?: string;
+  settings_tier_downgrade_btn?: string;
   theme_light: string;
   theme_dark: string;
 
   audio_card_title: string;
   timeline_title: string;
   download_audio_title: string;
+  download_format_desc?: string;
   download_title: string;
   download_body: string;
   download_video: string;
@@ -295,6 +314,7 @@ interface Strings {
   /// Cooldown message — `{m}` is replaced with minutes-until-next.
   submit_logs_cooldown?: string;
   profile_signed_out_title?: string;
+  profile_name_rename?: string;
   profile_signed_out_body?: string;
   profile_sign_in?: string;
   model_gemini?: string;
@@ -419,14 +439,22 @@ const ru: Strings = {
   tab_summary: "Саммари",
   tab_chapters: "Главы",
   chapters_empty_title: "Главы появятся здесь",
-  chapters_empty_body: "Как только готов транскрипт, мы автоматически разделим его на главы.",
+  chapters_empty_body: "После готового транскрипта.",
+  chapters_empty_ready_body: "Разделить транскрипт на главы.",
   chapters_pending_title: "Генерируем главы…",
-  chapters_pending_body: "Транскрипт готов — главы появятся на следующем проходе. Если нет — нажмите Re-transcribe в тулбаре встречи.",
+  chapters_pending_body: "Минутку.",
+  chapters_loading: "Минутку.",
+  chapters_generate: "Сгенерировать главы",
+  chapters_regenerate: "Сгенерировать заново",
+  chapters_error: "Не удалось сгенерировать главы.",
+  chapters_search: "Поиск по главам…",
   settings_auto_chapters_title: "Автоглавы",
-  settings_auto_chapters_desc: "Разбивать готовый транскрипт на главы в стиле Loom с кликабельными таймкодами.",
+  settings_auto_chapters_desc: "Разделять готовый транскрипт.",
   settings_telemetry_title: "Помочь улучшить Corder",
-  settings_telemetry_desc: "Раз в сутки отправлять анонимные счётчики (количество записей, успешные/неуспешные транскрипции, модель Mac, версия) разработчику. Без транскриптов, аудио и e-mail — аккаунт хешируется до отправки.",
+  settings_telemetry_desc: "Раз в сутки отправлять анонимные счётчики разработчику.",
   tab_settings: "Настройки",
+  tab_general_settings: "General",
+  tab_advanced_settings: "Advanced Settings",
   settings_draft_note: "Черновик, настройки дорабатываются.",
   settings_sec_notifications: "Уведомления",
   settings_notifications: "Системные уведомления",
@@ -536,12 +564,23 @@ const ru: Strings = {
   btn_theme_title: "Переключить светлую/тёмную тему",
   btn_theme_to_dark: "Тёмная тема",
   btn_theme_to_light: "Светлая тема",
+  settings_theme_label_to_dark: "Сменить тему на тёмную",
+  settings_theme_label_to_light: "Сменить тему на светлую",
+  settings_theme_desc_light: "Сейчас светлая.",
+  settings_theme_desc_dark: "Сейчас тёмная.",
+  settings_tier_upgrade_label: "Подключить Max",
+  settings_tier_upgrade_desc: "Облачные Whisper и Gemini, без API ключей.",
+  settings_tier_upgrade_btn: "Upgrade",
+  settings_tier_downgrade_label: "Сейчас тариф Max",
+  settings_tier_downgrade_desc: "Вернуться на Free.",
+  settings_tier_downgrade_btn: "Downgrade",
   theme_light: "Светлая",
   theme_dark: "Тёмная",
 
   audio_card_title: "Запись",
   timeline_title: "Таймлайн",
   download_audio_title: "Скачать аудиозапись",
+  download_format_desc: "Выберите файл для сохранения.",
   download_title: "Скачать",
   download_body: "Что сохранить из этой записи.",
   download_video: "Видео",
@@ -708,14 +747,22 @@ const en: Strings = {
   tab_summary: "Summary",
   tab_chapters: "Chapters",
   chapters_empty_title: "Chapters appear here",
-  chapters_empty_body: "After the transcript is ready we'll split it into chapters automatically.",
+  chapters_empty_body: "Ready after the transcript.",
+  chapters_empty_ready_body: "Split the transcript into chapters.",
   chapters_pending_title: "Generating chapters…",
-  chapters_pending_body: "The transcript is ready — chapters land here on the next pipeline sweep. If they don't show up, re-transcribe from the meeting toolbar.",
+  chapters_pending_body: "Hang tight.",
+  chapters_loading: "Hang tight.",
+  chapters_generate: "Generate chapters",
+  chapters_regenerate: "Regenerate",
+  chapters_error: "Couldn't generate chapters.",
+  chapters_search: "Search chapters…",
   settings_auto_chapters_title: "Auto-chapters",
-  settings_auto_chapters_desc: "Split a finished transcript into Loom-style chapters with clickable timestamps.",
+  settings_auto_chapters_desc: "Split a finished transcript.",
   settings_telemetry_title: "Help improve Corder",
-  settings_telemetry_desc: "Send anonymous diagnostic counts (recordings, transcribe success/fail, Mac model, app version) to the maintainer once a day. No transcripts, no audio, no email — your account is hashed before it leaves the Mac.",
+  settings_telemetry_desc: "Send anonymous diagnostic counts to the maintainer once a day.",
   tab_settings: "Settings",
+  tab_general_settings: "General",
+  tab_advanced_settings: "Advanced Settings",
   settings_draft_note: "Draft. Settings still in progress.",
   settings_sec_notifications: "Notifications",
   settings_notifications: "System notifications",
@@ -825,12 +872,23 @@ const en: Strings = {
   btn_theme_title: "Toggle light/dark theme",
   btn_theme_to_dark: "Dark theme",
   btn_theme_to_light: "Light theme",
+  settings_theme_label_to_dark: "Switch to dark theme",
+  settings_theme_label_to_light: "Switch to light theme",
+  settings_theme_desc_light: "Currently light.",
+  settings_theme_desc_dark: "Currently dark.",
+  settings_tier_upgrade_label: "Upgrade for cloud transcription",
+  settings_tier_upgrade_desc: "Whisper + Gemini in the cloud, no API keys.",
+  settings_tier_upgrade_btn: "Upgrade",
+  settings_tier_downgrade_label: "You're on Max",
+  settings_tier_downgrade_desc: "Drop back to Free.",
+  settings_tier_downgrade_btn: "Downgrade",
   theme_light: "Light",
   theme_dark: "Dark",
 
   audio_card_title: "Recording",
   timeline_title: "Timeline",
   download_audio_title: "Download audio",
+  download_format_desc: "Pick which file to save.",
   download_title: "Download",
   download_body: "What to save from this recording.",
   download_video: "Video",
@@ -1007,14 +1065,22 @@ const uk: Strings = {
   tab_summary: "Самарі",
   tab_chapters: "Розділи",
   chapters_empty_title: "Розділи з'являться тут",
-  chapters_empty_body: "Як тільки транскрипт буде готовий, ми автоматично поділимо його на розділи.",
+  chapters_empty_body: "Після готового транскрипту.",
+  chapters_empty_ready_body: "Поділити транскрипт на розділи.",
   chapters_pending_title: "Створюємо розділи…",
-  chapters_pending_body: "Транскрипт готовий — розділи з'являться на наступному проході. Якщо ні — натисніть Re-transcribe.",
+  chapters_pending_body: "Хвилинку.",
+  chapters_loading: "Хвилинку.",
+  chapters_generate: "Створити розділи",
+  chapters_regenerate: "Створити знову",
+  chapters_error: "Не вдалося створити розділи.",
+  chapters_search: "Пошук у розділах…",
   settings_auto_chapters_title: "Автоматичні розділи",
-  settings_auto_chapters_desc: "Розділяти готовий транскрипт на розділи у стилі Loom з клікабельними таймкодами.",
+  settings_auto_chapters_desc: "Розділяти готовий транскрипт.",
   settings_telemetry_title: "Допомогти покращити Corder",
-  settings_telemetry_desc: "Раз на добу надсилати анонімні лічильники (записи, успіх/збій транскрипції, модель Mac, версія) розробнику. Без транскриптів, аудіо та e-mail — акаунт хешується до надсилання.",
+  settings_telemetry_desc: "Раз на добу надсилати анонімні лічильники розробнику.",
   tab_settings: "Налаштування",
+  tab_general_settings: "General",
+  tab_advanced_settings: "Advanced Settings",
   settings_draft_note: "Чернетка, налаштування ще доопрацьовуються.",
   settings_sec_notifications: "Сповіщення",
   settings_notifications: "Системні сповіщення",
@@ -1100,6 +1166,10 @@ const uk: Strings = {
   btn_theme_title: "Перемкнути світлу/темну тему",
   btn_theme_to_dark: "Темна тема",
   btn_theme_to_light: "Світла тема",
+  settings_theme_label_to_dark: "Перемкнути на темну",
+  settings_theme_label_to_light: "Перемкнути на світлу",
+  settings_theme_desc_light: "Зараз світла.",
+  settings_theme_desc_dark: "Зараз темна.",
   theme_light: "Світла",
   theme_dark: "Темна",
 

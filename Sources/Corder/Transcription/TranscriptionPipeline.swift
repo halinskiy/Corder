@@ -927,7 +927,7 @@ final class TranscriptionPipeline {
 
         let userSpeakerId = "\(meetingId)-you"
         try repo.insertSpeaker(Speaker(id: userSpeakerId, meetingId: meetingId,
-                                       label: "Speaker 1", customName: "you", colorHex: "#3b82f6"))
+                                       label: "Speaker 1", customName: AppSettings.userName ?? "you", colorHex: "#3b82f6"))
 
         let collapseAll = (meeting.expectedOtherSpeakers == 0)
         let otherLabels = collapseAll
@@ -1097,7 +1097,7 @@ final class TranscriptionPipeline {
         let userHasContent = collapseAll || !userTurns.isEmpty
         if userHasContent {
             try repo.insertSpeaker(Speaker(id: userSpeakerId, meetingId: meetingId,
-                                           label: "Speaker 1", customName: "you", colorHex: "#3b82f6"))
+                                           label: "Speaker 1", customName: AppSettings.userName ?? "you", colorHex: "#3b82f6"))
         }
 
         // Each distinct label inside system.wav maps to one "other" id —

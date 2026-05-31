@@ -52,13 +52,12 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
     provider: "gemini" | "whisper" | "whisperLocal";
     variant?: string;
   };
+  // Gemini Flash was removed from the picker — Whisper Cloud is the
+  // only cloud option we offer now (cheaper per-minute, better-quality
+  // English, no proxy round-trip through Google). The `transcription_provider="gemini"`
+  // value stays valid in the backend for back-compat with any cached
+  // settings, but it's no longer selectable.
   const cloudChoices: Choice[] = [
-    {
-      value: "gemini",
-      label: t.model_gemini ?? "Gemini Flash",
-      meta: t.model_cloud ?? "cloud",
-      provider: "gemini",
-    },
     {
       value: "whisper",
       label: t.model_whisper_cloud ?? "Whisper Cloud",
@@ -77,7 +76,10 @@ export function WhisperPrefetchPill({ t }: { t: T }) {
 
   const currentValue = (() => {
     if (provider === "whisperLocal" && variant) return `local:${variant}`;
-    if (provider === "gemini" || provider === "whisper") return provider;
+    // Legacy `gemini` accounts get coerced to `whisper` in the UI so
+    // the picker shows a valid selection. The backend reconciles on
+    // the next /api/settings POST.
+    if (provider === "whisper" || provider === "gemini") return "whisper";
     return cloudChoices[0]!.value;
   })();
 

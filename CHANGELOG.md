@@ -16,6 +16,28 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.26] — 2026-05-31
+
+### Added
+- **Chapters tab** now renders 1:1 with Summary — h3-sized timestamp pill at the top of each chapter (hover only on the pill, click jumps to that moment), body title below as a paragraph, hairline divider between chapters. On-demand "Generate chapters" / "Regenerate" buttons hit a new `POST /api/meetings/:id/chapters` endpoint that runs `GeminiChapters` and caches the result.
+- **Theme toggle moved into General Settings** as a real switch row (label + desc + switch, same shell as System notifications). The Moon icon in the header is gone — clicking the switch keeps the view-transition wipe whose origin is your click.
+- **Profile-popover inline rename** — click the name in the popover head, edit, Enter to save. Persisted via `/api/settings` (`user_name`). Future transcribes write your real name into the user-speaker row, and existing transcripts/Timeline auto-substitute it wherever `custom_name` was "you" / "I".
+- **Test-mode Upgrade / Downgrade block** at the bottom of General Settings — flips `app_metadata.tier=max ↔ free` via a Worker endpoint that calls Supabase admin. Refreshes the local session so the tier shows up immediately. Interim while billing isn't wired.
+- **Download page redesign** — single bordered card matching the Timeline-card geometry (margin/border/radius), label + desc on top, format dropdown, accent Download CTA. The tab strip shows `← Download` as a back-chip (same family as `← General Settings`).
+
+### Changed
+- **Gemini Flash removed from the transcription-model picker.** Whisper Cloud is the single cloud option (Pro/Max default); Free defaults to local Whisper. A legacy `gemini` override in UserDefaults is coerced back to the tier default.
+- **Sessions on dark theme** — text inside the active session in the sidebar now renders white on the accent-green fill (was muted grey on green, unreadable).
+- **Breadcrumb in the header updates instantly** on session switch. Previously the old meeting's title lingered for the few hundred ms it took to fetch the new detail; now the cached sidebar title fills in immediately.
+- **Active-state outline** on Settings / Archive header buttons is now a translucent 2-px accent ring around the filled green tile, plus filled-glyph swaps (Heroicons Solid) instead of stroked outlines.
+- **Toast Undo dismisses the toast immediately.** Previously the countdown kept ticking after the user clicked Undo.
+- **Submit-a-bug-report icon disappears the instant you click it** — through the 10-sec undo window AND the full 60-min cooldown after a send.
+
+### Fixed
+- **Welcome wizard re-opens** on launch when mic OR screen-recording permission has been revoked (or `tccutil reset`'d). Sticky permission flags clear so the wizard re-shows the permission step instead of jumping past it to sign-in.
+- **Library no longer pops over the Welcome wizard** during the session-restore Task — `LibraryWindow.show` now runs the same live TCC check and hands off to Welcome if permissions are missing.
+- **Whisper Cloud 403 (tier required)** correctly identified as a Free-tier user; flip tier via the new Upgrade block (or upstream billing) to gain access.
+
 ## [0.13.25] — 2026-05-31
 
 ### Fixed

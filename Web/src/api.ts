@@ -187,6 +187,37 @@ export async function summarize(id: string, force = false): Promise<string> {
   return j.summary as string;
 }
 
+/// On-demand Loom-style chapter generation. Server returns the raw
+/// JSON string we persist in `meetings.chapters` so the frontend can
+/// `parse(detail.chapters)` the same way the auto-generated path
+/// surfaces it.
+export async function generateChapters(id: string, force = false): Promise<string> {
+  const url = force
+    ? `/api/meetings/${id}/chapters?force=1`
+    : `/api/meetings/${id}/chapters`;
+  const r = await fetch(url, { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  if (j.error || !j.chapters) throw new Error(j.error || "no chapters");
+  return j.chapters as string;
+}
+
+/// Test-mode tier flip. Server forwards to the Cloudflare Worker
+/// which calls Supabase admin to set `app_metadata.tier` for the
+/// signed-in user, then refreshes the local session so the new tier
+/// shows up immediately. Used by the Settings → General test block.
+export async function setTestTier(tier: "free" | "max"): Promise<string> {
+  const r = await fetch("/api/billing/test-set-tier", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tier }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error ?? "tier change failed");
+  return (j.tier as string) ?? tier;
+}
+
 export async function cancelTranscription(id: string): Promise<void> {
   const r = await fetch(`/api/meetings/${id}/cancel-transcription`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

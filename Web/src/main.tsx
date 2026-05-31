@@ -28,7 +28,7 @@ function readNum(key: string, fallback: number): number {
   }
 }
 
-function Toast({ toast, leaving }: { toast: ToastState; leaving: boolean }) {
+function Toast({ toast, leaving, onDismiss }: { toast: ToastState; leaving: boolean; onDismiss: () => void }) {
   // Two-phase mount: render with `.entering` (off-screen below), flip to the
   // resting state on the next frame so CSS sees a transition. Exit is parent-
   // driven via the `leaving` prop — when true, the modifier flips us back to
@@ -61,7 +61,17 @@ function Toast({ toast, leaving }: { toast: ToastState; leaving: boolean }) {
     <div className={cls}>
       <span>{toast.msg}</span>
       {toast.action && (
-        <button className="toast-action" onClick={toast.action.onClick}>
+        <button
+          className="toast-action"
+          onClick={() => {
+            // Run the action's callback FIRST so consumers see the
+            // toast as "still open" while cancelling work, then close
+            // the toast — clicking Undo shouldn't leave a stale
+            // countdown chip on screen waiting out its 10 s.
+            toast.action!.onClick();
+            onDismiss();
+          }}
+        >
           {toast.action.label}
         </button>
       )}
@@ -515,8 +525,15 @@ function App() {
                     // No `key={activeId}` — id changes are handled by
                     // MeetingView's internal `useEffect([meetingId])`,
                     // which fetches the new detail while keeping the
-                    // previous one visible until it arrives.
+                    // previous one visible until it arrives. `initialTitle`
+                    // / `initialStartedAt` come from the cached sidebar
+                    // row so the breadcrumb updates INSTANTLY on session
+                    // switch — without these, the header showed the
+                    // previous meeting's title for the ~few hundred ms
+                    // the detail fetch took.
                     meetingId={activeId ?? lastSeen}
+                    initialTitle={visibleMeetings.find((m) => m.id === (activeId ?? lastSeen))?.title ?? null}
+                    initialStartedAt={visibleMeetings.find((m) => m.id === (activeId ?? lastSeen))?.started_at ?? null}
                     onDeleted={handleArchived}
                     onOpenArchive={() => setArchiveOpen((v) => !v)}
                     archiveOpen={archiveOpen}
@@ -543,7 +560,7 @@ function App() {
           );
         })()}
       </main>
-      {toast && <Toast toast={toast} leaving={toastLeaving} />}
+      {toast && <Toast toast={toast} leaving={toastLeaving} onDismiss={dismissToast} />}
     </div>
   );
 }

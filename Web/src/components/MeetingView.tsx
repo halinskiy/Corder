@@ -1,5 +1,5 @@
 import React from "react";
-import { Copy, Users, Search } from "lucide-react";
+import { Copy, Users, Search, ChevronLeft } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { Tooltip } from "./Tooltip";
 import { MainHeader } from "./MainHeader";
@@ -75,6 +75,12 @@ interface Props {
   /// dropped later without breaking the file.
   onBackToDashboard?: () => void;
   meetingId: string;
+  /// Fallback title shown in the breadcrumb the instant `meetingId`
+  /// changes — before the detail fetch completes — so the header
+  /// stops lagging behind the sidebar selection. Sourced from the
+  /// already-loaded sidebar `MeetingSummary` row in the parent.
+  initialTitle?: string | null;
+  initialStartedAt?: number | null;
   onDeleted: (id?: string) => void;
   /// Opens the global archive panel — toolbar's Archive button hands off
   /// to this. Archiving the *current* meeting happens via Sidebar's
@@ -119,18 +125,26 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, onSettingsOpenChange, t }: Props) {
+export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, onSettingsOpenChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
-  const [rightTab, setRightTab] = React.useState<"recording" | "settings" | "integrations">("recording");
+  const [rightTab, setRightTab] = React.useState<"recording" | "settings-general" | "settings-advanced" | "integrations">("recording");
+  const inSettings = rightTab === "settings-general" || rightTab === "settings-advanced";
+  // Download view replaces the Recording-tab content in place; the
+  // tab strip then shows `← Download` instead of `Recording`. Lifted
+  // from RightPanel so the strip can render the back-chip without a
+  // ref-chain. Resets on every meeting switch — a stale "Download"
+  // chip would lie about the new meeting's state.
+  const [downloadOpen, setDownloadOpen] = React.useState(false);
+  React.useEffect(() => { setDownloadOpen(false); }, [meetingId]);
   // Tell the parent (main.tsx → MainHeader) when the right tab
   // is Settings so the Settings toolbar button can light up
   // active. Same pattern the Archive button uses.
   React.useEffect(() => {
-    onSettingsOpenChange?.(rightTab === "settings");
-  }, [rightTab, onSettingsOpenChange]);
+    onSettingsOpenChange?.(inSettings);
+  }, [inSettings, onSettingsOpenChange]);
   // Profile-menu Settings handoff: bumping `openSettingsNonce` flips
   // the right tab to settings. Skip the initial mount tick so the
   // first render doesn't auto-open Settings on `openSettingsNonce = 0`.
@@ -140,7 +154,7 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
       lastSettingsNonceRef.current = openSettingsNonce;
       // Toggle: a second tap on the Settings gear returns to the
       // Recording tab — same affordance as the Archive button.
-      setRightTab((cur) => cur === "settings" ? "recording" : "settings");
+      setRightTab((cur) => (cur === "settings-general" || cur === "settings-advanced") ? "recording" : "settings-general");
     }
   }, [openSettingsNonce]);
   // Left-column tab: Transcript (default) | Summary. Summary is rendered
@@ -388,7 +402,20 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
                 title={t.ctx_rename}
                 onClick={() => setTitleEdit(detail.title?.trim() ?? "")}
               >
-                {detail.title?.trim() || formatDate(detail.started_at, lang)}
+                {/* `initialTitle` / `initialStartedAt` are the cached
+                    sidebar row — they win for the brief window while
+                    the new meeting's detail is still being fetched, so
+                    the breadcrumb never shows the previous meeting's
+                    title after a sidebar click. Once `detail.id` ==
+                    `meetingId` arrives, the regular detail data takes
+                    over again. */}
+                {(detail.id === meetingId ? detail.title?.trim() : initialTitle?.trim())
+                  || formatDate(
+                    detail.id === meetingId
+                      ? detail.started_at
+                      : (initialStartedAt ?? detail.started_at),
+                    lang
+                  )}
               </span>
             )}
           </>
@@ -397,7 +424,7 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
         archiveOpen={archiveOpen}
         archiveEmpty={archiveEmpty}
         onOpenSettings={onOpenSettings}
-        settingsOpen={rightTab === "settings"}
+        settingsOpen={inSettings}
         onOpenDashboard={onOpenDashboard}
         onToast={onToast}
         t={t}
@@ -430,18 +457,57 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
             </span>
           </div>
           <div className="detail-tab-col detail-tab-col-right">
-            <span
-              className={"tab" + (rightTab === "recording" ? " active" : "")}
-              onClick={() => setRightTab("recording")}
-            >
-              {t.audio_card_title}
-            </span>
-            <span
-              className={"tab" + (rightTab === "settings" ? " active" : "")}
-              onClick={() => setRightTab("settings")}
-            >
-              {t.tab_settings}
-            </span>
+            {inSettings ? (
+              // Settings opens from the header (profile menu OR the
+              // gear in MainHeader). The strip then shows
+              // `← General Settings` + `Advanced Settings` chips. The
+              // chevron lives inside the General chip — clicking it
+              // when already on General returns to the Recording pane
+              // (same back affordance as the old single Settings
+              // chip), clicking it from Advanced switches to General.
+              <>
+                <span
+                  className={"tab dash-settings-back" + (rightTab === "settings-general" ? " active" : "")}
+                  role="button"
+                  onClick={() => setRightTab(
+                    rightTab === "settings-general" ? "recording" : "settings-general"
+                  )}
+                  title={t.tab_general_settings ?? "General Settings"}
+                  aria-label={t.tab_general_settings ?? "General Settings"}
+                >
+                  <ChevronLeft size={14} strokeWidth={2} />
+                  <span>{t.tab_general_settings ?? "General Settings"}</span>
+                </span>
+                <span
+                  className={"tab" + (rightTab === "settings-advanced" ? " active" : "")}
+                  onClick={() => setRightTab("settings-advanced")}
+                >
+                  {t.tab_advanced_settings ?? "Advanced Settings"}
+                </span>
+              </>
+            ) : downloadOpen ? (
+              // Download view replaces the Recording panel; the tab
+              // strip becomes a back-chip that returns the user to
+              // Recording. Same chevron-on-the-left pattern as the
+              // Settings strip.
+              <span
+                className="tab active dash-settings-back"
+                role="button"
+                onClick={() => setDownloadOpen(false)}
+                title={t.audio_card_title}
+                aria-label={t.audio_card_title}
+              >
+                <ChevronLeft size={14} strokeWidth={2} />
+                <span>{t.download_title ?? "Download"}</span>
+              </span>
+            ) : (
+              <span
+                className={"tab" + (rightTab === "recording" ? " active" : "")}
+                onClick={() => setRightTab("recording")}
+              >
+                {t.audio_card_title}
+              </span>
+            )}
             {/* Integrations tab hidden for now — `IntegrationsPane`
                 kept around so wiring it back is a one-line toggle. */}
           </div>
@@ -535,11 +601,16 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
               onTimeUpdate={setCurrentTime}
               currentTimeSec={currentTime}
               onSeek={onSeek}
+              downloadOpen={downloadOpen}
+              onDownloadChange={setDownloadOpen}
               t={t}
             />
           </div>
-          <div style={{ display: rightTab === "settings" ? "contents" : "none" }}>
-            <SettingsPane t={t} lang={lang} onLangChange={onLangChange} />
+          <div style={{ display: rightTab === "settings-general" ? "contents" : "none" }}>
+            <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="general" />
+          </div>
+          <div style={{ display: rightTab === "settings-advanced" ? "contents" : "none" }}>
+            <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="advanced" />
           </div>
           {/* IntegrationsPane mount disabled while the tab is
               hidden (see the comment in the tab strip above). */}

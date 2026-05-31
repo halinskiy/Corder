@@ -183,9 +183,14 @@ enum AppSettings {
     /// Cache keys are prefixed with the provider name so the three
     /// providers' raw outputs never replay each other.
     static var transcriptionProvider: TranscriptionProvider {
-        // Explicit override wins.
+        // Explicit override wins — except for legacy `gemini`, which
+        // we no longer offer in the picker (Whisper Cloud is the
+        // single cloud option). A stale `gemini` override coerces
+        // back to the tier default so an old account doesn't keep
+        // routing through a provider we don't surface anymore.
         if let raw = UserDefaults.standard.string(forKey: kTranscriptionProvider),
-           let p = TranscriptionProvider(rawValue: raw) {
+           let p = TranscriptionProvider(rawValue: raw),
+           p != .gemini {
             return p
         }
         // Tier-driven default.
