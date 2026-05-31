@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.19] — 2026-05-31
+
+### Added
+- **Failed-transcription toast** in the Library window. When the pipeline can't finish (model load failed, OOM, MIL network read error, etc.), an in-app toast surfaces *why* and what to do — picking a lighter Whisper variant when the cause is the on-device model not fitting. Other failures get the generic "tap Re-transcribe; send a bug report if it persists" hint.
+
 ## [0.13.18] — 2026-05-31
 
 ### Added
