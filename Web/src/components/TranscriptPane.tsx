@@ -23,16 +23,17 @@ type RatingState = {
 
 const RATING_STATE_KEY = "corder.ratingPromptState";
 const RATING_SEEN_KEY = "corder.ratingPromptSeenIds";
-// TODO: revert to 3 after the rating-banner UX is signed off.
-// Lowered to 1 so the banner shows on the first ready transcript.
-const RATING_THRESHOLD = 1;
-const RATING_REDISMISS_MS = 7 * 24 * 3600 * 1000;
+const RATING_SHOWN_FOR_KEY = "corder.ratingPromptShownForId";
+// Show once the user has read 3 distinct ready transcripts —
+// the first 1-2 might just be tests, and we don't want to ask
+// for feedback on a 5-second smoke recording.
+const RATING_THRESHOLD = 3;
 const RATING_API_URL = "https://corder-api.empqwork.workers.dev/feedback";
 // Bumped manually when the native shell version moves. The wizard
 // already POSTs `version` to /signup so once we wire it through the
 // Swift bridge we can drop the hardcode; until then it stays in sync
 // with `Info.plist`.
-const RATING_APP_VERSION = "0.10.0";
+const RATING_APP_VERSION = "0.13.10";
 
 function readRatingState(): RatingState {
   try {
@@ -68,20 +69,24 @@ function writeSeenIds(ids: Set<string>) {
   try { localStorage.setItem(RATING_SEEN_KEY, JSON.stringify(Array.from(ids))); } catch {}
 }
 
-function shouldShowRatingBanner(s: RatingState): boolean {
+function shouldShowRatingBanner(s: RatingState, currentMeetingId: string): boolean {
+  // Submitted OR dismissed → never again, full stop. Per Kostya's
+  // call: a single rating prompt per user, ever; once they engage
+  // (good or skip) we leave them alone.
   if (s.state === "submitted") return false;
-  if (s.state === "pending") return s.transcriptsViewed >= RATING_THRESHOLD;
-  // dismissed: only re-show after the cooldown elapses AND the
-  // threshold is still met (it always is, since transcriptsViewed
-  // only grows).
-  if (s.state === "dismissed") {
-    return (
-      s.transcriptsViewed >= RATING_THRESHOLD &&
-      typeof s.dismissedAt === "number" &&
-      Date.now() - s.dismissedAt > RATING_REDISMISS_MS
-    );
+  if (s.state === "dismissed") return false;
+  if (s.transcriptsViewed < RATING_THRESHOLD) return false;
+  // Pin the prompt to the FIRST meeting it appeared on so opening
+  // the SAME meeting later or revisiting OTHER meetings doesn't
+  // re-render it. Mounted once on its anchor meeting; if the
+  // anchor meeting goes away the prompt is gone with it.
+  let pinned: string | null = null;
+  try { pinned = localStorage.getItem(RATING_SHOWN_FOR_KEY); } catch {}
+  if (pinned === null) {
+    try { localStorage.setItem(RATING_SHOWN_FOR_KEY, currentMeetingId); } catch {}
+    return true;
   }
-  return false;
+  return pinned === currentMeetingId;
 }
 
 interface Props {
@@ -130,7 +135,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     });
   }, [detail.id, detail.status, detail.segments.length]);
 
-  const showRating = shouldShowRatingBanner(ratingState);
+  const showRating = shouldShowRatingBanner(ratingState, detail.id);
 
   const handleRatingSubmit = React.useCallback((rating: number, comment: string) => {
     // Fire-and-forget so the UI flips instantly. The signed-in

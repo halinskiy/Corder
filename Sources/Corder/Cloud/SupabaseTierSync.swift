@@ -20,9 +20,22 @@ enum SupabaseTierSync {
             FileLogger.log("SupabaseTierSync: no recognised tier in app_metadata (was: \(raw.isEmpty ? "absent" : raw)) — keeping local")
             return
         }
-        if AppSettings.userTier != tier {
+        let priorTier = AppSettings.userTier
+        if priorTier != tier {
             FileLogger.log("SupabaseTierSync: applying tier=\(tier.rawValue) from server")
             AppSettings.setUserTier(tier)
+        }
+        // On the Free → Paid transition we force the transcription
+        // provider to cloud Whisper — that's what Pro / Max plans
+        // are paying for and we don't want the on-device default to
+        // sit there silently. We only DO this once per upgrade:
+        // clearing the override means the tier-driven default
+        // (.whisper for pro/max) kicks in, and any explicit choice
+        // the user makes afterwards persists normally.
+        let becamePaid = (priorTier == .free) && (tier == .pro || tier == .max)
+        if becamePaid {
+            FileLogger.log("SupabaseTierSync: tier upgraded to \(tier.rawValue) — clearing provider override so cloud Whisper becomes the default")
+            AppSettings.clearTranscriptionProviderOverride()
         }
     }
 }

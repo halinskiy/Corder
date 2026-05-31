@@ -34,6 +34,23 @@ final class TranscriptionPipeline {
         activeProvider ?? AppSettings.transcriptionProvider
     }
 
+    /// True when the on-disk key file for the given cloud provider
+    /// is present and non-empty. Used to decide whether to fall
+    /// back to local Whisper before we even attempt the API call —
+    /// otherwise the user gets a meeting in `.failed` with a
+    /// `noKey` error that they can't fix without going into the
+    /// Settings panel.
+    private func cloudKeyAvailable(for provider: TranscriptionProvider) -> Bool {
+        let path: String
+        switch provider {
+        case .gemini:        path = "\(NSHomeDirectory())/.config/corder/gemini_key"
+        case .whisper:       path = "\(NSHomeDirectory())/.config/corder/openai_key"
+        case .whisperLocal:  return true
+        }
+        guard let data = try? String(contentsOfFile: path, encoding: .utf8) else { return false }
+        return !data.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Called once at app launch. When the active provider is
     /// `.whisperLocal` (the Free-tier default) and the picked variant
     /// isn't on disk yet, kick off a background pre-fetch so the first
@@ -152,24 +169,28 @@ final class TranscriptionPipeline {
         // helper just stashes the runtime choice so every read
         // inside this method goes through `currentProvider`.
         let userPick = AppSettings.transcriptionProvider
-        let effective: TranscriptionProvider
-        if userPick.usageClass == "advanced",
-           let limit = AppSettings.userTier.advancedMonthlyLimitSeconds {
-            let cal = Calendar(identifier: .gregorian)
-            let now = Date()
-            let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
-            let sinceMs = Int64(monthStart.timeIntervalSince1970 * 1000)
-            let bucket = (try? repo.usageSecondsByClass(sinceMs: sinceMs)) ?? [:]
-            let simAdv = Int64(UserDefaults.standard.integer(forKey: "Corder.set.simAdvancedUsedSeconds"))
-            let usedAdv = (bucket["advanced"] ?? 0) + simAdv
-            if usedAdv >= Int64(limit), LocalWhisperTranscriber.isAvailable() {
-                FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s) — falling back to whisperLocal for this run")
+        var effective = userPick
+        if userPick.usageClass == "advanced" {
+            // No API key on disk for the chosen cloud provider →
+            // every call would `throw .noKey`. Fall back to local
+            // (if WhisperKit is available on this arch). Logs and
+            // moves on rather than failing the meeting.
+            if !cloudKeyAvailable(for: userPick), LocalWhisperTranscriber.isAvailable() {
+                FileLogger.log("transcribe(): no API key for \(userPick) — falling back to whisperLocal for this run")
                 effective = .whisperLocal
-            } else {
-                effective = userPick
+            } else if let limit = AppSettings.userTier.advancedMonthlyLimitSeconds {
+                let cal = Calendar(identifier: .gregorian)
+                let now = Date()
+                let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+                let sinceMs = Int64(monthStart.timeIntervalSince1970 * 1000)
+                let bucket = (try? repo.usageSecondsByClass(sinceMs: sinceMs)) ?? [:]
+                let simAdv = Int64(UserDefaults.standard.integer(forKey: "Corder.set.simAdvancedUsedSeconds"))
+                let usedAdv = (bucket["advanced"] ?? 0) + simAdv
+                if usedAdv >= Int64(limit), LocalWhisperTranscriber.isAvailable() {
+                    FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s) — falling back to whisperLocal for this run")
+                    effective = .whisperLocal
+                }
             }
-        } else {
-            effective = userPick
         }
         self.activeProvider = effective
 
