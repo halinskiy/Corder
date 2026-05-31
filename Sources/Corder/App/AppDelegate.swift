@@ -1,4 +1,6 @@
 import AppKit
+import AVFoundation
+import CoreGraphics
 import UserNotifications
 @preconcurrency import Supabase
 
@@ -157,6 +159,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Session restore is async (SDK reads disk + may refresh
         // the access token); we do the check inside a Task so the
         // launch path doesn't block.
+        // Permission watchdog: live TCC check on every launch so a
+        // reset (the user clicked Corder off in System Settings →
+        // Privacy & Security, or someone ran `tccutil reset`) re-opens
+        // the Welcome wizard on its `.permissions` step regardless of
+        // the local `onboardingCompleted` flag. The wizard re-evaluates
+        // mic + screen status when `present()` is called, so we just
+        // clear the sticky flags first (otherwise the wizard would
+        // skip to sign-in because `screenGrantedSticky == true`).
+        let liveMicOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let liveScreenOK = CGPreflightScreenCaptureAccess()
+        if !liveMicOK || !liveScreenOK {
+            FileLogger.log("AppDelegate: TCC reset detected (mic=\(liveMicOK) screen=\(liveScreenOK)) — reopening welcome on permissions step")
+            if !liveMicOK    { AppSettings.setMicGrantedSticky(false) }
+            if !liveScreenOK { AppSettings.setScreenGrantedSticky(false) }
+            LibraryWindow.shared.dismiss()
+            WelcomeWindowController.shared.presentManually()
+        }
+
         Task { @MainActor in
             let session = try? await SupabaseClientHolder.shared.auth.session
             if session == nil {

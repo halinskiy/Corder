@@ -63,6 +63,14 @@ enum Routes {
             let force = req.queryParams.contains(where: { $0.0 == "force" && $0.1 == "1" })
             return summarize(id: req.params[":id"] ?? "", repo: repo, force: force)
         }
+        server.post["/api/meetings/:id/chapters"] = { req in
+            // On-demand Chapters generation. Same `?force=1` semantics
+            // as `/summarize` — used by the ChaptersPane "Generate" /
+            // "Regenerate" buttons when the user wants chapters on a
+            // meeting that finished before auto-chapters was on.
+            let force = req.queryParams.contains(where: { $0.0 == "force" && $0.1 == "1" })
+            return chapters(id: req.params[":id"] ?? "", repo: repo, force: force)
+        }
         server.get["/api/recording/state"] = { _ in recordingState() }
         server.post["/api/recording/start"] = { _ in startRecordingNow() }
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
@@ -70,6 +78,7 @@ enum Routes {
         server.post["/api/settings"] = { req in settingsSet(req: req) }
         server.get["/api/usage"] = { _ in usageGet(repo: repo) }
         server.post["/api/submit-logs"] = { _ in submitLogs() }
+        server.post["/api/billing/test-set-tier"] = { req in setTestTier(req: req) }
         // Whisper Local model download — kicks off a background fetch
         // for the requested variant id (no body needed beyond `id`).
         // The /api/settings GET is the single source of truth for
@@ -955,6 +964,65 @@ enum Routes {
         return ok ? jsonResponse(["ok": true]) : .internalServerError
     }
 
+    /// Test-mode tier flip. Forwards `{"tier":"free"|"max"}` to the
+    /// Cloudflare Worker, which calls Supabase admin to update
+    /// `app_metadata.tier` for the currently signed-in user, then
+    /// refreshes the local Supabase session so the new tier is
+    /// reflected in `AppSettings.userTier` immediately (no relaunch).
+    /// Used by the Settings → General "Upgrade / Downgrade" testing
+    /// block; intended to be removed before real billing ships.
+    private static func setTestTier(req: HttpRequest) -> HttpResponse {
+        let bodyData = Data(req.body)
+        guard let obj = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+              let tier = (obj["tier"] as? String)?.lowercased(),
+              ["free", "pro", "max"].contains(tier) else {
+            return .badRequest(.text("tier must be free|pro|max"))
+        }
+        // Pull the user's Supabase JWT — same source the transcription
+        // proxies use. No JWT = no session = nothing to upgrade.
+        let sem0 = DispatchSemaphore(value: 0)
+        var jwt = ""
+        Task { @MainActor in
+            jwt = await GeminiTranscriber.jwtForProxy()
+            sem0.signal()
+        }
+        _ = sem0.wait(timeout: .now() + 5)
+        guard !jwt.isEmpty else {
+            return .raw(401, "Unauthorized", ["Content-Type": "application/json"], { try? $0.write([UInt8]("{\"error\":\"signed out\"}".utf8)) })
+        }
+        guard let url = URL(string: "https://corder-api.empqwork.workers.dev/billing/test-set-tier"),
+              let body = try? JSONSerialization.data(withJSONObject: ["tier": tier]) else {
+            return .internalServerError
+        }
+        var rq = URLRequest(url: url)
+        rq.httpMethod = "POST"
+        rq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        rq.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+        rq.httpBody = body
+        rq.timeoutInterval = 15
+        let sem = DispatchSemaphore(value: 0)
+        var ok = false
+        var responseTier = "free"
+        URLSession.shared.dataTask(with: rq) { data, resp, _ in
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(code), let d = data,
+               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
+                ok = (j["ok"] as? Bool) ?? false
+                if let nt = j["tier"] as? String { responseTier = nt }
+            }
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + 16)
+        guard ok else { return .internalServerError }
+        // Refresh local Supabase session so `app_metadata.tier` is
+        // re-read into AppSettings.userTier without forcing a relaunch.
+        Task { @MainActor in
+            try? await SupabaseClientHolder.shared.auth.refreshSession()
+            SupabaseTierSync.applyFromCurrentSession()
+        }
+        return jsonResponse(["ok": true, "tier": responseTier])
+    }
+
     private static func usageGet(repo: MeetingRepository) -> HttpResponse {
         let cal = Calendar(identifier: .gregorian)
         let now = Date()
@@ -1251,6 +1319,43 @@ enum Routes {
         try? repo.setSummary(meetingId: id, summary: summary)
         FileLogger.log("summarize: generated summary for \(id) (\(summary.count) chars)")
         return jsonResponse(["summary": summary])
+    }
+
+    /// On-demand chapters: same shape as `summarize` — cached value
+    /// returned unless `force=true`, otherwise rebuilds via
+    /// `GeminiChapters.generate(...)`, persists the JSON string into
+    /// `meetings.chapters`, and returns it. Returns an
+    /// `{ chapters: "", error: ... }` envelope on the "no transcript"
+    /// / "generation failed" paths so the React side surfaces the
+    /// same banner family the Summary tab uses.
+    private static func chapters(id: String, repo: MeetingRepository, force: Bool = false) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        guard let m = try? repo.meeting(id: id) else { return .notFound }
+        if !force, let cached = m.chapters?.trimmingCharacters(in: .whitespacesAndNewlines), !cached.isEmpty {
+            return jsonResponse(["chapters": cached])
+        }
+        let segs = (try? repo.segments(forMeeting: id)) ?? []
+        guard !segs.isEmpty else {
+            return jsonResponse(["chapters": "", "error": "no transcript"])
+        }
+        let timed: [(startMs: Int64, text: String)] = segs.map {
+            (startMs: Int64($0.startMs), text: $0.text)
+        }
+        let sema = DispatchSemaphore(value: 0)
+        var result: [GeminiChapters.Chapter]?
+        Task {
+            result = await GeminiChapters.generate(timedLines: timed)
+            sema.signal()
+        }
+        sema.wait()
+        guard let chapters = result, !chapters.isEmpty,
+              let data = try? JSONEncoder().encode(chapters),
+              let json = String(data: data, encoding: .utf8) else {
+            return jsonResponse(["chapters": "", "error": "generation failed"])
+        }
+        try? repo.setChapters(meetingId: id, chapters: json)
+        FileLogger.log("chapters: generated \(chapters.count) chapters for \(id)")
+        return jsonResponse(["chapters": json])
     }
 
     /// True iff the cached summary already uses the new Granola-style

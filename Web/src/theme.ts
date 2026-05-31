@@ -11,13 +11,27 @@ import { flushSync } from "react-dom";
 /// survive a restart. The choice still persists for the whole
 /// session; a cross-launch store would need a native bridge.
 const KEY = "corder.theme";
+export type ThemeMode = "system" | "light" | "dark";
+
+function storedMode(): ThemeMode {
+  try {
+    const v = localStorage.getItem(KEY);
+    if (v === "dark" || v === "light" || v === "system") return v;
+  } catch {}
+  return "system";
+}
+
+function systemPrefersDark(): boolean {
+  try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+  catch { return false; }
+}
+
+function resolveDark(mode: ThemeMode): boolean {
+  return mode === "dark" || (mode === "system" && systemPrefersDark());
+}
 
 function stored(): "light" | "dark" {
-  try {
-    return localStorage.getItem(KEY) === "dark" ? "dark" : "light";
-  } catch {
-    return "light";
-  }
+  return resolveDark(storedMode()) ? "dark" : "light";
 }
 
 /// Tell native the resolved page background so the NSWindow (visible
@@ -47,92 +61,90 @@ export function initTheme() {
 }
 
 export function useTheme() {
-  const [isDark, setIsDark] = React.useState(() => stored() === "dark");
+  const [mode, setModeState] = React.useState<ThemeMode>(() => storedMode());
+  const [isDark, setIsDark] = React.useState(() => resolveDark(storedMode()));
 
   React.useEffect(() => {
     apply(isDark);
   }, [isDark]);
 
-  const toggle = React.useCallback(
-    (e: React.MouseEvent) => {
-      const next = !isDark;
-      const commit = () => {
-        try {
-          localStorage.setItem(KEY, next ? "dark" : "light");
-        } catch {}
-        // flushSync so the DOM is fully repainted in the new theme
-        // *before* the View Transition snapshots it. Without this the
-        // React state update is async, the snapshot catches the old
-        // theme, and the interface flickers old → new under the wipe.
-        flushSync(() => setIsDark(next));
-      };
+  // Re-resolve when the OS theme changes while we're on "system".
+  React.useEffect(() => {
+    if (mode !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => setIsDark(mq.matches);
+    sync();
+    mq.addEventListener?.("change", sync);
+    return () => mq.removeEventListener?.("change", sync);
+  }, [mode]);
 
-      const start = (document as unknown as {
-        startViewTransition?: (cb: () => void) => {
-          ready: Promise<void>;
-          finished: Promise<void>;
-        };
-      }).startViewTransition?.bind(document);
-
-      if (!start) {
-        commit();
-        return;
-      }
-
-      const x = e.clientX;
-      const y = e.clientY;
-      const endRadius = Math.hypot(
-        Math.max(x, window.innerWidth - x),
-        Math.max(y, window.innerHeight - y)
-      );
-
-      // CSS pre-clips `::view-transition-new(root)` to `circle(0 at
-      // --vt-x --vt-y)`, so the very first composited frame is already
-      // hidden (no flash). These vars feed that static initial clip.
-      const root = document.documentElement;
-      root.style.setProperty("--vt-x", `${x}px`);
-      root.style.setProperty("--vt-y", `${y}px`);
-      root.style.setProperty("--vt-r", `${endRadius}px`);
-
-      // Freeze element CSS transitions for the duration of the wipe so
-      // colour-animated bits don't flicker under it.
-      root.classList.add("theme-anim");
-
-      const transition = start(commit);
-      // WAAPI on the VT pseudo = WebKit's ACCELERATED path (CSS
-      // @keyframes on clip-path:circle() re-rasterises every frame).
-      // `fill: "forwards"` is LOAD-BEARING: without it the animation's
-      // effect is dropped the instant it ends, so clip-path snaps back
-      // to the CSS resting value (circle(0) — fully hidden), and the
-      // old snapshot underneath shows through for a few frames before
-      // `transition.finished` tears down the snapshots = backward
-      // "snap to old then jump to new" flicker at the END of the wipe.
-      transition.ready
-        .then(() => {
-          root.animate(
-            {
-              clipPath: [
-                `circle(0px at ${x}px ${y}px)`,
-                `circle(${endRadius}px at ${x}px ${y}px)`,
-              ],
-            },
-            {
-              duration: 700,
-              easing: "ease-in-out",
-              fill: "forwards",
-              pseudoElement: "::view-transition-new(root)",
-            }
-          );
-        })
-        .catch(() => {});
-      transition.finished
-        .catch(() => {})
-        .finally(() => {
-          root.classList.remove("theme-anim");
-        });
+  /// Apply a new mode with the cursor-origin radial reveal. `origin`
+  /// is the click point in viewport coords — pass the event from a
+  /// SettingsSelect option click. Falls back to the centre of the
+  /// viewport when the caller has nothing better.
+  const setMode = React.useCallback(
+    (next: ThemeMode, origin?: { x: number; y: number }) => {
+      try { localStorage.setItem(KEY, next); } catch {}
+      const targetDark = resolveDark(next);
+      if (targetDark === isDark) { setModeState(next); return; }
+      runWipe(origin, () => {
+        setModeState(next);
+        setIsDark(targetDark);
+      });
     },
     [isDark]
   );
 
-  return { isDark, toggle };
+  const toggle = React.useCallback((e: React.MouseEvent) => {
+    setMode(isDark ? "light" : "dark", { x: e.clientX, y: e.clientY });
+  }, [isDark, setMode]);
+
+  return { isDark, mode, setMode, toggle };
+}
+
+/// Cursor-origin radial wipe shared by every theme switch.
+function runWipe(origin: { x: number; y: number } | undefined, commit: () => void) {
+  const start = (document as unknown as {
+    startViewTransition?: (cb: () => void) => {
+      ready: Promise<void>;
+      finished: Promise<void>;
+    };
+  }).startViewTransition?.bind(document);
+
+  const doCommit = () => flushSync(commit);
+
+  if (!start) { doCommit(); return; }
+
+  const x = origin?.x ?? window.innerWidth / 2;
+  const y = origin?.y ?? window.innerHeight / 2;
+  const endRadius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+  const root = document.documentElement;
+  root.style.setProperty("--vt-x", `${x}px`);
+  root.style.setProperty("--vt-y", `${y}px`);
+  root.style.setProperty("--vt-r", `${endRadius}px`);
+  root.classList.add("theme-anim");
+
+  const transition = start(doCommit);
+  transition.ready.then(() => {
+    root.animate(
+      {
+        clipPath: [
+          `circle(0px at ${x}px ${y}px)`,
+          `circle(${endRadius}px at ${x}px ${y}px)`,
+        ],
+      },
+      {
+        duration: 700,
+        easing: "ease-in-out",
+        fill: "forwards",
+        pseudoElement: "::view-transition-new(root)",
+      }
+    );
+  }).catch(() => {});
+  transition.finished.catch(() => {}).finally(() => {
+    root.classList.remove("theme-anim");
+  });
 }

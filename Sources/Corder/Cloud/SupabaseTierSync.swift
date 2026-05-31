@@ -16,25 +16,35 @@ enum SupabaseTierSync {
     static func applyFromCurrentSession() {
         guard let user = SupabaseClientHolder.shared.auth.currentUser else { return }
         let raw = user.appMetadata["tier"]?.stringValue?.lowercased() ?? ""
-        guard let tier = UserTier(rawValue: raw) else {
-            FileLogger.log("SupabaseTierSync: no recognised tier in app_metadata (was: \(raw.isEmpty ? "absent" : raw)) — keeping local")
+        // Absent / empty tier ≡ Free. Previously we returned early on
+        // an empty value ("keeping local") — that left a paid user
+        // stuck on the cached tier after a server-side downgrade,
+        // because the local Free fallback was never written. Treat
+        // empty as Free so server downgrades reflect locally.
+        let tier: UserTier
+        if let parsed = UserTier(rawValue: raw) {
+            tier = parsed
+        } else if raw.isEmpty {
+            tier = .free
+        } else {
+            FileLogger.log("SupabaseTierSync: unrecognised tier value '\(raw)' — keeping local")
             return
         }
         let priorTier = AppSettings.userTier
         if priorTier != tier {
-            FileLogger.log("SupabaseTierSync: applying tier=\(tier.rawValue) from server")
+            FileLogger.log("SupabaseTierSync: applying tier=\(tier.rawValue) from server (was \(priorTier.rawValue))")
             AppSettings.setUserTier(tier)
         }
-        // On the Free → Paid transition we force the transcription
-        // provider to cloud Whisper — that's what Pro / Max plans
-        // are paying for and we don't want the on-device default to
-        // sit there silently. We only DO this once per upgrade:
-        // clearing the override means the tier-driven default
-        // (.whisper for pro/max) kicks in, and any explicit choice
-        // the user makes afterwards persists normally.
-        let becamePaid = (priorTier == .free) && (tier == .pro || tier == .max)
-        if becamePaid {
-            FileLogger.log("SupabaseTierSync: tier upgraded to \(tier.rawValue) — clearing provider override so cloud Whisper becomes the default")
+        // On any tier change between Free and Paid we reset the
+        // transcription-provider override so the tier-driven default
+        // kicks in: Free → whisperLocal, Pro/Max → whisper cloud. A
+        // user who picked cloud as Pro and then downgrades to Free
+        // shouldn't keep a cloud override the Worker will 403 on
+        // every recording.
+        let wasPaid = (priorTier == .pro || priorTier == .max)
+        let isPaid = (tier == .pro || tier == .max)
+        if wasPaid != isPaid {
+            FileLogger.log("SupabaseTierSync: tier transitioned \(priorTier.rawValue) → \(tier.rawValue) — clearing provider override so the new tier default applies")
             AppSettings.clearTranscriptionProviderOverride()
         }
     }

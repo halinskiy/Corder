@@ -181,17 +181,26 @@ export function ProfileMenu({
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
   const paid = tier === "pro" || tier === "max";
 
-  // Pull tier on mount so the header avatar can render its
-  // accent-vs-outlined treatment without waiting for the popover
-  // to open. Refreshed alongside the in-popover settings read.
+  // Pull tier on mount AND keep it fresh so the header avatar reacts
+  // when the user flips tier in Settings (test Upgrade/Downgrade)
+  // without having to reopen the popover. 3 s cadence is the same as
+  // the rest of the polling surfaces; cheap, single GET.
   React.useEffect(() => {
-    (async () => {
+    let alive = true;
+    const tick = async () => {
       try {
         const s = await getSettings();
+        if (!alive) return;
         if (s.tier === "pro" || s.tier === "max") setTier(s.tier);
         else setTier("free");
       } catch {}
-    })();
+    };
+    tick();
+    // 1 s cadence so the avatar repaints during the spinner-window
+    // floor inside `TierTestRow` — at 3 s the spinner could
+    // disappear before the avatar refreshed.
+    const id = window.setInterval(tick, 1000);
+    return () => { alive = false; window.clearInterval(id); };
   }, []);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const [pos, setPos] = React.useState<{ top: number; right: number } | null>(null);

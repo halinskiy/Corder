@@ -206,7 +206,33 @@ export async function generateChapters(id: string, force = false): Promise<strin
 /// which calls Supabase admin to set `app_metadata.tier` for the
 /// signed-in user, then refreshes the local session so the new tier
 /// shows up immediately. Used by the Settings → General test block.
-export async function setTestTier(tier: "free" | "max"): Promise<string> {
+/// In-app news item the Dashboard banner surfaces over "Ready when
+/// you are." Pulled from the Cloudflare Worker so we can ship
+/// announcements (survey invites, release call-outs, …) without
+/// pushing a new app build. `audience` filters which tier sees the
+/// item; `dismissible` lets the user kill it from localStorage
+/// permanently (banner ids are stored in `corder.news.dismissed`).
+export interface NewsItem {
+  id: string;
+  title: string;
+  body?: string;
+  cta_label?: string;
+  cta_url?: string;
+  audience?: "all" | "free" | "paid";
+  dismissible?: boolean;
+}
+
+export async function getNews(): Promise<NewsItem[]> {
+  try {
+    const r = await fetch("https://corder-api.empqwork.workers.dev/news", { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = await r.json();
+    if (!Array.isArray(j.items)) return [];
+    return (j.items as NewsItem[]).filter((it) => !!it.id && !!it.title);
+  } catch { return []; }
+}
+
+export async function setTestTier(tier: "free" | "pro" | "max"): Promise<string> {
   const r = await fetch("/api/billing/test-set-tier", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

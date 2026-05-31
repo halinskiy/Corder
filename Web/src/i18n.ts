@@ -211,12 +211,23 @@ interface Strings {
   settings_theme_label_to_light?: string;
   settings_theme_desc_light?: string;
   settings_theme_desc_dark?: string;
+  settings_theme_opt_system?: string;
+  settings_theme_opt_light?: string;
+  settings_theme_opt_dark?: string;
+  btn_dismiss?: string;
+  news_eyebrow?: string;
   settings_tier_upgrade_label?: string;
   settings_tier_upgrade_desc?: string;
   settings_tier_upgrade_btn?: string;
   settings_tier_downgrade_label?: string;
   settings_tier_downgrade_desc?: string;
   settings_tier_downgrade_btn?: string;
+  settings_tier_upgrading?: string;
+  settings_tier_downgrading?: string;
+  settings_tier_plan_pro?: string;
+  settings_tier_plan_max?: string;
+  settings_tier_upgrade_desc_pro?: string;
+  settings_tier_upgrade_desc_max?: string;
   theme_light: string;
   theme_dark: string;
 
@@ -320,6 +331,8 @@ interface Strings {
   model_gemini?: string;
   model_whisper_cloud?: string;
   model_cloud?: string;
+  model_pro_only?: string;
+  toast_pro_required?: string;
   /// Subtitle shown under the headline while a recording is in
   /// progress. Optional so locales that haven't translated it yet
   /// fall back to the start-mode `dashboard_subtitle` and the banner
@@ -454,7 +467,7 @@ const ru: Strings = {
   settings_telemetry_desc: "Раз в сутки отправлять анонимные счётчики разработчику.",
   tab_settings: "Настройки",
   tab_general_settings: "General",
-  tab_advanced_settings: "Advanced Settings",
+  tab_advanced_settings: "Advanced",
   settings_draft_note: "Черновик, настройки дорабатываются.",
   settings_sec_notifications: "Уведомления",
   settings_notifications: "Системные уведомления",
@@ -568,12 +581,23 @@ const ru: Strings = {
   settings_theme_label_to_light: "Сменить тему на светлую",
   settings_theme_desc_light: "Сейчас светлая.",
   settings_theme_desc_dark: "Сейчас тёмная.",
-  settings_tier_upgrade_label: "Подключить Max",
-  settings_tier_upgrade_desc: "Облачные Whisper и Gemini, без API ключей.",
+  settings_theme_opt_system: "Как в системе",
+  settings_theme_opt_light: "Светлая",
+  settings_theme_opt_dark: "Тёмная",
+  btn_dismiss: "Скрыть",
+  news_eyebrow: "Новое",
+  settings_tier_upgrade_label: "Upgrade",
+  settings_tier_upgrade_desc: "Pro Features",
+  settings_tier_upgrade_desc_pro: "Pro Features",
+  settings_tier_upgrade_desc_max: "Max Features",
   settings_tier_upgrade_btn: "Upgrade",
-  settings_tier_downgrade_label: "Сейчас тариф Max",
-  settings_tier_downgrade_desc: "Вернуться на Free.",
+  settings_tier_downgrade_label: "Downgrade",
+  settings_tier_downgrade_desc: "Free Features",
   settings_tier_downgrade_btn: "Downgrade",
+  settings_tier_upgrading: "Подключаем…",
+  settings_tier_downgrading: "Отключаем…",
+  settings_tier_plan_pro: "Pro",
+  settings_tier_plan_max: "Max",
   theme_light: "Светлая",
   theme_dark: "Тёмная",
 
@@ -659,6 +683,8 @@ const ru: Strings = {
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
   model_cloud: "облако",
+  model_pro_only: "Pro+",
+  toast_pro_required: "Чтобы выбрать облачную модель, нужна подписка Pro или Max.",
   rec_starting: "Запускаю…",
   rec_stopping: "Останавливаю…",
   sidebar_today: "Сегодня",
@@ -762,7 +788,7 @@ const en: Strings = {
   settings_telemetry_desc: "Send anonymous diagnostic counts to the maintainer once a day.",
   tab_settings: "Settings",
   tab_general_settings: "General",
-  tab_advanced_settings: "Advanced Settings",
+  tab_advanced_settings: "Advanced",
   settings_draft_note: "Draft. Settings still in progress.",
   settings_sec_notifications: "Notifications",
   settings_notifications: "System notifications",
@@ -876,12 +902,23 @@ const en: Strings = {
   settings_theme_label_to_light: "Switch to light theme",
   settings_theme_desc_light: "Currently light.",
   settings_theme_desc_dark: "Currently dark.",
-  settings_tier_upgrade_label: "Upgrade for cloud transcription",
-  settings_tier_upgrade_desc: "Whisper + Gemini in the cloud, no API keys.",
+  settings_theme_opt_system: "Follow system",
+  settings_theme_opt_light: "Light",
+  settings_theme_opt_dark: "Dark",
+  btn_dismiss: "Dismiss",
+  news_eyebrow: "New",
+  settings_tier_upgrade_label: "Upgrade",
+  settings_tier_upgrade_desc: "Pro Features",
+  settings_tier_upgrade_desc_pro: "Pro Features",
+  settings_tier_upgrade_desc_max: "Max Features",
   settings_tier_upgrade_btn: "Upgrade",
-  settings_tier_downgrade_label: "You're on Max",
-  settings_tier_downgrade_desc: "Drop back to Free.",
+  settings_tier_downgrade_label: "Downgrade",
+  settings_tier_downgrade_desc: "Free Features",
   settings_tier_downgrade_btn: "Downgrade",
+  settings_tier_upgrading: "Upgrading…",
+  settings_tier_downgrading: "Downgrading…",
+  settings_tier_plan_pro: "Pro",
+  settings_tier_plan_max: "Max",
   theme_light: "Light",
   theme_dark: "Dark",
 
@@ -968,6 +1005,8 @@ const en: Strings = {
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
   model_cloud: "cloud",
+  model_pro_only: "Pro+",
+  toast_pro_required: "Cloud models require a Pro or Max plan.",
   rec_starting: "Starting…",
   rec_stopping: "Stopping…",
   sidebar_today: "Today",
@@ -1080,7 +1119,7 @@ const uk: Strings = {
   settings_telemetry_desc: "Раз на добу надсилати анонімні лічильники розробнику.",
   tab_settings: "Налаштування",
   tab_general_settings: "General",
-  tab_advanced_settings: "Advanced Settings",
+  tab_advanced_settings: "Advanced",
   settings_draft_note: "Чернетка, налаштування ще доопрацьовуються.",
   settings_sec_notifications: "Сповіщення",
   settings_notifications: "Системні сповіщення",
@@ -1254,6 +1293,8 @@ const uk: Strings = {
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
   model_cloud: "хмара",
+  model_pro_only: "Pro+",
+  toast_pro_required: "Хмарні моделі доступні з Pro або Max.",
   rec_starting: "Запускаю…",
   rec_stopping: "Зупиняю…",
   sidebar_today: "Сьогодні",

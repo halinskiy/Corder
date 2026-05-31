@@ -28,7 +28,7 @@ const RATING_SHOWN_FOR_KEY = "corder.ratingPromptShownForId";
 // Show once the user has read 3 distinct ready transcripts —
 // the first 1-2 might just be tests, and we don't want to ask
 // for feedback on a 5-second smoke recording.
-const RATING_THRESHOLD = 3;
+const RATING_THRESHOLD = 1;
 const RATING_API_URL = "https://corder-api.empqwork.workers.dev/feedback";
 // Bumped manually when the native shell version moves. The wizard
 // already POSTs `version` to /signup so once we wire it through the
