@@ -76,6 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Kick off WhisperKit model download in the background so the first
         // recording transcribes immediately instead of waiting on a 800 MB pull.
         TranscriptionPipeline.shared.prewarm()
+
+        // Opt-in diagnostic telemetry: fires once per 24h when the
+        // user has flipped the toggle in Settings. Default off; no
+        // PII / no transcript content. See TelemetryService for
+        // exactly what gets shipped.
+        TelemetryService.tickIfDue()
+        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+            Task { @MainActor in TelemetryService.tickIfDue() }
+        }
         installMainMenu()
         // Boot Sparkle's background updater. Reads SUFeedURL / SUPublicEDKey
         // from Info.plist; checks once on launch and then on Sparkle's

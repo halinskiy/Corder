@@ -107,6 +107,7 @@ enum AppSettings {
     private static let kAutoTitle      = "Corder.set.autoTitle"
     private static let kAutoSummary    = "Corder.set.autoSummary"
     private static let kAutoChapters   = "Corder.set.autoChapters"
+    private static let kTelemetry      = "Corder.set.telemetry"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
@@ -136,6 +137,12 @@ enum AppSettings {
     static var autoTitle: Bool             { flag(kAutoTitle) }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
+    /// Opt-in diagnostic telemetry. Default OFF on purpose — the
+    /// user must explicitly turn it on in Settings before anything
+    /// leaves the Mac. No transcripts, no PII.
+    static var telemetryEnabled: Bool {
+        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? false
+    }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
 
@@ -146,6 +153,9 @@ enum AppSettings {
     static func setAutoTitle(_ v: Bool)      { setFlag(kAutoTitle, v) }
     static func setAutoSummary(_ v: Bool)    { setFlag(kAutoSummary, v) }
     static func setAutoChapters(_ v: Bool)   { setFlag(kAutoChapters, v) }
+    static func setTelemetryEnabled(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kTelemetry)
+    }
     static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
     static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }
 

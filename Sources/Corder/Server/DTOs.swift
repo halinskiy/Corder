@@ -97,6 +97,10 @@ enum DTO {
         /// Run `GeminiChapters` automatically once the transcript is
         /// ready, so the Chapters tab is pre-populated on first open.
         let auto_chapters: Bool?
+        /// Opt-in diagnostic telemetry — default off. When on, the
+        /// app ships diagnostic counts (no PII / no transcript) to
+        /// the maintainer's Worker once per 24h.
+        let telemetry: Bool?
         /// User-managed bundle ids: always offer to record for these /
         /// never offer for these. Consumed by `MeetingDetector`.
         let meeting_whitelist: [String]?

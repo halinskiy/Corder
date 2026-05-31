@@ -157,6 +157,16 @@ export function SettingsPane({
         />
       </SoloCard>
 
+      <SoloCard>
+        <Toggle
+          label={t.settings_telemetry_title ?? "Help improve Corder"}
+          desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts (recordings, transcribe success/fail, Mac model, app version) to the maintainer once a day. No transcripts, no audio, no email — your account is hashed before it leaves the Mac."}
+          checked={(s?.telemetry as boolean | undefined) ?? false}
+          disabled={!loaded}
+          onChange={(v) => patch({ telemetry: v })}
+        />
+      </SoloCard>
+
       {/* Microphone picker. Pre-feature behaviour ("System default")
           stays available as the first option and is the value used
           when `mic_device_uid` is empty/null. The choice applies to
