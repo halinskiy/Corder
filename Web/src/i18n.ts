@@ -192,6 +192,11 @@ interface Strings {
   lang_picker_search: string;
   lang_picker_empty: string;
   btn_theme_title: string;
+  /// Tooltip when the app is currently in light mode (clicking
+  /// switches to dark). Optional — locales without it fall back
+  /// to the legacy `btn_theme_title`.
+  btn_theme_to_dark?: string;
+  btn_theme_to_light?: string;
   theme_light: string;
   theme_dark: string;
 
@@ -285,6 +290,8 @@ interface Strings {
   submit_logs_success?: string;
   submit_logs_failed?: string;
   submit_logs_pending?: string;
+  /// Cooldown message — `{m}` is replaced with minutes-until-next.
+  submit_logs_cooldown?: string;
   profile_signed_out_title?: string;
   profile_signed_out_body?: string;
   profile_sign_in?: string;
@@ -523,6 +530,8 @@ const ru: Strings = {
   lang_picker_search: "Найти язык…",
   lang_picker_empty: "Ничего не найдено",
   btn_theme_title: "Переключить светлую/тёмную тему",
+  btn_theme_to_dark: "Тёмная тема",
+  btn_theme_to_light: "Светлая тема",
   theme_light: "Светлая",
   theme_dark: "Тёмная",
 
@@ -600,6 +609,7 @@ const ru: Strings = {
   submit_logs_success: "Логи отправлены. Спасибо!",
   submit_logs_failed: "Не получилось отправить лог. Попробуй ещё раз.",
   submit_logs_pending: "Отправляем лог…",
+  submit_logs_cooldown: "Следующий отчёт можно отправить через ~{m} мин.",
   profile_signed_out_title: "Вы не вошли",
   profile_signed_out_body: "Войдите, чтобы получить доступ к аккаунту.",
   profile_sign_in: "Войти",
@@ -807,6 +817,8 @@ const en: Strings = {
   lang_picker_search: "Search a language…",
   lang_picker_empty: "No matches",
   btn_theme_title: "Toggle light/dark theme",
+  btn_theme_to_dark: "Dark theme",
+  btn_theme_to_light: "Light theme",
   theme_light: "Light",
   theme_dark: "Dark",
 
@@ -885,6 +897,7 @@ const en: Strings = {
   submit_logs_success: "Logs sent. Thanks!",
   submit_logs_failed: "Couldn't send the log. Try again.",
   submit_logs_pending: "Sending log…",
+  submit_logs_cooldown: "You can send a new report in ~{m} min.",
   profile_signed_out_title: "Not signed in",
   profile_signed_out_body: "Sign in to access your account.",
   profile_sign_in: "Sign in",
@@ -1077,6 +1090,8 @@ const uk: Strings = {
   lang_picker_search: "Шукати мову…",
   lang_picker_empty: "Нічого не знайдено",
   btn_theme_title: "Перемкнути світлу/темну тему",
+  btn_theme_to_dark: "Темна тема",
+  btn_theme_to_light: "Світла тема",
   theme_light: "Світла",
   theme_dark: "Темна",
 
@@ -1154,6 +1169,7 @@ const uk: Strings = {
   submit_logs_success: "Логи надіслано. Дякую!",
   submit_logs_failed: "Не вдалося надіслати лог. Спробуй ще раз.",
   submit_logs_pending: "Надсилаємо лог…",
+  submit_logs_cooldown: "Наступний звіт можна надіслати за ~{m} хв.",
   profile_signed_out_title: "Ви не увійшли",
   profile_signed_out_body: "Увійдіть, щоб отримати доступ до акаунта.",
   profile_sign_in: "Увійти",

@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.21] — 2026-05-31
+
+### Changed
+- **Theme switch tooltip** now reads the action ("Dark theme" in light mode, "Light theme" in dark mode), not the abstract "Toggle light/dark theme".
+
+### Fixed
+- **Bug-report rate limit**: the Bug icon now refuses to fire more than once per hour. A spammed click surfaces "You can send a new report in ~X min." instead of mailing the maintainer 50 copies of the same log.
+
 ## [0.13.20] — 2026-05-31
 
 ### Fixed
