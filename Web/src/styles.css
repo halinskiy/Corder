@@ -4183,3 +4183,45 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg);
   border-color: var(--accent);
 }
+
+/* ===== Chapters tab ============================================ */
+
+/* Same horizontal padding as the transcript body (20 px) so the
+   left edge of the title text lines up with transcript paragraphs
+   when the user flips between tabs. */
+.chapters-list {
+  list-style: none;
+  padding: 12px 20px 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chapter-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.chapter-row:hover {
+  background: var(--bg-hover);
+}
+/* Timestamp = mono, accent green so it reads as a clickable
+   timecode (mirrors how transcript paragraphs colour speaker
+   chips on hover). Tabular-nums keeps the column flush. */
+.chapter-time {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+}
+.chapter-title {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--fg);
+}

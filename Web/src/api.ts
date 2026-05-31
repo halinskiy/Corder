@@ -50,6 +50,9 @@ export interface MeetingDetail {
   /// archived to Dropbox. The RightPanel uses it to decide
   /// whether to render the screen-capture preview above the audio.
   has_video?: boolean;
+  /// JSON-encoded `[{start_ms, title}]` — Chapters tab. May be
+  /// absent on rows that haven't been auto-chaptered yet.
+  chapters?: string | null;
   /// Unix-ms timestamp the backend pipeline first moved the meeting
   /// into `transcribing`. The Transcribing banner uses it for the
   /// inline elapsed counter so it reflects real backend work, not
@@ -240,6 +243,7 @@ export interface Settings {
   auto_transcribe?: boolean;
   auto_title?: boolean;
   auto_summary?: boolean;
+  auto_chapters?: boolean;
   /** user-managed bundle ids for the call auto-detector. */
   meeting_whitelist?: string[];
   meeting_blacklist?: string[];

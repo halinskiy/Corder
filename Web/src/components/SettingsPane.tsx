@@ -147,6 +147,16 @@ export function SettingsPane({
         />
       </SoloCard>
 
+      <SoloCard>
+        <Toggle
+          label={t.settings_auto_chapters_title ?? "Auto-chapters"}
+          desc={t.settings_auto_chapters_desc ?? "Split a finished transcript into Loom-style chapters with clickable timestamps."}
+          checked={on("auto_chapters")}
+          disabled={!loaded}
+          onChange={(v) => patch({ auto_chapters: v })}
+        />
+      </SoloCard>
+
       {/* Microphone picker. Pre-feature behaviour ("System default")
           stays available as the first option and is the value used
           when `mic_device_uid` is empty/null. The choice applies to

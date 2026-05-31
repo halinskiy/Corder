@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.17] — 2026-05-31
+
+### Added
+- **Chapters tab** (Loom-style) next to Transcript and Summary in every meeting view. Gemini Flash Lite splits the transcript into 3–8 topical chapters with `[mm:ss]` timestamps; clicking a row seeks the audio scrubber. Generated server-side after each successful transcribe when **Auto-chapters** is on (new toggle in Settings, on by default). Routes through the same Worker proxy as transcribe / title / summary so Pro / Max users don't need a local Google API key.
+
 ## [0.13.16] — 2026-05-31
 
 ### Fixed

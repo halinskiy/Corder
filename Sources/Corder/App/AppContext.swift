@@ -106,6 +106,7 @@ enum AppSettings {
     private static let kAutoTranscribe = "Corder.set.autoTranscribe"
     private static let kAutoTitle      = "Corder.set.autoTitle"
     private static let kAutoSummary    = "Corder.set.autoSummary"
+    private static let kAutoChapters   = "Corder.set.autoChapters"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
@@ -134,6 +135,7 @@ enum AppSettings {
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
     static var autoTitle: Bool             { flag(kAutoTitle) }
     static var autoSummary: Bool           { flag(kAutoSummary) }
+    static var autoChapters: Bool          { flag(kAutoChapters) }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
 
@@ -143,6 +145,7 @@ enum AppSettings {
     static func setAutoTranscribe(_ v: Bool) { setFlag(kAutoTranscribe, v) }
     static func setAutoTitle(_ v: Bool)      { setFlag(kAutoTitle, v) }
     static func setAutoSummary(_ v: Bool)    { setFlag(kAutoSummary, v) }
+    static func setAutoChapters(_ v: Bool)   { setFlag(kAutoChapters, v) }
     static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
     static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }
 

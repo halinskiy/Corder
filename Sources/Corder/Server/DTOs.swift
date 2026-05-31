@@ -35,6 +35,9 @@ enum DTO {
         /// uses this to decide whether to render the `<video>` block
         /// above the audio player.
         let has_video: Bool
+        /// JSON string with `[{start_ms, title}]` for the Chapters tab.
+        /// Returned as-is from the DB column; frontend parses it.
+        let chapters: String?
         /// Unix-ms timestamp the pipeline first flipped this meeting
         /// into `.transcribing`. The Transcribing banner uses it for
         /// the inline elapsed counter so the timer reflects the
@@ -91,6 +94,9 @@ enum DTO {
         /// Run `GeminiSummarizer` automatically once the transcript is
         /// ready, so the Summary tab is pre-populated on first open.
         let auto_summary: Bool?
+        /// Run `GeminiChapters` automatically once the transcript is
+        /// ready, so the Chapters tab is pre-populated on first open.
+        let auto_chapters: Bool?
         /// User-managed bundle ids: always offer to record for these /
         /// never offer for these. Consumed by `MeetingDetector`.
         let meeting_whitelist: [String]?

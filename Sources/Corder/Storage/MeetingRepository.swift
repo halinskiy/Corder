@@ -389,6 +389,16 @@ struct MeetingRepository {
         Task { @MainActor in SupabaseSync.setSummary(summary, meetingId: meetingId) }
     }
 
+    /// Store the auto-generated Chapters JSON for a meeting. Setting
+    /// `nil` clears the cached chapters so the pipeline's auto-step
+    /// will regenerate on the next transcribe / re-transcribe.
+    func setChapters(meetingId: String, chapters: String?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET chapters = ? WHERE id = ?",
+                           arguments: [chapters, meetingId])
+        }
+    }
+
     func setDropboxArchive(meetingId: String, videoPath: String?, audioPath: String?, uploadedAt: Int64?) throws {
         try dbq.write { db in
             try db.execute(sql: """

@@ -59,6 +59,7 @@ async function copyText(text: string): Promise<void> {
 import { formatDate } from "../format";
 import { TranscriptPane } from "./TranscriptPane";
 import { SummaryPane } from "./SummaryPane";
+import { ChaptersPane } from "./ChaptersPane";
 import { SettingsPane } from "./SettingsPane";
 // IntegrationsPane import removed while the Integrations tab is
 // hidden (see the tab strip below). Re-add when bringing it back.
@@ -144,7 +145,7 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
   }, [openSettingsNonce]);
   // Left-column tab: Transcript (default) | Summary. Summary is rendered
   // by `SummaryPane`, which lazily fetches `/summarize` on first open.
-  const [leftTab, setLeftTab] = React.useState<"transcript" | "summary">("transcript");
+  const [leftTab, setLeftTab] = React.useState<"transcript" | "summary" | "chapters">("transcript");
   // Speakers-clarify banner visibility — controlled here so the toolbar
   // icon button can toggle it. Auto-opens once per meeting if the diarizer
   // looks over-segmented and the user hasn't already dismissed for this id.
@@ -421,6 +422,12 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
             >
               {t.tab_summary}
             </span>
+            <span
+              className={"tab" + (leftTab === "chapters" ? " active" : "")}
+              onClick={() => setLeftTab("chapters")}
+            >
+              {t.tab_chapters ?? "Chapters"}
+            </span>
           </div>
           <div className="detail-tab-col detail-tab-col-right">
             <span
@@ -508,6 +515,12 @@ export function MeetingView({ meetingId, onDeleted, onOpenArchive, archiveOpen, 
             style={{ display: leftTab === "summary" ? "flex" : "none" }}
           >
             <SummaryPane detail={detail} onToast={onToast} t={t} />
+          </div>
+          <div
+            className="transcript-wrap summary-wrap-host"
+            style={{ display: leftTab === "chapters" ? "flex" : "none" }}
+          >
+            <ChaptersPane detail={detail} onSeek={onSeek} t={t} />
           </div>
           {/* All three right-pane panels stay MOUNTED across tab
               switches (display toggled, not unmounted) — RightPanel
