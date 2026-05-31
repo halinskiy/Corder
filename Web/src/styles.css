@@ -287,6 +287,27 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   filter: brightness(1.05);
 }
 
+/* Shuffle overlay — the lucide Shuffle icon fades in over the glyph
+   on hover so the user understands "click = new random glyph".
+   Pointer-events:none means the click still goes to the parent
+   button. */
+.avatar-shuffle .avatar-shuffle-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 80%, #000);
+  color: #fff;
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+.avatar-shuffle:hover .avatar-shuffle-overlay {
+  opacity: 1;
+}
+
 /* 3×3 grid picker that slides in between the popover head and the
    action items. Each cell is a round chip showing one of the nine
    glyph variants; no resting outline — the accent fill is the

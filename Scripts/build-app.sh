@@ -23,11 +23,16 @@ cp "$ROOT/.build/release/Corder" "$APP/Contents/MacOS/Corder"
 # frameworks). swift-build doesn't set this rpath on bare CLI builds.
 install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Corder" 2>/dev/null || true
 
-# The web assets live in this SwiftPM resource bundle. Routes.swift
-# resolves it via Bundle.main from Contents/Resources — if it's missing
-# the app serves a blank Library (or, on older code, HARD-CRASHED via
-# Bundle.module's fatalError, which is what crashed the tester's Mac).
-# Never ship a bundle without it: hard-fail the build instead.
+# The web assets live in this SwiftPM resource bundle. We ship it in
+# `Contents/Resources/` (macOS convention; codesign refuses anything
+# in the .app root). Code reads it via `Bundle.corderResources`
+# (helper in Sources/Corder/Shared/Bundle+CorderResources.swift),
+# NOT via SwiftPM's auto-generated `Bundle.module` — `.module`
+# resolves to `Bundle.main.bundleURL/Corder_Corder.bundle` (i.e. the
+# .app ROOT, not Resources), so on every tester Mac it fatalError'd
+# with "could not load resource bundle: from /Applications/Corder.app/
+# Corder_Corder.bundle". Our helper checks Contents/Resources first
+# and gracefully returns nil on a real miss instead of trapping.
 if [ ! -d "$ROOT/.build/release/Corder_Corder.bundle" ]; then
     echo "FATAL: .build/release/Corder_Corder.bundle missing — web assets" \
          "would not ship. Run Scripts/build-web.sh; do not 'swift build' alone." >&2

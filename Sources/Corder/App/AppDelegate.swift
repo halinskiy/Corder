@@ -167,6 +167,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if let name, !name.isEmpty {
                         AppSettings.setUserName(name)
                     }
+                    // Pull subscription tier from the server-side
+                    // `app_metadata.tier` (the *admin* API can write
+                    // it, the user cannot — so this is the canonical
+                    // source of truth for paid plans). Falls back to
+                    // whatever's already in UserDefaults if missing
+                    // so we never DOWNgrade silently on a transient
+                    // network blip.
+                    SupabaseTierSync.applyFromCurrentSession()
                     AppSettings.setOnboardingCompleted(true)
                     AppSettings.setHasSignedInBefore(true)
                 }

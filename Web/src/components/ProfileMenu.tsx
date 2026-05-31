@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, LifeBuoy, LogOut, RefreshCw } from "lucide-react";
+import { Home, LifeBuoy, LogOut, RefreshCw, Shuffle } from "lucide-react";
 import type { T } from "../i18n";
 import { getSettings, signOut, triggerUpdateCheck } from "../api";
 
@@ -136,7 +136,6 @@ export function ProfileMenu({
   t: T;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [pickerOpen, setPickerOpen] = React.useState(false);
   const [variant, setVariant] = React.useState(() => readStoredVariant(t.profile_name));
   const [userName, setUserName] = React.useState<string | null>(null);
   const [userEmail, setUserEmail] = React.useState<string | null>(null);
@@ -183,13 +182,20 @@ export function ProfileMenu({
     };
   }, [open, place]);
 
-  const pickVariant = (v: number) => {
-    setVariant(v);
-    try { localStorage.setItem(AVATAR_STORAGE_KEY, String(v)); } catch {}
-    setPickerOpen(false);
+  /// Cycle to a fresh random variant on every click — never repeats
+  /// the current one (otherwise rolling the same index does nothing
+  /// visible and feels broken). Persists via the same localStorage
+  /// key so the choice survives a relaunch. Replaces the old 3×3
+  /// grid picker (cleaner, single tap, no extra UI).
+  const shuffleAvatar = () => {
+    if (AVATAR_COUNT <= 1) return;
+    let next = Math.floor(Math.random() * AVATAR_COUNT);
+    if (next === variant) next = (next + 1) % AVATAR_COUNT;
+    setVariant(next);
+    try { localStorage.setItem(AVATAR_STORAGE_KEY, String(next)); } catch {}
   };
 
-  const goDashboard = () => { onOpenDashboard(); setOpen(false); setPickerOpen(false); };
+  const goDashboard = () => { onOpenDashboard(); setOpen(false); };
   // `onOpenSettings` removed from the popover rows (header has
   // its own gear icon). Reference it once so TS's
   // noUnusedParameters check doesn't complain — the prop stays
@@ -210,7 +216,7 @@ export function ProfileMenu({
         .corderOpenExternal?.("https://getcorder.com/contact/");
     } catch {}
     setOpen(false);
-    setPickerOpen(false);
+    
   };
 
   /// Force Sparkle to refetch the appcast right now. Useful when
@@ -222,7 +228,7 @@ export function ProfileMenu({
   /// found, the standard Sparkle dialog pops up.
   const checkUpdates = async () => {
     setOpen(false);
-    setPickerOpen(false);
+    
     try { await triggerUpdateCheck(); } catch {}
   };
 
@@ -247,13 +253,15 @@ export function ProfileMenu({
         >
           <div className="profile-pop-head">
             <button
-              className="avatar-img-lg avatar-img-lg-svg avatar-pickable"
-              onClick={() => setPickerOpen((v) => !v)}
+              className="avatar-img-lg avatar-img-lg-svg avatar-pickable avatar-shuffle"
+              onClick={shuffleAvatar}
               title={t.profile_pick_avatar}
               aria-label={t.profile_pick_avatar}
-              aria-expanded={pickerOpen}
             >
               <AvatarGlyph variant={variant} />
+              <span className="avatar-shuffle-overlay" aria-hidden>
+                <Shuffle size={18} strokeWidth={2} />
+              </span>
             </button>
             <div className="profile-pop-id">
               {/* Real signed-in identity from the backend. Name
@@ -274,23 +282,6 @@ export function ProfileMenu({
             </div>
           </div>
 
-          {pickerOpen && (
-            <div className="avatar-picker" role="listbox">
-              {Array.from({ length: AVATAR_COUNT }).map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={"avatar-picker-cell" + (i === variant ? " is-active" : "")}
-                  onClick={() => pickVariant(i)}
-                  role="option"
-                  aria-selected={i === variant}
-                  title={t.profile_pick_avatar}
-                >
-                  <AvatarGlyph variant={i} />
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Top group: navigation + support. Settings is gone
               from here — there's already a Settings icon in the

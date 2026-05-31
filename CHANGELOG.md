@@ -16,6 +16,22 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.8] — 2026-05-31
+
+### Added
+- **Send a bug report** button (Bug icon) in the toolbar, left of the theme toggle. One click posts the tail of `/tmp/corder.log` to the maintainer with your email + Corder version + macOS version attached — no Terminal commands required.
+- **Remote subscription tier**: at sign-in, Corder reads `app_metadata.tier` from your Supabase user and applies it locally. Pro / Max can now be granted server-side without `defaults write`.
+- **Model picker always visible** under the Start button, listing every cloud provider (Gemini Flash / Whisper Cloud) AND every local Whisper size in one chevron pill. Switch with one click; if the local variant isn't on disk yet, the picker flips to a download progress bar.
+
+### Changed
+- **Dashboard cold start**: a brand-new install shows only "Ready when you are." + Start + the model picker. Stats and Monthly usage cards reveal themselves after 10 minutes of use, on first relaunch, or when you have at least one recording — and stay revealed forever.
+- **Avatar**: one click on the avatar in the profile popover now rolls a fresh random glyph (with a Shuffle hover overlay), instead of opening a 9-cell picker grid.
+- Per-tier monthly caps restored — Free 1h / Pro 25h / Max unlimited (the 0.13.6 hard 60-min cap was a test stub).
+
+### Fixed
+- **Hard crash on first launch for off-dev testers** ("could not load resource bundle: from /Applications/Corder.app/Corder_Corder.bundle"). SwiftPM's auto-generated `Bundle.module` accessor lives at the .app root, not in `Contents/Resources/`. Routed through our own `Bundle.corderResources` resolver that checks the realistic paths and returns nil instead of fatal-erroring.
+- **SupabaseSync `segments_speaker_id_fkey` (Postgres 23503)** on every transcribe. Speakers and segments now upsert in a single ordered task so segments can never land before their referenced speakers.
+
 ## [0.13.7] — 2026-05-30
 
 ### Changed

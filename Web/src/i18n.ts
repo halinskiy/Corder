@@ -274,6 +274,12 @@ interface Strings {
   usage_subtitle?: string;
   usage_advanced?: string;
   usage_local?: string;
+  submit_logs_title?: string;
+  submit_logs_success?: string;
+  submit_logs_failed?: string;
+  model_gemini?: string;
+  model_whisper_cloud?: string;
+  model_cloud?: string;
   /// Subtitle shown under the headline while a recording is in
   /// progress. Optional so locales that haven't translated it yet
   /// fall back to the start-mode `dashboard_subtitle` and the banner
@@ -572,6 +578,12 @@ const ru: Strings = {
   usage_subtitle: "Минуты транскрипции в этом месяце.",
   usage_advanced: "Продвинутая транскрипция",
   usage_local: "Локальные модели",
+  submit_logs_title: "Отправить отчёт",
+  submit_logs_success: "Логи отправлены. Спасибо!",
+  submit_logs_failed: "Не получилось отправить лог. Попробуй ещё раз.",
+  model_gemini: "Gemini Flash",
+  model_whisper_cloud: "Whisper Cloud",
+  model_cloud: "облако",
   rec_starting: "Запускаю…",
   rec_stopping: "Останавливаю…",
   sidebar_today: "Сегодня",
@@ -840,6 +852,12 @@ const en: Strings = {
   usage_subtitle: "Transcription minutes this month.",
   usage_advanced: "Advanced transcription",
   usage_local: "Local Models",
+  submit_logs_title: "Send a bug report",
+  submit_logs_success: "Logs sent. Thanks!",
+  submit_logs_failed: "Couldn't send the log. Try again.",
+  model_gemini: "Gemini Flash",
+  model_whisper_cloud: "Whisper Cloud",
+  model_cloud: "cloud",
   rec_starting: "Starting…",
   rec_stopping: "Stopping…",
   sidebar_today: "Today",
@@ -1092,6 +1110,12 @@ const uk: Strings = {
   usage_subtitle: "Хвилини транскрипції за цей місяць.",
   usage_advanced: "Просунута транскрипція",
   usage_local: "Локальні моделі",
+  submit_logs_title: "Надіслати звіт",
+  submit_logs_success: "Логи надіслано. Дякую!",
+  submit_logs_failed: "Не вдалося надіслати лог. Спробуй ще раз.",
+  model_gemini: "Gemini Flash",
+  model_whisper_cloud: "Whisper Cloud",
+  model_cloud: "хмара",
   rec_starting: "Запускаю…",
   rec_stopping: "Зупиняю…",
   sidebar_today: "Сьогодні",
