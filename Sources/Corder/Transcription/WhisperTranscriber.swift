@@ -74,6 +74,7 @@ enum WhisperTranscriber {
     private static let vadEmptyFloorMs: Int64 = 500
 
     private static let endpoint = "https://api.openai.com/v1/audio/transcriptions"
+    private static let proxyEndpoint = "https://corder-api.empqwork.workers.dev/transcribe/whisper"
 
     /// Serialises every Whisper HTTP call across the whole process.
     /// Background: TranscriptionPipeline fires mic + system tracks in
@@ -110,7 +111,13 @@ enum WhisperTranscriber {
     static func transcribe(audioURL: URL,
                            mode: WMode,
                            initialPrompt: String?) async throws -> [GeminiTranscriber.Turn] {
-        guard let key = apiKey else { throw WhisperError.noKey }
+        // Signed-in users go through the Worker proxy (server-side
+        // OpenAI key). Only when there's no Supabase session do we
+        // require the legacy local key — keeps `swift test` / dev
+        // shells running without a sign-in.
+        let signedIn = await Self.hasSupabaseSession()
+        let key = apiKey ?? ""
+        if !signedIn && key.isEmpty { throw WhisperError.noKey }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw WhisperError.missingFile(audioURL.path)
         }
@@ -293,10 +300,17 @@ enum WhisperTranscriber {
                                                    initialPrompt: String?) async throws -> [GeminiTranscriber.Turn] {
         let model: String = (mode == .diarize) ? modelDiarize : modelSingle
 
+        // Resolve routing: if we have an active Supabase session we
+        // ship the audio to our Cloudflare Worker — it holds the
+        // OpenAI key server-side and gates by `app_metadata.tier`.
+        // Otherwise we hit OpenAI directly with the user's local
+        // key (the legacy path; still used during sign-out / dev).
+        let route = await Self.resolveRoute(apiKey: apiKey)
+
         let boundary = "----CorderWhisperBoundary-\(UUID().uuidString)"
-        var req = URLRequest(url: URL(string: endpoint)!)
+        var req = URLRequest(url: URL(string: route.endpoint)!)
         req.httpMethod = "POST"
-        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue(route.authHeader, forHTTPHeaderField: "Authorization")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 600
 
@@ -598,6 +612,36 @@ enum WhisperTranscriber {
             return k
         }
         return nil
+    }
+
+    /// Route resolver: prefer the Cloudflare Worker proxy (server
+    /// key, JWT auth, tier-gated) when the user is signed in.
+    /// Otherwise the legacy direct-to-OpenAI path with whichever
+    /// local key the caller already loaded.
+    private struct Route {
+        let endpoint: String
+        let authHeader: String
+    }
+    private static func resolveRoute(apiKey: String) async -> Route {
+        let jwt = await Self.currentJWT()
+        if !jwt.isEmpty {
+            return Route(endpoint: proxyEndpoint, authHeader: "Bearer \(jwt)")
+        }
+        return Route(endpoint: endpoint, authHeader: "Bearer \(apiKey)")
+    }
+
+    /// Pulls the current Supabase access token off the main actor.
+    /// The Supabase SDK's session accessor is async; we wrap in
+    /// `try?` so a signed-out build just returns "".
+    private static func currentJWT() async -> String {
+        await MainActor.run { _currentJWTSync() }
+    }
+    @MainActor
+    private static func _currentJWTSync() -> String {
+        SupabaseClientHolder.shared.auth.currentSession?.accessToken ?? ""
+    }
+    private static func hasSupabaseSession() async -> Bool {
+        await !Self.currentJWT().isEmpty
     }
 }
 
