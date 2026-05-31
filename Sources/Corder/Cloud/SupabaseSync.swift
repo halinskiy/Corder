@@ -197,28 +197,72 @@ enum SupabaseSync {
     static func replaceSegments(_ segments: [Segment], meetingId: String,
                                 speakerIdByLocalId: [String: UUID]) {
         push {
+            try await Self._replaceSegmentsAwait(
+                segments, meetingId: meetingId, speakerIdByLocalId: speakerIdByLocalId)
+        }
+    }
+
+    private static func _replaceSegmentsAwait(_ segments: [Segment], meetingId: String,
+                                              speakerIdByLocalId: [String: UUID]) async throws {
+        try await SupabaseClientHolder.shared
+            .from("segments")
+            .delete()
+            .eq("meeting_id", value: meetingId)
+            .execute()
+        guard !segments.isEmpty else { return }
+        let rows: [SegmentRow] = segments.enumerated().compactMap { idx, s in
+            guard let spk = speakerIdByLocalId[s.speakerId] else { return nil }
+            return SegmentRow(
+                id: UUID(),
+                meeting_id: meetingId,
+                speaker_id: spk,
+                start_ms: s.startMs,
+                end_ms: s.endMs,
+                text: s.text,
+                position: idx)
+        }
+        guard !rows.isEmpty else { return }
+        try await SupabaseClientHolder.shared
+            .from("segments")
+            .insert(rows)
+            .execute()
+    }
+
+    /// Push speakers AND segments in a single task so segments can't
+    /// land before their referenced speakers (which is exactly the
+    /// foreign-key violation 23503 we kept seeing on every successful
+    /// transcribe: `segments_speaker_id_fkey`). The two helpers were
+    /// independent `push` calls before — fire-and-forget, no
+    /// ordering guarantee.
+    static func replaceSpeakersAndSegments(
+        speakers: [Speaker],
+        segments: [Segment],
+        meetingId: String,
+        speakerIdByLocalId: [String: UUID]
+    ) {
+        push {
             try await SupabaseClientHolder.shared
-                .from("segments")
+                .from("speakers")
                 .delete()
                 .eq("meeting_id", value: meetingId)
                 .execute()
-            guard !segments.isEmpty else { return }
-            let rows: [SegmentRow] = segments.enumerated().compactMap { idx, s in
-                guard let spk = speakerIdByLocalId[s.speakerId] else { return nil }
-                return SegmentRow(
-                    id: UUID(),
-                    meeting_id: meetingId,
-                    speaker_id: spk,
-                    start_ms: s.startMs,
-                    end_ms: s.endMs,
-                    text: s.text,
-                    position: idx)
+            if !speakers.isEmpty {
+                let rows: [SpeakerRow] = speakers.enumerated().map { idx, s in
+                    SpeakerRow(
+                        id: UUID(uuidString: s.id) ?? UUID(),
+                        meeting_id: meetingId,
+                        label: s.label,
+                        display_name: s.customName,
+                        kind: s.label == "user" ? "user" : "other",
+                        position: idx)
+                }
+                try await SupabaseClientHolder.shared
+                    .from("speakers")
+                    .insert(rows)
+                    .execute()
             }
-            guard !rows.isEmpty else { return }
-            try await SupabaseClientHolder.shared
-                .from("segments")
-                .insert(rows)
-                .execute()
+            try await Self._replaceSegmentsAwait(
+                segments, meetingId: meetingId, speakerIdByLocalId: speakerIdByLocalId)
         }
     }
 

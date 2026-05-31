@@ -766,9 +766,11 @@ final class TranscriptionPipeline {
             speakerUUIDs[s.id] = UUID(uuidString: s.id) ?? UUID()
         }
         await MainActor.run {
-            SupabaseSync.replaceSpeakers(speakers, meetingId: meetingId)
-            SupabaseSync.replaceSegments(segments, meetingId: meetingId,
-                                         speakerIdByLocalId: speakerUUIDs)
+            SupabaseSync.replaceSpeakersAndSegments(
+                speakers: speakers,
+                segments: segments,
+                meetingId: meetingId,
+                speakerIdByLocalId: speakerUUIDs)
         }
         // Audio upload. Mix is the playback file (always there once
         // transcribed); mic/system are the raw tracks (kept until

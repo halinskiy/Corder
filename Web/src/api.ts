@@ -76,6 +76,15 @@ export async function getUsage(): Promise<Usage> {
   return r.json();
 }
 
+/// Send the tail of /tmp/corder.log (last ~2000 lines) to the
+/// maintainer through the Cloudflare Worker → Resend pipeline.
+/// Backend attaches the signed-in user's email + Corder version
+/// + macOS version; the user doesn't have to type anything.
+export async function submitLogs(): Promise<void> {
+  const r = await fetch("/api/submit-logs", { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 export async function listMeetings(): Promise<MeetingSummary[]> {
   const r = await fetch("/api/meetings");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

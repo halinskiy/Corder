@@ -1,9 +1,10 @@
 import React from "react";
-import { Moon, Archive as ArchiveIcon, Settings as SettingsIcon } from "lucide-react";
+import { Moon, Archive as ArchiveIcon, Settings as SettingsIcon, Bug } from "lucide-react";
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
 import { useTheme } from "../theme";
+import { submitLogs } from "../api";
 import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip — breadcrumb
@@ -57,6 +58,7 @@ export function MainHeader({
       <div className="spacer" />
       <div className="toolbar">
         <UpdatePill t={t} onToast={onToast} />
+        <SubmitLogsButton t={t} onToast={onToast} />
         <ThemeSwitch t={t} />
         {/* Settings now sits in the toolbar where the LangPicker used
             to live — the language switcher moved into the profile
@@ -107,6 +109,45 @@ function ThemeSwitch({ t }: { t: T }) {
         aria-label={t.btn_theme_title}
       >
         <Moon size={16} strokeWidth={2} />
+      </button>
+    </Tooltip>
+  );
+}
+
+/// Sends the tail of `/tmp/corder.log` to the maintainer via the
+/// Cloudflare Worker (→ Resend email). Replaces "ask the user to run
+/// a curl in the terminal", which nobody actually does. Disabled
+/// while a previous submit is in flight so a double-click doesn't
+/// fire two emails.
+function SubmitLogsButton({
+  t,
+  onToast,
+}: {
+  t: T;
+  onToast: (msg: string, kind?: "success" | "error") => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await submitLogs();
+      onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
+    } catch {
+      onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Tooltip label={t.submit_logs_title ?? "Send a bug report"}>
+      <button
+        className="toolbar-icon-btn"
+        onClick={onClick}
+        aria-label={t.submit_logs_title ?? "Send a bug report"}
+        disabled={busy}
+      >
+        <Bug size={16} strokeWidth={2} />
       </button>
     </Tooltip>
   );

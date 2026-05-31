@@ -68,6 +68,7 @@ enum Routes {
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
         server.get["/api/usage"] = { _ in usageGet(repo: repo) }
+        server.post["/api/submit-logs"] = { _ in submitLogs() }
         // Whisper Local model download — kicks off a background fetch
         // for the requested variant id (no body needed beyond `id`).
         // The /api/settings GET is the single source of truth for
@@ -849,6 +850,55 @@ enum Routes {
     ///   defaults write com.3mpq.Corder Corder.set.simLocalUsedSeconds 600
     /// They're additive on top of the real DB count and zero by
     /// default, so production behaviour is unchanged.
+    /// Sends the tail of /tmp/corder.log to the Cloudflare Worker
+    /// (`POST /submit-logs`) which forwards via Resend to the
+    /// maintainer. The user clicks one button (header Bug icon) and
+    /// we attach their email + app version + macOS version for
+    /// triage — they don't have to copy anything by hand.
+    private static func submitLogs() -> HttpResponse {
+        let path = "/tmp/corder.log"
+        let tail: String = {
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let full = String(data: data, encoding: .utf8) else { return "(log file missing or unreadable)" }
+            let lines = full.split(separator: "\n", omittingEmptySubsequences: false)
+            // Last 2000 lines is enough for the whole session in
+            // every realistic case; keeps the email body small.
+            let slice = lines.suffix(2000)
+            return slice.joined(separator: "\n")
+        }()
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let macOS = ProcessInfo.processInfo.operatingSystemVersionString
+        let email = AppSettings.userEmail ?? "anonymous"
+        let payload: [String: Any] = [
+            "email": email,
+            "app_version": "\(version) (\(build))",
+            "macos_version": macOS,
+            "log_tail": tail,
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let url = URL(string: "https://corder-api.empqwork.workers.dev/submit-logs") else {
+            return .internalServerError
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        req.timeoutInterval = 15
+        // Sync via a semaphore — Swifter handlers are blocking; we
+        // want to surface success/failure to the React toast in one
+        // round-trip, not fire-and-forget.
+        let sem = DispatchSemaphore(value: 0)
+        var ok = false
+        URLSession.shared.dataTask(with: req) { _, resp, _ in
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            ok = (200..<300).contains(code)
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + 16)
+        return ok ? jsonResponse(["ok": true]) : .internalServerError
+    }
+
     private static func usageGet(repo: MeetingRepository) -> HttpResponse {
         let cal = Calendar(identifier: .gregorian)
         let now = Date()

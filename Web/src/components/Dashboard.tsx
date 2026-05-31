@@ -112,17 +112,55 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   const dashLeftRef = useRef<HTMLDivElement | null>(null);
   // Monotonic counter bumped on every transition into a recording
   // state — covers Start from the Dashboard button, the menu-bar
-  // popover, the global hotkey, and the auto-detect invite. The
-  // child `WhisperPrefetchPill` reads this to latch its "revealed"
-  // flag once and persist it across sessions.
-  const [prefetchRevealedSince, setPrefetchRevealedSince] = useState(0);
+  // popover, the global hotkey, and the auto-detect invite.
   useEffect(() => {
     if (lastRecRef.current !== isRecording) {
       lastRecRef.current = isRecording;
       setBusy(false);
-      if (isRecording) setPrefetchRevealedSince((n) => n + 1);
     }
   }, [isRecording]);
+
+  // Stats + Usage cards stay hidden on a brand-new install — the
+  // first surface the user sees is just "Ready when you are." + the
+  // Start button + the model picker. The cards reveal themselves
+  // when ANY of these is true (and stay revealed forever via a
+  // localStorage latch):
+  //   • the user already has at least one recording
+  //   • the user has been in the app for 10 minutes this session
+  //   • the user has relaunched the app at least once after install
+  //     (we stamp `corder.firstRunAt` on first mount; on any LATER
+  //     mount with that key already set, we reveal immediately)
+  const STATS_REVEAL_KEY = "corder.dashStatsRevealed";
+  const FIRST_RUN_KEY = "corder.firstRunAt";
+  const [statsRevealed, setStatsRevealed] = useState<boolean>(() => {
+    try {
+      if (localStorage.getItem(STATS_REVEAL_KEY) === "1") return true;
+      const firstRunRaw = localStorage.getItem(FIRST_RUN_KEY);
+      if (!firstRunRaw) {
+        localStorage.setItem(FIRST_RUN_KEY, String(Date.now()));
+        return false;
+      }
+      // Key existed BEFORE this mount → relaunch case → reveal.
+      return true;
+    } catch { return false; }
+  });
+  // Recording count > 0 reveals immediately.
+  useEffect(() => {
+    if (statsRevealed) return;
+    if ((statsMeetings?.length ?? 0) > 0 || (meetings?.length ?? 0) > 0) {
+      setStatsRevealed(true);
+      try { localStorage.setItem(STATS_REVEAL_KEY, "1"); } catch {}
+    }
+  }, [statsRevealed, statsMeetings, meetings]);
+  // 10-minute timeout fallback (clears if already revealed).
+  useEffect(() => {
+    if (statsRevealed) return;
+    const id = window.setTimeout(() => {
+      setStatsRevealed(true);
+      try { localStorage.setItem(STATS_REVEAL_KEY, "1"); } catch {}
+    }, 10 * 60 * 1000);
+    return () => window.clearTimeout(id);
+  }, [statsRevealed]);
   const handlePrimary = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -285,32 +323,36 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
                       : (isRecording ? t.rec_stop : t.dashboard_start)}
                   </span>
                 </button>
-                <WhisperPrefetchPill t={t} revealedSince={prefetchRevealedSince} />
+                <WhisperPrefetchPill t={t} />
               </div>
               <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
             </div>
 
-            {/* Stats — one outlined `.settings-rows` card, three rows
-                separated by hairline borders. Same width and look as
-                the banner above; same as Settings rows. */}
-            <div className="settings-rows dash-stats-card">
-              <div className="dash-stat-row">
-                <div className="settings-row-label">{t.dashboard_stat_total}</div>
-                <div className="dash-stat-value">{total}</div>
-              </div>
-              <div className="dash-stat-row">
-                <div className="settings-row-label">{t.dashboard_stat_time}</div>
-                <div className="dash-stat-value">{totalLabel}</div>
-              </div>
-              <div className="dash-stat-row">
-                <div className="settings-row-label">{t.dashboard_stat_thisweek}</div>
-                <div className="dash-stat-value">{thisWeek}</div>
-              </div>
-            </div>
+            {statsRevealed && (
+              <>
+                {/* Stats — one outlined `.settings-rows` card, three rows
+                    separated by hairline borders. Same width and look as
+                    the banner above; same as Settings rows. */}
+                <div className="settings-rows dash-stats-card">
+                  <div className="dash-stat-row">
+                    <div className="settings-row-label">{t.dashboard_stat_total}</div>
+                    <div className="dash-stat-value">{total}</div>
+                  </div>
+                  <div className="dash-stat-row">
+                    <div className="settings-row-label">{t.dashboard_stat_time}</div>
+                    <div className="dash-stat-value">{totalLabel}</div>
+                  </div>
+                  <div className="dash-stat-row">
+                    <div className="settings-row-label">{t.dashboard_stat_thisweek}</div>
+                    <div className="dash-stat-value">{thisWeek}</div>
+                  </div>
+                </div>
 
-            {/* Usage — monthly transcription minutes by class. Same
-                outlined card visual as Stats. */}
-            <UsageBars t={t} reloadSignal={total} />
+                {/* Usage — monthly transcription minutes by class. Same
+                    outlined card visual as Stats. */}
+                <UsageBars t={t} reloadSignal={total} />
+              </>
+            )}
           </div>
           <OverlayScrollbar scrollRef={dashLeftRef} name="corder-sb-dashboard" />
         </div>

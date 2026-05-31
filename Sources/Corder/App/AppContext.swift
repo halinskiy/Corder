@@ -466,26 +466,17 @@ enum SourceMode: String {
 enum UserTier: String { case free, pro, max }
 
 extension UserTier {
-    /// TEST MODE: a single 60-minute cap for every tier, regardless
-    /// of subscription. We use this to validate the cap-then-fallback
-    /// path end-to-end before paid plans ship — once Paddle is wired
-    /// up, restore the per-tier ladder commented out below.
-    static let testAdvancedCapSeconds: Int = 60 * 60
-
     /// Per-tier monthly cap on "advanced" transcription seconds —
     /// the cloud models (Gemini, Whisper-cloud) that cost real
-    /// compute. Returning `nil` means unlimited (the Max tier).
-    /// On-device `whisperLocal` is unmetered for every tier.
+    /// compute. Returning `nil` means unlimited (the Max tier; the
+    /// Usage bar pins to "unlimited"). On-device `whisperLocal` is
+    /// unmetered for every tier.
     var advancedMonthlyLimitSeconds: Int? {
-        // TEMP — same low cap for everyone so the auto-fallback to
-        // local Whisper can be observed without burning real cloud
-        // budget. Replace with the switch when monetisation goes live.
-        return Self.testAdvancedCapSeconds
-        // switch self {
-        // case .free: return 60 * 60     // 1 hour / month
-        // case .pro:  return 1500 * 60   // 25 hours / month
-        // case .max:  return nil         // unlimited
-        // }
+        switch self {
+        case .free: return 60 * 60        // 1 hour / month
+        case .pro:  return 1500 * 60      // 25 hours / month
+        case .max:  return nil            // unlimited
+        }
     }
 }
 

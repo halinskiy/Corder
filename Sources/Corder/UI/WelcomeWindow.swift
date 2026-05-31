@@ -819,6 +819,7 @@ private struct WelcomeView: View {
         let wasFirst = !AppSettings.hasSignedInBefore
         AppSettings.setUserEmail(email)
         AppSettings.setHasSignedInBefore(true)
+        SupabaseTierSync.applyFromCurrentSession()
         onFinish(.init(provider: "email", displayName: nil, email: email,
                        wasFirstSignIn: wasFirst))
     }
@@ -1537,6 +1538,7 @@ private struct SignInInteractive: View {
                             ?? metadata["name"]?.stringValue) as String?
                 if !email.isEmpty { AppSettings.setUserEmail(email) }
                 if let name, !name.isEmpty { AppSettings.setUserName(name) }
+                SupabaseTierSync.applyFromCurrentSession()
                 let wasFirst = !AppSettings.hasSignedInBefore
                 AppSettings.setHasSignedInBefore(true)
                 onSuccess(.init(
@@ -1598,12 +1600,14 @@ private struct SignInInteractive: View {
 /// Google "G" — official 4-colour logo loaded from a bundled PNG
 /// (`Sources/Corder/Resources/icons/google-g.png` + `@2x`).
 /// Falls back to an empty view if the asset can't be found,
-/// rather than crashing.
+/// rather than crashing — and goes through `Bundle.corderResources`
+/// instead of `Bundle.module`, which fatal-errors on every tester
+/// Mac because its candidate path doesn't include `Contents/Resources/`.
 private struct GoogleG: View {
     var body: some View {
-        if let url = Bundle.module.url(forResource: "google-g",
-                                       withExtension: "png",
-                                       subdirectory: "icons"),
+        if let url = Bundle.corderResources?.url(forResource: "google-g",
+                                                 withExtension: "png",
+                                                 subdirectory: "icons"),
            let nsImage = NSImage(contentsOf: url) {
             Image(nsImage: nsImage)
                 .resizable()
