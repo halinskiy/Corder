@@ -104,13 +104,21 @@ export function MainHeader({
 }
 
 function ThemeSwitch({ t }: { t: T }) {
-  const { toggle } = useTheme();
+  const { isDark, toggle } = useTheme();
+  // Tooltip shows what the user will GET if they click (Apple's
+  // pattern), not the current state. In light mode → "Dark theme",
+  // in dark mode → "Light theme". Falls back to the legacy
+  // single-string key on locales that haven't translated the
+  // directional pair yet.
+  const label = isDark
+    ? (t.btn_theme_to_light ?? t.btn_theme_title)
+    : (t.btn_theme_to_dark ?? t.btn_theme_title);
   return (
-    <Tooltip label={t.btn_theme_title}>
+    <Tooltip label={label}>
       <button
         className="toolbar-icon-btn"
         onClick={toggle}
-        aria-label={t.btn_theme_title}
+        aria-label={label}
       >
         <Moon size={16} strokeWidth={2} />
       </button>
@@ -140,8 +148,25 @@ function SubmitLogsButton({
   // not when the button is clicked — so an accidental click never
   // ships the log. Undo cancels the timer and nothing leaves the Mac.
   const pendingRef = React.useRef<number | null>(null);
+  // Rate-limit to 1 report per hour. A user mashing the Bug icon
+  // used to fill the maintainer's inbox in seconds; the localStorage
+  // timestamp is enforced here client-side. A second guard lives on
+  // the Worker (TODO) so this can't be bypassed by a fresh install.
+  const SUBMIT_COOLDOWN_MS = 60 * 60 * 1000;
+  const LAST_SUBMIT_KEY = "corder.lastSubmitLogsAt";
   const onClick = () => {
     if (busy || pendingRef.current !== null) return;
+    let lastAt = 0;
+    try { lastAt = parseInt(localStorage.getItem(LAST_SUBMIT_KEY) ?? "0", 10) || 0; } catch {}
+    const sinceMs = Date.now() - lastAt;
+    if (sinceMs < SUBMIT_COOLDOWN_MS) {
+      const minutesLeft = Math.max(1, Math.ceil((SUBMIT_COOLDOWN_MS - sinceMs) / 60_000));
+      onToast(
+        (t.submit_logs_cooldown ?? "You can send a new report in ~{m} min.").replace("{m}", String(minutesLeft)),
+        "error"
+      );
+      return;
+    }
     const cancel = () => {
       if (pendingRef.current !== null) {
         window.clearTimeout(pendingRef.current);
@@ -154,6 +179,7 @@ function SubmitLogsButton({
       pendingRef.current = null;
       try {
         await submitLogs();
+        try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
         onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
       } catch {
         onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
