@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.15] — 2026-05-31
+
+### Fixed
+- **Auto-title and auto-summary now work for Pro / Max** without a local Google API key. Both helpers were checking `GeminiTranscriber.apiKey` and silently returning nil when the file wasn't on disk — they now route through the same Worker proxy as the transcribe path (server-side Google key, JWT auth).
+
 ## [0.13.14] — 2026-05-31
 
 ### Fixed
