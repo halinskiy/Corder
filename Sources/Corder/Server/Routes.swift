@@ -103,6 +103,14 @@ enum Routes {
         }
         server.get["/api/update-status"] = { _ in updateStatus() }
         server.post["/api/update-check"] = { _ in updateCheck() }
+        // Re-opens the Welcome wizard at the sign-in step. Used by
+        // the profile popover when the user is signed-out and taps
+        // "Sign in" — there's no in-window auth surface, the wizard
+        // is the only auth flow we have.
+        server.post["/api/open-welcome"] = { _ in
+            Task { @MainActor in WelcomeWindowController.shared.presentManually() }
+            return .ok(.text("ok"))
+        }
         server.post["/api/account/signout"] = { _ in accountSignOut() }
         server.post["/api/account/delete"] = { _ in accountDelete() }
         server.get["/api/account/mcp-token"] = { _ in mcpToken() }
@@ -706,6 +714,16 @@ enum Routes {
     /// we just expose the latest verdict.
     private static func updateStatus() -> HttpResponse {
         let v = AvailableUpdateSnapshot.read()
+        // Opportunistically kick Sparkle's silent background check
+        // when the React poll arrives and we don't yet have a
+        // resolved update. Sparkle's own 24h scheduled check might
+        // not have fired since install — without this nudge the
+        // pill could take a full day to appear after a fresh release.
+        // checkInBackground is a no-op if a check is already in
+        // flight, so the polling cadence (60 s) can't double-fire it.
+        if v == nil {
+            Task { @MainActor in UpdateController.shared.checkInBackground() }
+        }
         var payload: [String: Any] = ["available": v != nil]
         if let v = v { payload["version"] = v }
         return jsonResponse(payload)

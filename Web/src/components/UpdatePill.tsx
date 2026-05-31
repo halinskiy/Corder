@@ -60,11 +60,12 @@ export function UpdatePill({ t, onToast }: Props) {
     window.setTimeout(() => setBusy(false), 2200);
   };
 
-  // Append the target version so the user knows exactly what they're
-  // about to install — useful when the appcast bumps twice in a day.
-  const label = version
-    ? `${t.update_available_label} ${version}`
-    : t.update_available_label;
+  // Just "Update available" — no specific version number per
+  // Kostya's call. Two appcast bumps in a day still surface as a
+  // single pill that re-fires the dialog on click; the dialog
+  // itself shows the version.
+  void version;
+  const label = t.update_available_label;
 
   return (
     <Tooltip label={t.update_available_title}>

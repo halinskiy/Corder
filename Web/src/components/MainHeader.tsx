@@ -49,7 +49,11 @@ export function MainHeader({
   /// Fires when the user clicks "Dashboard" in the profile popover —
   /// always returns to the landing surface (parent clears activeId).
   onOpenDashboard: () => void;
-  onToast: (msg: string, kind?: "success" | "error") => void;
+  onToast: (
+    msg: string,
+    kind?: "success" | "error",
+    opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }
+  ) => void;
   t: T;
 }) {
   return (
@@ -124,20 +128,48 @@ function SubmitLogsButton({
   onToast,
 }: {
   t: T;
-  onToast: (msg: string, kind?: "success" | "error") => void;
+  onToast: (
+    msg: string,
+    kind?: "success" | "error",
+    opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }
+  ) => void;
 }) {
   const [busy, setBusy] = React.useState(false);
-  const onClick = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await submitLogs();
-      onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
-    } catch {
-      onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
-    } finally {
+  // 10-second send-with-undo, same UX as the archive flow. The
+  // actual `submitLogs()` POST fires when the countdown elapses,
+  // not when the button is clicked — so an accidental click never
+  // ships the log. Undo cancels the timer and nothing leaves the Mac.
+  const pendingRef = React.useRef<number | null>(null);
+  const onClick = () => {
+    if (busy || pendingRef.current !== null) return;
+    const cancel = () => {
+      if (pendingRef.current !== null) {
+        window.clearTimeout(pendingRef.current);
+        pendingRef.current = null;
+      }
       setBusy(false);
-    }
+    };
+    setBusy(true);
+    pendingRef.current = window.setTimeout(async () => {
+      pendingRef.current = null;
+      try {
+        await submitLogs();
+        onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
+      } catch {
+        onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
+      } finally {
+        setBusy(false);
+      }
+    }, 10_000);
+    onToast(
+      t.submit_logs_pending ?? "Sending log in 10s…",
+      "success",
+      {
+        action: { label: t.toast_undo, onClick: cancel },
+        durationMs: 10_000,
+        countdown: true,
+      }
+    );
   };
   return (
     <Tooltip label={t.submit_logs_title ?? "Send a bug report"}>

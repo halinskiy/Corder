@@ -112,11 +112,18 @@ enum LocalWhisperTranscriber {
 
     // MARK: - Tunables
 
-    /// Default variant chosen on a fresh install. Multilingual large-v3
-    /// turbo is the right "feels instant" floor for a 30-min meeting on
-    /// M-series, but ~1.5 GB on disk — the picker lets the user trade
-    /// quality for download size.
-    nonisolated static let defaultVariant: Variant = .turbo
+    /// Default variant chosen on a fresh install. Turbo (large-v3-turbo,
+    /// ~1.5 GB on disk, ~3 GB RAM at inference) is the "feels instant"
+    /// floor on M-series with 16 GB+ RAM. On an 8 GB M1, though, turbo
+    /// swaps the whole machine into the ground and transcription
+    /// effectively hangs — we silently default to Base (~150 MB, ~500
+    /// MB RAM) on those Macs so the on-device path actually completes.
+    /// The picker still lets the user upgrade to Turbo if they want.
+    nonisolated static var defaultVariant: Variant {
+        let bytes = ProcessInfo.processInfo.physicalMemory
+        let gb = bytes / 1_073_741_824 // 1024^3
+        return gb <= 8 ? .base : .turbo
+    }
 
     /// VAD pre-pass thresholds, mirror cloud Whisper. Talk-heavy meetings
     /// sail through unchanged; idle mic tracks get squeezed.

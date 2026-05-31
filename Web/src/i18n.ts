@@ -284,6 +284,10 @@ interface Strings {
   submit_logs_title?: string;
   submit_logs_success?: string;
   submit_logs_failed?: string;
+  submit_logs_pending?: string;
+  profile_signed_out_title?: string;
+  profile_signed_out_body?: string;
+  profile_sign_in?: string;
   model_gemini?: string;
   model_whisper_cloud?: string;
   model_cloud?: string;
@@ -595,6 +599,10 @@ const ru: Strings = {
   submit_logs_title: "Отправить отчёт",
   submit_logs_success: "Логи отправлены. Спасибо!",
   submit_logs_failed: "Не получилось отправить лог. Попробуй ещё раз.",
+  submit_logs_pending: "Отправляем лог…",
+  profile_signed_out_title: "Вы не вошли",
+  profile_signed_out_body: "Войдите, чтобы получить доступ к аккаунту.",
+  profile_sign_in: "Войти",
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
   model_cloud: "облако",
@@ -876,6 +884,10 @@ const en: Strings = {
   submit_logs_title: "Send a bug report",
   submit_logs_success: "Logs sent. Thanks!",
   submit_logs_failed: "Couldn't send the log. Try again.",
+  submit_logs_pending: "Sending log…",
+  profile_signed_out_title: "Not signed in",
+  profile_signed_out_body: "Sign in to access your account.",
+  profile_sign_in: "Sign in",
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
   model_cloud: "cloud",
@@ -1141,6 +1153,10 @@ const uk: Strings = {
   submit_logs_title: "Надіслати звіт",
   submit_logs_success: "Логи надіслано. Дякую!",
   submit_logs_failed: "Не вдалося надіслати лог. Спробуй ще раз.",
+  submit_logs_pending: "Надсилаємо лог…",
+  profile_signed_out_title: "Ви не увійшли",
+  profile_signed_out_body: "Увійдіть, щоб отримати доступ до акаунта.",
+  profile_sign_in: "Увійти",
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
   model_cloud: "хмара",
