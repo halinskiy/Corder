@@ -7,7 +7,7 @@ import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
-import { UsageBars } from "./UsageBars";
+// import { UsageBars } from "./UsageBars"; // hidden for now
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
 /// Same filled-bust glyph the sidebar uses next to each meeting's
@@ -348,9 +348,10 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
                   </div>
                 </div>
 
-                {/* Usage — monthly transcription minutes by class. Same
-                    outlined card visual as Stats. */}
-                <UsageBars t={t} reloadSignal={total} />
+                {/* Usage block hidden for now — re-enable when paid
+                    plans are live and the per-tier limits are real
+                    again (we just rolled the 60-min test cap out). */}
+                {/* <UsageBars t={t} reloadSignal={total} /> */}
               </>
             )}
           </div>
