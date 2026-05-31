@@ -161,7 +161,7 @@ export function SettingsPane({
         <Toggle
           label={t.settings_telemetry_title ?? "Help improve Corder"}
           desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts (recordings, transcribe success/fail, Mac model, app version) to the maintainer once a day. No transcripts, no audio, no email — your account is hashed before it leaves the Mac."}
-          checked={(s?.telemetry as boolean | undefined) ?? false}
+          checked={(s?.telemetry as boolean | undefined) ?? true}
           disabled={!loaded}
           onChange={(v) => patch({ telemetry: v })}
         />
