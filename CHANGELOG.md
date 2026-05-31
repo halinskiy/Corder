@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.10] — 2026-05-31
+
+### Fixed
+- App icon stays canonical white on macOS Tahoe (26+) in **dark mode**. Tahoe auto-tints legacy `.icns` icons to near-black on dark backgrounds — we now ship an Asset Catalog with explicit dark + light variants pointing at the same canonical white squircle, so the system uses our copy instead of the auto-tinted one.
+
 ## [0.13.9] — 2026-05-31
 
 ### Changed
