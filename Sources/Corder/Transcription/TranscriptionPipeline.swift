@@ -42,10 +42,12 @@ final class TranscriptionPipeline {
     /// the API call, so the user never sees a meeting `.failed` with
     /// `noKey` for a provider they can't configure themselves.
     private func cloudKeyAvailable(for provider: TranscriptionProvider) -> Bool {
-        // Worker proxy currently covers Whisper Cloud only. Gemini
-        // still needs a local key (Files-API upload chain isn't
-        // proxied yet); when we add that, drop this guard.
-        if provider == .whisper,
+        // Worker proxy covers Whisper Cloud AND Gemini (the
+        // catch-all `/transcribe/gemini-proxy/*` path forwards the
+        // Files-API upload chain + generateContent with a server-
+        // side Google key). A signed-in user passes the tier gate
+        // server-side; no local key required.
+        if (provider == .whisper || provider == .gemini),
            SupabaseClientHolder.shared.auth.currentSession != nil {
             return true
         }

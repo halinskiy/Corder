@@ -57,7 +57,34 @@ enum GeminiTranscriber {
     }
 
     private static let model = "gemini-2.5-flash"
-    private static let endpoint = "https://generativelanguage.googleapis.com/v1beta"
+    private static let directEndpoint = "https://generativelanguage.googleapis.com/v1beta"
+    private static let proxyEndpoint = "https://corder-api.empqwork.workers.dev/transcribe/gemini-proxy/v1beta"
+
+    /// Base URL the current call should target. When signed in we
+    /// go through the Cloudflare Worker proxy (server-side Google
+    /// key, JWT-gated by `app_metadata.tier`). When signed out we
+    /// keep the legacy direct hit with whatever `?key=` the caller
+    /// passed. Both paths share `/v1beta` so the rest of the URL
+    /// builders downstream don't have to change.
+    private static func endpointBase() async -> String {
+        let jwt = await Self.currentJWT()
+        return jwt.isEmpty ? directEndpoint : proxyEndpoint
+    }
+    private static func currentJWT() async -> String {
+        await MainActor.run { _currentJWTSync() }
+    }
+    @MainActor
+    private static func _currentJWTSync() -> String {
+        SupabaseClientHolder.shared.auth.currentSession?.accessToken ?? ""
+    }
+    /// Authorization header to attach to proxy requests. Returns
+    /// `nil` for direct (signed-out) traffic — Google reads the
+    /// key from the query string and rejects unexpected Auth
+    /// headers on the resumable-upload start path.
+    private static func proxyAuthHeader() async -> String? {
+        let jwt = await currentJWT()
+        return jwt.isEmpty ? nil : "Bearer \(jwt)"
+    }
 
     /// Tells the prompt builder how to label speakers in the output.
     /// `single` — there's exactly one speaker (mic.wav of the local user).
@@ -116,7 +143,12 @@ enum GeminiTranscriber {
                             mode: TranscribeMode = .diarize,
                             singlePass: Bool = false,
                             expectedSpeakers: Int? = nil) async throws -> [Turn] {
-        guard let key = apiKey else { throw GError.missingAPIKey }
+        // Signed-in users get cloud Gemini through the Worker proxy
+        // (server-side Google key, JWT auth). Signed-out builds /
+        // dev shells still need a local key in ~/.config/corder/gemini_key.
+        let jwt = await Self.currentJWT()
+        let key = apiKey ?? ""
+        if jwt.isEmpty && key.isEmpty { throw GError.missingAPIKey }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw GError.parse("audio file missing at \(audioURL.path)")
         }
@@ -430,7 +462,8 @@ enum GeminiTranscriber {
         // `Protocol: resumable` + `Command: start` header pair, Google
         // happily returns 200 with an empty body and no `X-Goog-Upload-URL`
         // header — the previous code path was failing here every time.
-        let startURL = URL(string: "\(endpoint.replacingOccurrences(of: "/v1beta", with: "/upload/v1beta"))/files?key=\(apiKey)")!
+        let base = await Self.endpointBase()
+        let startURL = URL(string: "\(base.replacingOccurrences(of: "/v1beta", with: "/upload/v1beta"))/files?key=\(apiKey)")!
         var startReq = URLRequest(url: startURL)
         startReq.httpMethod = "POST"
         startReq.setValue("resumable", forHTTPHeaderField: "X-Goog-Upload-Protocol")
@@ -438,6 +471,9 @@ enum GeminiTranscriber {
         startReq.setValue("\(size)", forHTTPHeaderField: "X-Goog-Upload-Header-Content-Length")
         startReq.setValue("audio/wav", forHTTPHeaderField: "X-Goog-Upload-Header-Content-Type")
         startReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let h = await Self.proxyAuthHeader() {
+            startReq.setValue(h, forHTTPHeaderField: "Authorization")
+        }
         let startBody: [String: Any] = ["file": ["display_name": displayName]]
         startReq.httpBody = try JSONSerialization.data(withJSONObject: startBody)
 
@@ -483,12 +519,15 @@ enum GeminiTranscriber {
         // URL, but the file resource for status lives under /files/{name} —
         // strip and rebuild.
         let name = (fileURI as NSString).lastPathComponent  // "abc123"
-        let statusURL = URL(string: "\(endpoint)/files/\(name)?key=\(apiKey)")!
+        let base = await Self.endpointBase()
+        let statusURL = URL(string: "\(base)/files/\(name)?key=\(apiKey)")!
+        let proxyAuth = await Self.proxyAuthHeader()
 
         let deadline = Date().addingTimeInterval(120)
         while Date() < deadline {
             var req = URLRequest(url: statusURL)
             req.httpMethod = "GET"
+            if let h = proxyAuth { req.setValue(h, forHTTPHeaderField: "Authorization") }
             let (data, resp) = try await URLSession.shared.data(for: req)
             try throwIfBilling(http: resp, data: data)
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -514,10 +553,14 @@ enum GeminiTranscriber {
     /// time projection, since the missing middle shifts every surviving
     /// turn). Salvage is only allowed once we can't split any further.
     private static func generate(fileURI: String, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil, salvageOnTruncation: Bool = true) async throws -> [Turn] {
-        let url = URL(string: "\(endpoint)/models/\(model):generateContent?key=\(apiKey)")!
+        let base = await Self.endpointBase()
+        let url = URL(string: "\(base)/models/\(model):generateContent?key=\(apiKey)")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let h = await Self.proxyAuthHeader() {
+            req.setValue(h, forHTTPHeaderField: "Authorization")
+        }
         req.timeoutInterval = 600
 
         // Two prompt variants. The single-speaker one (mic.wav) is much
@@ -755,9 +798,13 @@ enum GeminiTranscriber {
 
     private static func deleteFile(fileURI: String, apiKey: String) async throws {
         let name = (fileURI as NSString).lastPathComponent
-        let url = URL(string: "\(endpoint)/files/\(name)?key=\(apiKey)")!
+        let base = await Self.endpointBase()
+        let url = URL(string: "\(base)/files/\(name)?key=\(apiKey)")!
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
+        if let h = await Self.proxyAuthHeader() {
+            req.setValue(h, forHTTPHeaderField: "Authorization")
+        }
         _ = try? await URLSession.shared.data(for: req)
     }
 

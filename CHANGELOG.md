@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.13] — 2026-05-31
+
+### Added
+- **Gemini cloud transcription now also works without a local API key.** A second catch-all proxy in the Worker (`/transcribe/gemini-proxy/*`) forwards the full Files-API upload chain + `generateContent` to Google with our server key, gated by `app_metadata.tier`. Pro / Max users can now pick either Whisper Cloud or Gemini Flash and have it just work — no local key files in `~/.config/corder/`.
+
 ## [0.13.12] — 2026-05-31
 
 ### Added
