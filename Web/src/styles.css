@@ -1636,6 +1636,57 @@ input[type="text"]:focus, input[type="search"]:focus {
   transition: background 80ms ease, color 80ms ease;
 }
 .news-banner-x:hover { background: var(--bg-hover); color: var(--fg); }
+
+/* Collapsed news state — small glossy green pill. Tap to expand into
+   the full card. Shimmer is a soft white diagonal sweep across the
+   pill, looping every ~2.6 s so the pill stays alive in peripheral
+   vision without screaming. */
+.news-pill {
+  appearance: none;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-bottom: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-pressed));
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 6px 16px -10px rgba(14, 124, 68, 0.55);
+  transition: transform 80ms ease, box-shadow 120ms ease;
+}
+.news-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px -10px rgba(14, 124, 68, 0.7);
+}
+.news-pill:active { transform: translateY(0); }
+.news-pill-label { position: relative; z-index: 1; }
+.news-pill-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: news-pill-shine 2.6s linear infinite;
+  pointer-events: none;
+}
+@keyframes news-pill-shine {
+  0%   { transform: translateX(-120%); }
+  60%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
 /* "Settings" tab on the Dashboard right column when opened from the
    profile menu — leading ChevronLeft + label, whole chip is the
    back-to-Recent target. Tighter gap than the sort trigger so the

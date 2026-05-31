@@ -32,6 +32,7 @@ function saveDismissed(s: Set<string>) {
 export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) {
   const [items, setItems] = React.useState<NewsItem[]>([]);
   const [dismissed, setDismissed] = React.useState<Set<string>>(() => loadDismissed());
+  const [expanded, setExpanded] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -69,16 +70,39 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
     else window.open(visible.cta_url, "_blank", "noopener,noreferrer");
   };
 
+  // Collapsed state: a single glossy green pill with the "New" label.
+  // Tapping it expands into the full outline card (title + body + CTA
+  // + Skip + ×). Skip / × dismiss the news item permanently. The
+  // expand state is session-local — closing and reopening the app
+  // brings the pill back; the only thing that hides the news for good
+  // is an explicit dismiss.
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="news-pill"
+        onClick={() => setExpanded(true)}
+        aria-label={visible.title}
+      >
+        <span className="news-pill-shimmer" aria-hidden />
+        <span className="news-pill-label">{t.news_eyebrow ?? "New"}</span>
+      </button>
+    );
+  }
+
+  const skipLabel = t.rating_skip ?? "Skip";
+
   return (
     <div className="trans-banner clarify-banner news-banner">
       {visible.dismissible !== false && (
         <button
           type="button"
-          className="news-banner-x"
+          className="clarify-dismiss"
           onClick={dismiss}
+          title={skipLabel}
           aria-label={t.btn_dismiss ?? "Dismiss"}
         >
-          <X size={14} strokeWidth={2.2} />
+          <X size={14} strokeWidth={2} />
         </button>
       )}
       <div className="clarify-text">
@@ -86,8 +110,8 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
         <div className="clarify-body">{visible.title}</div>
         {visible.body && <div className="summary-banner-sub">{visible.body}</div>}
       </div>
-      {visible.cta_label && visible.cta_url && (
-        <div className="clarify-actions clarify-actions-stack">
+      <div className="clarify-actions clarify-actions-stack">
+        {visible.cta_label && visible.cta_url && (
           <button
             type="button"
             className="clarify-btn accent"
@@ -95,8 +119,17 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
           >
             {visible.cta_label}
           </button>
-        </div>
-      )}
+        )}
+        {visible.dismissible !== false && (
+          <button
+            type="button"
+            className="clarify-btn"
+            onClick={dismiss}
+          >
+            {skipLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

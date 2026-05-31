@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.28] — 2026-05-31
+
+### Changed
+- **News banner now collapses into a glossy green "New" pill** by default. Tap to expand into the full card (title + body + CTA). Expanded card carries a Skip button alongside the × — both permanently dismiss the news item.
+- **Tester survey page redesigned** to match the OAuth callback look — `#161616` dot-grid, SF / Inter sans-serif, accent-green check. The Worker `/news` feed now points at the GH-Pages mirror (`halinskiy.github.io/3mpq-studio/#/corder-survey`).
+
 ## [0.13.27] — 2026-05-31
 
 ### Added
