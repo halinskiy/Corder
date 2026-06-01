@@ -101,10 +101,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notificationDelegate.onAction = { [weak self] action in
             switch action {
             case .openLibrary: self?.openLibrary()
+            case .openURL(let url): NSWorkspace.shared.open(url)
             }
         }
         UNUserNotificationCenter.current().delegate = notificationDelegate
         NotificationsService.requestAuthorizationIfNeeded()
+        NewsPoller.start()
         // Auto-stop the recording when macOS is about to sleep / switch
         // sessions — SCStream silently dies through those transitions,
         // and a quiet abort with no notification is the worst UX of all.

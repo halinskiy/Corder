@@ -1,5 +1,5 @@
 import React from "react";
-import { Copy, Users, Search, ChevronLeft } from "lucide-react";
+import { Copy, Users, Search } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { Tooltip } from "./Tooltip";
 import { MainHeader } from "./MainHeader";
@@ -488,21 +488,6 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                   {t.tab_advanced_settings ?? "Advanced"}
                 </span>
               </>
-            ) : downloadOpen ? (
-              // Download view replaces the Recording panel; the tab
-              // strip becomes a back-chip that returns the user to
-              // Recording. Same chevron-on-the-left pattern as the
-              // Settings strip.
-              <span
-                className="tab active dash-settings-back"
-                role="button"
-                onClick={() => setDownloadOpen(false)}
-                title={t.audio_card_title}
-                aria-label={t.audio_card_title}
-              >
-                <ChevronLeft size={14} strokeWidth={2} />
-                <span>{t.download_title ?? "Download"}</span>
-              </span>
             ) : (
               <span
                 className={"tab" + (rightTab === "recording" ? " active" : "")}

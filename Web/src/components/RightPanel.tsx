@@ -32,27 +32,28 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   return (
     <div className="right-panel">
-      {downloadOpen && (
-        <DownloadView detail={detail} t={t} />
-      )}
-      <div style={{ display: downloadOpen ? "none" : "contents" }}>
-        {detail.has_video && (
-          <ScreenVideo
-            detail={detail}
-            videoRef={screenVideoRef}
-            audioRef={audioRef}
-            currentTimeSec={currentTimeSec}
-          />
-        )}
-        <AudioCard
+      {detail.has_video && (
+        <ScreenVideo
           detail={detail}
+          videoRef={screenVideoRef}
           audioRef={audioRef}
-          onTimeUpdate={onTimeUpdate}
-          onOpenDownload={() => onDownloadChange(true)}
-          t={t}
+          currentTimeSec={currentTimeSec}
         />
-        <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
-      </div>
+      )}
+      <AudioCard
+        detail={detail}
+        audioRef={audioRef}
+        onTimeUpdate={onTimeUpdate}
+        downloadOpen={downloadOpen}
+        onToggleDownload={() => onDownloadChange(!downloadOpen)}
+        t={t}
+      />
+      {/* Inline download chooser slides in BETWEEN AudioCard and the
+          Timeline, pushing the Timeline down — same layout slot as
+          before, just no longer a full tab swap. The Download button
+          on the audio scrubber is now a toggle (active = open). */}
+      {downloadOpen && <DownloadView detail={detail} t={t} />}
+      <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
     </div>
   );
 }
@@ -62,6 +63,25 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
 /// the design system, no icons (consistency with the other inline
 /// banners). The audio element lives a sibling level up and stays
 /// mounted while this view is on screen, so playback continues.
+/// Solid Download glyph for the active-state Download button on the
+/// audio scrubber — same Heroicons Solid path used by SettingsFilled /
+/// ArchiveFilled in MainHeader. Inline so we don't pull a fresh
+/// dependency for a single icon.
+function DownloadFilled({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+    >
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Zm-9 13.5a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" />
+    </svg>
+  );
+}
+
 function DownloadView({
   detail, t,
 }: {
@@ -618,12 +638,13 @@ function FsScrubber({
  *  time / duration, and a clickable scrub line. The native <audio>
  *  element is kept hidden — we drive it through React state. */
 function AudioCard({
-  detail, audioRef, onTimeUpdate, onOpenDownload, t,
+  detail, audioRef, onTimeUpdate, downloadOpen, onToggleDownload, t,
 }: {
   detail: MeetingDetail;
   audioRef: React.RefObject<HTMLAudioElement>;
   onTimeUpdate: (sec: number) => void;
-  onOpenDownload: () => void;
+  downloadOpen: boolean;
+  onToggleDownload: () => void;
   t: T;
 }) {
   const [playing, setPlaying] = React.useState(false);
@@ -686,12 +707,15 @@ function AudioCard({
           )}
         </div>
         <button
-          className="toolbar-icon-btn audio-download-btn"
-          onClick={onOpenDownload}
+          className={"toolbar-icon-btn audio-download-btn" + (downloadOpen ? " active" : "")}
+          onClick={onToggleDownload}
           title={t.download_title}
           aria-label={t.download_title}
+          aria-pressed={downloadOpen}
         >
-          <Download size={16} strokeWidth={2} />
+          {downloadOpen
+            ? <DownloadFilled size={16} />
+            : <Download size={16} strokeWidth={2} />}
         </button>
       </div>
       <audio

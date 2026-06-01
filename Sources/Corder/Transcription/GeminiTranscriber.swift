@@ -435,27 +435,14 @@ enum GeminiTranscriber {
         }
     }
 
-    static var apiKey: String? {
-        // Reject an un-edited placeholder (e.g. bootstrap.sh's
-        // "<paste-your-gemini-api-key-here>") as if no key were set:
-        // real keys are alphanumeric and never contain angle brackets,
-        // so a tester who didn't paste one gets the clear "configure
-        // your key" path instead of a confusing Gemini 400.
-        func clean(_ s: String) -> String? {
-            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            if t.isEmpty || t.contains("<") || t.contains(">") { return nil }
-            return t
-        }
-        if let env = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
-           let k = clean(env) {
-            return k
-        }
-        let path = ("~/.config/corder/gemini_key" as NSString).expandingTildeInPath
-        if let data = try? String(contentsOfFile: path, encoding: .utf8) {
-            return clean(data)
-        }
-        return nil
-    }
+    /// Legacy `~/.config/corder/gemini_key` and `$GEMINI_API_KEY`
+    /// reads are gone — production goes through the Cloudflare
+    /// Worker proxy (`/transcribe/gemini-proxy/*`) with the user's
+    /// Supabase JWT, and the title/summary/chapters paths share the
+    /// same proxy. Returning nil keeps the property's call-sites
+    /// stable; the noKey fallback in TranscriptionPipeline diverts
+    /// the run to whisperLocal when no JWT is available either.
+    static var apiKey: String? { nil }
 
     // MARK: - File upload (resumable, single-chunk)
 

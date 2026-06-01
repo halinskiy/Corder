@@ -85,7 +85,28 @@ enum NotificationsService {
         }
     }
 
-    enum Action: String {
+    /// Per-banner action surfaced when the user clicks. `openLibrary`
+    /// is the default fallback for app-internal notifications; `openURL`
+    /// carries an external link as its payload (used by `NewsPoller`
+    /// to send the reader to the news item's CTA in the browser).
+    enum Action: RawRepresentable {
         case openLibrary
+        case openURL(URL)
+
+        var rawValue: String {
+            switch self {
+            case .openLibrary:      return "openLibrary"
+            case .openURL(let u):   return "openURL:\(u.absoluteString)"
+            }
+        }
+
+        init?(rawValue: String) {
+            if rawValue == "openLibrary" { self = .openLibrary; return }
+            if rawValue.hasPrefix("openURL:") {
+                let s = String(rawValue.dropFirst("openURL:".count))
+                if let u = URL(string: s) { self = .openURL(u); return }
+            }
+            return nil
+        }
     }
 }

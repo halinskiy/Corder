@@ -77,16 +77,47 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
   // brings the pill back; the only thing that hides the news for good
   // is an explicit dismiss.
   if (!expanded) {
+    // Full-width running marquee at the very top of the column. Click
+    // anywhere on the bar (except the × at the right edge) expands it
+    // into the full card. Marquee text duplicated so the loop seam is
+    // invisible — `translateX(-50%)` shifts by one copy's worth.
+    const eyebrow = t.news_eyebrow ?? "New";
+    const segments = Array.from({ length: 6 }, (_, i) => (
+      <span className="news-bar-seg" key={i}>
+        <span className="news-bar-bang">{eyebrow}!</span>
+        <span className="news-bar-dot" aria-hidden>•</span>
+      </span>
+    ));
     return (
-      <button
-        type="button"
-        className="news-pill"
+      <div
+        className="news-bar"
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(true); } }}
         aria-label={visible.title}
       >
-        <span className="news-pill-shimmer" aria-hidden />
-        <span className="news-pill-label">{t.news_eyebrow ?? "New"}</span>
-      </button>
+        <div className="news-bar-shimmer" aria-hidden />
+        <div className="news-bar-track" aria-hidden>
+          <div className="news-bar-marquee">
+            {segments}
+            {segments /* duplicate for seamless loop */}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="news-bar-x"
+          onPointerDown={(e) => { e.stopPropagation(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            dismiss();
+          }}
+          aria-label={t.btn_dismiss ?? "Dismiss"}
+        >
+          <X size={12} strokeWidth={2.4} />
+        </button>
+      </div>
     );
   }
 
@@ -98,9 +129,11 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
         <button
           type="button"
           className="clarify-dismiss"
-          onClick={dismiss}
-          title={skipLabel}
-          aria-label={t.btn_dismiss ?? "Dismiss"}
+          // × in expanded card just collapses back to the bar.
+          // Permanent-dismiss lives on the Skip button below.
+          onClick={() => setExpanded(false)}
+          title={t.btn_collapse ?? "Collapse"}
+          aria-label={t.btn_collapse ?? "Collapse"}
         >
           <X size={14} strokeWidth={2} />
         </button>

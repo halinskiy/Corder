@@ -1637,55 +1637,113 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .news-banner-x:hover { background: var(--bg-hover); color: var(--fg); }
 
-/* Collapsed news state — small glossy green pill. Tap to expand into
-   the full card. Shimmer is a soft white diagonal sweep across the
-   pill, looping every ~2.6 s so the pill stays alive in peripheral
-   vision without screaming. */
-.news-pill {
-  appearance: none;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  margin-bottom: 12px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-pressed));
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
+/* Collapsed news state — full-width accent strip pinned across the
+   top of the Stats column, edge-to-edge (negative margin lifts it
+   out of the column's padding). Marquee text scrolls indefinitely;
+   shimmer sweeps across; × at the right edge dismisses, click
+   anywhere else expands into the full card. */
+.news-bar {
   position: relative;
+  width: calc(100% + 40px);
+  margin: -20px -20px 0;
+  height: 24px;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
   overflow: hidden;
-  box-shadow: 0 6px 16px -10px rgba(14, 124, 68, 0.55);
-  transition: transform 80ms ease, box-shadow 120ms ease;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: background 80ms ease;
 }
-.news-pill:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px -10px rgba(14, 124, 68, 0.7);
+.news-bar:hover { background: var(--accent-pressed); }
+.news-bar:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #ffffff 60%, transparent);
 }
-.news-pill:active { transform: translateY(0); }
-.news-pill-label { position: relative; z-index: 1; }
-.news-pill-shimmer {
+.news-bar-shimmer {
   position: absolute;
   inset: 0;
   background: linear-gradient(
     100deg,
     transparent 30%,
-    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0.22) 50%,
     transparent 70%
   );
-  transform: translateX(-100%);
-  animation: news-pill-shine 2.6s linear infinite;
+  transform: translateX(-120%);
+  animation: news-bar-shine 2.8s linear infinite;
   pointer-events: none;
+  z-index: 1;
 }
-@keyframes news-pill-shine {
+@keyframes news-bar-shine {
   0%   { transform: translateX(-120%); }
-  60%  { transform: translateX(120%); }
+  55%  { transform: translateX(120%); }
   100% { transform: translateX(120%); }
+}
+.news-bar-track {
+  flex: 1 1 auto;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  /* Reserve space for the × button on the right edge. */
+  padding-right: 28px;
+}
+.news-bar-marquee {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  /* 40 s = calm scroll speed. The previous 14 s read as twitching. */
+  animation: news-bar-marquee 40s linear infinite;
+  /* Width = 2× content (we duplicate the segments in JS), so the
+     -50% endpoint lands exactly one cycle to the left. */
+  will-change: transform;
+}
+@keyframes news-bar-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.news-bar-seg {
+  display: inline-flex;
+  align-items: center;
+}
+.news-bar-bang {
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  padding: 0 14px;
+}
+.news-bar-dot {
+  opacity: 0.6;
+  font-size: 12px;
+  line-height: 1;
+}
+.news-bar-x {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  /* Bigger hit area than the visual glyph so the × is easy to land
+     on inside a 24-px tall bar. */
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: background 80ms ease, color 80ms ease;
+}
+.news-bar-x:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
 }
 /* "Settings" tab on the Dashboard right column when opened from the
    profile menu — leading ChevronLeft + label, whole chip is the
