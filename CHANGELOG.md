@@ -16,6 +16,22 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.29] — 2026-06-01
+
+### Added
+- **News marquee** in the Stats column — full-width edge-to-edge running bar with shimmer. Tap anywhere on the bar to expand into the full news card; × on the right edge dismisses the item forever (until a new id ships from the Worker `/news` feed).
+- **macOS push-notification on new news** — `NewsPoller` (Swift) polls `/news` every 30 min, posts a `UNUserNotificationCenter` banner the first time it sees an unseen id; tapping the banner opens the item's CTA in the browser. First-launch seeds the set so retroactive announcements don't spam.
+- **Notifications card in the Welcome wizard** — third tile next to Microphone + Screen Recording, marked `Optional` (Continue is not gated on it). Opens the System Settings → Notifications pane when previously denied.
+- **Download is now inline** on the Recording panel — clicking the Download icon on the audio scrubber slides a Download block in between the player and the Timeline (no more full-tab swap). The icon turns into a filled active-state chip while the block is open.
+
+### Changed
+- **Local provider keys removed from disk.** `~/.config/corder/openai_key` and `gemini_key` are no longer read. All cloud transcription / titles / summaries / chapters go through the Cloudflare Worker (`corder-api.empqwork.workers.dev`) with the user's Supabase JWT; the Worker holds the only OpenAI / Gemini secrets. No more API-secret on user disk, no more "Corder shipped requests with the wrong account" surprises.
+- **Notification action** now carries an optional URL payload so a tapped banner can open a CTA link via `NSWorkspace.shared.open` (used by the news poller).
+
+### Fixed
+- **× in the news bar permanently dismisses** the item (event-bubble guard via `pointerdown` + preventDefault). **×** in the expanded news card now just **collapses** back to the bar — only the **Skip** button kills the item for good.
+- **Check for Updates** with no update available now surfaces a confirmation modal instead of silently ack'ing — the menu item no longer looks broken on the latest build.
+
 ## [0.13.28] — 2026-05-31
 
 ### Changed

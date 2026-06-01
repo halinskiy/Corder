@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import AVFoundation
 import CoreGraphics
+import UserNotifications
 @preconcurrency import Supabase
 
 /// Welcome / onboarding window shown on first launch (and any later
@@ -407,6 +408,28 @@ private func currentScreenStatus() -> WizardPermission {
         return .granted
     }
     return .unknown
+}
+
+/// Async helper isn't worth it for an opt-in card — Apple's
+/// `getNotificationSettings` is async but cheap. We do a synchronous
+/// snapshot via a semaphore (short, off the main render path), which
+/// is fine for a one-shot read inside `@State` defaults / the
+/// `didBecomeActive` re-sync. Returns `.granted` only when authorised
+/// (provisional / ephemeral both count as banners visible).
+private func currentNotificationStatus() -> WizardPermission {
+    let sem = DispatchSemaphore(value: 0)
+    var out: WizardPermission = .unknown
+    UNUserNotificationCenter.current().getNotificationSettings { s in
+        switch s.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: out = .granted
+        case .denied:                                out = .denied
+        case .notDetermined:                         out = .unknown
+        @unknown default:                            out = .unknown
+        }
+        sem.signal()
+    }
+    _ = sem.wait(timeout: .now() + 0.5)
+    return out
 }
 
 // Earlier drafts had a `liveScreenStatus()` helper that called
@@ -1019,6 +1042,12 @@ private struct PermissionsCardsInteractive: View {
     @Binding var screenStatus: WizardPermission
     @Binding var screenDidRequest: Bool
 
+    /// Notifications is OPTIONAL — Continue does not gate on it.
+    /// Local state so we don't have to thread another binding all
+    /// the way back up to WelcomeShell.
+    @State private var notifStatus: WizardPermission = currentNotificationStatus()
+    @State private var notifDidRequest: Bool = false
+
     var body: some View {
         VStack(spacing: 14) {
             permissionCard(
@@ -1026,19 +1055,33 @@ private struct PermissionsCardsInteractive: View {
                 description: "Record your side of the call.",
                 status: micStatus,
                 primaryLabel: micPrimaryLabel,
-                onPrimary: micPrimaryAction
+                onPrimary: micPrimaryAction,
+                optional: false
             )
             permissionCard(
                 title: "Screen Recording",
                 description: "Capture the other side's audio.",
                 status: screenStatus,
                 primaryLabel: screenPrimaryLabel,
-                onPrimary: screenPrimaryAction
+                onPrimary: screenPrimaryAction,
+                optional: false
+            )
+            permissionCard(
+                title: "Notifications",
+                description: "Get a banner when a transcript is ready.",
+                status: notifStatus,
+                primaryLabel: notifPrimaryLabel,
+                onPrimary: notifPrimaryAction,
+                optional: true
             )
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+            notifStatus = currentNotificationStatus()
+        }
     }
 
     /// Pixel-for-pixel match of the Library's
@@ -1057,7 +1100,8 @@ private struct PermissionsCardsInteractive: View {
         description: String,
         status: WizardPermission,
         primaryLabel: String,
-        onPrimary: @escaping () -> Void
+        onPrimary: @escaping () -> Void,
+        optional: Bool = false
     ) -> some View {
         // Two layouts:
         //   • granted → no CTA pill, just a small green checkmark
@@ -1091,10 +1135,24 @@ private struct PermissionsCardsInteractive: View {
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(title)
-                            .font(.system(size: 18, weight: .light))
-                            .lineSpacing(18 * 0.35)
-                            .foregroundColor(.primary)
+                        HStack(spacing: 8) {
+                            Text(title)
+                                .font(.system(size: 18, weight: .light))
+                                .lineSpacing(18 * 0.35)
+                                .foregroundColor(.primary)
+                            if optional {
+                                Text("Optional")
+                                    .font(.system(size: 10.5, weight: .semibold))
+                                    .tracking(0.6)
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                            .fill(Color.black.opacity(0.06))
+                                    )
+                            }
+                        }
                         Text(description)
                             .font(.system(size: 13.5))
                             .foregroundColor(.secondary)
@@ -1150,6 +1208,36 @@ private struct PermissionsCardsInteractive: View {
     private var screenPrimaryLabel: String {
         if screenStatus == .granted { return "" }
         return screenDidRequest ? "Open Settings" : "Allow"
+    }
+
+    // ── Notifications actions (optional) ────────────────────────
+
+    private var notifPrimaryLabel: String {
+        switch notifStatus {
+        case .denied:  return "Open Settings"
+        case .unknown: return "Allow"
+        case .granted: return ""
+        }
+    }
+
+    private func notifPrimaryAction() {
+        switch notifStatus {
+        case .denied:
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.3mpq.Corder"
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)") {
+                NSWorkspace.shared.open(url)
+            }
+            notifDidRequest = true
+        case .unknown:
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                DispatchQueue.main.async {
+                    notifStatus = granted ? .granted : .denied
+                    notifDidRequest = true
+                }
+            }
+        case .granted:
+            break
+        }
     }
 
     private func screenPrimaryAction() {

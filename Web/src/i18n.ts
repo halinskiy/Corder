@@ -215,6 +215,7 @@ interface Strings {
   settings_theme_opt_light?: string;
   settings_theme_opt_dark?: string;
   btn_dismiss?: string;
+  btn_collapse?: string;
   news_eyebrow?: string;
   settings_tier_upgrade_label?: string;
   settings_tier_upgrade_desc?: string;

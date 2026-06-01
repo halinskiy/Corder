@@ -585,34 +585,14 @@ enum WhisperTranscriber {
 
     // MARK: - API key
 
-    static var apiKey: String? {
-        // Same placeholder-rejection rule as Gemini: real keys never
-        // contain angle brackets, so an un-edited bootstrap stub fails
-        // closed with the clear "configure your key" path.
-        func clean(_ s: String) -> String? {
-            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            if t.isEmpty || t.contains("<") || t.contains(">") { return nil }
-            return t
-        }
-        // File first, env second. Earlier we read env first as a CI
-        // / dev convenience, but a stale `OPENAI_API_KEY` exported
-        // months ago in the user's shell silently shadowed the real
-        // key in `~/.config/corder/openai_key` — Corder shipped
-        // requests with the wrong account's key and hit
-        // `insufficient_quota` while the configured account had $10.
-        // The file is the authoritative source: it's the location
-        // Welcome wizard / docs reference.
-        let path = ("~/.config/corder/openai_key" as NSString).expandingTildeInPath
-        if let data = try? String(contentsOfFile: path, encoding: .utf8),
-           let k = clean(data) {
-            return k
-        }
-        if let env = ProcessInfo.processInfo.environment["OPENAI_API_KEY"],
-           let k = clean(env) {
-            return k
-        }
-        return nil
-    }
+    /// Legacy `~/.config/corder/openai_key` and `$OPENAI_API_KEY`
+    /// reads are gone — production goes through the Cloudflare
+    /// Worker proxy (`/transcribe/whisper`) with the user's Supabase
+    /// JWT. Returning nil here funnels every direct-to-OpenAI code
+    /// path into the existing noKey fallback that re-routes the run
+    /// to `whisperLocal`. We keep the property so call-sites stay
+    /// stable.
+    static var apiKey: String? { nil }
 
     /// Route resolver: prefer the Cloudflare Worker proxy (server
     /// key, JWT auth, tier-gated) when the user is signed in.

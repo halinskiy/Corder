@@ -247,26 +247,13 @@ enum WhisperCleanup {
     // MARK: - API key
 
     /// Reads the OpenAI API key from the same source `WhisperTranscriber`
-    /// uses: `~/.config/corder/openai_key` first, `$OPENAI_API_KEY` env
-    /// as a fallback. Inline copy of `WhisperTranscriber.apiKey` so this
-    /// file stays self-contained without forcing `apiKey` to become
-    /// public surface. TODO: extract into a shared `OpenAIKey` helper
-    /// once a third consumer appears.
-    private static func readAPIKey() -> String? {
-        func clean(_ s: String) -> String? {
-            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            if t.isEmpty || t.contains("<") || t.contains(">") { return nil }
-            return t
-        }
-        let path = ("~/.config/corder/openai_key" as NSString).expandingTildeInPath
-        if let data = try? String(contentsOfFile: path, encoding: .utf8),
-           let k = clean(data) {
-            return k
-        }
-        if let env = ProcessInfo.processInfo.environment["OPENAI_API_KEY"],
-           let k = clean(env) {
-            return k
-        }
-        return nil
-    }
+    /// Legacy local-key fallback removed — production users go through
+    /// the Cloudflare Worker proxy (`/transcribe/whisper-cleanup`) with
+    /// their Supabase JWT. The .app never ships an OpenAI key, and the
+    /// `~/.config/corder/openai_key` file is no longer read so we can
+    /// stop documenting a path that distributes the project's billing
+    /// risk onto every install. Returning nil keeps the call-site
+    /// signature stable; pipeline already falls through to whisperLocal
+    /// when the cleanup step is unreachable.
+    private static func readAPIKey() -> String? { nil }
 }

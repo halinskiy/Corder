@@ -20,13 +20,22 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
 
     // MARK: - User-initiated check
 
+    private var pendingUserInitiatedCheck = false
+
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
+        // The user hit "Check for Updates" — remember the click so the
+        // "no update found" path can surface a confirmation instead of
+        // silently ack'ing (which made it look like nothing happened).
+        // Sparkle calls this BEFORE either `showUpdateFound:` or
+        // `showUpdateNotFoundWithError:`.
+        pendingUserInitiatedCheck = true
         _ = cancellation
     }
 
     // MARK: - Update found
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state updateState: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        pendingUserInitiatedCheck = false
         let s = self.state
         s.versionString = appcastItem.displayVersionString
         s.releaseNotes = htmlToPlain(appcastItem.itemDescription ?? "")
@@ -63,7 +72,26 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
 
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
         _ = error
-        acknowledgement()
+        // Silent scheduled check → just ack, no UI. User-initiated
+        // check → show the modal in `.upToDate` state so the click
+        // gets a confirmation ("you are on the latest version") +
+        // an OK button to dismiss. Without this, the menu item
+        // looked broken.
+        guard pendingUserInitiatedCheck else { acknowledgement(); return }
+        pendingUserInitiatedCheck = false
+        let s = self.state
+        s.versionString = ""
+        s.releaseNotes = nil
+        s.phase = .upToDate
+        window.onPrimary = { [weak self] in
+            acknowledgement()
+            self?.window.close()
+        }
+        window.onDismiss = { [weak self] in
+            acknowledgement()
+            self?.window.close()
+        }
+        window.present()
     }
 
     // MARK: - Updater error

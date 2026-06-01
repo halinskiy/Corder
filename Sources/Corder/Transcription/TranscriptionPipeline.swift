@@ -42,23 +42,18 @@ final class TranscriptionPipeline {
     /// the API call, so the user never sees a meeting `.failed` with
     /// `noKey` for a provider they can't configure themselves.
     private func cloudKeyAvailable(for provider: TranscriptionProvider) -> Bool {
-        // Worker proxy covers Whisper Cloud AND Gemini (the
-        // catch-all `/transcribe/gemini-proxy/*` path forwards the
-        // Files-API upload chain + generateContent with a server-
-        // side Google key). A signed-in user passes the tier gate
-        // server-side; no local key required.
-        if (provider == .whisper || provider == .gemini),
-           SupabaseClientHolder.shared.auth.currentSession != nil {
+        // Cloud providers go through the Cloudflare Worker proxy with
+        // the user's Supabase JWT — no local key is consulted any
+        // more. The legacy `~/.config/corder/{openai,gemini}_key`
+        // fallback was removed in 0.13.29 to keep the .app from ever
+        // depending on a user-side API secret. A signed-out user can
+        // only use whisperLocal.
+        switch provider {
+        case .whisper, .gemini:
+            return SupabaseClientHolder.shared.auth.currentSession != nil
+        case .whisperLocal:
             return true
         }
-        let path: String
-        switch provider {
-        case .gemini:        path = "\(NSHomeDirectory())/.config/corder/gemini_key"
-        case .whisper:       path = "\(NSHomeDirectory())/.config/corder/openai_key"
-        case .whisperLocal:  return true
-        }
-        guard let data = try? String(contentsOfFile: path, encoding: .utf8) else { return false }
-        return !data.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Called once at app launch. When the active provider is
