@@ -1,6 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
-import { getNews, type NewsItem } from "../api";
+import { getNews, type NewsAction, type NewsItem } from "../api";
 import type { T } from "../i18n";
 
 declare global {
@@ -29,7 +29,13 @@ function saveDismissed(s: Set<string>) {
 /// users dismiss it via the × and the id is remembered forever in
 /// localStorage so it never reappears. Pulled from the Worker once
 /// on mount + every 10 min — light traffic, only one request.
-export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) {
+export function NewsBanner({
+  tier, t, onOpenSettings,
+}: {
+  tier: "free" | "pro" | "max";
+  t: T;
+  onOpenSettings?: () => void;
+}) {
   const [items, setItems] = React.useState<NewsItem[]>([]);
   const [dismissed, setDismissed] = React.useState<Set<string>>(() => loadDismissed());
   const [expanded, setExpanded] = React.useState(false);
@@ -63,11 +69,25 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
     saveDismissed(next);
   };
 
-  const openCta = () => {
-    if (!visible.cta_url) return;
-    const native = window.corderOpenExternal;
-    if (native) native(visible.cta_url);
-    else window.open(visible.cta_url, "_blank", "noopener,noreferrer");
+  const runAction = (action: NewsAction | undefined, url: string | undefined) => {
+    const effective: NewsAction = action ?? (url ? "open_url" : "dismiss");
+    switch (effective) {
+      case "open_url":
+        if (url) {
+          const native = window.corderOpenExternal;
+          if (native) native(url);
+          else window.open(url, "_blank", "noopener,noreferrer");
+        }
+        dismiss();
+        break;
+      case "open_settings":
+        onOpenSettings?.();
+        dismiss();
+        break;
+      case "dismiss":
+        dismiss();
+        break;
+    }
   };
 
   // Collapsed state: a single glossy green pill with the "New" label.
@@ -144,16 +164,25 @@ export function NewsBanner({ tier, t }: { tier: "free" | "pro" | "max"; t: T }) 
         {visible.body && <div className="summary-banner-sub">{visible.body}</div>}
       </div>
       <div className="clarify-actions clarify-actions-stack">
-        {visible.cta_label && visible.cta_url && (
+        {visible.cta_label && (
           <button
             type="button"
             className="clarify-btn accent"
-            onClick={openCta}
+            onClick={() => runAction(visible.cta_action, visible.cta_url)}
           >
             {visible.cta_label}
           </button>
         )}
-        {visible.dismissible !== false && (
+        {visible.secondary_label && (
+          <button
+            type="button"
+            className="clarify-btn"
+            onClick={() => runAction(visible.secondary_action, undefined)}
+          >
+            {visible.secondary_label}
+          </button>
+        )}
+        {!visible.secondary_label && visible.dismissible !== false && (
           <button
             type="button"
             className="clarify-btn"
