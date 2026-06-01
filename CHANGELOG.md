@@ -16,6 +16,20 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.30] — 2026-06-01
+
+### Changed
+- **News item supports a secondary action.** New `cta_action` /
+  `secondary_label` / `secondary_action` fields on `NewsItem` — values
+  `open_url` / `open_settings` / `dismiss`. The first live use is the
+  telemetry consent prompt: primary `Got it` → dismiss, secondary
+  `Settings` → opens Settings → General where the toggle can be
+  flipped off.
+- **`docs/SECURITY.md` rewritten** for the post-0.13.29 architecture.
+  Threat model now reflects the Worker-only secret model: no provider
+  keys on user disk, OpenAI / Gemini live exclusively as Cloudflare
+  Worker secrets.
+
 ## [0.13.29] — 2026-06-01
 
 ### Added

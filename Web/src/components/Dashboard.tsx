@@ -319,7 +319,15 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
       <div className="detail-body">
         <div className="transcript-wrap dashboard-left ovsb-scroll" ref={dashLeftRef}>
           <div className="dashboard-left-inner">
-            <DashTier render={(tier) => <NewsBanner tier={tier} t={t} />} />
+            <DashTier
+              render={(tier) => (
+                <NewsBanner
+                  tier={tier}
+                  t={t}
+                  onOpenSettings={() => onSettingsSectionChange("general")}
+                />
+              )}
+            />
             {/* Same outline-card as EmptyDeleteBanner: `.trans-banner`
                 shell with the `.clarify-banner` size override. */}
             <div className="trans-banner clarify-banner dash-banner">

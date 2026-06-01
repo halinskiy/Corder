@@ -212,12 +212,17 @@ export async function generateChapters(id: string, force = false): Promise<strin
 /// pushing a new app build. `audience` filters which tier sees the
 /// item; `dismissible` lets the user kill it from localStorage
 /// permanently (banner ids are stored in `corder.news.dismissed`).
+export type NewsAction = "open_url" | "open_settings" | "dismiss";
+
 export interface NewsItem {
   id: string;
   title: string;
   body?: string;
   cta_label?: string;
   cta_url?: string;
+  cta_action?: NewsAction;
+  secondary_label?: string;
+  secondary_action?: NewsAction;
   audience?: "all" | "free" | "paid";
   dismissible?: boolean;
 }
