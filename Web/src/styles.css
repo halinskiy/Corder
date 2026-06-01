@@ -4505,3 +4505,249 @@ body.resizing { cursor: col-resize; user-select: none; }
 .chapter-block .md-p.chapter-title {
   margin: 0;
 }
+
+
+
+/* ── Sparkle update modal (in-WebView overlay) ────────────────────
+   Rendered inside the Library WKWebView as a `position: fixed`
+   layer — that's what makes the backdrop reliably cover the WHOLE
+   Library viewport (it IS the WebView). Theme follows the page's
+   own design tokens, no NSAppearance plumbing needed. */
+.update-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.36);
+  animation: update-overlay-in 180ms ease-out;
+  perspective: 900px;
+}
+.update-overlay.is-leaving {
+  animation: update-overlay-out 200ms ease-out forwards;
+}
+@keyframes update-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes update-overlay-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.update-stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* Card carries the cursor-tilt parallax (`--tilt-x` / `--tilt-y`
+   set from JS on mousemove). The CSS transition smooths the snap
+   so the card glides instead of stutters between mouse samples.
+   Same vocabulary banking/saas hero cards use. */
+.update-card {
+  position: relative;
+  z-index: 1;
+  width: 380px;
+  padding: 22px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.45);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --tilt-shine-x: 50%;
+  --tilt-shine-y: 50%;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform 135ms ease;
+  animation: update-card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: center 70%;
+  overflow: hidden;
+}
+/* Sheen is a soft radial highlight that follows the cursor — and
+   now sits ABOVE the card content (z-index: 2) so it actually lights
+   up the Update button instead of being trapped under it. Alpha is
+   low enough (≤ 22 %) that the white label on the accent-green CTA
+   still reads — the gradient just brightens what's beneath without
+   the `mix-blend-mode: plus-lighter` blow-out we used to have. */
+.update-card-sheen {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: radial-gradient(
+    320px circle at var(--tilt-shine-x) var(--tilt-shine-y),
+    rgba(255, 255, 255, 0.22),
+    transparent 65%
+  );
+}
+.dark .update-card-sheen {
+  background: radial-gradient(
+    320px circle at var(--tilt-shine-x) var(--tilt-shine-y),
+    rgba(255, 255, 255, 0.10),
+    transparent 65%
+  );
+}
+/* Card content (title, status, buttons, notes) sits in its own
+   stacking context below the sheen layer. */
+.update-card > :not(.update-card-sheen) { position: relative; z-index: 1; }
+@keyframes update-card-in {
+  from {
+    opacity: 0;
+    transform: perspective(900px) rotateX(10deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(900px) rotateX(0) scale(1);
+  }
+}
+/* Exit mirrors the entrance: scale collapses down, opacity fades.
+   `forwards` keeps the final invisible state until React unmounts. */
+.update-card.is-leaving {
+  animation: update-card-out 200ms cubic-bezier(0.4, 0.0, 0.6, 1) forwards;
+}
+@keyframes update-card-out {
+  from {
+    opacity: 1;
+    transform: perspective(900px) rotateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(900px) rotateX(8deg) scale(0.88);
+  }
+}
+/* Icon-only "details" toggle in the top-right of the card. Replaces
+   the wide "Show details" outline button. */
+.update-help {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+.update-help:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.update-help.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+/* Title + status line live in one tight block (4 px between them),
+   then the outer card gap (14 px) controls the space below them. */
+/* Title + status pressed right against each other. The `gap: 0`
+   on the flex column plus a tiny `margin-top` on the status keeps
+   them visually as one stacked unit. */
+.update-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  text-align: center;
+  margin-top: 6px;
+}
+.update-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  line-height: 1.1;
+}
+.update-status {
+  font-size: 14px;
+  color: var(--fg-muted);
+  line-height: 1.4;
+  margin: 2px 0 0;
+}
+.update-status.error { color: var(--danger); }
+.update-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.update-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms ease;
+}
+/* Both action buttons share the row at flex:1 so they end up the
+   same width. Same font-size / weight / padding so they read as
+   siblings — the only difference is fill colour. Extra top margin
+   lifts the row away from the status line above. */
+.update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.update-primary,
+.update-secondary {
+  appearance: none;
+  flex: 1;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+/* No hover background-flip on either button — the global
+   `button:hover` rule (~line 228) would otherwise paint a near-
+   white fill over the accent green and erase the white label.
+   Explicit `:hover` selectors here re-pin the resting colours so
+   the sheen sweep is the only visible cursor feedback. */
+.update-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+.update-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.update-primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+}
+.update-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.update-secondary {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+}
+.update-secondary:hover { background: transparent; border-color: var(--border-strong); }
+.update-secondary:active { background: var(--bg-hover); }
+.update-notes {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--fg);
+  background: var(--bg-elev);
+  border-radius: 10px;
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  user-select: text;
+}
