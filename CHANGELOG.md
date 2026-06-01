@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.31] — 2026-06-01
+
+### Changed
+- **Sparkle update modal moved into WebView.** SwiftUI overlays through child NSWindows fought macOS Sequoia for the full-viewport coverage we wanted — re-implemented as a React component (`UpdateModal`) inside the Library. `position: fixed; inset: 0` guarantees it covers the whole window, inherits theme automatically, and the 3D cursor-tilt + radial sheen feel like the marketing-site hero cards. Click outside the card = Later.
+- **Bug-report button is event-gated.** `SubmitLogsButton` polls `/api/has-bug-events` (filters log lines by error/fail/crash/HTTP-4xx-5xx regex); button stays hidden until something actually breaks. Submitted logs now ship only the matching lines + 2 lines of context — no more 95 %-noise emails.
+
 ## [0.13.30] — 2026-06-01
 
 ### Changed

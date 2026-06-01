@@ -83,6 +83,15 @@ export async function getUsage(): Promise<Usage> {
 /// maintainer through the Cloudflare Worker → Resend pipeline.
 /// Backend attaches the signed-in user's email + Corder version
 /// + macOS version; the user doesn't have to type anything.
+export async function hasBugEvents(): Promise<boolean> {
+  try {
+    const r = await fetch("/api/has-bug-events", { cache: "no-store" });
+    if (!r.ok) return false;
+    const j = await r.json();
+    return !!j.has;
+  } catch { return false; }
+}
+
 export async function submitLogs(): Promise<void> {
   const r = await fetch("/api/submit-logs", { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

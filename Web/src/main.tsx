@@ -9,6 +9,7 @@ import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
 import { ArchiveSidebar } from "./components/ArchiveSidebar";
 import { Dashboard } from "./components/Dashboard";
+import { UpdateModalHost } from "./components/UpdateModal";
 import { MainHeader } from "./components/MainHeader";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { Lang, T, pickStrings } from "./i18n";
@@ -578,6 +579,10 @@ function App() {
         })()}
       </main>
       {toast && <Toast toast={toast} leaving={toastLeaving} onDismiss={dismissToast} />}
+      {/* Sparkle update modal — rendered into the same WebView so a
+          `position: fixed; inset: 0` overlay covers the whole Library,
+          not a fragment-sized child window. */}
+      <UpdateModalHost />
     </div>
   );
 }

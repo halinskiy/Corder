@@ -78,6 +78,7 @@ enum Routes {
         server.post["/api/settings"] = { req in settingsSet(req: req) }
         server.get["/api/usage"] = { _ in usageGet(repo: repo) }
         server.post["/api/submit-logs"] = { _ in submitLogs() }
+        server.get["/api/has-bug-events"] = { _ in hasBugEvents() }
         server.post["/api/billing/test-set-tier"] = { req in setTestTier(req: req) }
         // Whisper Local model download — kicks off a background fetch
         // for the requested variant id (no body needed beyond `id`).
@@ -920,17 +921,67 @@ enum Routes {
     /// maintainer. The user clicks one button (header Bug icon) and
     /// we attach their email + app version + macOS version for
     /// triage — they don't have to copy anything by hand.
-    private static func submitLogs() -> HttpResponse {
+    /// Regex that flags a log line as "interesting" — i.e. worth
+    /// shipping to the maintainer's inbox. Routine status lines
+    /// (server started, hotkey registered, popover suppressed) are
+    /// dropped so the email isn't 95 % noise. Case-insensitive.
+    private static let bugLineRegex: NSRegularExpression = {
+        let pattern = "(error|fail(ed|ure)?|fatal|crash(ed)?|exception|aborted|panic|noKey|denied|insufficient|invalid|timeout|HTTP [45][0-9]{2}|apiFailure|GError|EXC_|SIGSEGV)"
+        return (try? NSRegularExpression(pattern: pattern, options: .caseInsensitive))
+            ?? NSRegularExpression()
+    }()
+
+    /// Whether the current session has any matching event lines.
+    /// Frontend polls this to decide whether to show the Bug icon
+    /// at all — no events → button hidden.
+    private static func hasBugEvents() -> HttpResponse {
+        let lines = readLogTail(maxLines: 4000)
+        var count = 0
+        for line in lines {
+            let range = NSRange(line.startIndex..<line.endIndex, in: line)
+            if bugLineRegex.firstMatch(in: line, range: range) != nil { count += 1 }
+        }
+        return jsonResponse(["count": count, "has": count > 0])
+    }
+
+    /// Filter the log to ONLY the lines that match `bugLineRegex`,
+    /// plus 2 lines of context above and 2 below each hit. Vastly
+    /// shorter than the previous whole-tail dump.
+    private static func bugEventLog() -> String {
+        let lines = readLogTail(maxLines: 4000)
+        if lines.isEmpty { return "(log file missing or unreadable)" }
+        var keep = Array(repeating: false, count: lines.count)
+        for i in lines.indices {
+            let line = lines[i]
+            let range = NSRange(line.startIndex..<line.endIndex, in: line)
+            if bugLineRegex.firstMatch(in: line, range: range) != nil {
+                let from = max(0, i - 2)
+                let to = min(lines.count - 1, i + 2)
+                for j in from...to { keep[j] = true }
+            }
+        }
+        var out: [String] = []
+        var lastKept = -10
+        for i in lines.indices where keep[i] {
+            if i - lastKept > 1 && !out.isEmpty { out.append("…") }
+            out.append(lines[i])
+            lastKept = i
+        }
+        if out.isEmpty { return "(no bug events detected in the current session)" }
+        return out.joined(separator: "\n")
+    }
+
+    /// Last `maxLines` of `/tmp/corder.log`.
+    private static func readLogTail(maxLines: Int) -> [String] {
         let path = "/tmp/corder.log"
-        let tail: String = {
-            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-                  let full = String(data: data, encoding: .utf8) else { return "(log file missing or unreadable)" }
-            let lines = full.split(separator: "\n", omittingEmptySubsequences: false)
-            // Last 2000 lines is enough for the whole session in
-            // every realistic case; keeps the email body small.
-            let slice = lines.suffix(2000)
-            return slice.joined(separator: "\n")
-        }()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let full = String(data: data, encoding: .utf8) else { return [] }
+        let lines = full.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        return Array(lines.suffix(maxLines))
+    }
+
+    private static func submitLogs() -> HttpResponse {
+        let tail = bugEventLog()
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         let macOS = ProcessInfo.processInfo.operatingSystemVersionString

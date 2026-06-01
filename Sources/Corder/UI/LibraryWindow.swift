@@ -238,6 +238,14 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async {
                 NSWorkspace.shared.open(url)
             }
+        case "updateAction":
+            // The React update modal posts "primary" / "dismiss" here.
+            // We route into UpdateBridge which owns the current Sparkle
+            // reply callbacks; the Swift driver wired them in.
+            guard let action = message.body as? String else { return }
+            DispatchQueue.main.async {
+                UpdateBridge.shared.handle(action: action)
+            }
         default:
             break
         }
@@ -396,6 +404,11 @@ final class LibraryWindow: NSWindowController {
     static let shared = LibraryWindow()
 
     private var webView: WKWebView!
+    /// Read-only handle for non-LibraryWindow code that needs to
+    /// poke the WebView (currently: `UpdateBridge` for the in-Library
+    /// update modal). Returns nil while the window hasn't initialised
+    /// or has been deinit'd.
+    var webViewRef: WKWebView? { webView }
     private var bridgeHandler: WebBridgeHandler?
     private var downloadDelegate: WebDownloadDelegate?
     private var uiDelegate: WebUIDelegate?
@@ -440,6 +453,7 @@ final class LibraryWindow: NSWindowController {
         cfg.userContentController.add(handler, name: "openExternal")
         cfg.userContentController.add(handler, name: "blobVisible")
         cfg.userContentController.add(handler, name: "headerHits")
+        cfg.userContentController.add(handler, name: "updateAction")
         let bridgeJS = """
         (function() {
           // Header drag/hover hit-test: report the bounding rects of

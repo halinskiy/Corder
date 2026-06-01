@@ -40,7 +40,7 @@ function ArchiveFilled({ size = 16 }: { size?: number }) {
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
-import { submitLogs } from "../api";
+import { submitLogs, hasBugEvents } from "../api";
 import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip — breadcrumb
@@ -180,18 +180,32 @@ function SubmitLogsButton({
   //   (`pendingRef !== null`).
   const [now, setNow] = React.useState(() => Date.now());
   const [pending, setPending] = React.useState(false);
+  // Whether the current log has any bug-flagged event lines. We poll
+  // the backend so the button only appears when there's actually
+  // something worth shipping — fewer noise emails for the maintainer.
+  const [hasEvents, setHasEvents] = React.useState(false);
   React.useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(id);
+  }, []);
+  React.useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      hasBugEvents().then((v) => { if (alive) setHasEvents(v); }).catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => { alive = false; window.clearInterval(id); };
   }, []);
 
   const cooldownEnd = readCooldownEnd();
   const inCooldown = now < cooldownEnd;
   // The button DISAPPEARS the instant the user clicks it: while the
   // 10-s undo window is open, while the POST is in flight, and for the
-  // full 60-min cooldown after a successful send. Undo bumps `now` so
-  // the button reappears without waiting for the 30-s tick.
-  if (pending || inCooldown) return null;
+  // full 60-min cooldown after a successful send. Also hidden when
+  // the log has no flagged events — no point letting the user submit
+  // a clean session.
+  if (pending || inCooldown || !hasEvents) return null;
 
   const onClick = () => {
     if (pendingRef.current !== null) return;
