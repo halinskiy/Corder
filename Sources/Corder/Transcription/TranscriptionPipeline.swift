@@ -787,8 +787,14 @@ final class TranscriptionPipeline {
                 }
             }
 
-            // 4. Optional Dropbox archive.
-            if DropboxService.shared.isConfigured {
+            // 4. Dropbox archive — DISABLED. Legacy cloud-backup path,
+            //    superseded by the (pending) R2 migration — same state as
+            //    SupabaseSync's audio upload. It kept firing for configured
+            //    accounts and failing on full ones (insufficient_space):
+            //    log + bug-report noise for zero current benefit. Flip
+            //    `dropboxArchiveEnabled` back to true when R2 backup ships.
+            let dropboxArchiveEnabled = false
+            if dropboxArchiveEnabled, DropboxService.shared.isConfigured {
                 let mid = meetingId
                 let videoURL = URL(fileURLWithPath: meeting.videoPath)
                 let mixCopy = mixURL
