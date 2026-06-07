@@ -16,6 +16,30 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.33] — 2026-06-07
+
+### Added
+- **Transcription language** setting — pin the spoken language so Whisper
+  no longer mis-detects Russian as Ukrainian. Auto-detect stays default.
+- **Launch at login** — open Corder automatically when your Mac starts.
+- **Chapters** progress: the active chapter's timecode fills as it plays,
+  with a green active highlight, and the whole row is clickable.
+- Transcript progress bar on the **Stop** button so a long transcribe
+  reads as moving, not frozen.
+- **Resilient transcription**: if the connection drops mid-run, each
+  chunk finishes on the on-device model and returns to the cloud when
+  it's back; an interrupted run resumes from the chunks it already did.
+
+### Changed
+- **Download** is its own tab — opening it hides the video + timeline.
+- Recording video previews now fill the frame uniformly (no random sizes).
+- Softer recording-blob pulse that reacts to every sound.
+
+### Fixed
+- On-device Whisper failing to start with a missing `tokenizer.json`.
+- Chapter timestamps all showing 0:00.
+- Video kept playing after leaving fullscreen — now pauses.
+
 ## [0.13.31] — 2026-06-01
 
 ### Changed

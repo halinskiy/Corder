@@ -18,6 +18,44 @@ export function UpdatePill({ t, onToast }: Props) {
   const [available, setAvailable] = React.useState(false);
   const [version, setVersion] = React.useState<string | undefined>(undefined);
   const [busy, setBusy] = React.useState(false);
+  const pillRef = React.useRef<HTMLButtonElement | null>(null);
+
+  // 3D cursor-tilt — the same parallax vocabulary as the update modal
+  // card. Listener lives on the pill itself; the rotation amounts are
+  // smaller (max 6° vs the modal's 11°) because the pill is tiny and
+  // a strong tilt feels exaggerated on a 30 px element. The sheen
+  // position follows the cursor for an extra depth cue.
+  React.useEffect(() => {
+    const el = pillRef.current;
+    if (!el) return;
+    const reset = () => {
+      el.style.setProperty("--tilt-x", "0deg");
+      el.style.setProperty("--tilt-y", "0deg");
+      el.style.setProperty("--tilt-shine-x", "50%");
+      el.style.setProperty("--tilt-shine-y", "50%");
+    };
+    const onMove = (e: MouseEvent) => {
+      const r = el.getBoundingClientRect();
+      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;   // -1..1
+      const ny = ((e.clientY - r.top) / r.height) * 2 - 1;   // -1..1
+      const max = 6;
+      const ry = nx * max;
+      const rx = -ny * max;
+      el.style.setProperty("--tilt-x", `${rx.toFixed(2)}deg`);
+      el.style.setProperty("--tilt-y", `${ry.toFixed(2)}deg`);
+      const sx = ((e.clientX - r.left) / r.width) * 100;
+      const sy = ((e.clientY - r.top) / r.height) * 100;
+      el.style.setProperty("--tilt-shine-x", `${sx}%`);
+      el.style.setProperty("--tilt-shine-y", `${sy}%`);
+    };
+    reset();
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", reset);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", reset);
+    };
+  }, [available]);
 
   // Poll Sparkle's verdict every 60 s + also re-check whenever the
   // window comes back into focus. Cheap (just a NSLock read on the
@@ -70,6 +108,7 @@ export function UpdatePill({ t, onToast }: Props) {
   return (
     <Tooltip label={t.update_available_title}>
       <button
+        ref={pillRef}
         type="button"
         className={"update-pill" + (busy ? " busy" : "")}
         onClick={onClick}

@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, LifeBuoy, LogOut, RefreshCw, Shuffle } from "lucide-react";
+import { Home, LifeBuoy, LogOut, RefreshCw, Shield, Shuffle } from "lucide-react";
 import type { T } from "../i18n";
 import { getSettings, signOut, triggerUpdateCheck, openWelcome } from "../api";
 
@@ -27,18 +27,29 @@ function readStoredVariant(seed: string): number {
 /// built from primitive SVG elements (<circle>, <rect>, <polygon>) +
 /// straight-line paths so they render reliably in WKWebView (the
 /// arc-only paths I tried first didn't paint on the tester's machine).
-function AvatarGlyph({ variant, paid }: { variant: number; paid: boolean }) {
-  /// Tier-aware. Paid (Pro / Max) gets the canonical accent-green
-  /// fill with a white glyph. Free gets a transparent surface with
-  /// a dark glyph and a hairline outline — mirrors the secondary
-  /// button treatment so a Free avatar reads as "outlined / not
-  /// upgraded yet". The `var(--avatar-cutout)` variable is what
-  /// the half-moon case (variant 2) paints over its overlapping
-  /// rect — paid = accent, free = bg so the cut-out blends into
-  /// the surface.
-  const fillBg = paid ? "var(--accent)" : "transparent";
-  const fillGlyph = paid ? "#fff" : "var(--fg)";
-  const stroke = paid ? "var(--accent)" : "var(--border-strong)";
+function AvatarGlyph({
+  variant,
+  paid,
+  admin,
+}: {
+  variant: number;
+  paid: boolean;
+  admin: boolean;
+}) {
+  /// Tier-aware, with admin on top. Admin (any tier) gets a blue fill
+  /// + white glyph so the operator can confirm the server-side admin
+  /// grant landed in their session. Otherwise: paid (Pro / Max) gets
+  /// the canonical accent-green fill with a white glyph; Free gets a
+  /// transparent surface with a dark glyph and a hairline outline —
+  /// mirrors the secondary button treatment so a Free avatar reads as
+  /// "outlined / not upgraded yet". `var(--avatar-cutout)` is what the
+  /// half-moon case (variant 2) paints over its overlapping rect, so it
+  /// tracks the surface colour (admin blue / paid accent / free bg).
+  const filled = paid || admin;
+  const surface = admin ? "var(--avatar-admin)" : "var(--accent)";
+  const fillBg = filled ? surface : "transparent";
+  const fillGlyph = filled ? "#fff" : "var(--fg)";
+  const stroke = filled ? surface : "var(--border-strong)";
   return (
     <svg
       viewBox="0 0 40 40"
@@ -50,7 +61,7 @@ function AvatarGlyph({ variant, paid }: { variant: number; paid: boolean }) {
         display: "block",
         width: "100%",
         height: "100%",
-        ["--avatar-cutout" as string]: paid ? "var(--accent)" : "var(--bg)",
+        ["--avatar-cutout" as string]: filled ? surface : "var(--bg)",
       }}
       aria-hidden
     >
@@ -180,6 +191,9 @@ export function ProfileMenu({
   }, [nameEdit, userName]);
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
   const paid = tier === "pro" || tier === "max";
+  // Admin role, polled alongside tier. Blue avatar overrides the
+  // tier colour so the operator sees at a glance that the grant landed.
+  const [isAdmin, setIsAdmin] = React.useState(false);
 
   // Pull tier on mount AND keep it fresh so the header avatar reacts
   // when the user flips tier in Settings (test Upgrade/Downgrade)
@@ -193,6 +207,7 @@ export function ProfileMenu({
         if (!alive) return;
         if (s.tier === "pro" || s.tier === "max") setTier(s.tier);
         else setTier("free");
+        setIsAdmin(s.is_admin === true);
       } catch {}
     };
     tick();
@@ -219,6 +234,7 @@ export function ProfileMenu({
         setUserEmail(s.user_email ?? null);
         if (s.tier === "pro" || s.tier === "max") setTier(s.tier);
         else setTier("free");
+        setIsAdmin(s.is_admin === true);
       } catch {}
     })();
   }, [open]);
@@ -306,7 +322,7 @@ export function ProfileMenu({
         title={t.profile_title}
         aria-label={t.profile_title}
       >
-        <AvatarGlyph variant={variant} paid={paid} />
+        <AvatarGlyph variant={variant} paid={paid} admin={isAdmin} />
       </button>
       {open && pos && (
         <div
@@ -323,7 +339,7 @@ export function ProfileMenu({
               title={t.profile_pick_avatar}
               aria-label={t.profile_pick_avatar}
             >
-              <AvatarGlyph variant={variant} paid={paid} />
+              <AvatarGlyph variant={variant} paid={paid} admin={isAdmin} />
               <span className="avatar-shuffle-overlay" aria-hidden>
                 <Shuffle size={18} strokeWidth={2} />
               </span>
@@ -397,6 +413,23 @@ export function ProfileMenu({
           <button className="profile-pop-item" onClick={checkUpdates} role="menuitem">
             <RefreshCw size={15} strokeWidth={2} /> {t.profile_check_updates ?? "Check for updates"}
           </button>
+          {isAdmin && (
+            // Operator-only shortcut. Doesn't ship admin UI inside the
+            // app — just opens getcorder.com/admin in the default
+            // browser, where the static admin panel handles auth itself
+            // via the same Supabase session (cookies on the public site).
+            <button
+              className="profile-pop-item"
+              onClick={() => {
+                setOpen(false);
+                const w = window as Window & { corderOpenExternal?: (u: string) => void };
+                w.corderOpenExternal?.("https://getcorder.com/admin/");
+              }}
+              role="menuitem"
+            >
+              <Shield size={15} strokeWidth={2} /> {t.profile_admin ?? "Open admin panel"}
+            </button>
+          )}
 
           {/* Auxiliary group: Sign out (+ legacy danger row slot,
               currently empty — Delete account moved into Settings).

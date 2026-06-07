@@ -77,6 +77,15 @@ function Toast({ toast, leaving, onDismiss }: { toast: ToastState; leaving: bool
         </button>
       )}
       {remaining !== null && <span className="toast-countdown">{remaining}s</span>}
+      <button
+        type="button"
+        className="toast-close"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        title="Dismiss"
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -130,6 +139,14 @@ function App() {
   const [toastLeaving, setToastLeaving] = React.useState(false);
   const toastTimer = React.useRef<number | null>(null);
   const toastLeaveTimer = React.useRef<number | null>(null);
+  // Suppression table — keyed by toast message (or explicit `dedupKey`
+  // when passed) → timestamp until which we silently swallow new toasts
+  // with that key. The native bridge can fire the same Whisper-cancel
+  // toast a dozen times as one cancellation cascades through the
+  // pipeline; without this the user sees the same scary card repeat
+  // over and over. Lives outside React state because it's a side-channel,
+  // not part of the visible UI tree.
+  const toastSuppressUntilRef = React.useRef<Map<string, number>>(new Map());
   // Soft-deleted meeting IDs — UI hides them immediately, real DELETE is
   // scheduled for 10s later. While the meeting is in this set the user can
   // press Undo on the toast and the timer is cancelled.
@@ -192,7 +209,14 @@ function App() {
       const msg = (d?.title && d.title.trim()) || (d?.body && d.body.trim()) || "";
       if (!msg) return;
       const kind = d?.kind === "error" ? "error" : "success";
-      showToast(msg, kind);
+      // Native error toasts (TranscriptionPipeline failure cascade,
+      // BT-output warning, etc.) tend to fire many times in a row
+      // when one root cause ripples through the pipeline. Suppress
+      // repeats keyed on the title for one hour so the user sees
+      // the error once and isn't badgered for the rest of the session.
+      showToast(msg, kind, kind === "error"
+        ? { dedupKey: msg, suppressAfterMs: 60 * 60 * 1000 }
+        : undefined);
     };
     window.addEventListener("corder-toast", onNativeToast);
     return () => window.removeEventListener("corder-toast", onNativeToast);
@@ -267,7 +291,17 @@ function App() {
     }, 300);
   }, []);
 
-  const showToast = React.useCallback((msg: string, kind: "success" | "error" = "success", opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }) => {
+  const showToast = React.useCallback((msg: string, kind: "success" | "error" = "success", opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean; dedupKey?: string; suppressAfterMs?: number }) => {
+    const key = opts?.dedupKey ?? msg;
+    const now = Date.now();
+    const suppressedUntil = toastSuppressUntilRef.current.get(key);
+    if (suppressedUntil && suppressedUntil > now) {
+      // Same toast was shown recently and asked to be muted; bail.
+      return;
+    }
+    if (opts?.suppressAfterMs && opts.suppressAfterMs > 0) {
+      toastSuppressUntilRef.current.set(key, now + opts.suppressAfterMs);
+    }
     if (toastTimer.current) { window.clearTimeout(toastTimer.current); toastTimer.current = null; }
     if (toastLeaveTimer.current) { window.clearTimeout(toastLeaveTimer.current); toastLeaveTimer.current = null; }
     const ms = opts?.durationMs ?? 2200;
@@ -331,6 +365,15 @@ function App() {
     if (!archivedId) return;
 
     setActiveId((prev) => prev === archivedId ? null : prev);
+    // Also clear `lastSeenMeetingRef` if it points at the row we're
+    // archiving. MeetingView is mount-stable via a `display:none`
+    // wrapper that keys off `lastSeen`, so without this clear it stays
+    // rendered with the just-archived id and EmptyDeleteBanner's local
+    // `busy='archive'` spinner never gets a chance to unmount (Костя's
+    // "Archive Session бесконечно грузится" case).
+    if (lastSeenMeetingRef.current === archivedId) {
+      lastSeenMeetingRef.current = null;
+    }
     setSoftDeleted((prev) => { const n = new Set(prev); n.add(archivedId); return n; });
 
     // Fire the actual archive immediately so a sudden quit / network drop

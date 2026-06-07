@@ -55,6 +55,10 @@ enum AppPaths {
     }
 
     static var databaseURL: URL { accountRoot.appendingPathComponent("corder.db") }
+    /// Disposable per-chunk transcript cache (own SQLite file so it never
+    /// contends with the main DB's connection). Lets a transcribe that was
+    /// killed mid-run resume from the chunks it already finished.
+    static var chunkCacheURL: URL { accountRoot.appendingPathComponent("chunk_cache.db") }
     static var modelsDir: URL { accountRoot.appendingPathComponent("models", isDirectory: true) }
     static var recordingsDir: URL { accountRoot.appendingPathComponent("recordings", isDirectory: true) }
 

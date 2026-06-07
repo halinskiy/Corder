@@ -49,7 +49,7 @@ final class TranscriptionPipeline {
         // depending on a user-side API secret. A signed-out user can
         // only use whisperLocal.
         switch provider {
-        case .whisper, .gemini:
+        case .whisper, .gemini, .groq:
             return SupabaseClientHolder.shared.auth.currentSession != nil
         case .whisperLocal:
             return true
@@ -63,14 +63,40 @@ final class TranscriptionPipeline {
     /// Other providers (Gemini, cloud Whisper) are stateless on our
     /// side — nothing to warm up.
     func prewarm() {
-        guard AppSettings.transcriptionProvider == .whisperLocal else {
-            FileLogger.log("TranscriptionPipeline.prewarm: provider is not whisperLocal — skip")
-            return
-        }
         guard LocalWhisperTranscriber.isAvailable() else {
             FileLogger.log("TranscriptionPipeline.prewarm: WhisperKit unavailable on this arch — skip")
             return
         }
+
+        // Cloud-provider users (Pro/Max) don't transcribe locally, but we
+        // still keep a SMALL on-device model on disk as the offline
+        // safety net: if the connection drops mid-transcribe, the
+        // per-chunk fallback finishes the meeting locally instead of
+        // failing it (see WhisperTranscriber.localChunkFallback). Only
+        // fetch it when NOTHING is on disk yet — if the user already has
+        // any local model (they picked local before), that one is the net.
+        guard AppSettings.transcriptionProvider == .whisperLocal else {
+            if LocalWhisperTranscriber.firstDownloadedVariant() != nil {
+                FileLogger.log("TranscriptionPipeline.prewarm: cloud user already has a local model on disk — skip")
+                return
+            }
+            let net = LocalWhisperTranscriber.offlineFallbackVariant
+            FileLogger.log("TranscriptionPipeline.prewarm: cloud user — staging offline fallback \(net.rawValue) in background")
+            Task { @MainActor in
+                do {
+                    // Full ensureModelReady (not downloadOnly): it ALSO
+                    // fetches + caches the tokenizer sidecar, which the
+                    // offline fallback needs — once the network is down we
+                    // can't fetch it. base is small, so warming it is cheap.
+                    try await LocalWhisperTranscriber.ensureModelReady(net)
+                    FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) ready (model + tokenizer cached)")
+                } catch {
+                    FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) staging failed — \(error)")
+                }
+            }
+            return
+        }
+
         let variant = AppSettings.whisperLocalVariant
         if LocalWhisperTranscriber.isModelDownloaded(variant) {
             FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) already on disk — skip")
@@ -333,6 +359,14 @@ final class TranscriptionPipeline {
                 switch currentProvider {
                 case .gemini:        return ""
                 case .whisper:       return "whisper:v2:"
+                case .groq:
+                    // Groq Whisper-large-v3-turbo. Distinct prefix from
+                    // .whisper so a flip between OpenAI and Groq never
+                    // replays the other backend's output (the models
+                    // are close but not identical — large-v3 vs large-v2
+                    // — and we don't run the gpt-4o-mini polish step
+                    // on Groq, so the cleaned text differs as well).
+                    return "groq:v1:"
                 case .whisperLocal:
                     // Local Whisper keeps its own cache namespace so a
                     // flip between cloud and local never replays the
@@ -460,7 +494,10 @@ final class TranscriptionPipeline {
                     // — the polish stage only touches text and doesn't
                     // care where the raw turns came from.
                     if currentProvider != .gemini {
-                        let lang = AppLanguage.current
+                        // Prefer the pinned transcription language so the
+                        // polish doesn't re-introduce the drift we just
+                        // fixed at the ASR layer; fall back to the UI lang.
+                        let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? AppLanguage.current
                         rawUserTurns = await WhisperCleanup.polish(rawUserTurns, language: lang)
                         rawOtherTurns = await WhisperCleanup.polish(rawOtherTurns, language: lang)
                     }
@@ -475,8 +512,9 @@ final class TranscriptionPipeline {
                     rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
                     rawUserTurns = []
                     if currentProvider != .gemini {
+                        let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? AppLanguage.current
                         rawOtherTurns = await WhisperCleanup.polish(
-                            rawOtherTurns, language: AppLanguage.current)
+                            rawOtherTurns, language: lang)
                     }
                 }
             } else {
@@ -509,7 +547,25 @@ final class TranscriptionPipeline {
                     // model handles fine (it's not asked to attribute,
                     // only to fix punctuation / typos line by line).
                     legacyTurns = await WhisperCleanup.polish(
-                        legacyTurns, language: AppLanguage.current)
+                        legacyTurns,
+                        language: AppSettings.transcriptionLanguage.nilIfEmpty ?? AppLanguage.current)
+                case .groq:
+                    // Groq Whisper-large-v3-turbo. Same .diarize mode
+                    // call as OpenAI; backend swaps the proxy URL and
+                    // model name. No polish stage — large-v3 punctuation
+                    // is already cleaner than whisper-1's, and the cost
+                    // savings disappear if we tack a gpt-4o-mini pass
+                    // back on.
+                    do {
+                        let prompt = AppVocabulary.current.nilIfEmpty
+                        legacyTurns = try await WhisperTranscriber.transcribe(
+                            audioURL: mixURL, mode: .diarize,
+                            initialPrompt: prompt, backend: .groq)
+                    } catch let err as WhisperTranscriber.WhisperError {
+                        TranscriptionErrors.record(meetingId: meetingId,
+                                                   message: err.localizedDescription)
+                        throw err
+                    }
                 case .whisperLocal:
                     // Local Whisper has no diarize mode — fall back to
                     // Gemini for the legacy mix case (the on-device
@@ -790,30 +846,14 @@ final class TranscriptionPipeline {
             FileLogger.log("Corder transcription error: \(error)")
             meeting.status = .failed
             try? repo.updateMeeting(meeting)
-            // Surface a Library-window toast for the failure. We
-            // classify on the error description: anything that
-            // matches the on-device-Whisper-couldn't-load family
-            // (OOM, model load fail, MIL network read fail,
-            // dealloc race) gets a SPECIFIC message that tells the
-            // user how to recover (switch to a lighter variant).
-            // Everything else gets a generic retry-via-toolbar
-            // hint. Toast is best-effort — if the Library window
-            // isn't open, system Notifications also fire from
-            // elsewhere in the pipeline.
-            let raw = String(describing: error).lowercased()
-            let lowMem = raw.contains("memory") || raw.contains("oom")
-                || raw.contains("mil network") || raw.contains("deallocated")
-                || raw.contains("load failed") || raw.contains("init failed")
-            let title: String
-            let body: String
-            if lowMem {
-                title = "Transcription failed: your Mac couldn't run the model"
-                body = "Open Settings → Transcription model and pick a lighter Whisper variant (Small or Base). Re-transcribe from the meeting toolbar."
-            } else {
-                title = "Transcription failed"
-                body = "Open the meeting and tap Re-transcribe. If it keeps failing, send a bug report from the toolbar."
-            }
-            LibraryWindow.shared.postToast(title: title, body: body, kind: "error")
+            // Surface a Library-window toast for the failure. One
+            // string for every failure mode on purpose — Костя's call:
+            // no model-load vs network vs auth branching, no jargon.
+            // Power users send the bug report (toolbar 🐞 button) and
+            // we read the log; the user just needs to know "something
+            // broke, ping us".
+            let title = L.notif("transcribe_failed_title")
+            LibraryWindow.shared.postToast(title: title, body: "", kind: "error")
         }
         // Post-transcribe Supabase sync: push speakers + segments
         // for cross-device read, and upload the playback mix +
@@ -1305,6 +1345,29 @@ final class TranscriptionPipeline {
     /// state: ship a Whisper-native diarize fallback via gpt-4o-
     /// transcribe-diarize.) An ASR/quota/network error from the active
     /// provider is a real failure and propagates.
+    /// Shared "user picked a cloud provider but their tier doesn't
+    /// cover it" recovery. Flips the persisted override back to `.auto`
+    /// (which resolves to `.whisperLocal` on free), surfaces a single
+    /// "Cloud needs Pro" line into TranscriptionErrors for the toast,
+    /// and re-runs the same track through local Whisper for THIS call.
+    /// On Intel where local Whisper isn't available we re-throw the
+    /// tier error — there's nothing useful we can fall back to.
+    private func fallbackToLocalAfterTierGate(wavURL: URL,
+                                              meetingId: String) async throws -> [GeminiTranscriber.Turn] {
+        FileLogger.log("Whisper tier-gate: cloud refused, falling back to whisperLocal for \(meetingId)")
+        AppSettings.clearTranscriptionProviderOverride()
+        TranscriptionErrors.record(meetingId: meetingId,
+                                   message: "Cloud models need Pro or Max. Using local model.")
+        guard LocalWhisperTranscriber.isAvailable() else {
+            throw WhisperTranscriber.WhisperError.tierRequired
+        }
+        let variant = AppSettings.whisperLocalVariant
+        try await LocalWhisperTranscriber.ensureModelReady(variant)
+        let prompt = AppVocabulary.current.nilIfEmpty
+        return try await LocalWhisperTranscriber.transcribe(
+            audioURL: wavURL, mode: .single, variant: variant, initialPrompt: prompt)
+    }
+
     private func geminiRawTurns(wavURL: URL,
                                 meetingId: String) async throws -> [GeminiTranscriber.Turn] {
         switch currentProvider {
@@ -1328,8 +1391,34 @@ final class TranscriptionPipeline {
                 // tokens is the documented cap; we send a string,
                 // OpenAI tokenises and truncates.
                 let prompt = AppVocabulary.current.nilIfEmpty
+                // Pass the on-device model so a mid-run network drop is
+                // recovered per-chunk locally instead of failing the
+                // whole meeting (only when that model is already on disk).
                 return try await WhisperTranscriber.transcribe(
-                    audioURL: wavURL, mode: .single, initialPrompt: prompt)
+                    audioURL: wavURL, mode: .single, initialPrompt: prompt,
+                    localFallbackVariant: LocalWhisperTranscriber.firstDownloadedVariant())
+            } catch WhisperTranscriber.WhisperError.tierRequired {
+                return try await fallbackToLocalAfterTierGate(
+                    wavURL: wavURL, meetingId: meetingId)
+            } catch let err as WhisperTranscriber.WhisperError {
+                TranscriptionErrors.record(meetingId: meetingId,
+                                           message: err.localizedDescription)
+                throw err
+            }
+        case .groq:
+            // Same single-pass call as OpenAI path; backend swap moves
+            // the request to /transcribe/groq (worker proxies to
+            // api.groq.com with the org key) and pins the model to
+            // whisper-large-v3-turbo. Polish stage skipped on purpose.
+            do {
+                let prompt = AppVocabulary.current.nilIfEmpty
+                return try await WhisperTranscriber.transcribe(
+                    audioURL: wavURL, mode: .single,
+                    initialPrompt: prompt, backend: .groq,
+                    localFallbackVariant: LocalWhisperTranscriber.firstDownloadedVariant())
+            } catch WhisperTranscriber.WhisperError.tierRequired {
+                return try await fallbackToLocalAfterTierGate(
+                    wavURL: wavURL, meetingId: meetingId)
             } catch let err as WhisperTranscriber.WhisperError {
                 TranscriptionErrors.record(meetingId: meetingId,
                                            message: err.localizedDescription)

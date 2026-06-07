@@ -16,6 +16,10 @@
      for text and icons. See corder-design-system memory. */
   --accent: #0e7c44;
   --accent-pressed: #0a5e34;
+  /* Admin-role avatar fill. Blue, deliberately outside the green/gold
+     brand range, used only as a status cue that the operator's admin
+     grant is live in this session. Display-only, never a brand accent. */
+  --avatar-admin: #2563eb;
   /* Gold accent reserved for the Pro tier badge (and the existing
      "unseen meeting" title styling, which already hard-codes a similar
      value inline — left untouched). Picked to sit between the warm
@@ -52,6 +56,8 @@
   --fg-dim: #6e6e6a;
   --accent: #1f9d59;
   --accent-pressed: #178048;
+  /* Admin-role avatar fill — lifted for legibility on the dark panel. */
+  --avatar-admin: #3b82f6;
   /* Slightly cooler gold in dark — same intent (Pro tier badge) but
      lifted so the chip stays legible on the dark panel surface. */
   --accent-gold: #e0b95a;
@@ -542,7 +548,7 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 7px 10px;
   border: none;
   border-radius: 9px;
   background: transparent;
@@ -637,7 +643,7 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 }
 /* SOON chip reuses the shared `.promo-soon` (no second chip style). */
 button:active { background: var(--bg-active); }
-button:disabled { opacity: 0.4; cursor: default; }
+button:disabled { opacity: 0.4; cursor: pointer; }
 button.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
 button.primary:hover { background: #2a2a28; }
 /* `.ghost` keeps the same hover treatment as the default button so all three
@@ -849,7 +855,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   transition: background 80ms ease, border-color 80ms ease;
 }
 .rec-stop:hover { background: #9e3a32; border-color: #9e3a32; }
-.rec-stop:disabled { opacity: 0.5; cursor: default; }
+.rec-stop:disabled { opacity: 0.5; cursor: pointer; }
 .rec-stop-square {
   width: 9px;
   height: 9px;
@@ -917,7 +923,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
 .trans-stop:hover { background: var(--bg-hover); border-color: #b8b8b4; }
-.trans-stop:disabled { opacity: 0.5; cursor: default; }
+.trans-stop:disabled { opacity: 0.5; cursor: pointer; }
 .trans-stop-square {
   width: 9px;
   height: 9px;
@@ -1151,6 +1157,26 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .status-dot.ready { background: var(--status-ready); }
 .status-dot.recording { background: var(--status-fail); animation: pulse 1.6s ease-in-out infinite; }
+/* Inline red dot next to "Recording" inside the RecordingBanner.
+   Same shape as `.status-dot.recording`, but blinks via a JS-driven
+   `.on` class instead of a CSS keyframe (RecordingBanner already
+   computes a 1 Hz toggle from the elapsed timer). Without this
+   rule the span had no width/height/background and was invisible —
+   which is exactly what Костя caught in dark theme. */
+.rec-dot-inline {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-fail);
+  display: inline-block;
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.rec-dot-inline.on {
+  opacity: 1;
+  transform: scale(1.05);
+}
 /* "transcribing" rows used to wear a pulsing gold dot even after the
    pipeline finished or stalled — confusing because the row visually
    claimed work was in flight when it wasn't. Use a hollow white
@@ -1584,6 +1610,21 @@ input[type="text"]:focus, input[type="search"]:focus {
   justify-content: center;
   gap: 8px;
 }
+/* Subtle accent-coloured glow under the green Start CTA so the
+   button reads as the page's most-important action without resorting
+   to size or saturation tricks. Scoped to the accent variant — the
+   red Stop variant stays neutral so it doesn't read as "primary CTA"
+   on the same card. */
+.dash-primary-btn.accent {
+  box-shadow:
+    0 10px 30px -12px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 3px 10px -4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.dash-primary-btn.accent:hover:not(:disabled) {
+  box-shadow:
+    0 14px 36px -12px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 4px 12px -4px color-mix(in srgb, var(--accent) 28%, transparent);
+}
 .dash-primary-spin { animation: spin 0.9s linear infinite; }
 /* Spinner inside the test-mode Upgrade / Downgrade button. Same
    keyframe + cadence as the Dashboard primary button — keeps a
@@ -1762,7 +1803,13 @@ input[type="text"]:focus, input[type="search"]:focus {
    the active option read its state without colour-tinting the whole
    row. */
 .dash-sort-pop {
-  min-width: 200px;
+  /* Override `.profile-pop`'s fixed 280px — that's sized for a user
+     name, far too wide for "Most speakers". Hug the longest option
+     instead; `max-content` adapts automatically to every language's
+     label, with a cap so a freak-long translation can't run off-screen. */
+  width: max-content;
+  min-width: 0;
+  max-width: min(320px, 80vw);
 }
 .dash-sort-item {
   /* `.profile-pop-item` is flex with gap already; we just need to
@@ -1903,7 +1950,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    the layout when switching tabs. Active = colour + bottom border only,
    constant metrics. */
 .tab.active { color: var(--fg); border-bottom-color: var(--fg); }
-.tab.disabled { color: var(--fg-dim); cursor: default; }
+.tab.disabled { color: var(--fg-dim); cursor: pointer; }
 .tab.disabled:hover { color: var(--fg-dim); }
 
 /* Transcript area */
@@ -2110,7 +2157,7 @@ body.resizing { cursor: col-resize; user-select: none; }
      .toolbar-icon-btn:hover` and friends) still lit a hover bg even
      while the `:not(:disabled)` guard above prevented the local one. */
   opacity: 0.45;
-  cursor: default;
+  cursor: pointer;
   pointer-events: none;
 }
 /* Active state — accent-green fill, white glyph, 2-px accent ring
@@ -2246,6 +2293,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
   align-self: stretch;
 }
+/* "4+" headcount dropdown slot — sizes like a `.clarify-btn` pill so the
+   SettingsSelect trigger sits flush next to the Just me / 2 / 3 pills.
+   The trigger itself is width:100%, so the flex sizing lives here. */
+.clarify-people-slot { flex: 1 1 72px; min-width: 0; display: flex; }
+.clarify-people-slot .settings-select-trigger { padding: 13px 12px 13px 16px; }
 /* Vertical-stack variant (Re-transcribe + Delete in EmptyDeleteBanner). */
 .clarify-actions-stack { flex-direction: column; }
 /* `.clarify-btn` carries `flex: 1 1 72px` so it shares WIDTH in the
@@ -2280,7 +2332,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
 .clarify-btn:hover { background: var(--bg-hover); border-color: #b8b8b4; }
-.clarify-btn:disabled { opacity: 0.5; cursor: default; }
+.clarify-btn:disabled { opacity: 0.5; cursor: pointer; }
 /* Dark theme — secondary (non-accent / non-danger / non-active) variants
    invert to a WHITE fill with dark text. The transparent + light-grey
    outline pattern read as a hollow tile on a dark surface and pulled
@@ -2305,7 +2357,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--accent-pressed);
   border-color: var(--accent-pressed);
   color: #fff;
-  cursor: default;
+  cursor: pointer;
 }
 .clarify-btn.active:hover {
   background: var(--accent-pressed);
@@ -2321,6 +2373,29 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: #B7443C;
 }
 .clarify-btn.danger:hover { background: #9e3a32; border-color: #9e3a32; }
+
+/* Stop-transcription button doubles as a progress meter. A translucent
+   dark layer creeps across the red fill from the left, easing forward
+   every 1 s tick, so a multi-minute transcribe reads as "moving" rather
+   than a frozen spinner. Estimate-based (no byte-accurate signal), so it
+   approaches but never reaches the right edge — completion is signalled
+   by the banner disappearing, never by the bar hitting 100%. */
+.trans-stop-btn { position: relative; overflow: hidden; }
+.trans-stop-fill {
+  position: absolute;
+  inset: 0 auto 0 0;          /* top/bottom 0, left 0, width set inline */
+  background: rgba(0, 0, 0, 0.22);
+  /* Long ease so each 1 s width bump glides instead of stepping. */
+  transition: width 1000ms linear;
+  pointer-events: none;
+}
+.trans-stop-label {
+  position: relative;          /* sit above the fill */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 /* Accent (green) fill — primary affirmative big card button: the
    "Transcribe now" action and every "+ Add" in Settings. Same shape as
    .danger, brand accent instead of red. */
@@ -2470,7 +2545,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: var(--fg);
   color: #fff;
 }
-.speakers-pill:disabled { opacity: 0.5; cursor: default; }
+.speakers-pill:disabled { opacity: 0.5; cursor: pointer; }
 .transcript {
   flex: 1;
   overflow-y: auto;
@@ -2614,7 +2689,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   width: 100%;
   display: block;
   aspect-ratio: 16 / 10;
-  object-fit: contain;
+  /* `cover`, not `contain`: every recording captures the screen at its
+     own native resolution, so `contain` letterboxed each one a
+     DIFFERENT amount inside the fixed 16:10 box and the previews looked
+     like random sizes. `cover` fills the box edge-to-edge so every
+     preview is visually identical; the fullscreen lightbox
+     (`.video-fs-video`) still uses `contain` to show the whole frame. */
+  object-fit: cover;
   /* transparent so the parent's grey placeholder shows through until
      the first frame is decoded — no jarring flash of pure black on
      load. */
@@ -2965,7 +3046,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .audio-btn-primary:disabled,
 .audio-btn-primary:disabled:hover {
   background: #cbcbc7;
-  cursor: default;
+  cursor: pointer;
   opacity: 1;
 }
 .audio-time {
@@ -3240,7 +3321,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: background 80ms ease, border-color 80ms ease;
 }
 .settings-save-btn:hover { background: var(--accent-pressed); border-color: var(--accent-pressed); }
-.settings-save-btn:disabled { opacity: 0.45; cursor: default; }
+.settings-save-btn:disabled { opacity: 0.45; cursor: pointer; }
 .settings-field-hint {
   font-size: 12px;
   color: var(--fg-muted);
@@ -3536,7 +3617,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .wl-download-btn.is-loading {
   background: var(--bg);
   color: var(--fg);
-  cursor: default;
+  cursor: pointer;
 }
 .wl-download-btn.is-loading:hover {
   background: var(--bg);
@@ -3597,6 +3678,19 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .dash-prefetch-picker {
   width: 100%;
+}
+/* First-poll loader — muted, non-interactive, with a spinning glyph on
+   the right where the picker's chevron would sit. */
+.dash-prefetch-loading {
+  width: 100%;
+  cursor: default;
+  color: var(--fg-muted);
+}
+.dash-prefetch-loading .settings-select-trigger-label { color: var(--fg-muted); }
+.dash-prefetch-spin {
+  margin-left: auto;
+  color: var(--fg-muted);
+  animation: spin 0.8s linear infinite;
 }
 
 /* ── Tooltip ──────────────────────────────────────────────────────
@@ -3958,6 +4052,42 @@ body.resizing { cursor: col-resize; user-select: none; }
   opacity: 0.8;
   min-width: 2.4ch;
   text-align: right;
+}
+/* Dismiss × pinned to the right edge of every toast. Matches the toast's
+   surface (translucent white on the red error pill, faded ink on the
+   white success pill) so it reads as part of the same chrome instead of
+   a foreign button. Hit area is a comfortable 20px round; the glyph is
+   the lighter ✕ so it doesn't out-shout the message text. */
+.toast-close {
+  margin-left: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+  background: transparent !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+  flex-shrink: 0;
+}
+.toast-error .toast-close {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.toast-error .toast-close:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+}
+.toast-success .toast-close {
+  color: var(--fg-muted) !important;
+}
+.toast-success .toast-close:hover {
+  background: var(--bg-hover) !important;
+  color: var(--fg) !important;
 }
 
 /* Floating donate button — bottom-right, white pill matching toolbar
@@ -4412,7 +4542,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* Pill in busy state — after click, before Sparkle's dialog appears.
    Slight pulse so the user sees the click registered. */
 .update-pill.busy {
-  cursor: default;
+  cursor: pointer;
   animation: update-pill-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 @keyframes update-pill-pulse {
@@ -4469,41 +4599,70 @@ body.resizing { cursor: col-resize; user-select: none; }
    top (the only hot target), the body title below as a normal
    paragraph. Same `.md-h3`/`.md-p` rhythm Summary uses, so flipping
    between the two tabs reads as one surface. */
+/* Whole row is the click target — a chapter is one seek action, so
+   the entire block lights up on hover, not just the time pill. */
+/* Each chapter is one clickable rounded row. No dividers + no negative
+   margin: the old version mixed a rounded hover highlight with full-
+   width border-top dividers (corners clashed with the lines) AND used a
+   `:has()` trick to hide adjacent borders on hover, which read as a
+   glitch ("обводка пропадает"). Spacing + the hover highlight separate
+   the rows cleanly instead. */
 .chapter-block {
-  display: block;
-  padding: 8px 0 14px;
-}
-/* Thin divider between chapters spanning the full content width —
-   no inset so it reaches the same edges as the Summary headings. */
-.chapter-block + .chapter-block {
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-}
-/* Timestamp pill — uses the same type as `.md-h3` (16/500, fg) so
-   it sits at section-heading weight in the visual hierarchy. Hover
-   highlights ONLY this chip (not the whole row), making it the
-   obvious click target. Tabular-nums keeps the column flush. */
-.chapter-time {
   appearance: none;
   border: 0;
+  width: 100%;
+  text-align: left;
   background: transparent;
   cursor: pointer;
   font: inherit;
+  display: block;
+  padding: 12px;
+  margin: 2px 0;
+  border-radius: 10px;
+  transition: background 80ms ease;
+}
+.chapter-block:hover { background: var(--bg-hover); }
+/* Timestamp — same type as `.md-h3` (16/500, fg) so it sits at
+   section-heading weight. Tabular-nums keeps the column flush. */
+.chapter-time {
   font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.005em;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
-  padding: 2px 8px;
-  border-radius: 6px;
-  margin: 0 -8px 6px;
+  /* inline-block pill so the active highlight wraps just the timecode,
+     not the whole row width. Negative left margin keeps the digits flush
+     with the title text below despite the pill's own padding. */
   display: inline-block;
-  transition: background 80ms ease;
+  padding: 1px 8px;
+  margin: 0 0 6px -8px;
+  border-radius: 6px;
 }
-.chapter-time:hover { background: var(--bg-hover); }
+/* Active chapter (the one playing right now) — green fill + white text
+   on the timecode, so the user can see where they are in the list. */
+.chapter-block.is-active .chapter-time {
+  background: var(--accent);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+/* Progress THROUGH the active chapter — a darker-green layer creeps
+   across the pill from the left, full by the time the next chapter
+   takes over (same idea as the Stop-transcription button fill). */
+.chapter-time-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(0, 0, 0, 0.22);
+  transition: width 250ms linear;
+  pointer-events: none;
+}
+.chapter-time-text {
+  position: relative;   /* above the fill */
+}
 /* Title = body paragraph (matches Summary's `.md-p`). */
 .chapter-block .md-p.chapter-title {
   margin: 0;
+  display: block;
 }
 
 
@@ -4595,8 +4754,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   );
 }
 /* Card content (title, status, buttons, notes) sits in its own
-   stacking context below the sheen layer. */
-.update-card > :not(.update-card-sheen) { position: relative; z-index: 1; }
+   stacking context below the sheen layer. The help button is
+   absolutely positioned above EVERYTHING (sheen included) so the
+   selector excludes it — otherwise `position: relative` here would
+   clobber its `position: absolute` and snap it back into flow. */
+.update-card > :not(.update-card-sheen):not(.update-help) {
+  position: relative;
+  z-index: 1;
+}
 @keyframes update-card-in {
   from {
     opacity: 0;
@@ -4622,38 +4787,53 @@ body.resizing { cursor: col-resize; user-select: none; }
     transform: perspective(900px) rotateX(8deg) scale(0.88);
   }
 }
-/* Icon-only "details" toggle in the top-right of the card. Replaces
-   the wide "Show details" outline button. */
+/* Icon-only "details" toggle pinned to the card's top-right corner.
+   Mirrors `.toolbar-icon-btn` exactly so it feels like a transcript-
+   toolbar Copy / Refresh chip: 1-px outline at rest, `--bg-hover`
+   wash on hover, accent fill when active. `z-index: 3` lifts it
+   above both the sheen overlay (z:2) and the card content (z:1),
+   so the radial light slides UNDER it instead of through it. */
 .update-help {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 3;
   appearance: none;
-  width: 26px;
-  height: 26px;
+  /* Same 38×38 chip as `.toolbar-icon-btn` in the main header so
+     the help button reads as part of the same icon-button family. */
+  width: 38px;
+  height: 38px;
+  /* Explicit padding:0 + box-sizing:border-box override the global
+     `button { padding: 8px 14px }` rule from line 221 — without
+     them the circle deforms into a pill. */
+  padding: 0;
+  box-sizing: border-box;
   border-radius: 50%;
   border: 1px solid var(--border-strong);
-  background: transparent;
+  background: var(--bg);
   color: var(--fg-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
   transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
 }
 .update-help:hover {
   background: var(--bg-hover);
   color: var(--fg);
+  border-color: #b8b8b4;
 }
+.update-help:active { background: var(--bg-active); }
 .update-help.is-active {
   background: var(--accent);
   border-color: var(--accent);
   color: #ffffff;
 }
+.dark .update-help:hover { background: var(--bg-hover); border-color: var(--fg-muted); }
 /* Title + status line live in one tight block (4 px between them),
    then the outer card gap (14 px) controls the space below them. */
 /* Title + status pressed right against each other. The `gap: 0`
@@ -4678,7 +4858,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-size: 14px;
   color: var(--fg-muted);
   line-height: 1.4;
-  margin: 2px 0 0;
+  margin: 6px 0 0;
 }
 .update-status.error { color: var(--danger); }
 .update-progress {
@@ -4692,12 +4872,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--accent);
   transition: width 120ms ease;
 }
-/* Both action buttons share the row at flex:1 so they end up the
-   same width. Same font-size / weight / padding so they read as
-   siblings — the only difference is fill colour. Extra top margin
-   lifts the row away from the status line above. */
+/* Stacked vertically: primary (Update now / OK) on top, secondary
+   (Later) below it. Both stretch to the full card width. Same
+   font-size / weight / padding so they read as siblings — the only
+   difference is fill colour. */
 .update-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-top: 8px;
 }
@@ -4731,14 +4912,17 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--accent-pressed);
   border-color: var(--accent-pressed);
 }
-.update-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.update-primary:disabled { opacity: 0.55; cursor: pointer; }
 .update-secondary {
   background: transparent;
   color: var(--fg);
   border: 1px solid var(--border-strong);
 }
-.update-secondary:hover { background: transparent; border-color: var(--border-strong); }
-.update-secondary:active { background: var(--bg-hover); }
+/* Secondary CTA (Later / Close) is the dismiss path — a normal
+   light-grey hover reads as a real button without competing with
+   the primary's accent fill. */
+.update-secondary:hover { background: var(--bg-hover); border-color: #b8b8b4; }
+.update-secondary:active { background: var(--bg-active, var(--bg-hover)); }
 .update-notes {
   font-size: 14px;
   line-height: 1.55;
@@ -4750,4 +4934,110 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow-y: auto;
   white-space: pre-wrap;
   user-select: text;
+}
+.update-notes.is-empty {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* Upsell strip pinned to the bottom of the Transcribing banner.
+   Same visual family as the rest of the card (typography pair +
+   `.clarify-btn` CTA), separated by a hairline so it reads as a
+   distinct, optional invitation rather than a continuation of the
+   "this row is busy" message above. */
+.trans-upsell {
+  position: relative;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: stretch;
+}
+/* Dismiss × anchored to the top-right of the upsell strip. Same
+   discreet outline-less style as `.clarify-dismiss`. */
+.trans-upsell-close {
+  position: absolute;
+  top: 8px;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 50% !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+}
+.trans-upsell-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+/* The Loader2 inside Stop transcription gets a fresh `.trans-stop-spinner`
+   modifier — overrides the inherited accent-green colour (the spinner
+   class is also used on the title spinner) so it reads white on the
+   red destructive surface. */
+.trans-stop-spinner {
+  color: #fff !important;
+}
+.trans-upsell-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.35;
+}
+.trans-upsell-desc {
+  font-size: 13px;
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+.trans-upsell-cta {
+  margin-top: 10px;
+  /* Match the header `.update-pill` silhouette: pill-shaped, content-
+     sized width, ~30 px tall via the inherited 8/14 padding. We pin it
+     to `flex-start` so it stays at its natural width instead of
+     stretching across the card like a hero CTA. */
+  align-self: flex-start;
+  flex: 0 0 auto;
+}
+/* Dense, naturally-varying sparkle field across the Upgrade CTA.
+   Position / size / delay / peak-opacity / duration are randomized
+   per-span at render time (see `makeSparkleField`), so the cluster
+   reads as a starry texture rather than the six-star ring on the
+   header `.update-pill`. */
+.trans-upsell-sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.trans-upsell-sparkles span {
+  position: absolute;
+  color: #ffffff;
+  line-height: 1;
+  opacity: 0;
+  animation-name: trans-sparkle;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.45);
+  will-change: opacity, transform;
+}
+@keyframes trans-sparkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50%      { opacity: var(--sparkle-peak, 0.7); transform: scale(1); }
+}
+.trans-upsell-cta .update-pill-text {
+  position: relative;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trans-upsell-sparkles span { animation: none; opacity: 0; }
 }

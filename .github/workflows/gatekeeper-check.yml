@@ -1,0 +1,82 @@
+name: Gatekeeper check
+
+# Guardrail against the "won't launch on someone else's Mac" class of
+# bug. On every published GitHub release (and on demand), download the
+# release's notarized zip and assert that a FRESH Mac — on both the
+# current and previous macOS — would accept it: valid Developer ID
+# signature, stapled notarization ticket, and a clean Gatekeeper verdict
+# even with the download (quarantine) flag set. CI runners are clean,
+# headless environments, so this is the closest automated stand-in for a
+# real new user; it can't click through the GUI or grant TCC prompts.
+#
+# Trigger: a release is published (asset already uploaded), or manually
+# via workflow_dispatch with a tag like `v0.13.33`.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag in halinskiy/corder-updates (e.g. v0.13.33)"
+        required: true
+
+jobs:
+  gatekeeper:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-15 = Sequoia, macos-14 = Sonoma. Add new images here as
+        # GitHub ships them so every shipped macOS is covered.
+        os: [macos-15, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Checking $TAG on $(sw_vers -productVersion)"
+
+      - name: Download release zip
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          # Assets live on the corder-updates repo's release of that tag.
+          gh release download "$TAG" \
+            --repo halinskiy/corder-updates \
+            --pattern '*.zip' --dir dist
+          ls -lh dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unpack
+        run: |
+          cd dist
+          ZIP="$(ls *.zip | head -1)"
+          ditto -x -k "$ZIP" extracted
+          APP="$(/usr/bin/find extracted -maxdepth 2 -name 'Corder.app' -print -quit)"
+          echo "APP=$PWD/$APP" >> "$GITHUB_ENV"
+
+      - name: Simulate a downloaded copy (quarantine)
+        run: |
+          # This is the exact state a user's download is in — it's what
+          # triggers the "Apple could not verify" dialog on a bad build.
+          xattr -w com.apple.quarantine "0083;00000000;Safari;" "$APP"
+
+      - name: codesign --verify
+        run: codesign --verify --deep --strict --verbose=1 "$APP"
+
+      - name: Developer ID + hardened runtime
+        run: |
+          codesign -dv --verbose=4 "$APP" 2>&1 | tee /tmp/cs.txt
+          grep -q "Authority=Developer ID Application" /tmp/cs.txt || { echo "::error::not Developer ID signed"; exit 1; }
+          grep -q "flags=.*runtime" /tmp/cs.txt || { echo "::error::hardened runtime missing"; exit 1; }
+
+      - name: Stapled notarization ticket
+        run: xcrun stapler validate "$APP"
+
+      - name: Gatekeeper assessment (must accept)
+        run: |
+          spctl --assess --type execute -vv "$APP" 2>&1 | tee /tmp/spctl.txt
+          grep -q "source=Notarized Developer ID" /tmp/spctl.txt || { echo "::error::Gatekeeper would reject this build on $(sw_vers -productVersion)"; exit 1; }
+          echo "✅ $(sw_vers -productVersion): accepted as Notarized Developer ID"

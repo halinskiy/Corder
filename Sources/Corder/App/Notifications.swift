@@ -56,7 +56,13 @@ enum NotificationsService {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
+        // Softer notification tone than the macOS default "Funk" /
+        // "Bottle" alert. `Glass.aiff` ships in /System/Library/Sounds/
+        // on every macOS — short, gentle water-drop chime, much less
+        // jarring than the default banner sound. Falls back to system
+        // default if the file isn't where we expect (older macOS / a
+        // user who deleted it).
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "Glass.aiff"))
         content.userInfo = ["action": action.rawValue]
         // `threadIdentifier` groups the banner in Notification Center
         // so even when iOS-like grouping is on, every Corder banner

@@ -103,11 +103,22 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
             acknowledgement()
             self?.hide()
         }
+        // No-update modal: title states the conclusion ("You're up to
+        // date"), the status line just confirms with the current
+        // version, and the only action is "OK" — there's nothing to
+        // install, so the previous "Update available" / "Update now"
+        // labels were straight-up misleading (Костя caught this).
+        // No-update modal: just a confirmation card. Primary (Update
+        // now / OK) is suppressed — there's literally nothing to do
+        // here, so the only affordance is the secondary "Later" which
+        // dismisses the dialog. Empty `primaryLabel` is the contract
+        // the React side reads to hide the primary slot.
+        let current = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
         push(visible: true, phase: "upToDate",
-             primaryLabel: "Update now", primaryEnabled: true,
-             statusLine: "You are on the latest version.",
+             primaryLabel: "", primaryEnabled: false,
+             statusLine: current.isEmpty ? nil : "Corder \(current)",
              showsProgress: false, progress: 0,
-             versionOverride: "Update available")
+             versionOverride: "You're up to date")
     }
 
     // MARK: - Updater error

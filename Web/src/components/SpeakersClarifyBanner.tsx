@@ -1,6 +1,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { setExpectedSpeakers, retranscribe } from "../api";
+import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import type { T } from "../i18n";
 
 interface Props {
@@ -25,12 +26,17 @@ interface Props {
 /// Banner asks "how many people were on the call?" (total, including the
 /// user). Backend stores `expected_other_speakers` = total − 1, so the
 /// "Just me" option still maps to 0 and "2 people" maps to 1 etc.
+/// Discrete pills for the common small-call cases. "4+" is no longer a
+/// pill — it's a dropdown (see below) so the user picks the EXACT
+/// headcount for bigger calls instead of a fuzzy bucket.
 const OPTIONS: Array<{ othersValue: number; label: string }> = [
   { othersValue: 0, label: "just_me" },
   { othersValue: 1, label: "2" },
   { othersValue: 2, label: "3" },
-  { othersValue: 3, label: "4+" },
 ];
+
+/// Dropdown choices for 4..10 people total (othersValue = total − 1).
+const PEOPLE_DROPDOWN = [4, 5, 6, 7, 8, 9, 10];
 
 /// Sibling of RecordingBanner / TranscribingBanner, surfaced when the
 /// auto-diarizer over-counted speakers and we'd like the user to confirm
@@ -79,11 +85,7 @@ export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onTo
       </div>
       <div className="clarify-actions">
         {OPTIONS.map((opt) => {
-          // Active only reflects the user's own click in this session,
-          // never a pre-filled guess. "4+" stays the bucket for 3+.
-          const isActive =
-            picked !== null &&
-            (opt.othersValue === 3 ? picked >= 3 : picked === opt.othersValue);
+          const isActive = picked !== null && picked === opt.othersValue;
           return (
             <button
               key={opt.othersValue}
@@ -95,6 +97,26 @@ export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onTo
             </button>
           );
         })}
+        {/* 4+ is a dropdown — click it and pick the exact headcount.
+            Same `SettingsSelect` widget as the theme picker, sized to a
+            pill so it sits flush in the row. Shows "4+" until a value is
+            picked (no matching option → literal fallback label), then the
+            chosen total. */}
+        <div className="clarify-people-slot">
+          <SettingsSelect
+            value={picked !== null && picked >= 3 ? String(picked + 1) : "4+"}
+            options={PEOPLE_DROPDOWN.map<SettingsSelectOption<string>>((n) => ({
+              value: String(n),
+              label: String(n),
+            }))}
+            disabled={busy}
+            onChange={(v) => {
+              const total = parseInt(v, 10);
+              if (!Number.isNaN(total)) select(total - 1);
+            }}
+            ariaLabel={t.clarify_question}
+          />
+        </div>
       </div>
     </div>
   );

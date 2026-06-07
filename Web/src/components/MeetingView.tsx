@@ -574,7 +574,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
             className="transcript-wrap summary-wrap-host"
             style={{ display: leftTab === "chapters" ? "flex" : "none" }}
           >
-            <ChaptersPane detail={detail} onSeek={onSeek} t={t} />
+            <ChaptersPane detail={detail} onSeek={onSeek} currentTimeSec={currentTime} t={t} />
           </div>
           {/* All three right-pane panels stay MOUNTED across tab
               switches (display toggled, not unmounted) — RightPanel

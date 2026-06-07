@@ -321,6 +321,10 @@ export interface Settings {
   auto_title?: boolean;
   auto_summary?: boolean;
   auto_chapters?: boolean;
+  /** register Corder as a login item (launch on boot). */
+  launch_at_login?: boolean;
+  /** forced transcription language (ISO-639-1, e.g. "ru"); "" = auto. */
+  transcription_language?: string;
   telemetry?: boolean;
   /** user-managed bundle ids for the call auto-detector. */
   meeting_whitelist?: string[];
@@ -351,6 +355,10 @@ export interface Settings {
   /** read-only: server-derived "this licence currently looks Pro" flag.
    *  Free tier when false. */
   is_pro?: boolean;
+  /** read-only: account carries the admin role (`app_metadata.role ==
+   *  "admin"`), mirrored from the Supabase session. Drives the blue
+   *  profile avatar. Display-only — never a privilege grant. */
+  is_admin?: boolean;
   /** read-only: paid-tier ladder rung. `free` = baseline, `pro` = paying
    *  customer, `max` = top-tier unlimited bundle. Drives the profile
    *  tier badge styling and the Sidebar Upgrade-card visibility. */
@@ -363,7 +371,7 @@ export interface Settings {
    *  default (Free → whisperLocal, Pro/Max → whisper). The three
    *  concrete values map 1:1 to the Swift `TranscriptionProvider`
    *  rawValues. POST `"auto"` to clear the override. */
-  transcription_provider?: "auto" | "gemini" | "whisper" | "whisperLocal";
+  transcription_provider?: "auto" | "gemini" | "whisper" | "groq" | "whisperLocal";
   /** read-only: is the *currently picked* WhisperKit variant fully
    *  downloaded? Convenience flag — per-variant state lives in
    *  `whisper_local_models`. */
@@ -371,6 +379,12 @@ export interface Settings {
   /** Picked Whisper Local variant id (e.g. "openai_whisper-large-v3_turbo").
    *  Persists across launches; POST the same field to switch. */
   whisper_local_variant?: string;
+  /** Upsell-dismiss timestamps keyed by upsell kind ("speed", "best",
+   *  "unlimited"). Stored as a JSON string on the native side because
+   *  `UserDefaults` is the only persistent storage we trust across
+   *  launches (WKWebView localStorage gets wiped if the listening
+   *  port rotates — Костя's case). Empty / absent = no snooze. */
+  upsell_snooze?: string;
   /** Per-variant catalogue with ready/progress state. The picker
    *  renders this directly; the DownloadButton under the picker reads
    *  the currently picked entry to decide between idle / Download /

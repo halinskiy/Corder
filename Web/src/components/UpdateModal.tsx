@@ -1,4 +1,5 @@
 import React from "react";
+import { StarsCanvas } from "./StarsCanvas";
 
 /// Full-screen update modal rendered inside the Library WKWebView.
 /// State is pushed in by the Swift side via `window.corderUpdateState(...)`
@@ -147,6 +148,9 @@ export function UpdateModalHost() {
   const onPrimary = () => { if (state.primaryEnabled) postAction("primary"); };
   const onDismiss = () => { postAction("dismiss"); };
   const hasNotes = !!(state.releaseNotes && state.releaseNotes.trim().length > 0);
+  const notesBody = hasNotes
+    ? state.releaseNotes
+    : "No release notes attached to this update.";
 
   // Click on the backdrop (outside the card) closes the modal —
   // same as the in-card Later button. Click inside the card must
@@ -166,17 +170,15 @@ export function UpdateModalHost() {
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="update-card-sheen" aria-hidden />
-        {hasNotes && (
-          <button
-            type="button"
-            className={"update-help" + (notesOpen ? " is-active" : "")}
-            onClick={() => setNotesOpen((v) => !v)}
-            aria-label={notesOpen ? "Hide details" : "Show details"}
-            title={notesOpen ? "Hide details" : "Show details"}
-          >
-            ?
-          </button>
-        )}
+        <button
+          type="button"
+          className={"update-help" + (notesOpen ? " is-active" : "")}
+          onClick={() => setNotesOpen((v) => !v)}
+          aria-label={notesOpen ? "Hide details" : "Show details"}
+          title={notesOpen ? "Hide details" : "Show details"}
+        >
+          ?
+        </button>
         <div className="update-head">
           <div className="update-title">{state.version || "Update available"}</div>
           {state.phaseStatusLine && (
@@ -193,14 +195,19 @@ export function UpdateModalHost() {
         )}
 
         <div className="update-actions">
-          <button
-            type="button"
-            className="update-primary"
-            onClick={onPrimary}
-            disabled={!state.primaryEnabled}
-          >
-            {state.primaryLabel}
-          </button>
+          {/* Primary button is hidden when Swift passes an empty label —
+              the no-update modal has nothing actionable so the only
+              affordance left is the secondary "Later" (= dismiss). */}
+          {state.primaryLabel && (
+            <button
+              type="button"
+              className="update-primary"
+              onClick={onPrimary}
+              disabled={!state.primaryEnabled}
+            >
+              {state.primaryLabel}
+            </button>
+          )}
           <button
             type="button"
             className="update-secondary"
@@ -210,112 +217,13 @@ export function UpdateModalHost() {
           </button>
         </div>
 
-        {notesOpen && hasNotes && (
-          <div className="update-notes">{state.releaseNotes}</div>
+        {notesOpen && (
+          <div className={"update-notes" + (hasNotes ? "" : " is-empty")}>
+            {notesBody}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-/// Lightweight starfield via a Canvas + requestAnimationFrame loop.
-/// Particles spawn at random points around the viewport and drift
-/// toward centre; alpha follows a triangle envelope so they ramp in
-/// and out instead of popping. 200 particles is a comfortable count
-/// at ~30-fps even on integrated GPUs.
-function StarsCanvas() {
-  const ref = React.useRef<HTMLCanvasElement | null>(null);
-
-  React.useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let stars = makeStars(200, canvas);
-    let raf = 0;
-    let last = performance.now();
-
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-
-    const resize = () => {
-      const { clientWidth: w, clientHeight: h } = canvas;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-
-    const tick = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      const cx = w / 2, cy = h / 2;
-
-      ctx.clearRect(0, 0, w, h);
-
-      for (const s of stars) {
-        s.life += dt;
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        const dx = s.x - cx, dy = s.y - cy;
-        const distSq = dx * dx + dy * dy;
-        if (s.life >= s.maxLife || distSq < 16 || s.x < -20 || s.x > w + 20 || s.y < -20 || s.y > h + 20) {
-          respawn(s, w, h);
-        }
-        const t = s.life / s.maxLife;
-        const env = t < 0.5 ? t * 2 : (1 - t) * 2;
-        const alpha = Math.max(0, Math.min(0.9, env));
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-    };
-  }, []);
-
-  return <canvas ref={ref} className="update-stars" aria-hidden />;
-}
-
-interface Star {
-  x: number; y: number;
-  vx: number; vy: number;
-  r: number;
-  life: number; maxLife: number;
-}
-
-function makeStars(n: number, canvas: HTMLCanvasElement): Star[] {
-  const out: Star[] = [];
-  const w = canvas.clientWidth || 800;
-  const h = canvas.clientHeight || 600;
-  for (let i = 0; i < n; i++) {
-    const s: Star = { x: 0, y: 0, vx: 0, vy: 0, r: 0, life: 0, maxLife: 1 };
-    respawn(s, w, h);
-    out.push(s);
-  }
-  return out;
-}
-
-function respawn(s: Star, w: number, h: number) {
-  const cx = w / 2, cy = h / 2;
-  s.x = Math.random() * w;
-  s.y = Math.random() * h;
-  const dx = cx - s.x;
-  const dy = cy - s.y;
-  const dist = Math.max(1, Math.hypot(dx, dy));
-  const speed = 110 + Math.random() * 110;
-  s.vx = (dx / dist) * speed;
-  s.vy = (dy / dist) * speed;
-  s.r = 0.6 + Math.random() * 1.1;
-  s.life = 0;
-  s.maxLife = 0.6 + Math.random() * 0.8;
-}
