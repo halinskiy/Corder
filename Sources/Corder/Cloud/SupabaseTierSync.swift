@@ -15,6 +15,17 @@ enum SupabaseTierSync {
     /// a paying user back to Free).
     static func applyFromCurrentSession() {
         guard let user = SupabaseClientHolder.shared.auth.currentUser else { return }
+
+        // Mirror the admin role first, independent of tier parsing (the
+        // tier branch below can `return` early on an unrecognised value,
+        // and admin state must still settle). `app_metadata.role` is set
+        // server-side by the admin grant; absent ≡ not admin.
+        let isAdmin = (user.appMetadata["role"]?.stringValue?.lowercased() == "admin")
+        if AppSettings.isAdmin != isAdmin {
+            FileLogger.log("SupabaseTierSync: applying isAdmin=\(isAdmin) from server (was \(AppSettings.isAdmin))")
+            AppSettings.setIsAdmin(isAdmin)
+        }
+
         let raw = user.appMetadata["tier"]?.stringValue?.lowercased() ?? ""
         // Absent / empty tier ≡ Free. Previously we returned early on
         // an empty value ("keeping local") — that left a paid user

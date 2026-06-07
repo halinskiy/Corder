@@ -6,12 +6,20 @@
     <true/>
     <key>com.apple.security.device.camera</key>
     <false/>
-    <!-- Required for Sparkle on a self-signed (non-notarized) app: hardened
-         runtime would otherwise refuse to load Sparkle's signed XPC services
-         because they're not from the same Developer-ID team. Removable once
-         we move to notarized Developer ID builds. -->
-    <key>com.apple.security.cs.disable-library-validation</key>
-    <true/>
+    <!-- Removed 2026-06-02 along with the move to Developer ID +
+         universal-binary notarized builds. `Sparkle.framework` is now
+         re-signed with our Team ID (PDB9JGGX74) during build, so
+         hardened-runtime library validation passes without the
+         opt-out. Dropping the entitlement lowers our Gatekeeper risk
+         score — Apple's malware-scan path treats apps with fewer
+         hardening opt-outs as lower-risk, which removes the "Apple
+         could not verify Corder is free of malware" diagnostic that
+         was firing on cleanly-notarized builds on tester Macs.
+         Re-add ONLY if Sparkle starts failing with
+         "Library Validation failed: Rejecting"-class errors and
+         re-signing the framework in-place no longer helps. -->
+    <!-- <key>com.apple.security.cs.disable-library-validation</key> -->
+    <!-- <true/> -->
     <!-- Sign in with Apple capability is registered for
          com.3mpq.Corder on developer.apple.com (2026-05-25).
          The `com.apple.developer.applesignin` entitlement is

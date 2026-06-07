@@ -123,6 +123,16 @@ export function SettingsPane({
 
         <SoloCard>
           <Toggle
+            label={t.settings_launch_at_login_title ?? "Launch at login"}
+            desc={t.settings_launch_at_login_desc ?? "Open Corder automatically when your Mac starts."}
+            checked={(s?.launch_at_login as boolean | undefined) ?? false}
+            disabled={!loaded}
+            onChange={(v) => patch({ launch_at_login: v })}
+          />
+        </SoloCard>
+
+        <SoloCard>
+          <Toggle
             label={t.settings_telemetry_title ?? "Help improve Corder"}
             desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts to the maintainer once a day."}
             checked={(s?.telemetry as boolean | undefined) ?? true}
@@ -166,10 +176,16 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        <div className="settings-divider" />
-        <SoloCard>
-          <TierTestRow t={t} s={s} patch={patch} />
-        </SoloCard>
+        {/* Subscription flip is an admin/QA-only lever — regular users
+            must not be able to change their own tier from Settings. */}
+        {s?.is_admin === true && (
+          <>
+            <div className="settings-divider" />
+            <SoloCard>
+              <TierTestRow t={t} s={s} patch={patch} />
+            </SoloCard>
+          </>
+        )}
       </div>
 
       <div style={{ display: section === "advanced" ? "contents" : "none" }}>
@@ -220,6 +236,15 @@ export function SettingsPane({
             checked={on("auto_chapters")}
             disabled={!loaded}
             onChange={(v) => patch({ auto_chapters: v })}
+          />
+        </SoloCard>
+
+        <SoloCard>
+          <TranscriptionLanguageRow
+            value={s?.transcription_language ?? ""}
+            disabled={!loaded}
+            onChange={(code) => patch({ transcription_language: code })}
+            t={t}
           />
         </SoloCard>
 
@@ -461,6 +486,63 @@ function MicDevicePicker({
           {t.settings_mic_device_empty ?? "No input devices found"}
         </div>
       )}
+    </div>
+  );
+}
+
+/// Forced transcription-language picker. Same `.hk-block` shell as
+/// MicDevicePicker. "Auto-detect" ("" value) is the default and keeps
+/// Whisper guessing per recording; pinning a language stops the
+/// Russian→Ukrainian misdetection (the two are close enough that
+/// auto-detect renders Russian speech as Ukrainian). Curated short list
+/// of the languages our users actually record in — not the full UI
+/// locale set, since this is about SPOKEN language, not interface.
+const TRANSCRIPTION_LANGS: Array<{ code: string; label: string }> = [
+  { code: "en", label: "English" },
+  { code: "ru", label: "Русский" },
+  { code: "uk", label: "Українська" },
+  { code: "de", label: "Deutsch" },
+  { code: "fr", label: "Français" },
+  { code: "es", label: "Español" },
+  { code: "pt", label: "Português" },
+  { code: "it", label: "Italiano" },
+  { code: "pl", label: "Polski" },
+  { code: "nl", label: "Nederlands" },
+  { code: "tr", label: "Türkçe" },
+];
+
+function TranscriptionLanguageRow({
+  value, disabled, onChange, t,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (code: string) => void;
+  t: T;
+}) {
+  const autoLabel = t.settings_transcription_language_auto ?? "Auto-detect";
+  const options: SettingsSelectOption<string>[] = [
+    { value: "", label: autoLabel },
+    ...TRANSCRIPTION_LANGS.map<SettingsSelectOption<string>>((l) => ({
+      value: l.code,
+      label: l.label,
+    })),
+  ];
+  const title = t.settings_transcription_language_title ?? "Transcription language";
+  return (
+    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
+         aria-label={title}>
+      <div className="settings-row-label">{title}</div>
+      <div className="settings-row-desc">
+        {t.settings_transcription_language_desc
+          ?? "Pin the spoken language so it isn't mis-detected. Auto-detect works for most calls."}
+      </div>
+      <SettingsSelect
+        value={value}
+        options={options}
+        disabled={disabled}
+        onChange={onChange}
+        ariaLabel={title}
+      />
     </div>
   );
 }

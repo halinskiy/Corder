@@ -97,6 +97,9 @@ enum DTO {
         /// Run `GeminiChapters` automatically once the transcript is
         /// ready, so the Chapters tab is pre-populated on first open.
         let auto_chapters: Bool?
+        /// Register Corder as a login item (launch on boot / login).
+        /// Backed by `SMAppService.mainApp`.
+        let launch_at_login: Bool?
         /// Opt-in diagnostic telemetry — default off. When on, the
         /// app ships diagnostic counts (no PII / no transcript) to
         /// the maintainer's Worker once per 24h.
@@ -144,6 +147,11 @@ enum DTO {
         /// flag. MVP rule lives in `AppSettings.isValidLicenceFormat`
         /// (≥ 20 alphanumeric/dash/underscore).
         let is_pro: Bool?
+        /// Read-only: `true` when the signed-in account has the admin
+        /// role (`app_metadata.role == "admin"`), mirrored from the
+        /// Supabase session by `SupabaseTierSync`. Drives the blue
+        /// profile avatar. Display-only — never a privilege grant.
+        let is_admin: Bool?
         /// Read-only: current paid-tier ladder rung — `free` / `pro` /
         /// `max`. Source of truth on the server, mirrors
         /// `AppSettings.userTier`. The frontend reads this directly to
@@ -161,6 +169,10 @@ enum DTO {
         /// `"gemini"` / `"whisper"` / `"whisperLocal"`. POST `"auto"`
         /// to clear the override; POST a concrete value to pin.
         let transcription_provider: String?
+        /// Forced transcription language (ISO-639-1, e.g. `"ru"`). Empty
+        /// string = auto-detect. Feeds Whisper (cloud + local); Gemini
+        /// already preserves the spoken language verbatim.
+        let transcription_language: String?
         /// Read-only: is the currently-active WhisperKit variant fully
         /// downloaded (AudioEncoder.mlmodelc + TextDecoder.mlmodelc
         /// both present)? Convenience flag retained for the
@@ -173,6 +185,12 @@ enum DTO {
         /// the server hasn't seen one yet and is using the default
         /// (turbo).
         let whisper_local_variant: String?
+        /// JSON-encoded `{speed: ts, best: ts, unlimited: ts}` map —
+        /// timestamps the user dismissed the matching upsell strip at.
+        /// Lives in UserDefaults on the native side because the
+        /// WKWebView's localStorage gets wiped if Swifter binds a
+        /// different port at next launch.
+        let upsell_snooze: String?
         /// Per-variant catalogue with ready/downloading/progress state.
         /// Frontend renders this directly as the SettingsSelect option
         /// list AND the DownloadButton state under the picker.

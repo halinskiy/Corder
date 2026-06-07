@@ -843,6 +843,7 @@ enum Routes {
             auto_title: AppSettings.autoTitle,
             auto_summary: AppSettings.autoSummary,
             auto_chapters: AppSettings.autoChapters,
+            launch_at_login: AppSettings.launchAtLogin,
             telemetry: AppSettings.telemetryEnabled,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
@@ -869,6 +870,7 @@ enum Routes {
             user_name: AppSettings.userName,
             user_email: AppSettings.userEmail,
             is_pro: AppSettings.isPro,
+            is_admin: AppSettings.isAdmin,
             tier: AppSettings.userTier.rawValue,
             onboarding_completed: AppSettings.onboardingCompleted,
             transcription_provider: {
@@ -882,9 +884,11 @@ enum Routes {
                 }
                 return "auto"
             }(),
+            transcription_language: AppSettings.transcriptionLanguage,
             whisper_local_model_ready: LocalWhisperTranscriber.isModelDownloaded(
                 AppSettings.whisperLocalVariant),
             whisper_local_variant: AppSettings.whisperLocalVariant.rawValue,
+            upsell_snooze: AppSettings.upsellSnooze.nilIfEmpty,
             whisper_local_models: {
                 let inflight = LocalWhisperTranscriber.allInflight()
                 return LocalWhisperTranscriber.Variant.allCases.map { v in
@@ -935,7 +939,7 @@ enum Routes {
     /// Frontend polls this to decide whether to show the Bug icon
     /// at all — no events → button hidden.
     private static func hasBugEvents() -> HttpResponse {
-        let lines = readLogTail(maxLines: 4000)
+        let lines = currentSessionLines()
         var count = 0
         for line in lines {
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
@@ -948,7 +952,7 @@ enum Routes {
     /// plus 2 lines of context above and 2 below each hit. Vastly
     /// shorter than the previous whole-tail dump.
     private static func bugEventLog() -> String {
-        let lines = readLogTail(maxLines: 4000)
+        let lines = currentSessionLines()
         if lines.isEmpty { return "(log file missing or unreadable)" }
         var keep = Array(repeating: false, count: lines.count)
         for i in lines.indices {
@@ -978,6 +982,25 @@ enum Routes {
               let full = String(data: data, encoding: .utf8) else { return [] }
         let lines = full.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         return Array(lines.suffix(maxLines))
+    }
+
+    /// Log lines for the CURRENT session only — everything from the last
+    /// `applicationDidFinishLaunching` marker onward. `/tmp/corder.log`
+    /// accumulates across days, so an unbounded tail makes a bug report
+    /// resurface ancient, already-fixed errors (the AI summary then flags
+    /// long-dead issues as "critical"). Scoping to this launch keeps the
+    /// report — and its summary — about what's actually happening now.
+    private static let sessionMarker = "applicationDidFinishLaunching"
+    private static func currentSessionLines() -> [String] {
+        // A single session rarely exceeds a few thousand lines; 12k is a
+        // generous cap that still bounds the file read.
+        let lines = readLogTail(maxLines: 12_000)
+        if let idx = lines.lastIndex(where: { $0.contains(sessionMarker) }) {
+            return Array(lines[idx...])
+        }
+        // No marker in the tail (a marathon session rolled past 12k) —
+        // fall back to the recent slice rather than nothing.
+        return Array(lines.suffix(4000))
     }
 
     private static func submitLogs() -> HttpResponse {
@@ -1208,6 +1231,7 @@ enum Routes {
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
             if let v = parsed.auto_summary     { AppSettings.setAutoSummary(v) }
             if let v = parsed.auto_chapters    { AppSettings.setAutoChapters(v) }
+            if let v = parsed.launch_at_login  { AppSettings.setLaunchAtLogin(v) }
             if let v = parsed.telemetry        { AppSettings.setTelemetryEnabled(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
@@ -1262,6 +1286,15 @@ enum Routes {
             if let raw = parsed.whisper_local_variant,
                let v = LocalWhisperTranscriber.Variant(rawValue: raw) {
                 AppSettings.setWhisperLocalVariant(v)
+            }
+            // Forced transcription language ("" / null → auto-detect).
+            if let lang = parsed.transcription_language {
+                AppSettings.setTranscriptionLanguage(lang)
+            }
+            // Upsell snooze map — opaque JSON on the native side, the
+            // frontend owns the schema. Empty string clears the snooze.
+            if let snooze = parsed.upsell_snooze {
+                AppSettings.setUpsellSnooze(snooze)
             }
             // Onboarding flag. Only `true` is meaningful as a payload —
             // we never want a stale client to silently revert "wizard
@@ -1323,6 +1356,13 @@ enum Routes {
         // instantly instead of the "Empty transcript" placeholder.
         if var m = try? repo.meeting(id: id) {
             m.status = .transcribing
+            // Reset the start timestamp so the TranscribingBanner
+            // counter restarts at 00:00 instead of continuing where
+            // the previous run left off (Костя's case: switched
+            // provider mid-run, expected the timer to reset). The
+            // pipeline itself only stamps when the value is nil,
+            // so we nil it out here.
+            m.transcribingStartedAt = nil
             try? repo.updateMeeting(m)
         }
         try? repo.clearTranscript(meetingId: id)

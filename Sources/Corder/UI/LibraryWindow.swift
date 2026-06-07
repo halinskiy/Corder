@@ -754,4 +754,22 @@ extension LibraryWindow: NSWindowDelegate {
         FileLogger.log("LibraryWindow.windowDidDeminiaturize")
         RecordingHUDPanel.shared.setLibrarySuppressed(true)
     }
+
+    /// AppKit fires this whenever the window's effective visibility on
+    /// screen changes — including the case the user just hid the whole
+    /// app via ⌘H or switched to another Space that doesn't include the
+    /// window. The earlier suppression logic only listened to
+    /// `windowWillClose` and `windowDidMiniaturize`, so a ⌘H left the
+    /// window technically open AND occluded but with the floating HUD
+    /// stuck hidden — that's the case Костя caught ("блоб не появился
+    /// отдельным окном когда свернул кордер"). Reading the occlusion
+    /// bit and mirroring it onto `librarySuppressed` covers ⌘H, hide
+    /// via Dock, Space switches, and anything else AppKit considers a
+    /// visibility change.
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        guard let window = self.window else { return }
+        let visible = window.occlusionState.contains(.visible)
+        FileLogger.log("LibraryWindow.windowDidChangeOcclusionState visible=\(visible)")
+        RecordingHUDPanel.shared.setLibrarySuppressed(visible)
+    }
 }

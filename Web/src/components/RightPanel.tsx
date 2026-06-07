@@ -32,7 +32,12 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   return (
     <div className="right-panel">
-      {detail.has_video && (
+      {/* Download is its own view, not an overlay: when it's open the
+          screen-video preview and the speaker Timeline are hidden so
+          the panel reads as a dedicated "Download" tab — only the
+          audio scrubber (which carries the toggle back) stays mounted
+          so playback never stops. */}
+      {detail.has_video && !downloadOpen && (
         <ScreenVideo
           detail={detail}
           videoRef={screenVideoRef}
@@ -48,12 +53,9 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
         onToggleDownload={() => onDownloadChange(!downloadOpen)}
         t={t}
       />
-      {/* Inline download chooser slides in BETWEEN AudioCard and the
-          Timeline, pushing the Timeline down — same layout slot as
-          before, just no longer a full tab swap. The Download button
-          on the audio scrubber is now a toggle (active = open). */}
-      {downloadOpen && <DownloadView detail={detail} t={t} />}
-      <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
+      {downloadOpen
+        ? <DownloadView detail={detail} t={t} />
+        : <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />}
     </div>
   );
 }
@@ -268,6 +270,10 @@ function ScreenVideo({
   }, [audioRef]);
 
   const closeFullscreen = React.useCallback(() => {
+    // Pause on exit: leaving the fullscreen view should stop playback,
+    // not keep it running invisibly in the collapsed card. The audio is
+    // the master clock, so pausing it stops the mirrored <video> too.
+    audioRef.current?.pause();
     const inner = fsInnerRef.current;
     const rect = cardRef.current?.getBoundingClientRect() ?? originRect.current;
     if (inner && rect) {
@@ -280,7 +286,7 @@ function ScreenVideo({
       (window as any).corderSetBlobVisible?.(true);
       closeTimer.current = null;
     }, FS_MS);
-  }, []);
+  }, [audioRef]);
 
   // Play/pause the audio master clock (the muted <video>s mirror it).
   // Bound to Space and to a click on the video itself; the dark margin

@@ -38,8 +38,8 @@ enum L {
         "notif_saved_body": "Transcribing {s}s…",
         "notif_ready_title": "Transcript ready",
         "notif_ready_body": "Open the library to view it.",
-        "notif_silent_title": "No audio captured",
-        "notif_silent_body": "The recording is effectively silent — check the input device and Microphone permission.",
+        "notif_silent_title": "No sound recorded",
+        "notif_silent_body": "Mic was silent. Check device and permissions.",
         // Short by design — it's a passing toast/notification, not a
         // help article. The library shows the row in Archive; if the
         // user cares why, the Settings panel covers Microphone /
@@ -51,18 +51,24 @@ enum L {
         // without any audible speech. Body stays short — the popover
         // is 320 pt wide and the warning sits above the Stop button.
         "silence_warning_title": "Still recording",
-        "silence_warning_body": "No one's spoken for 10 minutes. Still recording?",
+        "silence_warning_body": "No voice for 10 min. Still recording?",
         "notif_bt_title": "Other side not recorded",
-        "notif_bt_body": "Your audio output is Bluetooth, so the remote side wasn't captured. Switch to built-in or wired output and re-record to get everyone.",
+        "notif_bt_body": "Bluetooth output skipped the far end. Switch to wired and re-record.",
         "notif_stopped_title": "Recording stopped",
         "notif_net_restored_title": "Internet restored",
-        "notif_net_restored_body": "Retrying any meetings that failed while offline.",
+        "notif_net_restored_body": "Catching up on meetings that failed offline.",
         "notif_net_lost_title": "No internet",
-        "notif_net_lost_body": "Recording continues locally. Transcription will need a connection when you stop.",
+        "notif_net_lost_body": "Recording without internet. We'll transcribe later.",
         // Pill that appears under Start/Stop in the popover while the
         // on-device Whisper model is pre-fetching. Just the label —
         // the progress fill is visual, no narration needed.
         "whisper_prefetch_label": "Downloading model",
+        // Single, deliberately-plain failure toast for the entire
+        // transcription pipeline. Whatever broke — Whisper local,
+        // Whisper cloud, Gemini, network, auth — the user sees this
+        // exact line. Power users hit the 🐞 button in the toolbar
+        // to send logs.
+        "transcribe_failed_title": "Transcription error. Send a report.",
     ]
     private static let ru: [String: String] = [
         "idle": "Запись не идёт",
@@ -83,20 +89,21 @@ enum L {
         "notif_saved_body": "Расшифровка {s}с…",
         "notif_ready_title": "Расшифровка готова",
         "notif_ready_body": "Открой библиотеку чтобы посмотреть.",
-        "notif_silent_title": "Звук не записался",
-        "notif_silent_body": "Запись фактически беззвучная — проверь устройство ввода и доступ к микрофону.",
+        "notif_silent_title": "Звука нет",
+        "notif_silent_body": "Микрофон молчал. Проверь устройство и доступ.",
         "notif_silent_archived_title": "Запись в архиве",
         "notif_silent_archived_body": "Ничего не записалось.",
         "silence_warning_title": "Всё ещё идёт запись",
-        "silence_warning_body": "Никто не говорил 10 минут. Всё ещё записываете?",
+        "silence_warning_body": "Никто не говорил 10 минут. Продолжать?",
         "notif_bt_title": "Собеседник не записан",
-        "notif_bt_body": "Вывод звука — Bluetooth, поэтому удалённую сторону не удалось записать. Переключи вывод на встроенный или проводной и перезапиши, чтобы записать всех.",
+        "notif_bt_body": "Bluetooth не записал собеседника. Включи проводные наушники.",
         "notif_stopped_title": "Запись остановлена",
-        "notif_net_restored_title": "Интернет восстановлен",
-        "notif_net_restored_body": "Повторяю встречи, упавшие без сети.",
+        "notif_net_restored_title": "Сеть вернулась",
+        "notif_net_restored_body": "Доделаю встречи, что упали без сети.",
         "notif_net_lost_title": "Нет интернета",
-        "notif_net_lost_body": "Запись идёт локально. Для расшифровки понадобится сеть, когда остановишь.",
+        "notif_net_lost_body": "Без интернета. Расшифрую, когда сеть вернётся.",
         "whisper_prefetch_label": "Скачиваем модель",
+        "transcribe_failed_title": "Ошибка с транскрипцией. Отправьте репорт.",
     ]
 
     /// Convenience for native notifications: resolves against the

@@ -579,10 +579,20 @@ struct RecordingHUDView: View {
                     ? Self.syntheticPeak(t: t)
                     : liveRecentPeak
                 let audioActivity = CGFloat(min(1, max(0, (recentPeak - 0.05) * 6)))
+                // Whole-blob size pulse: on top of the shape morph, the
+                // entire silhouette breathes in/out with the live level
+                // so every sound visibly "kicks" the blob, not just bends
+                // its outline. Driven by the instantaneous level (snappy,
+                // per-sound) — `* 3` lifts the 0.05…0.35 live range into a
+                // usable 0…1, clamped, then up to +15% scale. Multiplies
+                // with the entry/hover scaleEffect below, so both compose.
+                let instLevel = CGFloat(max(0, level * Float(energy)))
+                let pulse = 1.0 + min(1.0, instLevel * 3.0) * 0.15
                 blobLayer(time: t,
                           level: level * Float(energy),
                           activity: audioActivity * energy,
                           palette: palette)
+                    .scaleEffect(pulse)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

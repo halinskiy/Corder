@@ -137,6 +137,17 @@ enum LocalWhisperTranscriber {
     private static var pipe: WhisperKit?
     private static var pipeVariant: Variant?
 
+    /// Single-flight guard for the WhisperKit init. Dual-track
+    /// transcription calls `ensureModelReady` TWICE in parallel (mic +
+    /// system track). `WhisperKit(cfg)` with `download: true` fetches
+    /// the tokenizer sidecar at init; two concurrent inits race on the
+    /// same `.incomplete` download in the same folder and corrupt each
+    /// other — surfacing as `Required configuration file missing:
+    /// tokenizer.json` or `"…tokenizer.json.<hash>.incomplete" couldn't
+    /// be moved`. Funnelling both callers through one Task makes the
+    /// second await the first instead of starting a competing download.
+    private static var initTask: Task<Void, Error>?
+
     /// Per-variant in-flight download progress (0.0…1.0). Read by the
     /// HTTP `/api/whisper-local/status` poll so the React DownloadButton
     /// can paint the green progress fill. Absent key = not downloading.
@@ -239,6 +250,25 @@ enum LocalWhisperTranscriber {
     /// earlier single-segment path silently mis-reported every download
     /// as incomplete and bounced the UI back to "Download model" the
     /// instant the (no-op fast) re-download returned.
+    /// The best on-device model ALREADY downloaded, in descending
+    /// quality order, or nil if none are present. Used to pick the
+    /// offline-fallback model for a cloud transcribe that loses its
+    /// connection mid-run — we can only fall back to a model that's
+    /// already on disk (the network just dropped).
+    nonisolated static func firstDownloadedVariant() -> Variant? {
+        for v in [Variant.turbo, .small, .base, .tiny] where isModelDownloaded(v) {
+            return v
+        }
+        return nil
+    }
+
+    /// Small, universally-runnable model we keep on disk as the offline
+    /// safety net for cloud users — ~150 MB, decent quality, fast even
+    /// on weaker Macs. Deliberately NOT the machine-scaled `defaultVariant`
+    /// (turbo is 1.5 GB — too much to auto-download for a net that may
+    /// never trigger).
+    nonisolated static var offlineFallbackVariant: Variant { .base }
+
     nonisolated private static var downloadBaseURL: URL { AppPaths.modelsDir }
     nonisolated static func modelFolderURL(_ variant: Variant) -> URL {
         downloadBaseURL
@@ -303,31 +333,105 @@ enum LocalWhisperTranscriber {
             pipeVariant = nil
         }
 
-        if pipe == nil {
-            FileLogger.log("LocalWhisper: loading WhisperKit from \(modelFolderURL(variant).path)")
-            // `download: true` so WhisperKit can fetch the tokenizer
-            // sidecar (lives in the HF repo `openai/whisper-large-v3`,
-            // not in `argmaxinc/whisperkit-coreml/<variant>` — they
-            // ship the Core ML packages, not the text tokenizer).
-            // Without it, init throws "Tokenizer configuration is
-            // missing" on the very first transcribe. `WhisperKit.download`
-            // is idempotent: model files already on disk are reused.
-            let cfg = WhisperKitConfig(
-                model: variant.rawValue,
-                downloadBase: downloadBaseURL,
-                modelFolder: modelFolderURL(variant).path,
-                verbose: false,
-                logLevel: .error,
-                prewarm: true,
-                load: true,
-                download: true
-            )
-            do {
-                pipe = try await WhisperKit(cfg)
-                pipeVariant = variant
-            } catch {
-                throw LocalWhisperError.transcribeFailed("init failed: \(error.localizedDescription)")
-            }
+        // Already loaded for this variant — nothing to do.
+        guard pipe == nil else { return }
+
+        // Single-flight: if an init is already running (the parallel
+        // mic/system call beat us here), await THAT one instead of
+        // kicking a second WhisperKit(cfg) that would race on the
+        // tokenizer download. See `initTask` docs.
+        if let inFlight = initTask {
+            try await inFlight.value
+            return
+        }
+        let task = Task<Void, Error> { try await loadPipe(variant) }
+        initTask = task
+        defer { initTask = nil }
+        try await task.value
+    }
+
+    /// Actual WhisperKit construction. Runs exactly once at a time
+    /// (gated by `initTask`). Sweeps stale partial-download fragments
+    /// first — a previously-raced or crash-interrupted tokenizer fetch
+    /// leaves `*.incomplete` files that Hub's resume can't always
+    /// recover, then reports the final file as "missing". A clean slate
+    /// forces a correct fresh fetch.
+    private static func loadPipe(_ variant: Variant) async throws {
+        purgeIncompleteDownloads()
+        clearStaleTokenizer(variant)
+        FileLogger.log("LocalWhisper: loading WhisperKit from \(modelFolderURL(variant).path)")
+        // `download: true` so WhisperKit can fetch the tokenizer
+        // sidecar (lives in the HF repo `openai/whisper-large-v3`,
+        // not in `argmaxinc/whisperkit-coreml/<variant>` — they
+        // ship the Core ML packages, not the text tokenizer).
+        // Without it, init throws "Tokenizer configuration is
+        // missing" on the very first transcribe. `WhisperKit.download`
+        // is idempotent: model files already on disk are reused.
+        let cfg = WhisperKitConfig(
+            model: variant.rawValue,
+            downloadBase: downloadBaseURL,
+            modelFolder: modelFolderURL(variant).path,
+            verbose: false,
+            logLevel: .error,
+            prewarm: true,
+            load: true,
+            download: true
+        )
+        do {
+            pipe = try await WhisperKit(cfg)
+            pipeVariant = variant
+        } catch {
+            throw LocalWhisperError.transcribeFailed("init failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Remove leftover `*.incomplete` HuggingFace-Hub download markers
+    /// anywhere under the models dir. These accumulate when a tokenizer
+    /// / model fetch is interrupted (crash, cancel, or the dual-init
+    /// race we now serialize) and block the next clean download with
+    /// `"…couldn't be moved"` / `"configuration file missing"`.
+    nonisolated private static func purgeIncompleteDownloads() {
+        let fm = FileManager.default
+        guard let walker = fm.enumerator(at: downloadBaseURL,
+                                         includingPropertiesForKeys: nil) else { return }
+        for case let url as URL in walker where url.lastPathComponent.hasSuffix(".incomplete") {
+            try? fm.removeItem(at: url)
+            FileLogger.log("LocalWhisper: purged stale download fragment \(url.lastPathComponent)")
+        }
+    }
+
+    /// HuggingFace tokenizer repo for a variant — a SEPARATE repo from
+    /// the Core ML model. Mirrors WhisperKit's `tokenizerNameForVariant`.
+    nonisolated private static func tokenizerRepoFolderURL(_ variant: Variant) -> URL {
+        let repo: String
+        switch variant {
+        case .turbo: repo = "openai/whisper-large-v3"
+        case .small: repo = "openai/whisper-small"
+        case .base:  repo = "openai/whisper-base"
+        case .tiny:  repo = "openai/whisper-tiny"
+        }
+        return downloadBaseURL
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(repo, isDirectory: true)
+    }
+
+    /// If the tokenizer repo folder exists but is missing `tokenizer.json`,
+    /// remove the WHOLE folder so Hub re-downloads it cleanly. An
+    /// interrupted fetch leaves `tokenizer_config.json` +
+    /// `.cache/huggingface/download/tokenizer.json.metadata` but no
+    /// actual `tokenizer.json`; the stale metadata makes Hub believe the
+    /// file is already accounted for, so it never re-fetches and init
+    /// keeps failing with `Required configuration file missing:
+    /// tokenizer.json`. Nuking the folder clears the poisoned metadata.
+    nonisolated private static func clearStaleTokenizer(_ variant: Variant) {
+        let fm = FileManager.default
+        let folder = tokenizerRepoFolderURL(variant)
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue else { return }
+        let tokenizerJSON = folder.appendingPathComponent("tokenizer.json")
+        if !fm.fileExists(atPath: tokenizerJSON.path) {
+            try? fm.removeItem(at: folder)
+            FileLogger.log("LocalWhisper: cleared stale tokenizer repo (no tokenizer.json) at \(folder.path)")
         }
     }
 
@@ -430,11 +534,16 @@ enum LocalWhisperTranscriber {
         // cloud uses, but local Whisper needs us to tokenise first). The
         // tokenizer might be nil if the model hasn't been fully loaded
         // yet; in that case we just skip the prompt rather than blocking.
+        // Forced language (ISO-639-1) when the user pinned one in
+        // Settings; empty → auto-detect as before. Pinning stops the
+        // Russian→Ukrainian misdetection (the two are close enough that
+        // auto-detect renders Russian speech as Ukrainian words).
+        let forcedLang = AppSettings.transcriptionLanguage.nilIfEmpty
         var decodeOpts = DecodingOptions(
             verbose: false,
             task: .transcribe,
-            language: nil,                        // auto-detect — matches Gemini's behaviour
-            detectLanguage: true,
+            language: forcedLang,                 // nil = auto-detect (matches Gemini)
+            detectLanguage: forcedLang == nil,
             skipSpecialTokens: true,
             withoutTimestamps: false,
             wordTimestamps: false,
@@ -451,7 +560,27 @@ enum LocalWhisperTranscriber {
             results = try await pipe.transcribe(audioPath: workURL.path,
                                                  decodeOptions: decodeOpts,
                                                  callback: nil)
+        } catch is CancellationError {
+            // User-initiated cancel — bubble a clean CancellationError
+            // so `TranscriptionPipeline.transcribe()` catches it in its
+            // `catch is CancellationError` arm and stays silent. Without
+            // this re-throw the WhisperKit error would have been wrapped
+            // as `transcribeFailed("The operation couldn't be completed.
+            // (Swift.CancellationError error 1.)")` and surfaced as a
+            // long, scary error toast for what the user explicitly asked
+            // for.
+            throw CancellationError()
+        } catch let urlErr as URLError where urlErr.code == .cancelled {
+            throw CancellationError()
         } catch {
+            // Treat the cancel-by-string variants as cancellation too —
+            // WhisperKit sometimes surfaces them as NSError with the
+            // localized "operation couldn't be completed" wording when
+            // a chunk gets killed mid-flight.
+            let raw = error.localizedDescription.lowercased()
+            if raw.contains("cancel") || raw.contains("operation couldn't be completed") {
+                throw CancellationError()
+            }
             throw LocalWhisperError.transcribeFailed(error.localizedDescription)
         }
 

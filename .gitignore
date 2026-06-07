@@ -53,3 +53,6 @@ NOTES.local.md
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# Release artifacts (zips/dmgs live on the corder-updates GitHub release)
+releases/

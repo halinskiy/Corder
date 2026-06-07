@@ -80,6 +80,11 @@ interface Strings {
   settings_sec_notifications: string;
   settings_notifications: string;
   settings_notifications_desc: string;
+  settings_launch_at_login_title?: string;
+  settings_launch_at_login_desc?: string;
+  settings_transcription_language_title?: string;
+  settings_transcription_language_desc?: string;
+  settings_transcription_language_auto?: string;
   settings_sec_capture: string;
   settings_video: string;
   settings_video_desc: string;
@@ -154,6 +159,7 @@ interface Strings {
   /// prefetch of the on-device Whisper model. Suffix " · <percent>%"
   /// is appended at render time.
   whisper_prefetch_label?: string;
+  whisper_prefetch_loading?: string;
   settings_sec_shortcut: string;
   settings_shortcut_label: string;
   settings_shortcut_desc: string;
@@ -262,6 +268,9 @@ interface Strings {
   /// immediately. Falls back to the English literal via
   /// `t.profile_check_updates || "Check for updates"`.
   profile_check_updates?: string;
+  /// Admin-only row in ProfileMenu — opens getcorder.com/admin in the
+  /// default browser. Visible only when `settings.is_admin === true`.
+  profile_admin?: string;
   /// "Delete account" row in ProfileMenu — irreversible hard
   /// delete of all cloud data + local state. Optional fallback
   /// to "Delete account" if locale hasn't translated.
@@ -278,6 +287,22 @@ interface Strings {
   trans_label: string;
   trans_stop: string;
   trans_cancelled: string;
+  /// Upsell strip under the Transcribing banner. Three exclusive
+  /// scenarios drive the strings: free-on-local ("speed"),
+  /// pro-with-cloud-headroom ("smart" — switch to a better model),
+  /// pro-out-of-hours ("unlimited" — go Max). Optional so untranslated
+  /// locales fall back to English (`pickStrings` only fills the whole
+  /// table, not individual missing keys, so we want the type system
+  /// to allow gaps and the consumer to `??` against an English copy).
+  trans_upsell_speed_title?: string;
+  trans_upsell_speed_desc?: string;
+  trans_upsell_speed_cta?: string;
+  trans_upsell_best_title?: string;
+  trans_upsell_best_desc?: string;
+  trans_upsell_best_cta?: string;
+  trans_upsell_unlimited_title?: string;
+  trans_upsell_unlimited_desc?: string;
+  trans_upsell_unlimited_cta?: string;
 
   clarify_question: string;
   clarify_just_me: string;
@@ -331,6 +356,7 @@ interface Strings {
   profile_sign_in?: string;
   model_gemini?: string;
   model_whisper_cloud?: string;
+  model_groq?: string;
   model_cloud?: string;
   model_pro_only?: string;
   toast_pro_required?: string;
@@ -460,7 +486,7 @@ const ru: Strings = {
   chapters_loading: "Минутку.",
   chapters_generate: "Сгенерировать главы",
   chapters_regenerate: "Сгенерировать заново",
-  chapters_error: "Не удалось сгенерировать главы.",
+  chapters_error: "Главы не получились. Отправьте репорт.",
   chapters_search: "Поиск по главам…",
   settings_auto_chapters_title: "Автоглавы",
   settings_auto_chapters_desc: "Разделять готовый транскрипт.",
@@ -473,6 +499,11 @@ const ru: Strings = {
   settings_sec_notifications: "Уведомления",
   settings_notifications: "Системные уведомления",
   settings_notifications_desc: "Сообщать о начале записи, готовности расшифровки и потере сети.",
+  settings_launch_at_login_title: "Запуск при входе",
+  settings_launch_at_login_desc: "Открывать Corder автоматически при старте Mac.",
+  settings_transcription_language_title: "Язык транскрипции",
+  settings_transcription_language_desc: "Зафиксируйте язык речи, чтобы его не путало (например, русский с украинским). Авто подходит для большинства звонков.",
+  settings_transcription_language_auto: "Авто",
   settings_sec_capture: "Захват",
   settings_video: "Запись видео экрана",
   settings_video_desc: "Сохранять видео того, что было на экране во время встречи.",
@@ -526,6 +557,7 @@ const ru: Strings = {
   settings_asr_download_cta: "Скачать модель",
   settings_asr_downloading: "Загрузка…",
   whisper_prefetch_label: "Скачиваем модель",
+  whisper_prefetch_loading: "Загрузка модели…",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "На Intel-Mac Local Whisper недоступен и расшифровка пойдёт по облаку.",
   settings_sec_shortcut: "Горячая клавиша",
@@ -561,7 +593,7 @@ const ru: Strings = {
   settings_ext_badge_soon: "Скоро",
   settings_ext_cta: "Скоро будет доступно",
   transcript_search: "Поиск по транскрипту…",
-  transcript_empty_failed: "Расшифровка не удалась.",
+  transcript_empty_failed: "Расшифровка не получилась.",
   transcript_empty_recording: "Идёт запись…",
   transcript_no_match: (q) => `Нет совпадений по «${q}».`,
 
@@ -621,6 +653,7 @@ const ru: Strings = {
   profile_account: "Settings",
   profile_help: "Поддержка",
   profile_check_updates: "Проверить обновления",
+  profile_admin: "Открыть админку",
   profile_delete: "Удалить аккаунт",
   profile_delete_confirm: "Удалить аккаунт и все записи? Действие необратимо.",
   profile_signout: "Выйти",
@@ -633,6 +666,15 @@ const ru: Strings = {
   trans_label: "Идёт расшифровка",
   trans_stop: "Остановить расшифровку",
   trans_cancelled: "Расшифровка остановлена",
+  trans_upsell_speed_title: "Ускорьте расшифровку",
+  trans_upsell_speed_desc: "Облако работает в разы быстрее локальной модели.",
+  trans_upsell_speed_cta: "Перейти на Pro",
+  trans_upsell_best_title: "Попробуйте лучшую модель",
+  trans_upsell_best_desc: "Облачная транскрипция точнее и быстрее. Уже включена в ваш тариф.",
+  trans_upsell_best_cta: "Включить облако",
+  trans_upsell_unlimited_title: "Безлимит на Max",
+  trans_upsell_unlimited_desc: "Часы Pro на этот месяц закончились.",
+  trans_upsell_unlimited_cta: "Перейти на Max",
 
   clarify_question: "Сколько людей было на звонке?",
   clarify_just_me: "Только я",
@@ -656,13 +698,13 @@ const ru: Strings = {
   toast_copied: "Транскрипт скопирован",
   toast_copy_failed: "Не удалось скопировать",
   toast_retranscribe_started: "Запускаю расшифровку…",
-  toast_retranscribe_failed: "Не удалось запустить расшифровку",
+  toast_retranscribe_failed: "Расшифровка не запустилась",
   toast_deleted: "Запись удалена",
   toast_archived: "Перенесено в архив",
   toast_undo: "Отменить",
   toast_boost_on: "Усилить ВКЛ",
   toast_boost_off: "Усилить ВЫКЛ",
-  toast_settings_failed: "Не удалось сохранить настройку",
+  toast_settings_failed: "Настройка не сохранилась",
 
   no_meeting_selected_title: "Запись не выбрана",
   no_meeting_selected_body: "Выбери запись из списка слева, или нажми Start в menu bar.",
@@ -675,7 +717,7 @@ const ru: Strings = {
   usage_local: "Локальные модели",
   submit_logs_title: "Отправить отчёт",
   submit_logs_success: "Логи отправлены. Спасибо!",
-  submit_logs_failed: "Не получилось отправить лог. Попробуй ещё раз.",
+  submit_logs_failed: "Не удалось отправить лог.",
   submit_logs_pending: "Отправляем лог…",
   submit_logs_cooldown: "Следующий отчёт можно отправить через ~{m} мин.",
   profile_signed_out_title: "Вы не вошли",
@@ -683,9 +725,10 @@ const ru: Strings = {
   profile_sign_in: "Войти",
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
+  model_groq: "Groq Whisper",
   model_cloud: "облако",
   model_pro_only: "Pro+",
-  toast_pro_required: "Чтобы выбрать облачную модель, нужна подписка Pro или Max.",
+  toast_pro_required: "Облачные модели — только в Pro и Max.",
   rec_starting: "Запускаю…",
   rec_stopping: "Останавливаю…",
   sidebar_today: "Сегодня",
@@ -717,7 +760,7 @@ const ru: Strings = {
   summary_loading: "Готовлю резюме…",
   summary_generate: "Сгенерировать резюме",
   summary_regenerate: "Перегенерировать",
-  summary_error: "Не удалось сгенерировать резюме. Попробуй ещё раз.",
+  summary_error: "Резюме не получилось. Отправьте репорт.",
   summary_no_transcript: "Резюме появится после транскрибации.",
   summary_search: "Поиск по резюме…",
   error_label: "Ошибка",
@@ -781,7 +824,7 @@ const en: Strings = {
   chapters_loading: "Hang tight.",
   chapters_generate: "Generate chapters",
   chapters_regenerate: "Regenerate",
-  chapters_error: "Couldn't generate chapters.",
+  chapters_error: "Chapters didn't work. Send a report.",
   chapters_search: "Search chapters…",
   settings_auto_chapters_title: "Auto-chapters",
   settings_auto_chapters_desc: "Split a finished transcript.",
@@ -794,6 +837,11 @@ const en: Strings = {
   settings_sec_notifications: "Notifications",
   settings_notifications: "System notifications",
   settings_notifications_desc: "Notify on recording start, transcript ready, and network loss.",
+  settings_launch_at_login_title: "Launch at login",
+  settings_launch_at_login_desc: "Open Corder automatically when your Mac starts.",
+  settings_transcription_language_title: "Transcription language",
+  settings_transcription_language_desc: "Pin the spoken language so it isn't mis-detected (e.g. Russian as Ukrainian). Auto-detect works for most calls.",
+  settings_transcription_language_auto: "Auto-detect",
   settings_sec_capture: "Capture",
   settings_video: "Screen video recording",
   settings_video_desc: "Save a video of what was on screen during the meeting.",
@@ -847,6 +895,7 @@ const en: Strings = {
   settings_asr_download_cta: "Download model",
   settings_asr_downloading: "Downloading…",
   whisper_prefetch_label: "Downloading model",
+  whisper_prefetch_loading: "Loading model…",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud.",
   settings_sec_shortcut: "Shortcut",
@@ -943,6 +992,7 @@ const en: Strings = {
   profile_language: "Language",
   profile_help: "Get help",
   profile_check_updates: "Check for updates",
+  profile_admin: "Open admin panel",
   profile_delete: "Delete account",
   profile_delete_confirm: "Delete your account and all recordings? This cannot be undone.",
   profile_signout: "Sign out",
@@ -955,6 +1005,15 @@ const en: Strings = {
   trans_label: "Transcribing",
   trans_stop: "Stop transcription",
   trans_cancelled: "Transcription stopped",
+  trans_upsell_speed_title: "Upgrade for speed",
+  trans_upsell_speed_desc: "Cloud transcription runs several times faster than local.",
+  trans_upsell_speed_cta: "Upgrade to Pro",
+  trans_upsell_best_title: "Try our best model",
+  trans_upsell_best_desc: "Cloud transcription is faster and more accurate. Included in your plan.",
+  trans_upsell_best_cta: "Switch to cloud",
+  trans_upsell_unlimited_title: "Upgrade for unlimited",
+  trans_upsell_unlimited_desc: "You're out of Pro cloud hours this month.",
+  trans_upsell_unlimited_cta: "Upgrade to Max",
 
   clarify_question: "How many people were on the call?",
   clarify_just_me: "Just me",
@@ -1005,6 +1064,7 @@ const en: Strings = {
   profile_sign_in: "Sign in",
   model_gemini: "Gemini Flash",
   model_whisper_cloud: "Whisper Cloud",
+  model_groq: "Groq Whisper",
   model_cloud: "cloud",
   model_pro_only: "Pro+",
   toast_pro_required: "Cloud models require a Pro or Max plan.",
@@ -1039,7 +1099,7 @@ const en: Strings = {
   summary_loading: "Generating summary…",
   summary_generate: "Generate summary",
   summary_regenerate: "Regenerate",
-  summary_error: "Couldn't generate the summary. Try again.",
+  summary_error: "Summary didn't work. Send a report.",
   summary_no_transcript: "The summary will appear once the meeting is transcribed.",
   summary_search: "Search the summary…",
   error_label: "Error",
@@ -1125,6 +1185,11 @@ const uk: Strings = {
   settings_sec_notifications: "Сповіщення",
   settings_notifications: "Системні сповіщення",
   settings_notifications_desc: "Повідомляти про початок запису, готовність розшифровки та втрату мережі.",
+  settings_launch_at_login_title: "Запуск при вході",
+  settings_launch_at_login_desc: "Відкривати Corder автоматично при старті Mac.",
+  settings_transcription_language_title: "Мова транскрипції",
+  settings_transcription_language_desc: "Зафіксуйте мову мовлення, щоб її не плутало (наприклад, російську з українською). Авто підходить для більшості дзвінків.",
+  settings_transcription_language_auto: "Авто",
   settings_sec_capture: "Захоплення",
   settings_video: "Запис відео екрана",
   settings_video_desc: "Зберігати відео того, що було на екрані під час зустрічі.",
@@ -1231,6 +1296,7 @@ const uk: Strings = {
   profile_account: "Settings",
   profile_help: "Підтримка",
   profile_check_updates: "Перевірити оновлення",
+  profile_admin: "Відкрити адмінку",
   profile_delete: "Видалити акаунт",
   profile_delete_confirm: "Видалити акаунт та всі записи? Дію не можна скасувати.",
   profile_signout: "Вийти",
@@ -1243,6 +1309,15 @@ const uk: Strings = {
   trans_label: "Триває розшифровка",
   trans_stop: "Зупинити розшифровку",
   trans_cancelled: "Розшифровку зупинено",
+  trans_upsell_speed_title: "Прискорте розшифровку",
+  trans_upsell_speed_desc: "Хмара працює в рази швидше за локальну модель.",
+  trans_upsell_speed_cta: "Перейти на Pro",
+  trans_upsell_best_title: "Спробуйте найкращу модель",
+  trans_upsell_best_desc: "Хмарна транскрипція швидша й точніша. Вже включена у ваш тариф.",
+  trans_upsell_best_cta: "Увімкнути хмару",
+  trans_upsell_unlimited_title: "Безліміт на Max",
+  trans_upsell_unlimited_desc: "Години Pro цього місяця закінчилися.",
+  trans_upsell_unlimited_cta: "Перейти на Max",
 
   clarify_question: "Скільки людей було на дзвінку?",
   clarify_just_me: "Лише я",
@@ -1499,13 +1574,13 @@ const de: Strings = {
   toast_copied: "Transkript kopiert",
   toast_copy_failed: "Konnte nicht kopieren",
   toast_retranscribe_started: "Transkription startet…",
-  toast_retranscribe_failed: "Transkription konnte nicht gestartet werden",
+  toast_retranscribe_failed: "Transkription nicht gestartet",
   toast_deleted: "Aufnahme gelöscht",
   toast_archived: "Archiviert",
   toast_undo: "Rückgängig",
   toast_boost_on: "Boost An",
   toast_boost_off: "Boost Aus",
-  toast_settings_failed: "Einstellung konnte nicht gespeichert werden",
+  toast_settings_failed: "Einstellung nicht gespeichert",
   no_meeting_selected_title: "Keine Aufnahme ausgewählt",
   no_meeting_selected_body: "Wähle eine Aufnahme aus der Liste links, oder drücke Start in der Menüleiste.",
   dashboard_heading: "Bereit, wenn du es bist.",

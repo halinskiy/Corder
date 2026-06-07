@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import GRDB
+import ServiceManagement
 
 @MainActor
 final class AppContext: ObservableObject {
@@ -112,6 +113,12 @@ enum AppSettings {
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
     private static let kWhisperLocalVariant   = "Corder.set.whisperLocalVariant"
+    /// Persistent upsell-dismiss timestamps. JSON-encoded map keyed by
+    /// upsell kind (`speed` / `best` / `unlimited`). Lives in
+    /// UserDefaults instead of WKWebView localStorage because the
+    /// embedded server's port can rotate between launches, which wipes
+    /// any per-origin web storage.
+    private static let kUpsellSnooze          = "Corder.set.upsellSnooze"
     private static let kTranscriptCleanup = "Corder.set.transcriptCleanup"
     /// Sticky permission grants. `CGPreflightScreenCaptureAccess()`
     /// returns false right after a re-install of a previously-
@@ -148,6 +155,35 @@ enum AppSettings {
     }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
+
+    /// Launch Corder when the Mac boots / the user logs in. Source of
+    /// truth is the live `SMAppService.mainApp` registration status
+    /// (macOS 13+); the UserDefaults key is only a cached mirror for
+    /// fast reads when building the settings DTO. Defaults OFF — a
+    /// fresh install must not silently add itself to login items.
+    private static let kLaunchAtLogin = "Corder.set.launchAtLogin"
+    static var launchAtLogin: Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        return UserDefaults.standard.bool(forKey: kLaunchAtLogin)
+    }
+    static func setLaunchAtLogin(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kLaunchAtLogin)
+        if #available(macOS 13.0, *) {
+            do {
+                if v {
+                    if SMAppService.mainApp.status != .enabled {
+                        try SMAppService.mainApp.register()
+                    }
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                FileLogger.log("launchAtLogin: \(v ? "register" : "unregister") failed: \(error)")
+            }
+        }
+    }
 
     static func setNotifications(_ v: Bool)  { setFlag(kNotifications, v) }
     static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
@@ -223,6 +259,38 @@ enum AppSettings {
     }
     static func setWhisperLocalVariant(_ v: LocalWhisperTranscriber.Variant) {
         UserDefaults.standard.set(v.rawValue, forKey: kWhisperLocalVariant)
+    }
+
+    /// Forced transcription language (ISO-639-1, e.g. "ru"). Empty =
+    /// auto-detect. Whisper (cloud + local) otherwise guesses the
+    /// language per recording and, for Russian audio, frequently drifts
+    /// to the very-close Ukrainian — rendering Russian speech as
+    /// Ukrainian words. Pinning the language stops that. Gemini already
+    /// preserves the spoken language verbatim, so this only feeds the
+    /// Whisper paths.
+    private static let kTranscriptionLanguage = "Corder.set.transcriptionLanguage"
+    static var transcriptionLanguage: String {
+        (UserDefaults.standard.string(forKey: kTranscriptionLanguage) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    static func setTranscriptionLanguage(_ v: String) {
+        let cleaned = v.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kTranscriptionLanguage)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: kTranscriptionLanguage)
+        }
+    }
+
+    static var upsellSnooze: String {
+        UserDefaults.standard.string(forKey: kUpsellSnooze) ?? ""
+    }
+    static func setUpsellSnooze(_ json: String) {
+        if json.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kUpsellSnooze)
+        } else {
+            UserDefaults.standard.set(json, forKey: kUpsellSnooze)
+        }
     }
 
     /// LLM polish toggle for Whisper transcripts. When ON (default for
@@ -317,6 +385,20 @@ enum AppSettings {
     }
     static func setUserTier(_ v: UserTier) {
         UserDefaults.standard.set(v.rawValue, forKey: kUserTier)
+    }
+
+    // Admin role, mirrored from the signed-in Supabase user's
+    // `app_metadata.role == "admin"` by `SupabaseTierSync`. Drives the
+    // blue profile avatar so the operator can confirm at a glance that
+    // the server-side admin grant landed in their session. Purely a
+    // visual cue on the client — every privileged action is still
+    // re-checked against the admin JWT by corder-api.
+    private static let kIsAdmin = "Corder.set.isAdmin"
+    static var isAdmin: Bool {
+        UserDefaults.standard.bool(forKey: kIsAdmin)
+    }
+    static func setIsAdmin(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kIsAdmin)
     }
 
     static var isPro: Bool {
@@ -507,8 +589,8 @@ extension TranscriptionProvider {
     /// on-device WhisperKit maps to "local" (free for all tiers).
     var usageClass: String {
         switch self {
-        case .gemini, .whisper: return "advanced"
-        case .whisperLocal:     return "local"
+        case .gemini, .whisper, .groq: return "advanced"
+        case .whisperLocal:            return "local"
         }
     }
 }
@@ -524,6 +606,7 @@ extension TranscriptionProvider {
 enum TranscriptionProvider: String {
     case gemini         // gemini-2.5-flash (default)
     case whisper        // OpenAI whisper-1 + gpt-4o-mini polish
+    case groq           // Groq Whisper-large-v3-turbo (no polish; ~10× cheaper than whisper-1)
     case whisperLocal   // WhisperKit on-device (Apple Silicon)
 }
 

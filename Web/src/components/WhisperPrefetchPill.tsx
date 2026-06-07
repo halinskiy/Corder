@@ -1,4 +1,5 @@
 import React from "react";
+import { Loader2 } from "lucide-react";
 import { getSettings, downloadWhisperLocal, setSettings, WhisperLocalModel } from "../api";
 import type { T } from "../i18n";
 import { SettingsSelect, SettingsSelectOption } from "./SettingsSelect";
@@ -26,6 +27,10 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
   const [variant, setVariant] = React.useState<string | undefined>(undefined);
   const [provider, setProvider] = React.useState<string | undefined>(undefined);
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
+  // False until the first /api/settings poll lands. The provider/models
+  // arrive a beat after mount, so without this the slot flashed an empty
+  // picker ("Whisper Cloud · cloud" popping in late looked broken).
+  const [loaded, setLoaded] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -37,6 +42,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
         setModels(s.whisper_local_models ?? []);
         setProvider(s.transcription_provider);
         setTier((s.tier === "pro" || s.tier === "max") ? s.tier : "free");
+        setLoaded(true);
       } catch { /* keep last-known; next poll recovers */ }
     };
     tick();
@@ -52,7 +58,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     value: string;
     label: string;
     meta?: string;
-    provider: "gemini" | "whisper" | "whisperLocal";
+    provider: "gemini" | "whisper" | "groq" | "whisperLocal";
     variant?: string;
     disabled?: boolean;
   };
@@ -65,12 +71,24 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
   // isn't listed (even as a locked option). It reappears the moment
   // tier flips to Pro / Max.
   const cloudChoices: Choice[] = paid
-    ? [{
-        value: "whisper",
-        label: t.model_whisper_cloud ?? "Whisper Cloud",
-        meta: t.model_cloud ?? "cloud",
-        provider: "whisper",
-      }]
+    ? [
+        {
+          value: "whisper",
+          label: t.model_whisper_cloud ?? "Whisper Cloud",
+          meta: t.model_cloud ?? "cloud",
+          provider: "whisper",
+        },
+        {
+          // Groq Whisper-large-v3-turbo — same OpenAI-compatible
+          // interface, ~10× cheaper than whisper-1. Surfaced as an
+          // explicit alternative so users (and we) can A/B before
+          // making it the default.
+          value: "groq",
+          label: t.model_groq ?? "Groq Whisper",
+          meta: t.model_cloud ?? "cloud",
+          provider: "groq",
+        },
+      ]
     : [];
   const localChoices: Choice[] = models.map((m) => ({
     value: `local:${m.id}`,
@@ -83,6 +101,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
 
   const currentValue = (() => {
     if (provider === "whisperLocal" && variant) return `local:${variant}`;
+    if (provider === "groq" && paid) return "groq";
     // Legacy `gemini` accounts get coerced to `whisper` in the UI so
     // the picker shows a valid selection. The backend reconciles on
     // the next /api/settings POST.
@@ -98,7 +117,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     setProvider(choice.provider);
     if (choice.variant) setVariant(choice.variant);
     try {
-      const patch: { transcription_provider: "gemini" | "whisper" | "whisperLocal"; whisper_local_variant?: string } = {
+      const patch: { transcription_provider: "gemini" | "whisper" | "groq" | "whisperLocal"; whisper_local_variant?: string } = {
         transcription_provider: choice.provider,
       };
       if (choice.variant) patch.whisper_local_variant = choice.variant;
@@ -121,6 +140,26 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     meta: c.meta,
     disabled: c.disabled,
   }));
+
+  // First-poll loader — same slot shape as the picker, with a spinner so
+  // it's clear something's loading instead of a blank/late pop-in.
+  if (!loaded) {
+    return (
+      <div className="dash-prefetch-picker">
+        <button
+          type="button"
+          className="settings-select-trigger dash-prefetch-loading"
+          disabled
+          aria-label={t.whisper_prefetch_loading ?? "Loading model…"}
+        >
+          <span className="settings-select-trigger-label">
+            {t.whisper_prefetch_loading ?? "Loading model…"}
+          </span>
+          <Loader2 size={14} strokeWidth={2} className="dash-prefetch-spin" aria-hidden />
+        </button>
+      </div>
+    );
+  }
 
   // Active local model awaiting download → progress bar instead of picker.
   if (provider === "whisperLocal" && variant) {
@@ -150,7 +189,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
       <SettingsSelect<string>
         value={currentValue}
         options={options}
-        onLockedClick={() => onToast?.(t.toast_pro_required ?? "Upgrade to Pro or Max to use cloud models.", "error")}
+        onLockedClick={() => onToast?.(t.toast_pro_required ?? "Cloud models need Pro or Max.", "error")}
         onChange={(v) => { void onPickChoice(v); }}
         ariaLabel={t.settings_asr_label ?? "Transcription model"}
       />

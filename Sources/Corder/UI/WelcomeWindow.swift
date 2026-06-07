@@ -59,11 +59,19 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         // covers the sign-out / re-install case where TCC remembers
         // the grant but `CGPreflightScreenCaptureAccess` (process-
         // cached) reports false until the first live capture call.
+        //
+        // IMPORTANT: only bootstrap when the live status agrees. If
+        // priorMeetings > 0 BUT the live preflight reports denied/
+        // notDetermined, TCC genuinely lost the grants (e.g. an
+        // identity change between builds — self-signed → Developer ID,
+        // Костя's case). Bootstrapping sticky=true here would put the
+        // wizard on `.signin` step while LibraryWindow blocks on the
+        // real live denial, looping forever.
         let priorMeetings = (try? AppContext.shared.repo.listMeetings())?.count ?? 0
-        if priorMeetings > 0 {
-            if !AppSettings.micGrantedSticky    { AppSettings.setMicGrantedSticky(true) }
-            if !AppSettings.screenGrantedSticky { AppSettings.setScreenGrantedSticky(true) }
-        }
+        let bootstrapMicOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let bootstrapScreenOK = CGPreflightScreenCaptureAccess()
+        if priorMeetings > 0 && bootstrapMicOK    && !AppSettings.micGrantedSticky    { AppSettings.setMicGrantedSticky(true) }
+        if priorMeetings > 0 && bootstrapScreenOK && !AppSettings.screenGrantedSticky { AppSettings.setScreenGrantedSticky(true) }
 
         // Re-evaluate the right starting step EVERY time the wizard
         // surfaces (cold first run AND every sign-out re-open). The
@@ -661,11 +669,19 @@ private struct WelcomeView: View {
     private var interactiveContent: some View {
         switch state.step {
         case .permissions:
-            PermissionsCardsInteractive(
-                micStatus: $micStatus,
-                screenStatus: $screenStatus,
-                screenDidRequest: $screenDidRequest
-            )
+            // Wrap in a ScrollView — three cards (Mic + Screen + Notifications)
+            // don't fit the 380×516 wizard window, the bottom card and the
+            // Continue button get clipped (Костя's screenshot of 0.13.32).
+            ScrollView(.vertical, showsIndicators: false) {
+                PermissionsCardsInteractive(
+                    micStatus: $micStatus,
+                    screenStatus: $screenStatus,
+                    screenDidRequest: $screenDidRequest
+                )
+                // Bottom padding so the last card has breathing room
+                // above the fixed Continue footer.
+                .padding(.bottom, 12)
+            }
         case .signin:
             SignInInteractive(
                 email: $licenceInput,
