@@ -185,6 +185,10 @@ final class TranscriptionPipeline {
         // Idempotent re-runs: clear any prior segments and stale errors.
         try? repo.clearTranscript(meetingId: meetingId)
         TranscriptionErrors.clear(meetingId: meetingId)
+        // Count this attempt. Reset to 0 once we reach `.ready` below so
+        // a row only burns its retry budget on consecutive failures; the
+        // launch auto-retry skips rows that exhausted it.
+        try? repo.incrementTranscribeAttempts(meetingId: meetingId)
 
         meeting.status = .transcribing
         if meeting.transcribingStartedAt == nil {
@@ -717,6 +721,9 @@ final class TranscriptionPipeline {
             //    archive + boost branches below.
             guard let updated = try? repo.meeting(id: meetingId) else { return }
             meeting = updated
+            // Success — clear the attempt counter so a future failure gets
+            // the full retry budget again.
+            if meeting.status == .ready { try? repo.resetTranscribeAttempts(meetingId: meetingId) }
 
             // 3.5. Auto-title: one cheap text-only Gemini call from the
             //      fresh transcript. Best-effort + idempotent — only when
