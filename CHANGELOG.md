@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.34] — 2026-06-08
+
+### Changed
+- Failed transcriptions now retry automatically on the next launch
+  (bounded to 3 attempts) — a network blip or an interrupted run
+  recovers on its own, no manual Re-transcribe.
+- Recordings now always stay on your Mac: the legacy Dropbox cloud
+  backup is off (it was failing on full accounts); local copies are
+  never deleted.
+
 ## [0.13.33] — 2026-06-07
 
 ### Added
