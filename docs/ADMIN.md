@@ -95,10 +95,11 @@ for a short triage summary (`title` / `summary` / `severity`).
 
 | Method | Path                        | Body | Returns                              |
 |--------|-----------------------------|------|--------------------------------------|
-| GET    | `/admin/logs`               | `?limit=100&archived=true` | `{items: BugReportRow[]}` (newest first, **no** `log_tail`; default = active only, `archived=true` = archived view) |
+| GET    | `/admin/logs`               | `?limit=100&archived=true&severity=high&q=text` | `{items: BugReportRow[]}` (newest first, **no** `log_tail`; default = active only, `archived=true` = archived view; `severity` ∈ low\|medium\|high\|critical; `q` = free-text over title+summary+email) |
 | GET    | `/admin/logs/:id`           | —    | `{item: BugReportRow}` (incl. full `log_tail`) |
 | POST   | `/admin/logs/:id/summarize` | —    | `{ok:true,item: BugReportRow}` (re-runs the Gemini summary) |
 | POST   | `/admin/logs/:id/archive`   | `?undo=true` to restore | `{ok:true,item: BugReportRow}` (soft-archive; row stays, leaves active list) |
+| POST   | `/admin/logs/bulk-archive`  | `{ids: string[], undo?: boolean}` | `{ok:true,count,items}` (archive/restore many in one call) |
 
 `BugReportRow` columns (mirror `bug_reports`):
 

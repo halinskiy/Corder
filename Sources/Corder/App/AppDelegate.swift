@@ -49,6 +49,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 TranscriptionPipeline.shared.enqueue(meetingId: id)
             }
         }
+        // Also auto-retry meetings that hard-FAILED on a prior run, as long
+        // as they're still under the retry budget (3 attempts). With the
+        // per-chunk resume cache this is cheap — a transient failure
+        // (network drop, killed app) recovers on its own instead of
+        // leaving a red "failed" card the user must re-transcribe by hand.
+        // A genuinely-broken row stops after 3 tries (no re-bill loop).
+        if let retriable = try? AppContext.shared.repo.failedRetriableMeetingIds(maxAttempts: 3), !retriable.isEmpty {
+            for id in retriable {
+                FileLogger.log("AppDelegate: auto-retrying failed transcription for \(id) (under retry budget)")
+                TranscriptionErrors.clear(meetingId: id)
+                TranscriptionPipeline.shared.enqueue(meetingId: id)
+            }
+        }
         // One-time cleanup of "ghost" speakers (rows with zero segments) —
         // legacy dual-track transcriptions used to insert "Speaker 1"
         // unconditionally even when the mic was silent, which skewed the

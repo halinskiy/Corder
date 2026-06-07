@@ -221,6 +221,11 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN chapters TEXT;")
         }
 
+        // Bounded launch-time auto-retry of failed transcriptions.
+        m.registerMigration("v20_transcribe_attempts") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN transcribe_attempts INTEGER NOT NULL DEFAULT 0;")
+        }
+
         return m
     }
 }

@@ -399,6 +399,37 @@ struct MeetingRepository {
         }
     }
 
+    /// Bump the consecutive-attempt counter at the start of a transcribe.
+    func incrementTranscribeAttempts(meetingId: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET transcribe_attempts = transcribe_attempts + 1 WHERE id = ?",
+                           arguments: [meetingId])
+        }
+    }
+
+    /// Clear the attempt counter — called on a successful transcribe so a
+    /// row that later fails gets its full retry budget again.
+    func resetTranscribeAttempts(meetingId: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET transcribe_attempts = 0 WHERE id = ?",
+                           arguments: [meetingId])
+        }
+    }
+
+    /// IDs of `.failed` meetings still under the retry budget — the
+    /// launch-time auto-retry re-enqueues these so a transient failure
+    /// (network blip, killed mid-run) recovers without the user clicking
+    /// Re-transcribe. `maxAttempts` bounds it so a permanently-broken row
+    /// can't loop-fail (and re-bill) on every launch.
+    func failedRetriableMeetingIds(maxAttempts: Int) throws -> [String] {
+        try dbq.read { db in
+            try Meeting
+                .filter(Column("status") == "failed" && Column("transcribe_attempts") < maxAttempts)
+                .fetchAll(db)
+                .map { $0.id }
+        }
+    }
+
     func setDropboxArchive(meetingId: String, videoPath: String?, audioPath: String?, uploadedAt: Int64?) throws {
         try dbq.write { db in
             try db.execute(sql: """
