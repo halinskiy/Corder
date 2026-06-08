@@ -380,6 +380,12 @@ final class TranscriptionPipeline {
                 }
             }()
             let cacheKey: String
+            // False when any source-WAV MD5 came back empty (a transient
+            // read failure). Without this, the key degenerates to a shared
+            // `…:` value and two meetings that both hit a read error collide
+            // — one meeting's transcript replayed for another. When unusable
+            // we neither read nor write the whole-meeting cache for this run.
+            var cacheUsable = true
             if inPerson {
                 // The expected-speaker hint is baked into the Gemini
                 // prompt for the in-person path, so a different clarify
@@ -396,6 +402,7 @@ final class TranscriptionPipeline {
                 // forces a clean re-transcribe instead of replaying stale
                 // Gemini-diarized turns.
                 let mh = (try? Self.md5OfFile(at: micURL)) ?? ""
+                if mh.isEmpty { cacheUsable = false }
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
                 // v3: truncated Gemini chunks now force a split instead
                 // of salvaging a partial, so the raw turn set (and its
@@ -411,6 +418,7 @@ final class TranscriptionPipeline {
                 // so the count affects raw output and must key the cache.
                 let mh = (try? Self.md5OfFile(at: micURL)) ?? ""
                 let sh = (try? Self.md5OfFile(at: systemURL)) ?? ""
+                if mh.isEmpty || sh.isEmpty { cacheUsable = false }
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
                 cacheKey = "\(providerTag)dual:v10:\(ex):\(mh):\(sh)"
             } else {
@@ -419,7 +427,9 @@ final class TranscriptionPipeline {
                     FileLogger.log("transcribe(): legacy fallback — pulling mix from Dropbox \(remote)")
                     try await DropboxService.shared.download(remotePath: remote, to: mixURL)
                 }
-                cacheKey = "\(providerTag)mix:" + ((try? Self.md5OfFile(at: mixURL)) ?? "")
+                let mxh = (try? Self.md5OfFile(at: mixURL)) ?? ""
+                if mxh.isEmpty { cacheUsable = false }
+                cacheKey = "\(providerTag)mix:" + mxh
             }
 
             // RAW Gemini text turns (the only thing a Gemini call buys).
@@ -438,7 +448,8 @@ final class TranscriptionPipeline {
             var haveRaw = false                 // raw cached → no Gemini
             var usingDualTrack = canDualTrack
 
-            if let cachedJSON = meeting.geminiRawTurns,
+            if cacheUsable,
+               let cachedJSON = meeting.geminiRawTurns,
                let storedHash = meeting.audioHash,
                !storedHash.isEmpty,
                storedHash == cacheKey,
@@ -696,7 +707,10 @@ final class TranscriptionPipeline {
             // local `meeting` copy still has status=.transcribing while
             // mapping just flipped the DB to .ready, and round-tripping
             // the stale local copy through updateMeeting would revert it.
-            do {
+            // Skip the cache write entirely when the key is degenerate
+            // (empty source MD5) — a cache keyed by a collision-prone value
+            // is worse than no cache.
+            if cacheUsable {
                 let bundle: CachedTranscript
                 if usingDualTrack {
                     bundle = CachedTranscript(userLabel: nil, turns: nil,
@@ -710,11 +724,20 @@ final class TranscriptionPipeline {
                 }
                 if let raw = try? JSONEncoder().encode(bundle),
                    let json = String(data: raw, encoding: .utf8) {
-                    try? repo.setRawTurnsCache(meetingId: meetingId,
-                                               geminiRawTurns: json,
-                                               audioHash: cacheKey)
-                    FileLogger.log("transcribe(): cached raw+final turns + audio_hash")
+                    do {
+                        try repo.setRawTurnsCache(meetingId: meetingId,
+                                                  geminiRawTurns: json,
+                                                  audioHash: cacheKey)
+                        FileLogger.log("transcribe(): cached raw+final turns + audio_hash")
+                    } catch {
+                        // Surface the failure (was silently `try?`) so a
+                        // disk-full / locked-DB write that strands the
+                        // resume cache is at least visible in the log.
+                        FileLogger.log("transcribe(): setRawTurnsCache FAILED (\(error)) — meeting ready but cache not persisted")
+                    }
                 }
+            } else {
+                FileLogger.log("transcribe(): cache write skipped — degenerate key (source MD5 unreadable)")
             }
 
             // 3. Refetch (status is now .ready, transcribedAt set) for the
@@ -1409,7 +1432,7 @@ final class TranscriptionPipeline {
                 // whole meeting (only when that model is already on disk).
                 return try await WhisperTranscriber.transcribe(
                     audioURL: wavURL, mode: .single, initialPrompt: prompt,
-                    localFallbackVariant: LocalWhisperTranscriber.firstDownloadedVariant())
+                    localFallbackVariant: LocalWhisperTranscriber.fallbackVariant())
             } catch WhisperTranscriber.WhisperError.tierRequired {
                 return try await fallbackToLocalAfterTierGate(
                     wavURL: wavURL, meetingId: meetingId)
@@ -1428,7 +1451,7 @@ final class TranscriptionPipeline {
                 return try await WhisperTranscriber.transcribe(
                     audioURL: wavURL, mode: .single,
                     initialPrompt: prompt, backend: .groq,
-                    localFallbackVariant: LocalWhisperTranscriber.firstDownloadedVariant())
+                    localFallbackVariant: LocalWhisperTranscriber.fallbackVariant())
             } catch WhisperTranscriber.WhisperError.tierRequired {
                 return try await fallbackToLocalAfterTierGate(
                     wavURL: wavURL, meetingId: meetingId)

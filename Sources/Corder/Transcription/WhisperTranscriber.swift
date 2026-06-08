@@ -342,6 +342,7 @@ enum WhisperTranscriber {
 
             FileLogger.log("WhisperTranscriber: chunk \(i + 1)/\(chunks.count) (offset \(chunk.offsetMs)ms)…")
             let turns: [GeminiTranscriber.Turn]
+            var fromLocalFallback = false
             do {
                 turns = try await transcribeSingle(audioURL: chunk.url,
                                                    apiKey: apiKey,
@@ -358,9 +359,16 @@ enum WhisperTranscriber {
                     variant: localFallbackVariant, initialPrompt: initialPrompt,
                     label: "chunk \(i + 1)/\(chunks.count)") else { throw urlErr }
                 turns = local
+                fromLocalFallback = true
             }
-            // Persist immediately so a kill AFTER this chunk resumes here.
-            if let key = cacheKey { ChunkTranscriptCache.put(key, turns) }
+            // Persist immediately so a kill AFTER this chunk resumes here —
+            // but ONLY cloud results. A locally-recovered chunk is cached
+            // under the CLOUD key (cacheTag is backend:mode), so a later
+            // all-cloud run would replay the lower-quality on-device text
+            // for a chunk the user is paying to get from the cloud. Leaving
+            // it uncached means the resume re-fetches it (cloud if back),
+            // which is the correct quality/cost trade-off.
+            if let key = cacheKey, !fromLocalFallback { ChunkTranscriptCache.put(key, turns) }
             all.append(contentsOf: turns)
         }
         FileLogger.log("WhisperTranscriber: stitched \(all.count) turns from \(chunks.count) chunks")

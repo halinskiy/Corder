@@ -16,6 +16,24 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.35] — 2026-06-08
+
+### Fixed
+- A rare launch failure where a damaged library database could stop the
+  app from opening — Corder now recovers and starts instead of crashing.
+- Closed a local-network exposure: the app's internal server now listens
+  on localhost only, never the LAN.
+- Prevented a cache mix-up that could, in rare cases, show one meeting's
+  transcript on another.
+- Stopped a retry loop that could re-run a failed transcription
+  repeatedly when the connection flapped.
+- After a mid-recording network drop, a chunk finished on-device no longer
+  sticks — the cloud re-does it once you're back online.
+
+### Changed
+- The offline transcription fallback now uses a lighter model so it won't
+  bog down lower-RAM Macs.
+
 ## [0.13.34] — 2026-06-08
 
 ### Changed
