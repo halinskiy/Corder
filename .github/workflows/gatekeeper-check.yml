@@ -80,3 +80,34 @@ jobs:
           spctl --assess --type execute -vv "$APP" 2>&1 | tee /tmp/spctl.txt
           grep -q "source=Notarized Developer ID" /tmp/spctl.txt || { echo "::error::Gatekeeper would reject this build on $(sw_vers -productVersion)"; exit 1; }
           echo "✅ $(sw_vers -productVersion): accepted as Notarized Developer ID"
+
+      - name: Launch smoke test (does it actually OPEN, not just pass Gatekeeper?)
+        run: |
+          # The real-world failure is "user drags Corder to Applications,
+          # double-clicks, NOTHING happens" — a crash on launch, which the
+          # Gatekeeper checks above can never catch. Corder is a menu-bar
+          # app (LSUIElement): no Dock window, so "still alive after 10s"
+          # is the success signal; an immediate exit / a fresh crash report
+          # is exactly the "nothing happens" bug. The runner is a clean Mac
+          # (no dev tools, fresh TCC) — the closest automated stand-in for
+          # a new user's machine.
+          DR="$HOME/Library/Logs/DiagnosticReports"
+          mkdir -p "$DR"
+          BEFORE="$(ls "$DR"/Corder*.ips 2>/dev/null | wc -l | tr -d ' ')"
+          open "$APP" || true
+          sleep 10
+          if pgrep -f "Corder.app/Contents/MacOS/Corder" >/dev/null; then
+            echo "✅ $(sw_vers -productVersion): launched and still running after 10s"
+            pkill -f "Corder.app/Contents/MacOS/Corder" || true
+          else
+            echo "::error::Corder exited within 10s of opening on $(sw_vers -productVersion) — this IS the 'nothing happens on open' crash"
+            AFTER="$(ls "$DR"/Corder*.ips 2>/dev/null | wc -l | tr -d ' ')"
+            echo "crash reports before=$BEFORE after=$AFTER"
+            for f in $(ls -t "$DR"/Corder*.ips 2>/dev/null | head -2); do
+              echo "===== $f ====="; head -80 "$f"
+            done
+            # Also surface the runtime log for early failures that don't
+            # produce a .ips (e.g. a clean exit / fatalError print).
+            echo "===== /tmp/corder.log (tail) ====="; tail -40 /tmp/corder.log 2>/dev/null || true
+            exit 1
+          fi

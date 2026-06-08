@@ -1080,7 +1080,13 @@ private struct PermissionsCardsInteractive: View {
                 status: screenStatus,
                 primaryLabel: screenPrimaryLabel,
                 onPrimary: screenPrimaryAction,
-                optional: false
+                optional: false,
+                // Once the user has been sent to Settings, offer the
+                // relaunch macOS requires for a Screen Recording grant to
+                // take effect — otherwise the card is stuck on "Open
+                // Settings" forever even after they flip the toggle.
+                secondaryLabel: (screenStatus != .granted && screenDidRequest) ? "Enabled it? Quit & Reopen" : nil,
+                secondaryAction: (screenStatus != .granted && screenDidRequest) ? relaunchApp : nil
             )
             permissionCard(
                 title: "Notifications",
@@ -1117,7 +1123,9 @@ private struct PermissionsCardsInteractive: View {
         status: WizardPermission,
         primaryLabel: String,
         onPrimary: @escaping () -> Void,
-        optional: Bool = false
+        optional: Bool = false,
+        secondaryLabel: String? = nil,
+        secondaryAction: (() -> Void)? = nil
     ) -> some View {
         // Two layouts:
         //   • granted → no CTA pill, just a small green checkmark
@@ -1176,6 +1184,15 @@ private struct PermissionsCardsInteractive: View {
                     }
                     Button(primaryLabel, action: onPrimary)
                         .buttonStyle(FlatButtonStyle(role: .secondary))
+                    // Optional second action — used by Screen Recording to
+                    // offer "Quit & Reopen" after the user visits Settings,
+                    // because the grant only takes effect on relaunch (the
+                    // OS keeps `CGPreflightScreenCaptureAccess` false for
+                    // the life of the current process otherwise).
+                    if let secondaryLabel, let secondaryAction {
+                        Button(secondaryLabel, action: secondaryAction)
+                            .buttonStyle(FlatButtonStyle(role: .secondary))
+                    }
                 }
             }
         }
@@ -1275,6 +1292,22 @@ private struct PermissionsCardsInteractive: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             screenStatus = currentScreenStatus()
         }
+    }
+
+    /// Quit + relaunch ourselves. macOS only lets a Screen Recording
+    /// grant take effect on a fresh process (`CGPreflightScreenCaptureAccess`
+    /// stays cached-false for the life of the current one), so after the
+    /// user flips the toggle this is the only way the wizard can see it
+    /// short of the user quitting by hand. The `sleep 1` lets us fully
+    /// exit before the new instance opens, dodging the duplicate-instance
+    /// killer in AppDelegate.
+    private func relaunchApp() {
+        let path = Bundle.main.bundlePath
+        let p = Process()
+        p.launchPath = "/bin/sh"
+        p.arguments = ["-c", "sleep 1; open \"\(path)\""]
+        try? p.run()
+        NSApp.terminate(nil)
     }
 }
 
