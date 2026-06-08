@@ -528,7 +528,12 @@ enum WhisperTranscriber {
             let status = (r as? HTTPURLResponse)?.statusCode ?? 0
             let bodyText = String(data: d, encoding: .utf8) ?? ""
             let isRateLimit = (status == 429) && !bodyText.contains("insufficient_quota")
-            if !isRateLimit { break }
+            // Transient upstream/proxy errors (Cloudflare Worker cold start,
+            // OpenAI 5xx blip) were treated as PERMANENT and failed the
+            // meeting. Retry them with the same backoff as 429.
+            let isTransientServer = (status == 502 || status == 503 || status == 504)
+                || (status == 500 && bodyText.isEmpty)
+            if !isRateLimit && !isTransientServer { break }
             if attempt == maxAttempts { break }
             // Respect Retry-After header when present, otherwise
             // exponential backoff (1s, 2s, 4s, 8s).
@@ -536,7 +541,7 @@ enum WhisperTranscriber {
                 .value(forHTTPHeaderField: "Retry-After")
                 .flatMap(Double.init) ?? 0
             let waitSec = max(headerWait, pow(2.0, Double(attempt - 1)))
-            FileLogger.log("WhisperTranscriber: 429 rate-limit, retry \(attempt)/\(maxAttempts - 1) after \(waitSec)s")
+            FileLogger.log("WhisperTranscriber: \(status) \(isRateLimit ? "rate-limit" : "transient server"), retry \(attempt)/\(maxAttempts - 1) after \(waitSec)s")
             try await Task.sleep(nanoseconds: UInt64(waitSec * 1_000_000_000))
         }
         try throwIfBilling(http: resp, data: data)
@@ -818,8 +823,19 @@ actor WhisperInflightLimiter {
     }
     func run<T>(_ work: () async throws -> T) async rethrows -> T {
         await semaphore.wait()
-        defer { Task { await semaphore.signal() } }
-        return try await work()
+        // Release the permit STRUCTURALLY (awaited), not in a detached
+        // `Task`. The old `defer { Task { … } }` released asynchronously
+        // after `run` returned, so a back-to-back caller could reach
+        // `wait()` before the prior `signal()` Task was scheduled — briefly
+        // exceeding maxConcurrent=1, the exact TPM gate this exists to hold.
+        do {
+            let result = try await work()
+            await semaphore.signal()
+            return result
+        } catch {
+            await semaphore.signal()
+            throw error
+        }
     }
 }
 

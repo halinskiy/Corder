@@ -16,6 +16,22 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.36] — 2026-06-08
+
+### Fixed
+- Closed a recording-start race that could leak a capture or, after a
+  sleep mid-start, leave the privacy indicator stuck on.
+- Transcriptions no longer fail on a transient server blip (cloud
+  cold-start) — they retry automatically.
+- A relaunch (after sign-in / account change) no longer briefly runs two
+  copies racing for the same port and database.
+- Your interface language now persists across restarts for every
+  language, not just English and Russian.
+
+### Changed
+- Internal hardening from a full security + correctness audit (provider
+  rate-limiter, server-side endpoint allowlisting, safer URL handling).
+
 ## [0.13.35] — 2026-06-08
 
 ### Fixed

@@ -484,7 +484,13 @@ enum GeminiTranscriber {
 
         // Step 2: upload bytes and finalize in one shot.
         let bytes = try Data(contentsOf: audioURL)
-        var putReq = URLRequest(url: URL(string: uploadURL)!)
+        // `uploadURL` is a server-supplied response header — guard the
+        // parse instead of force-unwrapping (a malformed header would
+        // otherwise crash the app rather than fail the transcribe cleanly).
+        guard let uploadURLParsed = URL(string: uploadURL) else {
+            throw GError.parse("malformed X-Goog-Upload-URL")
+        }
+        var putReq = URLRequest(url: uploadURLParsed)
         putReq.httpMethod = "POST"
         putReq.setValue("\(size)", forHTTPHeaderField: "Content-Length")
         putReq.setValue("0", forHTTPHeaderField: "X-Goog-Upload-Offset")

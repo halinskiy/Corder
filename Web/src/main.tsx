@@ -12,7 +12,7 @@ import { Dashboard } from "./components/Dashboard";
 import { UpdateModalHost } from "./components/UpdateModal";
 import { MainHeader } from "./components/MainHeader";
 import { ResizeHandle } from "./components/ResizeHandle";
-import { Lang, T, pickStrings } from "./i18n";
+import { Lang, T, pickStrings, LANGS } from "./i18n";
 import { initTheme } from "./theme";
 
 const SIDEBAR_DEFAULT = 240, SIDEBAR_MIN = 200, SIDEBAR_MAX = 480;
@@ -333,7 +333,11 @@ function App() {
     (async () => {
       try {
         const s = await getSettings();
-        if (s.language === "ru" || s.language === "en") setLangState(s.language);
+        // Accept ANY supported locale on boot, not just ru/en — a user who
+        // picked German/French/etc. was being reset to English on reload.
+        if (s.language && LANGS.some((l) => l.code === s.language)) {
+          setLangState(s.language as Lang);
+        }
         if (s.record_hotkey_label) setHotkeyLabel(s.record_hotkey_label);
         const v = s.tier ?? (s.is_pro ? "pro" : "free");
         if (v === "free" || v === "pro" || v === "max") setTier(v);
