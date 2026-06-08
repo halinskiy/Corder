@@ -166,9 +166,13 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
     // settings so subsequent reads of `upsellDismissedAt` see the
     // dismiss immediately, even before the POST round-trips.
     setSettingsState((cur) => cur ? { ...cur, upsell_snooze: json } : cur);
-    try { await setSettings({ ...(settings ?? {}), upsell_snooze: json }); }
+    // Send ONLY the changed field — the backend treats absent fields as
+    // unchanged. Re-POSTing the whole cached `settings` snapshot would
+    // revert any toggle the user changed in Settings since this banner
+    // mounted (stale-snapshot clobber).
+    try { await setSettings({ upsell_snooze: json }); }
     catch { /* server write failed — next render will reconcile on the next /api/settings poll */ }
-  }, [settings]);
+  }, []);
 
   const sparkles = React.useMemo(() => makeSparkleField(28), []);
 
@@ -231,10 +235,9 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
       }
       setStopping(true);
       try {
-        const next = await setSettings({
-          ...(settings ?? {}),
-          transcription_provider: "auto",
-        });
+        // Only the changed field (see persistSnooze note) — never re-POST
+        // the whole cached snapshot.
+        const next = await setSettings({ transcription_provider: "auto" });
         setSettingsState(next);
         await cancelTranscription(meetingId);
         // Don't call onCancelled() — parent polls status every ~1 s,

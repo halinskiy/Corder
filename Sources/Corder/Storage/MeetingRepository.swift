@@ -399,6 +399,18 @@ struct MeetingRepository {
         }
     }
 
+    /// Flip ONLY the status column. Used on the transcribe failure path
+    /// instead of `updateMeeting(meeting)`: the in-memory `meeting` copy is
+    /// stale (e.g. it still carries the pre-increment `transcribe_attempts`),
+    /// so writing the whole struct back would REVERT the attempt counter and
+    /// defeat the launch/NetworkMonitor retry budget.
+    func setStatus(meetingId: String, status: MeetingStatus) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET status = ? WHERE id = ?",
+                           arguments: [status.rawValue, meetingId])
+        }
+    }
+
     /// Bump the consecutive-attempt counter at the start of a transcribe.
     func incrementTranscribeAttempts(meetingId: String) throws {
         try dbq.write { db in

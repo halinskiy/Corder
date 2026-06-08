@@ -125,14 +125,17 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
     : chapters;
 
   // Active chapter = the last one whose start is at/under the playhead.
-  // Keyed by startMs so it still matches inside the filtered subset.
+  // Tracked by the chapter OBJECT (not startMs value): two chapters can
+  // share a startMs (the parser coerces a missing/invalid start to 0), and
+  // value-matching would light up every duplicate. `filtered` holds the
+  // same object refs as `chapters`, so identity still matches when searching.
   const nowMs = currentTimeSec * 1000;
-  let activeStartMs = -1;
   let activeIdx = -1;
   for (let i = 0; i < chapters.length; i++) {
-    if (chapters[i].startMs <= nowMs) { activeStartMs = chapters[i].startMs; activeIdx = i; }
+    if (chapters[i].startMs <= nowMs) { activeIdx = i; }
     else break;
   }
+  const activeChapter = activeIdx >= 0 ? chapters[activeIdx] : null;
   // Progress THROUGH the active chapter (0…1): playhead position within
   // [thisChapter.start, nextChapter.start) — or the recording end for the
   // last chapter. Drives the darker-green fill on the active timecode pill,
@@ -196,12 +199,12 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
           <button
             key={i}
             type="button"
-            className={"chapter-block" + (c.startMs === activeStartMs ? " is-active" : "")}
+            className={"chapter-block" + (c === activeChapter ? " is-active" : "")}
             onClick={() => onSeek(Math.max(0, c.startMs / 1000))}
             aria-label={`${fmtTime(c.startMs)} ${c.title}`}
           >
             <span className="chapter-time">
-              {c.startMs === activeStartMs && (
+              {c === activeChapter && (
                 <span
                   className="chapter-time-fill"
                   style={{ width: `${Math.round(activeProgress * 100)}%` }}

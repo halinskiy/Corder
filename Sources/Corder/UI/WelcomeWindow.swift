@@ -1302,12 +1302,9 @@ private struct PermissionsCardsInteractive: View {
     /// exit before the new instance opens, dodging the duplicate-instance
     /// killer in AppDelegate.
     private func relaunchApp() {
-        let path = Bundle.main.bundlePath
-        let p = Process()
-        p.launchPath = "/bin/sh"
-        p.arguments = ["-c", "sleep 1; open \"\(path)\""]
-        try? p.run()
-        NSApp.terminate(nil)
+        // Reuse the single relaunch helper (terminate-before-relaunch +
+        // error logging) instead of a byte-for-byte copy.
+        CorderRelaunch.now()
     }
 }
 

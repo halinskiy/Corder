@@ -1196,11 +1196,20 @@ enum Routes {
         }
     }
 
+    /// Supported UI locale codes — keep in sync with `Web/src/i18n.ts` LANGS.
+    private static let supportedLocales: Set<String> = [
+        "en", "uk", "ru", "de", "fr", "es", "pt", "it", "pl", "cs",
+        "tr", "nl", "sv", "id", "vi", "ja", "ko", "zh", "hi", "ar",
+    ]
+
     private static func settingsSet(req: HttpRequest) -> HttpResponse {
         do {
             let body = Data(req.body)
             let parsed = try JSONDecoder().decode(DTO.Settings.self, from: body)
-            if let lang = parsed.language, lang == "ru" || lang == "en" {
+            // Persist ANY supported UI locale (must match the frontend's
+            // LANGS list), not just ru/en — otherwise a German/French/etc.
+            // pick was silently dropped here and reset to English on reload.
+            if let lang = parsed.language, Self.supportedLocales.contains(lang) {
                 UserDefaults.standard.set(lang, forKey: AppLanguage.key)
                 Task { @MainActor in
                     AppContext.shared.language = lang

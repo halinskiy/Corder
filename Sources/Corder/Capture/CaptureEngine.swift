@@ -380,24 +380,43 @@ final class CaptureEngine: NSObject {
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) ch")
-        let micFile = try AVAudioFile(
-            forWriting: micURL,
-            settings: inputFormat.settings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
-        self.micFile = micFile
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
-            guard let self = self else { return }
-            self.micFramesWritten &+= Int64(buffer.frameLength)
-            try? self.micFile?.write(from: buffer)
-            // Push raw peak to the level meter — the floating HUD
-            // panel observes it to draw the live mic bar.
-            RecordingLevelMeter.shared.ingestMic(buffer: buffer)
+        // Mic init can throw (AVAudioFile open with a zero/invalid input
+        // format, or engine.start when another app holds the input device —
+        // Discord/Telegram). By here the SCStream is ALREADY live, so a bare
+        // throw would leave it capturing forever with nothing to stop it (the
+        // privacy indicator stuck on, the device leaked). Tear the partial
+        // capture down before rethrowing so the recording fails cleanly.
+        do {
+            let micFile = try AVAudioFile(
+                forWriting: micURL,
+                settings: inputFormat.settings,
+                commonFormat: .pcmFormatFloat32,
+                interleaved: false
+            )
+            self.micFile = micFile
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
+                guard let self = self else { return }
+                self.micFramesWritten &+= Int64(buffer.frameLength)
+                try? self.micFile?.write(from: buffer)
+                // Push raw peak to the level meter — the floating HUD
+                // panel observes it to draw the live mic bar.
+                RecordingLevelMeter.shared.ingestMic(buffer: buffer)
+            }
+            engine.prepare()
+            try engine.start()
+            self.audioEngine = engine
+        } catch {
+            FileLogger.log("CaptureEngine.start: mic init failed (\(error)) — tearing down the already-armed SCStream to avoid a leaked live capture")
+            try? activeStream.removeStreamOutput(self, type: .screen)
+            try? activeStream.removeStreamOutput(self, type: .audio)
+            try? await activeStream.stopCapture()
+            self.stream = nil
+            self.sckSystemURL = nil
+            inputNode.removeTap(onBus: 0)
+            if engine.isRunning { engine.stop() }
+            self.micFile = nil
+            throw error
         }
-        engine.prepare()
-        try engine.start()
-        self.audioEngine = engine
 
         // 6. system.wav via the Core Audio process tap. Opened lazily
         //    on the first tap buffer (we take the format from the tap).
