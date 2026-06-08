@@ -70,8 +70,14 @@ final class NetworkMonitor {
     private func retryNetworkFailedMeetings() async {
         let repo = AppContext.shared.repo
         guard let meetings = try? repo.listMeetings() else { return }
+        // Respect the SAME retry budget the launch auto-retry uses
+        // (AppDelegate). Without it a flapping connection re-enqueues the
+        // same meeting on every online transition — an unbounded, paid
+        // re-transcribe loop. `failedRetriableMeetingIds` already excludes
+        // rows that exhausted their attempts.
+        let retriable = Set((try? repo.failedRetriableMeetingIds(maxAttempts: 3)) ?? [])
         for m in meetings {
-            guard m.status == .failed else { continue }
+            guard m.status == .failed, retriable.contains(m.id) else { continue }
             guard let err = TranscriptionErrors.read(meetingId: m.id) else { continue }
             // Phrase chosen so we catch our own GError.network message
             // ("No internet …") plus URLError descriptions surfaced through
@@ -81,9 +87,12 @@ final class NetworkMonitor {
                || lower.contains("offline")
                || lower.contains("network") else { continue }
 
-            FileLogger.log("NetworkMonitor: auto-retrying failed-by-network meeting \(m.id)")
+            FileLogger.log("NetworkMonitor: auto-retrying failed-by-network meeting \(m.id) (under budget)")
             TranscriptionErrors.clear(meetingId: m.id)
-            TranscriptionPipeline.shared.enqueue(meetingId: m.id)
+            // Serial: await each run before starting the next so a reconnect
+            // after a long offline window doesn't fire N paid pipelines at
+            // once (thundering herd).
+            await TranscriptionPipeline.shared.enqueue(meetingId: m.id).value
         }
     }
 }

@@ -269,6 +269,17 @@ enum LocalWhisperTranscriber {
     /// never trigger).
     nonisolated static var offlineFallbackVariant: Variant { .base }
 
+    /// Variant to use for a mid-run network-loss fallback. Prefers the
+    /// LIGHT offline-net model (`.base`, ~500 MB RAM) when it's on disk —
+    /// prewarm stages it for cloud users — so an emergency fallback never
+    /// spins up a 3 GB `.turbo` on a RAM-starved Mac (the swap-to-death
+    /// `firstDownloadedVariant` would pick, since it prefers best quality).
+    /// Falls back to whatever IS downloaded if base isn't present.
+    nonisolated static func fallbackVariant() -> Variant? {
+        if isModelDownloaded(offlineFallbackVariant) { return offlineFallbackVariant }
+        return firstDownloadedVariant()
+    }
+
     nonisolated private static var downloadBaseURL: URL { AppPaths.modelsDir }
     nonisolated static func modelFolderURL(_ variant: Variant) -> URL {
         downloadBaseURL
@@ -357,7 +368,7 @@ enum LocalWhisperTranscriber {
     /// recover, then reports the final file as "missing". A clean slate
     /// forces a correct fresh fetch.
     private static func loadPipe(_ variant: Variant) async throws {
-        purgeIncompleteDownloads()
+        purgeIncompleteDownloads(variant)
         clearStaleTokenizer(variant)
         FileLogger.log("LocalWhisper: loading WhisperKit from \(modelFolderURL(variant).path)")
         // `download: true` so WhisperKit can fetch the tokenizer
@@ -385,18 +396,22 @@ enum LocalWhisperTranscriber {
         }
     }
 
-    /// Remove leftover `*.incomplete` HuggingFace-Hub download markers
-    /// anywhere under the models dir. These accumulate when a tokenizer
-    /// / model fetch is interrupted (crash, cancel, or the dual-init
-    /// race we now serialize) and block the next clean download with
+    /// Remove leftover `*.incomplete` HuggingFace-Hub download markers for
+    /// THIS variant only (its model folder + its tokenizer repo folder).
+    /// These accumulate when a fetch is interrupted (crash, cancel, the
+    /// dual-init race we serialize) and block the next clean download with
     /// `"…couldn't be moved"` / `"configuration file missing"`.
-    nonisolated private static func purgeIncompleteDownloads() {
+    /// Scoped to the variant on purpose: a blanket walk of the whole models
+    /// dir would delete a CONCURRENT prewarm's in-flight `.incomplete`
+    /// (e.g. a `.turbo` transcribe purging a `.base` offline-net download).
+    nonisolated private static func purgeIncompleteDownloads(_ variant: Variant) {
         let fm = FileManager.default
-        guard let walker = fm.enumerator(at: downloadBaseURL,
-                                         includingPropertiesForKeys: nil) else { return }
-        for case let url as URL in walker where url.lastPathComponent.hasSuffix(".incomplete") {
-            try? fm.removeItem(at: url)
-            FileLogger.log("LocalWhisper: purged stale download fragment \(url.lastPathComponent)")
+        for root in [modelFolderURL(variant), tokenizerRepoFolderURL(variant)] {
+            guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
+            for case let url as URL in walker where url.lastPathComponent.hasSuffix(".incomplete") {
+                try? fm.removeItem(at: url)
+                FileLogger.log("LocalWhisper: purged stale download fragment \(url.lastPathComponent)")
+            }
         }
     }
 

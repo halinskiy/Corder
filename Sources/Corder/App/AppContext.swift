@@ -144,14 +144,14 @@ enum AppSettings {
     static var autoTitle: Bool             { flag(kAutoTitle) }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
-    /// Diagnostic telemetry. Default ON during the test period —
-    /// we need real-world signal from every install to fix
-    /// transcription failures we can't reproduce locally. Will
-    /// flip back to default-OFF before the paid plans ship.
-    /// No transcripts, no raw email; everything sent through
+    /// Diagnostic telemetry. Default OFF — opt-in only. The paid plans
+    /// have shipped and the landing promises "No telemetry, no analytics,
+    /// no pings" inside the app, so the default MUST stay off to keep that
+    /// claim true. A user who explicitly enables it sends aggregate signal
+    /// only: no transcripts, no raw email; everything through
     /// `TelemetryService` is aggregate + a SHA-256 anonymous id.
     static var telemetryEnabled: Bool {
-        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? true
+        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? false
     }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }

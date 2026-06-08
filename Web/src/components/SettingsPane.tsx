@@ -135,7 +135,7 @@ export function SettingsPane({
           <Toggle
             label={t.settings_telemetry_title ?? "Help improve Corder"}
             desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts to the maintainer once a day."}
-            checked={(s?.telemetry as boolean | undefined) ?? true}
+            checked={(s?.telemetry as boolean | undefined) ?? false}
             disabled={!loaded}
             onChange={(v) => patch({ telemetry: v })}
           />
