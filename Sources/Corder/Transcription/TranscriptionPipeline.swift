@@ -1016,7 +1016,7 @@ final class TranscriptionPipeline {
         for turn in turns {
             let text = turn.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
-            guard !isHallucination(text) else {
+            guard !Hallucinations.isHallucination(text) else {
                 FileLogger.log("mapTurns: dropping hallucination: \(text)")
                 continue
             }
@@ -1224,7 +1224,7 @@ final class TranscriptionPipeline {
         for item in items {
             let text = item.turn.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
-            guard !isHallucination(text) else {
+            guard !Hallucinations.isHallucination(text) else {
                 FileLogger.log("mapDual: dropping hallucination: \(text)")
                 continue
             }
@@ -1335,7 +1335,7 @@ final class TranscriptionPipeline {
         for t in sorted {
             let text = t.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
-            guard !isHallucination(text) else {
+            guard !Hallucinations.isHallucination(text) else {
                 FileLogger.log("mapInPerson: dropping hallucination: \(text)")
                 continue
             }
@@ -1839,29 +1839,14 @@ final class TranscriptionPipeline {
     /// doesn't generate these natively, but old Whisper transcripts in the
     /// DB still contain them — `purgeKnownHallucinations` clears those at
     /// launch, and this filter blocks any that slip through new pipelines.
-    private static let hallucinationPatterns: [String] = [
-        "субтитры сделал dimatorzok",
-        "субтитры подготовил dimatorzok",
-        "субтитры создавал dimatorzok",
-        "субтитры подобрал dimatorzok",
-        "субтитры от dimatorzok",
-        "продолжение следует",
-        "спасибо за просмотр",
-        "спасибо за внимание",
-        "не забудьте подписаться",
-        "подписывайтесь на канал",
-        "ставьте лайк",
-    ]
-
     /// One-time scrub at app launch — sweeps known hallucinated lines out
     /// of the existing transcripts so users don't have to re-run anything.
     static func purgeKnownHallucinations(repo: MeetingRepository) {
         do {
             let segs = try repo.allSegments()
-            let pipeline = TranscriptionPipeline.shared
             let badIds = segs.compactMap { s -> Int64? in
                 guard let id = s.id else { return nil }
-                return pipeline.isHallucination(s.text) ? id : nil
+                return Hallucinations.isHallucination(s.text) ? id : nil
             }
             if !badIds.isEmpty {
                 try repo.deleteSegments(ids: badIds)
@@ -1898,17 +1883,4 @@ final class TranscriptionPipeline {
         }
     }
 
-    private func isHallucination(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        let stripped = lower.unicodeScalars.filter {
-            CharacterSet.alphanumerics.contains($0) || $0 == " "
-        }
-        let normalised = String(String.UnicodeScalarView(stripped))
-            .replacingOccurrences(of: "  ", with: " ")
-            .trimmingCharacters(in: .whitespaces)
-        for pat in Self.hallucinationPatterns {
-            if normalised.contains(pat) { return true }
-        }
-        return false
-    }
 }

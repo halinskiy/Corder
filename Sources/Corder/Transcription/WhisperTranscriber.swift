@@ -608,7 +608,7 @@ enum WhisperTranscriber {
         for s in segs {
             let text = (s["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !text.isEmpty else { continue }
-            guard !Self.isHallucination(text) else {
+            guard !Hallucinations.isHallucination(text) else {
                 FileLogger.log("WhisperTranscriber: dropping hallucination: \(text)")
                 continue
             }
@@ -634,37 +634,7 @@ enum WhisperTranscriber {
 
     // MARK: - Hallucination filter
 
-    /// Mirror of `TranscriptionPipeline.hallucinationPatterns`. TODO:
-    /// extract into a shared `Hallucinations` helper module once we
-    /// have a second consumer beyond the pipeline. Until then a small
-    /// in-file copy beats a circular MainActor dependency.
-    private static let hallucinationPatterns: [String] = [
-        "субтитры сделал dimatorzok",
-        "субтитры подготовил dimatorzok",
-        "субтитры создавал dimatorzok",
-        "субтитры подобрал dimatorzok",
-        "субтитры от dimatorzok",
-        "продолжение следует",
-        "спасибо за просмотр",
-        "спасибо за внимание",
-        "не забудьте подписаться",
-        "подписывайтесь на канал",
-        "ставьте лайк",
-    ]
-
-    private static func isHallucination(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        let stripped = lower.unicodeScalars.filter {
-            CharacterSet.alphanumerics.contains($0) || $0 == " "
-        }
-        let normalised = String(String.UnicodeScalarView(stripped))
-            .replacingOccurrences(of: "  ", with: " ")
-            .trimmingCharacters(in: .whitespaces)
-        for pat in hallucinationPatterns {
-            if normalised.contains(pat) { return true }
-        }
-        return false
-    }
+    // Hallucination filtering lives in the shared `Hallucinations` helper.
 
     // MARK: - Audio helpers
 
