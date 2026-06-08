@@ -880,8 +880,12 @@ final class TranscriptionPipeline {
             FileLogger.log("transcribe(): cancelled (URLError -999) for \(meetingId)")
         } catch {
             FileLogger.log("Corder transcription error: \(error)")
-            meeting.status = .failed
-            try? repo.updateMeeting(meeting)
+            // Targeted status flip — NOT updateMeeting(meeting). The local
+            // copy is stale (pre-increment transcribe_attempts), and writing
+            // the whole struct would revert the attempt counter, breaking the
+            // retry budget (failedRetriableMeetingIds would never exclude a
+            // permanently-failing row → unbounded paid re-transcribe loop).
+            try? repo.setStatus(meetingId: meetingId, status: .failed)
             // Surface a Library-window toast for the failure. One
             // string for every failure mode on purpose — Костя's call:
             // no model-load vs network vs auth branching, no jargon.

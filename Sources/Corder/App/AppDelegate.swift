@@ -11,6 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         FileLogger.log("AppDelegate: applicationDidFinishLaunching")
+        // Single-instance guard. THIS instance is the newest (a fresh
+        // launch, a Sparkle update, or a CorderRelaunch), so reap any older
+        // Corder still running — otherwise two processes race the same
+        // loopback port (which OAuth pins) and the per-account SQLite DB.
+        // (The code/NOTES.md long referred to a "duplicate-instance killer"
+        // that never actually existed; this is it.)
+        Self.terminateOtherInstances()
         // Multi-account local layout: if there's still a legacy
         // flat `corder.db` at supportRoot AND we already know
         // which user owns this Mac (email persisted from previous
@@ -378,6 +385,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let mb = Double(freed) / 1_048_576
             FileLogger.log(String(format: "purgeStaleOriginals: removed %d original tracks across %d cached meetings, freed %.1f MB",
                                   purged, ids.count, mb))
+        }
+    }
+
+    /// Reap any OLDER Corder process still running (this instance is the
+    /// newest). Graceful terminate first, force-kill stragglers after a
+    /// beat. Prevents two processes fighting over the loopback port + DB.
+    static func terminateOtherInstances() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != me && !$0.isTerminated }
+        guard !others.isEmpty else { return }
+        for app in others {
+            FileLogger.log("AppDelegate: reaping older Corder instance pid=\(app.processIdentifier)")
+            app.terminate()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            for app in others where !app.isTerminated { app.forceTerminate() }
         }
     }
 

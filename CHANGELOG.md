@@ -16,6 +16,24 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.13.37] — 2026-06-08
+
+### Fixed
+- A damaged library database now recovers safely on launch in more cases,
+  and a schema issue no longer wipes your data or piles up backup files.
+- A failed transcription no longer retries forever in the background.
+- If your microphone is busy (another app holds it) when a recording
+  starts, Corder now stops cleanly instead of leaving the recording
+  indicator stuck on.
+- Your interface language really persists now for every language.
+- The Chapters highlight no longer lights up multiple rows.
+- Dismissing an upsell while transcribing no longer reverts a setting you
+  just changed.
+
+### Changed
+- Only one copy of Corder runs at a time — a relaunch or update reaps the
+  old one (no two copies fighting over the same data).
+
 ## [0.13.36] — 2026-06-08
 
 ### Fixed
