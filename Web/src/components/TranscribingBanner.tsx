@@ -152,7 +152,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
   // meetings — Костя's case: clicked ✕, app restarted, the same upsell
   // came back. We hydrate the timestamp map from `settings.upsell_snooze`
   // (opaque JSON the native side just round-trips) once settings land.
-  // Snooze is 30 days per upsell kind; after that we get another shot.
+  // Snooze is 4 hours per upsell kind (SNOOZE_MS); after that we get another shot.
   const upsellDismissedAt: Partial<Record<UpsellSlot, number>> = React.useMemo(() => {
     const raw = settings?.upsell_snooze;
     if (!raw) return {};

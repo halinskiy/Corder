@@ -428,10 +428,17 @@ extension Notification.Name {
 enum CorderRelaunch {
     static func now() {
         let path = Bundle.main.bundlePath
-        let task = Process()
-        task.launchPath = "/usr/bin/open"
-        task.arguments = ["-n", path]
-        do { try task.run() }
+        // Terminate FIRST, relaunch AFTER. The old `open -n` forced a new
+        // instance immediately while this one was still terminating, so two
+        // Corder processes briefly raced for the same loopback port (which
+        // the OAuth flow pins) and the same per-account SQLite DB. A shelled
+        // `sleep 1; open` lets this process fully exit — releasing the port
+        // and DB handle — before the replacement launches. No `-n`: we want
+        // exactly one instance, and the old one is already on its way out.
+        let p = Process()
+        p.launchPath = "/bin/sh"
+        p.arguments = ["-c", "sleep 1; open \"\(path)\""]
+        do { try p.run() }
         catch { FileLogger.log("CorderRelaunch: spawn failed — \(error)") }
         NSApp.terminate(nil)
     }

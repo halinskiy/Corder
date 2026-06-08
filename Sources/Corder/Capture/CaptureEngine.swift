@@ -33,6 +33,16 @@ final class CaptureEngine: NSObject {
     weak var delegate: CaptureEngineDelegate?
 
     private(set) var isRecording = false
+    /// Latched synchronously at the top of `start()` (before the first
+    /// `await`) so a second concurrent `start()` — or a `start()` racing a
+    /// `stop()` during the ~300 ms permission/SCStream warm-up — is
+    /// rejected instead of stomping the first run's stream/tap/files.
+    private var starting = false
+    /// Set by `stop()` when it's called WHILE `start()` is mid-warm-up
+    /// (isRecording not yet true). `start()` checks it after arming and
+    /// tears down immediately, so a sleep/lock during warm-up can't leave
+    /// a live capture that nothing ever stops (privacy indicator stuck on).
+    private var stopRequestedDuringStart = false
     /// Set true the instant `stop()` begins, before the async teardown.
     /// The system-audio writers open their AVAudioFile LAZILY on the
     /// first buffer (a nil file means "not opened yet"). After stop,
@@ -114,6 +124,17 @@ final class CaptureEngine: NSObject {
 
     func start(meetingId: String, source: CaptureSource) async throws {
         FileLogger.log("CaptureEngine.start: meetingId=\(meetingId) source=\(source)")
+        // Reject re-entry synchronously, BEFORE any await, so two near-
+        // simultaneous starts (manual + auto-detect, double hotkey) can't
+        // both pass and leak a stream/tap. `defer` clears the latch on
+        // every exit; once `isRecording` is true the normal guard owns it.
+        guard !isRecording, !starting else {
+            FileLogger.log("CaptureEngine.start: rejected — already \(isRecording ? "recording" : "starting")")
+            throw CaptureError.alreadyRecording
+        }
+        starting = true
+        stopRequestedDuringStart = false
+        defer { starting = false }
         tearingDown = false
         outputBluetoothAtStart = SystemAudioTap.defaultOutputIsBluetooth()
         if outputBluetoothAtStart {
@@ -412,10 +433,29 @@ final class CaptureEngine: NSObject {
         self.micURL = micURL
 
         FileLogger.log("CaptureEngine.start: recording state armed")
+
+        // If a stop() arrived while we were warming up, honour it now —
+        // otherwise the just-armed capture would run forever with nothing
+        // ever calling stop() (the user already asked to stop / the Mac
+        // went to sleep mid-start).
+        if stopRequestedDuringStart {
+            FileLogger.log("CaptureEngine.start: stop was requested during warm-up — tearing down immediately")
+            delegate?.captureEngine(self, didStartMeeting: meetingId)
+            await stop()
+            return
+        }
+
         delegate?.captureEngine(self, didStartMeeting: meetingId)
     }
 
     func stop() async {
+        // Called mid-warm-up: defer the real teardown to start()'s tail
+        // (the stream/tap/files aren't fully armed yet to tear down safely).
+        if starting, !isRecording {
+            FileLogger.log("CaptureEngine.stop: arrived during start warm-up — deferring to start() tail")
+            stopRequestedDuringStart = true
+            return
+        }
         guard isRecording, let id = meetingId else { return }
         // Latch teardown BEFORE the first await so any tap/SCK buffer
         // whose main-actor Task is already queued (or fires during the
