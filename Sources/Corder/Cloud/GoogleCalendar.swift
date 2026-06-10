@@ -69,6 +69,17 @@ enum GoogleCalendar {
                 provider: .google, scopes: scope, redirectTo: redirect, queryParams: params)
             pendingConnect = true
             pendingConnectEmail = signedInEmail
+            // Expire the pending flag if the user abandons the browser flow,
+            // so a much-later ordinary sign-in callback can't be mistaken
+            // for this calendar connect.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000_000)
+                if pendingConnect {
+                    pendingConnect = false
+                    pendingConnectEmail = nil
+                    FileLogger.log("GoogleCalendar: pending connect expired (no callback)")
+                }
+            }
             FileLogger.log("GoogleCalendar: opening incremental calendar OAuth (hint=\(signedInEmail ?? "none"))")
             NSWorkspace.shared.open(url)
         } catch {
@@ -93,26 +104,66 @@ enum GoogleCalendar {
             FileLogger.log("GoogleCalendar: connect account mismatch (was \(expectedEmail), now \(nowEmail)) — not caching")
             return
         }
-        guard let token = SupabaseClientHolder.shared.auth.currentSession?.providerToken,
-              !token.isEmpty else {
+        let session = SupabaseClientHolder.shared.auth.currentSession
+        guard let token = session?.providerToken, !token.isEmpty else {
             FileLogger.log("GoogleCalendar: connect finished but no providerToken on session")
             return
         }
+        // Persist the refresh token so the feed can be renewed past the 1h
+        // access-token expiry (see refreshIfStale).
+        let refresh = session?.providerRefreshToken
         do {
             let events = try await fetchUpcoming(accessToken: token)
-            writeCache(connected: true, events: events)
-            FileLogger.log("GoogleCalendar: connected, cached \(events.count) upcoming events")
+            writeCache(connected: true, events: events, refreshToken: refresh)
+            FileLogger.log("GoogleCalendar: connected, cached \(events.count) events (refreshToken=\(refresh != nil))")
         } catch {
-            // Distinguish an auth/scope failure (401/403) from a genuine
-            // empty calendar: on auth failure leave `connected:false` so
-            // the UI shows Connect again instead of silently pretending we
-            // have access. fetchUpcoming throws an NSError whose code is
-            // the HTTP status.
             let code = (error as NSError).code
             let authFailed = (code == 401 || code == 403)
             FileLogger.log("GoogleCalendar: event fetch failed (code \(code), authFailed=\(authFailed)) — \(error)")
-            writeCache(connected: !authFailed, events: [])
+            writeCache(connected: !authFailed, events: [], refreshToken: authFailed ? nil : refresh)
         }
+    }
+
+    /// Renew the feed when it's stale. Reads the cached refresh token, mints
+    /// a fresh access token via the Worker (which holds the Google client
+    /// secret), refetches events, and rewrites the cache. Called on
+    /// app-active. No-op unless connected, with a refresh token, and the
+    /// cache is older than `maxAgeSeconds`. Best-effort: any failure leaves
+    /// the existing cache untouched.
+    static func refreshIfStale(maxAgeSeconds: Double = 30 * 60) async {
+        guard let cache = readCache(), cache.connected,
+              let refresh = cache.refreshToken, !refresh.isEmpty else { return }
+        if Date().timeIntervalSince1970 - cache.fetchedAt < maxAgeSeconds { return }
+        guard let access = await exchangeRefreshToken(refresh) else {
+            FileLogger.log("GoogleCalendar: token refresh failed — keeping cached events")
+            return
+        }
+        do {
+            let events = try await fetchUpcoming(accessToken: access)
+            writeCache(connected: true, events: events, refreshToken: refresh)
+            FileLogger.log("GoogleCalendar: refreshed feed, \(events.count) events")
+        } catch {
+            FileLogger.log("GoogleCalendar: refetch after token refresh failed — \(error)")
+        }
+    }
+
+    /// Exchange a Google refresh token for a fresh access token via the
+    /// Cloudflare Worker (which holds GOOGLE_CLIENT_SECRET). The app never
+    /// sees the client secret. Returns nil on any failure.
+    private static func exchangeRefreshToken(_ refreshToken: String) async -> String? {
+        guard let url = URL(string: "https://corder-api.empqwork.workers.dev/calendar/refresh") else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let jwt = SupabaseClientHolder.shared.auth.currentSession?.accessToken {
+            req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+        }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = json["access_token"] as? String, !token.isEmpty else { return nil }
+        return token
     }
 
     // MARK: read
@@ -218,10 +269,21 @@ enum GoogleCalendar {
         let connected: Bool
         let events: [DTO.UpcomingEvent]
         let fetchedAt: Double
+        // Google refresh token, captured at connect (access_type=offline).
+        // Used to mint a fresh 1h access token via the Worker so the feed
+        // survives past the initial token's expiry. nil for pre-refresh
+        // caches and after an auth failure.
+        var refreshToken: String? = nil
     }
 
-    private static func writeCache(connected: Bool, events: [DTO.UpcomingEvent]) {
-        let cache = Cache(connected: connected, events: events, fetchedAt: Date().timeIntervalSince1970)
+    nonisolated private static func readCache() -> Cache? {
+        guard let data = try? Data(contentsOf: cacheURL) else { return nil }
+        return try? JSONDecoder().decode(Cache.self, from: data)
+    }
+
+    private static func writeCache(connected: Bool, events: [DTO.UpcomingEvent], refreshToken: String?) {
+        let cache = Cache(connected: connected, events: events,
+                          fetchedAt: Date().timeIntervalSince1970, refreshToken: refreshToken)
         if let data = try? JSONEncoder().encode(cache) {
             try? data.write(to: cacheURL)
         }

@@ -52,6 +52,21 @@ Dropbox archival, when configured, uploads `audio.wav` to a folder
 under the user's own Dropbox app token. Local copies are deleted
 after upload.
 
+**Google Calendar (Upcoming tab, opt-in).** Calendar access is a
+separate, opt-in flow, never bundled into sign-in, so a user who never
+clicks "Connect calendar" never grants it. The connect runs an
+incremental OAuth requesting only `calendar.readonly`, pinned to the
+signed-in account via `login_hint`; a callback that resolved to a
+different Google account is rejected so connecting a calendar can't swap
+the Corder identity. The Google access token (1 h) and refresh token are
+stored only in the account-scoped `calendar_cache.json` on the user's
+disk, never committed and never shipped. Token renewal goes through the
+Worker (`/calendar/refresh`): the app sends the refresh token + its
+Supabase JWT, the Worker exchanges it with Google using the server-side
+`GOOGLE_CLIENT_SECRET` and returns a fresh access token. The app never
+holds the Google client secret. Only event metadata (title, time,
+attendee count, join URL) is read, into the upcoming list.
+
 ## Secret hygiene
 
 ### What's a secret here

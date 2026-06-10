@@ -257,6 +257,22 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 - Per-speaker timeline: 20 px bar with coloured ticks at speaker
   segments. Ticks are 2px wide, every 220 ms of speech.
 - Cursor: black 1px line, never replaced for contrast.
+- Screen-video preview: FIXED-size card (200px tall, `object-fit: cover`,
+  no rounding) so every recording's preview is identical regardless of
+  its native resolution. The card is `flex-shrink: 0` and the panel's
+  native scrollbar is hidden so neither a tall timeline nor a scrollbar
+  can change its width.
+
+### Dashboard Upcoming tab
+
+- A plain chronological list of calendar meetings, NOT boxed cards: each
+  row is full-width with a 1px `--border` divider, text inset 20px, and
+  the dividers never react to hover (the hover fill is an inset pseudo
+  layer and the global `button:hover` border-darken is overridden).
+- Reuses existing type tokens, no bespoke fonts: meeting title in
+  `.clarify-body` (18/300, the "Ready when you are" voice), the date/time
+  in `.meeting-title` (14/500, the sidebar session-title voice). Meeting
+  service logo (Google Meet) at 24px on the left.
 
 ## Frontend conventions
 
