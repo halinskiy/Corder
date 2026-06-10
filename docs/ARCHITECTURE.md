@@ -148,8 +148,13 @@ Boost/
 └ BoostService.swift        Per-segment Gemini 2.5 Pro polish
 
 Cloud/
-└ DropboxService.swift      Refresh-token OAuth, chunked upload,
-                            temporary_link proxy
+├ DropboxService.swift      Refresh-token OAuth, chunked upload,
+│                           temporary_link proxy
+├ SupabaseTierSync.swift    Server tier (app_metadata) -> AppSettings;
+│                           refreshTier() on app-active + pollAfterUpgrade
+└ GoogleCalendar.swift      Opt-in calendar.readonly OAuth (separate from
+                            sign-in, account-pinned), Calendar API fetch,
+                            account-scoped cache, Worker token refresh
 
 Storage/
 ├ Database.swift            DatabaseQueue factory + migrations.run

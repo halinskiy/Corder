@@ -249,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `refreshTier`, so frequent focus toggles are cheap.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { @MainActor in SupabaseTierSync.refreshTier() }
+        // Renew the calendar feed if its 1h access token has gone stale.
+        Task { @MainActor in await GoogleCalendar.refreshIfStale() }
     }
 
     /// Builds an Edit menu so standard shortcuts (⌘C, ⌘X, ⌘V, ⌘A, ⌘Z) have
