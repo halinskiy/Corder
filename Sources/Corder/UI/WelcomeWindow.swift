@@ -692,6 +692,7 @@ private struct WelcomeView: View {
                 passwordError: $passwordError,
                 confirmPasswordError: $confirmPasswordError,
                 authMode: $authMode,
+                agreedToTerms: $agreedToTerms,
                 onSubmit: { currentCTA.action() },
                 onEmailBlur: { rawEmail in checkEmailExists(rawEmail) },
                 onEmailChange: { resetAuthModeIfEmailChanged() },
@@ -711,6 +712,11 @@ private struct WelcomeView: View {
     @State private var emailError: String? = nil
     @State private var passwordError: String? = nil
     @State private var confirmPasswordError: String? = nil
+    /// Terms-of-Service / Privacy-Policy consent. Gates BOTH sign-in
+    /// paths (email + Google). Following the "no dead button" rule, an
+    /// un-checked box doesn't disable the CTA — it surfaces an inline
+    /// error on tap and points at the checkbox.
+    @State private var agreedToTerms: Bool = false
     /// Confirm-password input — only meaningful when `authMode == .signUp`.
     /// Hidden + cleared whenever the email changes so a typo in the
     /// email doesn't leave the confirm field stuck open with stale
@@ -768,6 +774,13 @@ private struct WelcomeView: View {
             .lowercased()
         let label = (authMode == .signUp) ? "Sign up with email" : "Sign in with email"
         return (label, {
+            // ToS gate first — same "no dead button" treatment as the
+            // field validation: tap is always live, consent surfaces as
+            // an inline error instead of greying out the slab.
+            guard agreedToTerms else {
+                signInError = "Please agree to the Terms and Privacy Policy first."
+                return
+            }
             let (eErr, pErr, cErr) = validateFields(
                 email: trimmedEmail,
                 password: passwordInput,
@@ -1317,6 +1330,34 @@ private struct PermissionsCardsInteractive: View {
 /// We deliberately do NOT show a "check your inbox" confirmation
 /// card any more — there's no real verification flow yet, and
 /// adding one purely for theatre is friction without value.
+/// A Terms / Privacy link in the consent line: accent-coloured, underlines
+/// on hover, and shows the pointing-hand cursor so it's clearly clickable.
+/// Opens in the default browser. macOS 14 target → cursor via NSCursor
+/// push/pop (`.pointerStyle` is 15+).
+private struct TermsLink: View {
+    let label: String
+    let url: String
+    let accent: Color
+    @State private var hover = false
+    @State private var pushed = false
+    var body: some View {
+        Text(label)
+            .foregroundColor(accent)
+            .underline(hover)
+            .contentShape(Rectangle())
+            .onHover { h in
+                hover = h
+                // Balanced push/pop: never pop more than we pushed, so a
+                // missed hover-exit can't corrupt the global cursor stack.
+                if h && !pushed { pushed = true; NSCursor.pointingHand.push() }
+                else if !h && pushed { pushed = false; NSCursor.pop() }
+            }
+            .onTapGesture {
+                if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+            }
+    }
+}
+
 private struct SignInInteractive: View {
     @Binding var email: String
     @Binding var password: String
@@ -1336,6 +1377,9 @@ private struct SignInInteractive: View {
     /// field visibility. Owned by WelcomeView; this view only reads
     /// it (and clears it indirectly via `onEmailChange`).
     @Binding var authMode: AuthMode
+    /// ToS / Privacy consent, owned by WelcomeView. Gates both sign-in
+    /// paths; the checkbox below toggles it.
+    @Binding var agreedToTerms: Bool
     /// Fired when the user presses Return inside any field.
     /// Forwards to the bottom CTA's action.
     let onSubmit: () -> Void
@@ -1441,6 +1485,8 @@ private struct SignInInteractive: View {
                 // stand up a backend, restore `appleButton` here.
                 googleButton
 
+                termsCheckbox
+
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1476,6 +1522,47 @@ private struct SignInInteractive: View {
                     onEmailBlur(email)
                 }
             }
+    }
+
+    // MARK: - Terms consent
+
+    /// Granola-style consent row: a checkbox plus a line with tappable
+    /// Terms / Privacy links (rendered via Markdown so the links open in
+    /// the default browser through the environment `openURL`). Gates both
+    /// sign-in paths; see `agreedToTerms`.
+    private var termsCheckbox: some View {
+        // Brand green (#0e7c44) for the checked box + link tint.
+        let accent = Color(red: 14.0 / 255, green: 124.0 / 255, blue: 68.0 / 255)
+        // Checkbox + plain text toggle consent; the Terms / Privacy words
+        // are real links (hover underline + pointing-hand cursor). Tapping
+        // anywhere on the non-link text flips the checkbox too.
+        return HStack(alignment: .center, spacing: 8) {
+            Button(action: { agreedToTerms.toggle(); inlineError = nil }) {
+                Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 16))
+                    .foregroundColor(agreedToTerms ? accent : Color.secondary.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+            HStack(spacing: 0) {
+                toggleText("I agree to the ")
+                TermsLink(label: "Terms", url: "https://getcorder.com/terms/", accent: accent)
+                toggleText(" and ")
+                TermsLink(label: "Privacy Policy", url: "https://getcorder.com/privacy-policy/", accent: accent)
+            }
+            .font(.system(size: 12))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: 320, alignment: .leading)
+        .padding(.top, 4)
+    }
+
+    /// Non-link part of the consent line: tapping it toggles the checkbox
+    /// (the whole text area is hit-testable, not just the glyphs).
+    private func toggleText(_ s: String) -> some View {
+        Text(s)
+            .foregroundColor(.secondary)
+            .contentShape(Rectangle())
+            .onTapGesture { agreedToTerms.toggle(); inlineError = nil }
     }
 
     // MARK: - Provider buttons
@@ -1627,6 +1714,12 @@ private struct SignInInteractive: View {
     /// exchange + Cloudflare Worker /signup) — Supabase now owns
     /// the auth session, the welcome email, and the user row.
     private func openGoogleOAuth() {
+        // ToS gate, same as the email CTA — tap is live, missing consent
+        // surfaces an inline error pointing at the checkbox.
+        guard agreedToTerms else {
+            inlineError = "Please agree to the Terms and Privacy Policy first."
+            return
+        }
         FileLogger.log("WelcomeWindow: Google sign-in button tapped")
         Task { @MainActor in
             do {

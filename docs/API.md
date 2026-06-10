@@ -36,6 +36,11 @@ trust boundary is the macOS user account.
 | POST   | `/api/meetings/:id/cancel-transcription`| Cancels in-flight pipeline task; flips status to `failed`. |
 | POST   | `/api/meetings/:id/summarize`           | Returns `{summary}` (cached or generated on demand). |
 | POST   | `/api/meetings/:id/expected-speakers`   | Body `{count: int|null}`. `null` = auto, `0` = "just me", positive = pin. |
+| POST   | `/api/meetings/:id/segments/:segid/text`    | Body `{text}`. Right-click edit of one transcript line. |
+| POST   | `/api/meetings/:id/segments/:segid/speaker` | Body `{speaker_id}`. Reassign a line; target speaker must belong to the meeting. |
+| POST   | `/api/meetings/:id/speakers/:sid/merge`     | Body `{into}`. Fold a speaker's lines into another, drop the source. |
+| GET    | `/api/calendar/upcoming`                    | `{connected, events: UpcomingEvent[]}`. Served from the opt-in Google Calendar cache. |
+| POST   | `/api/calendar/connect`                     | Opens the incremental Google Calendar OAuth (separate from sign-in). |
 | POST   | `/api/meetings/:id/pin` · `/unpin`      | Pin/unpin; pinned sort to a top group. |
 | POST   | `/api/meetings/:id/archive` · `/restore`| Soft-archive / un-archive (7-day bin). |
 | GET    | `/api/archive`                          | `{items: ArchivedMeeting[]}` with `purge_at`. |

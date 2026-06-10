@@ -8,6 +8,7 @@ import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
+import { UpcomingPane } from "./UpcomingPane";
 // import { UsageBars } from "./UsageBars"; // hidden for now
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
@@ -231,6 +232,12 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   // ref name from going unused while we transition.
   void openSettingsNonce;
 
+  // Left-column tab: Stats (default) vs Upcoming. Upcoming lists future
+  // meetings from the connected calendar (the mirror of the Recent list).
+  // Independent of the right-column Settings pane, so it stays put when
+  // Settings opens.
+  const [leftTab, setLeftTab] = useState<"stats" | "upcoming">("stats");
+
   // Sort key — persisted across launches so the user's pick survives
   // a window close. Default is "duration" (longest meetings first):
   // the user's most explicit ask was "по длительности по дефолту".
@@ -279,7 +286,16 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
       <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
       <div className="detail-tabs">
         <div className="detail-tab-col detail-tab-col-left">
-          <span className="tab active">{t.dashboard_tab_stats}</span>
+          <span
+            className={"tab" + (leftTab === "stats" ? " active" : "")}
+            role="button"
+            onClick={() => setLeftTab("stats")}
+          >{t.dashboard_tab_stats}</span>
+          <span
+            className={"tab" + (leftTab === "upcoming" ? " active" : "")}
+            role="button"
+            onClick={() => setLeftTab("upcoming")}
+          >{t.dashboard_tab_upcoming ?? "Upcoming"}</span>
         </div>
         <div className="detail-tab-col detail-tab-col-right">
           {!inSettings ? (
@@ -319,6 +335,10 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
       <div className="detail-body">
         <div className="transcript-wrap dashboard-left ovsb-scroll" ref={dashLeftRef}>
           <div className="dashboard-left-inner">
+            {leftTab === "upcoming" ? (
+              <UpcomingPane t={t} lang={lang} />
+            ) : (
+            <>
             <DashTier
               render={(tier) => (
                 <NewsBanner
@@ -400,6 +420,8 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
                     again (we just rolled the 60-min test cap out). */}
                 {/* <UsageBars t={t} reloadSignal={total} /> */}
               </>
+            )}
+            </>
             )}
           </div>
           <OverlayScrollbar scrollRef={dashLeftRef} name="corder-sb-dashboard" />

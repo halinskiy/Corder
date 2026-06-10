@@ -350,6 +350,42 @@ struct MeetingRepository {
         }
     }
 
+    /// User-edited transcript text. Overwrites `text` directly (the
+    /// original ASR text isn't kept — a re-transcribe regenerates it
+    /// from scratch). `words_json` per-word timings are dropped so the
+    /// in-segment karaoke highlight doesn't point at stale word offsets.
+    func setSegmentText(segmentId: Int64, text: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE segments SET text = ?, words_json = NULL WHERE id = ?",
+                           arguments: [text, segmentId])
+        }
+    }
+
+    /// Move one segment to a different speaker (right-click → "Assign to").
+    /// Scoped to the meeting so a stale/forged segment id can't move a row
+    /// belonging to a different meeting.
+    func reassignSegment(meetingId: String, segmentId: Int64, toSpeakerId: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE segments SET speaker_id = ? WHERE id = ? AND meeting_id = ?",
+                           arguments: [toSpeakerId, segmentId, meetingId])
+        }
+    }
+
+    /// Merge speaker `from` into `into`: re-point every segment, then drop
+    /// the now-empty source speaker row. The diarizer over-splits one
+    /// person into several "Speaker N" — this is the manual fix
+    /// ("Speaker 2 and Speaker 3 are the same person"). Both speakers must
+    /// belong to the same meeting; the caller validates that.
+    func mergeSpeaker(meetingId: String, from: String, into: String) throws {
+        guard from != into else { return }
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE segments SET speaker_id = ? WHERE meeting_id = ? AND speaker_id = ?",
+                           arguments: [into, meetingId, from])
+            try db.execute(sql: "DELETE FROM speakers WHERE meeting_id = ? AND id = ?",
+                           arguments: [meetingId, from])
+        }
+    }
+
     /// Targeted UPDATE for the raw-turns cache. We must NOT use the full
     /// `updateMeeting(_:)` here — that would write every column from a
     /// stale local copy of the row, including `status`, which was just
@@ -408,6 +444,16 @@ struct MeetingRepository {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET status = ? WHERE id = ?",
                            arguments: [status.rawValue, meetingId])
+        }
+    }
+
+    /// Surgical setter for the clarify-banner speaker count. Targeted
+    /// UPDATE (not a full `updateMeeting` round-trip) so it can't revert a
+    /// column another path wrote concurrently (e.g. status / attempts).
+    func setExpectedOtherSpeakers(meetingId: String, count: Int?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET expected_other_speakers = ? WHERE id = ?",
+                           arguments: [count, meetingId])
         }
     }
 
@@ -472,13 +518,19 @@ struct MeetingRepository {
     }
 
     func searchSegments(query: String) throws -> [Segment] {
-        try dbq.read { db in
+        // Wrap the user's text as a single FTS5 phrase (doubling embedded
+        // quotes) so query syntax characters can't make MATCH throw a
+        // SQLite error that surfaces as a 500. Empty after trim → no rows.
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let phrase = "\"" + trimmed.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        return try dbq.read { db in
             try Segment.fetchAll(db, sql: """
                 SELECT s.* FROM segments s
                 JOIN segments_fts f ON f.rowid = s.id
                 WHERE segments_fts MATCH ?
                 ORDER BY rank
-            """, arguments: [query])
+            """, arguments: [phrase])
         }
     }
 }

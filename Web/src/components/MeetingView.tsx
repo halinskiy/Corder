@@ -156,6 +156,14 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // chip would lie about the new meeting's state.
   const [downloadOpen, setDownloadOpen] = React.useState(false);
   React.useEffect(() => { setDownloadOpen(false); }, [meetingId]);
+  // Reset the playhead on every meeting switch. RightPanel (and its
+  // <audio>/<video>) stay mounted across switches, so a stale
+  // `currentTime` from the previous session used to carry over — seek
+  // to 6:24 in a long meeting, click a 2-minute one, and its scrubber
+  // showed 6:24 (past the end). The AudioCard resets its own element +
+  // local time on `detail.id`; this resets the lifted clock the
+  // timeline/chapters read from.
+  React.useEffect(() => { setCurrentTime(0); }, [meetingId]);
   // Tell the parent (main.tsx → MainHeader) when the right tab
   // is Settings so the Settings toolbar button can light up
   // active. Same pattern the Archive button uses.

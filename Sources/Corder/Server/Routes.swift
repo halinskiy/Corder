@@ -42,6 +42,17 @@ enum Routes {
         server.post["/api/meetings/:id/speakers/:sid/rename"] = { req in
             renameSpeaker(req: req, repo: repo)
         }
+        // Right-click transcript editing: change a segment's text,
+        // reassign a segment to another speaker, or merge two speakers.
+        server.post["/api/meetings/:id/segments/:segid/text"] = { req in
+            editSegmentText(req: req, repo: repo)
+        }
+        server.post["/api/meetings/:id/segments/:segid/speaker"] = { req in
+            reassignSegment(req: req, repo: repo)
+        }
+        server.post["/api/meetings/:id/speakers/:sid/merge"] = { req in
+            mergeSpeaker(req: req, repo: repo)
+        }
         server.post["/api/meetings/:id/rename"] = { req in
             renameMeeting(req: req, repo: repo)
         }
@@ -77,6 +88,17 @@ enum Routes {
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
         server.get["/api/usage"] = { _ in usageGet(repo: repo) }
+        // Upcoming calendar meetings for the Dashboard "Upcoming" tab —
+        // served from the GoogleCalendar cache (connected:false until the
+        // user opts in via /connect).
+        server.get["/api/calendar/upcoming"] = { _ in upcomingCalendar() }
+        // Opt-in: kick off the incremental Google Calendar OAuth (separate
+        // from sign-in). Returns immediately; the browser round-trip lands
+        // on /auth/callback which harvests the token + caches events.
+        server.post["/api/calendar/connect"] = { _ in
+            Task { @MainActor in GoogleCalendar.startConnect() }
+            return jsonResponse(["ok": true])
+        }
         server.post["/api/submit-logs"] = { _ in submitLogs() }
         server.get["/api/has-bug-events"] = { _ in hasBugEvents() }
         server.post["/api/billing/test-set-tier"] = { req in setTestTier(req: req) }
@@ -226,6 +248,10 @@ enum Routes {
                 do {
                     try await SupabaseClientHolder.shared.auth.session(from: url)
                     FileLogger.log("authCallback: Supabase session established")
+                    // If this callback was an incremental calendar connect
+                    // (not a plain sign-in), harvest the calendar-scoped
+                    // provider token + cache events. No-op otherwise.
+                    await GoogleCalendar.finishConnectIfPending()
                     NotificationCenter.default.post(
                         name: .corderSupabaseSignedIn, object: nil)
                 } catch {
@@ -1491,9 +1517,8 @@ enum Routes {
             return .badRequest(.text("bad json"))
         }
         do {
-            guard var m = try repo.meeting(id: id) else { return .notFound }
-            m.expectedOtherSpeakers = body.count
-            try repo.updateMeeting(m)
+            guard (try repo.meeting(id: id)) != nil else { return .notFound }
+            try repo.setExpectedOtherSpeakers(meetingId: id, count: body.count)
             return .ok(.text("ok"))
         } catch {
             return .internalServerError
@@ -1590,6 +1615,68 @@ enum Routes {
         } catch {
             return .badRequest(.text("\(error)"))
         }
+    }
+
+    private static func editSegmentText(req: HttpRequest, repo: MeetingRepository) -> HttpResponse {
+        guard let segId = Int64(req.params[":segid"] ?? "") else {
+            return .badRequest(.text("missing segment id"))
+        }
+        do {
+            let parsed = try JSONDecoder().decode(DTO.SegmentTextRequest.self, from: Data(req.body))
+            let trimmed = parsed.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return .badRequest(.text("empty text")) }
+            try repo.setSegmentText(segmentId: segId, text: trimmed)
+            return .ok(.text("ok"))
+        } catch {
+            return .badRequest(.text("\(error)"))
+        }
+    }
+
+    private static func reassignSegment(req: HttpRequest, repo: MeetingRepository) -> HttpResponse {
+        let mid = req.params[":id"] ?? ""
+        guard let segId = Int64(req.params[":segid"] ?? "") else {
+            return .badRequest(.text("missing segment id"))
+        }
+        do {
+            let parsed = try JSONDecoder().decode(DTO.SegmentSpeakerRequest.self, from: Data(req.body))
+            // The target speaker must belong to this meeting.
+            let speakers = try repo.speakers(forMeeting: mid)
+            guard speakers.contains(where: { $0.id == parsed.speaker_id }) else {
+                return .badRequest(.text("unknown speaker"))
+            }
+            try repo.reassignSegment(meetingId: mid, segmentId: segId, toSpeakerId: parsed.speaker_id)
+            return .ok(.text("ok"))
+        } catch {
+            return .badRequest(.text("\(error)"))
+        }
+    }
+
+    private static func mergeSpeaker(req: HttpRequest, repo: MeetingRepository) -> HttpResponse {
+        let mid = req.params[":id"] ?? ""
+        let from = req.params[":sid"] ?? ""
+        guard !mid.isEmpty, !from.isEmpty else { return .badRequest(.text("missing id")) }
+        do {
+            let parsed = try JSONDecoder().decode(DTO.MergeSpeakerRequest.self, from: Data(req.body))
+            // Both endpoints of the merge must be real speakers on this meeting.
+            let speakers = try repo.speakers(forMeeting: mid)
+            guard speakers.contains(where: { $0.id == from }),
+                  speakers.contains(where: { $0.id == parsed.into }) else {
+                return .badRequest(.text("unknown speaker"))
+            }
+            try repo.mergeSpeaker(meetingId: mid, from: from, into: parsed.into)
+            return .ok(.text("ok"))
+        } catch {
+            return .badRequest(.text("\(error)"))
+        }
+    }
+
+    /// Upcoming-meetings feed for the Dashboard "Upcoming" tab. STUB:
+    /// returns an empty, not-connected payload. The live path (Google
+    /// `calendar.readonly` provider token → Calendar API `events.list`,
+    /// mapped to `DTO.UpcomingEvent`) lands once the OAuth scope is in
+    /// place; the JSON contract here is already what the frontend reads.
+    private static func upcomingCalendar() -> HttpResponse {
+        jsonResponse(GoogleCalendar.cachedResponse())
     }
 
     private static func renameMeeting(req: HttpRequest, repo: MeetingRepository) -> HttpResponse {

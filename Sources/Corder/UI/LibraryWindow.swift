@@ -237,6 +237,17 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
                   url.scheme == "http" || url.scheme == "https" else { return }
             DispatchQueue.main.async {
                 NSWorkspace.shared.open(url)
+                // Opening the pricing / upgrade page → start a short tier
+                // poll so a completed purchase flips the user to Pro within
+                // seconds, with no manual action even if they never refocus
+                // the app. No-op unless signed-in & Free.
+                // Only the pricing / upgrade page, not every getcorder.com
+                // link (privacy, terms, etc.).
+                let isPricing = url.host?.contains("getcorder.com") == true
+                    && (url.fragment == "pricing" || url.path.contains("pricing"))
+                if isPricing {
+                    Task { @MainActor in SupabaseTierSync.pollAfterUpgrade() }
+                }
             }
         case "updateAction":
             // The React update modal posts "primary" / "dismiss" here.

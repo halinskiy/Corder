@@ -1,5 +1,6 @@
 import React from "react";
-import { MeetingDetail, SegmentDTO, SpeakerDTO, RecordingState, renameSpeaker, getSettings } from "../api";
+import { MeetingDetail, SegmentDTO, SpeakerDTO, RecordingState, renameSpeaker, getSettings,
+  editSegmentText } from "../api";
 import { displaySpeakerName } from "../format";
 import { RecordingBanner } from "./RecordingBanner";
 import { RecordingPlaceholder } from "./RecordingPlaceholder";
@@ -124,6 +125,29 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     getSettings().then((s) => { if (alive) setProfileName((s.user_name ?? "").trim() || null); }).catch(() => {});
     return () => { alive = false; };
   }, [detail.id]);
+
+  // ── Right-click transcript editing ──────────────────────────────
+  // Single action: right-click a line to edit its text. Speaker
+  // reassignment / merge were intentionally dropped — with mislabelled
+  // "Speaker 2/3/4" the user can't tell which is which, so those actions
+  // only created confusion.
+  const [editing, setEditing] = React.useState<{ segId: number; value: string } | null>(null);
+  // Editing only makes sense on a finished transcript.
+  const canEdit = detail.status === "ready";
+  const startEdit = (e: React.MouseEvent, segId: number, currentText: string) => {
+    if (!canEdit) return;
+    e.preventDefault(); e.stopPropagation();
+    setEditing({ segId, value: currentText });
+  };
+  const saveEdit = async () => {
+    const ed = editing;
+    setEditing(null);
+    if (!ed) return;
+    const v = ed.value.trim();
+    if (!v) return;
+    try { await editSegmentText(detail.id, ed.segId, v); onSpeakersUpdated(); }
+    catch { onToast?.(t.edit_failed ?? "Couldn't save the edit"); }
+  };
 
   // Rating prompt: count UNIQUE ready-with-segments transcripts the
   // user has seen, surface the banner once we cross the threshold.
@@ -331,12 +355,32 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
             <div className="segment-paragraph">
               {g.segs.map((s, i) => {
                 const display = boostOn && s.text_boost ? s.text_boost : s.text;
+                if (editing && s.id === editing.segId) {
+                  return (
+                    <React.Fragment key={s.id}>
+                      <input
+                        className="segment-edit-input"
+                        value={editing.value}
+                        autoFocus
+                        onChange={(e) => setEditing({ segId: editing.segId, value: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+                          else if (e.key === "Escape") { e.preventDefault(); setEditing(null); }
+                        }}
+                        onBlur={saveEdit}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {i < g.segs.length - 1 ? " " : ""}
+                    </React.Fragment>
+                  );
+                }
                 return (
                   <React.Fragment key={s.id}>
                     <span
                       data-segid={s.id}
                       className={"segment-line" + (s.id === activeSegmentId ? " active" : "")}
                       onClick={() => onSeek(s.start_ms / 1000)}
+                      onContextMenu={(e) => s.id != null && startEdit(e, s.id, display)}
                     >
                       {highlight(display, q)}
                     </span>

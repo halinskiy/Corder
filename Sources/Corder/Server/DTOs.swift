@@ -275,6 +275,39 @@ enum DTO {
         let title: String?
     }
 
+    /// Dashboard "Upcoming" tab feed. `connected` is false until the
+    /// user grants calendar access; the frontend keys its Connect vs
+    /// empty state off it.
+    struct UpcomingResponse: Codable {
+        let connected: Bool
+        let events: [UpcomingEvent]
+    }
+    struct UpcomingEvent: Codable {
+        let id: String
+        let title: String
+        let start_ms: Int64
+        let end_ms: Int64?
+        let attendees: Int?
+        let platform: String?
+        let join_url: String?
+    }
+
+    /// Right-click → "Edit" on a transcript segment.
+    struct SegmentTextRequest: Codable {
+        let text: String
+    }
+
+    /// Right-click → "Assign to" — move a segment to another speaker.
+    struct SegmentSpeakerRequest: Codable {
+        let speaker_id: String
+    }
+
+    /// Right-click speaker → "Merge into" — fold this speaker's segments
+    /// into another and drop the source row.
+    struct MergeSpeakerRequest: Codable {
+        let into: String
+    }
+
     struct SearchHit: Codable {
         let meeting_id: String
         let segment_id: Int64
