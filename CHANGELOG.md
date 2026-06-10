@@ -16,6 +16,31 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.0] — 2026-06-10
+
+### Added
+- New Upcoming tab on the Dashboard: your calendar meetings, listed
+  chronologically with the meeting service logo. Connect your Google
+  Calendar to fill it (opt-in, separate from sign-in).
+- Edit a transcript line: right-click it and fix the text inline.
+- A Terms and Privacy agreement on the sign-in screen.
+
+### Changed
+- Your speaking time is attributed far more accurately. When you record
+  without headphones, the app no longer counts the room's audio as you
+  talking, so your share of the transcript reflects what you actually said.
+- Paid upgrades now apply on their own. After you subscribe, Corder
+  picks it up within seconds when you return to the app, no restart.
+
+### Fixed
+- The video preview is now a consistent fixed size across every
+  recording, with no stray width or height jumps.
+- The player position resets when you switch between recordings instead
+  of carrying over a stale time.
+- Searching the transcript no longer errors on punctuation.
+- Setting the number of speakers is saved without touching anything else
+  on the recording.
+
 ## [0.13.37] — 2026-06-08
 
 ### Fixed

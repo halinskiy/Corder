@@ -130,8 +130,67 @@ export async function renameSpeaker(meetingId: string, speakerId: string, name: 
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+export async function editSegmentText(meetingId: string, segmentId: number, text: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${meetingId}/segments/${segmentId}/text`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+export async function reassignSegment(meetingId: string, segmentId: number, speakerId: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${meetingId}/segments/${segmentId}/speaker`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ speaker_id: speakerId }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+export async function mergeSpeaker(meetingId: string, fromSpeakerId: string, intoSpeakerId: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${meetingId}/speakers/${fromSpeakerId}/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ into: intoSpeakerId }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 export async function deleteMeeting(id: string): Promise<void> {
   const r = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+// ── Upcoming meetings (calendar) ──────────────────────────────────
+// The forward-looking mirror of the Recent list: events pulled from
+// the user's connected calendar. `connected` is false until the user
+// grants calendar access, which drives the "Connect calendar" empty
+// state vs the "no meetings in the next 30 days" one.
+export interface UpcomingEvent {
+  id: string;
+  title: string;
+  start_ms: number;
+  end_ms?: number | null;
+  attendees?: number | null;
+  /** Meeting platform slug if detectable from the event link: "zoom" | "meet" | "teams". */
+  platform?: string | null;
+  /** Conferencing join URL, when the event carries one. */
+  join_url?: string | null;
+}
+export interface UpcomingResponse {
+  connected: boolean;
+  events: UpcomingEvent[];
+}
+export async function getUpcoming(): Promise<UpcomingResponse> {
+  const r = await fetch(`/api/calendar/upcoming`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+/// Opt-in: opens the incremental Google Calendar OAuth in the browser.
+/// Returns immediately; the caller polls `getUpcoming` until `connected`.
+export async function connectCalendar(): Promise<void> {
+  const r = await fetch(`/api/calendar/connect`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 

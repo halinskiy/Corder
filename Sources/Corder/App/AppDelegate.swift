@@ -242,6 +242,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Returning to Corder (e.g. after completing a Paddle checkout in the
+    /// browser) refreshes the Supabase session so a freshly-granted
+    /// `app_metadata.tier` is picked up WITHOUT a relaunch — the user gets
+    /// Pro the moment they switch back to the app. Throttled inside
+    /// `refreshTier`, so frequent focus toggles are cheap.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in SupabaseTierSync.refreshTier() }
+    }
+
     /// Builds an Edit menu so standard shortcuts (⌘C, ⌘X, ⌘V, ⌘A, ⌘Z) have
     /// real first-responder targets. Without this, an LSUIElement app with a
     /// regular window has no menu, and AppKit beeps when the user presses ⌘C

@@ -59,4 +59,48 @@ enum SupabaseTierSync {
             AppSettings.clearTranscriptionProviderOverride()
         }
     }
+
+    private static var lastRefresh: Date = .distantPast
+
+    /// Force a Supabase session refresh, then re-apply the tier. The new
+    /// JWT carries the current `app_metadata.tier`, so a paid plan granted
+    /// server-side (Paddle webhook → admin API) shows up WITHOUT a
+    /// relaunch. Throttled so rapid focus toggles can't hammer the auth
+    /// endpoint. Called on `applicationDidBecomeActive` — i.e. the moment
+    /// the user switches back to Corder after paying in the browser.
+    static func refreshTier(throttleSeconds: TimeInterval = 12) {
+        guard SupabaseClientHolder.shared.auth.currentUser != nil else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastRefresh) >= throttleSeconds else { return }
+        lastRefresh = now
+        Task { @MainActor in
+            try? await SupabaseClientHolder.shared.auth.refreshSession()
+            applyFromCurrentSession()
+        }
+    }
+
+    /// Poll the tier for a short window right after the user opens the
+    /// upgrade page, so a completed purchase flips them to Pro within
+    /// seconds with zero manual action (covers paying without ever
+    /// leaving the app focus, where `didBecomeActive` wouldn't fire).
+    /// No-op unless signed in AND currently Free; stops the instant the
+    /// tier is no longer Free.
+    private static var pollTask: Task<Void, Never>?
+
+    static func pollAfterUpgrade(seconds: TimeInterval = 150, interval: TimeInterval = 6) {
+        guard SupabaseClientHolder.shared.auth.currentUser != nil else { return }
+        guard AppSettings.userTier == .free else { return }
+        // Single-flight: a poll already running covers a repeat tap.
+        guard pollTask == nil else { return }
+        pollTask = Task { @MainActor in
+            defer { pollTask = nil }
+            let deadline = Date().addingTimeInterval(seconds)
+            while Date() < deadline {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                try? await SupabaseClientHolder.shared.auth.refreshSession()
+                applyFromCurrentSession()
+                if AppSettings.userTier != .free { break }
+            }
+        }
+    }
 }

@@ -482,9 +482,11 @@ final class TranscriptionPipeline {
                 // call-vs-in-person decided above via `systemSilent`.
                 if !systemSilent {
                     // Real call. mic.wav = you, system.wav = remote. Only
-                    // the Gemini .single text is fetched here (WHAT);
-                    // WHEN/WHO is the on-device re-derive step below.
-                    FileLogger.log("transcribe(): dual-track — Gemini .single on mic + system (raw text only)")
+                    // the .single TEXT is fetched here (WHAT) via the active
+                    // provider (Whisper / Groq / local Whisper — NOT Gemini
+                    // unless explicitly overridden); WHEN/WHO is the
+                    // on-device re-derive step below.
+                    FileLogger.log("transcribe(): dual-track — \(currentProvider.rawValue) .single on mic + system (raw text only)")
                     do {
                         async let micPart = geminiRawTurns(wavURL: micURL, meetingId: meetingId)
                         async let sysPart = geminiRawTurns(wavURL: systemURL, meetingId: meetingId)
@@ -522,7 +524,7 @@ final class TranscriptionPipeline {
                     // .single pass over mic.wav for the text; the room
                     // headcount drives the on-device diarizer below.
                     let why = micOnly ? "no system.wav (mic-only)" : "system.wav has no speech"
-                    FileLogger.log("transcribe(): \(why) — in-person Gemini .single on mic.wav (raw text only)")
+                    FileLogger.log("transcribe(): \(why) — in-person \(currentProvider.rawValue) .single on mic.wav (raw text only)")
                     usingDualTrack = true
                     rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
                     rawUserTurns = []
@@ -647,7 +649,15 @@ final class TranscriptionPipeline {
                     var (u, o) = try await (uT, oT)
                     if u.isEmpty { u = cachedFinalUser }
                     if o.isEmpty { o = cachedFinalOther }
-                    userTurns = u
+                    // B — bleed suppression via a speaking-rate duration
+                    // cap. numSpeakers:1 diarization of a mic that recorded
+                    // the room (user on speakers) marks the whole call as
+                    // "you", so the proportional time-placement stretches
+                    // each short user utterance across the silence until the
+                    // next one ("Нет" measured at 333 s on a 24-min meeting
+                    // where the user actually spoke ~1 min). Clamp each user
+                    // turn's duration to what its text could plausibly take.
+                    userTurns = Self.capUserTurnDurations(u)
                     otherTurns = o
                 }
                 FileLogger.log("transcribe(): timing re-derived — \(userTurns.count) user / \(otherTurns.count) other")
@@ -1117,6 +1127,43 @@ final class TranscriptionPipeline {
             FileLogger.log("mapDual: echo-filter dropped \(dropped)/\(userTurns.count) mic turns (speaker→mic bleed of system audio)")
         }
         return kept
+    }
+
+    /// B — speaking-rate duration cap for the user (mic) track.
+    /// numSpeakers:1 diarization of a mic that's recording the room (user
+    /// on speakers) marks the whole call as "you", and the proportional
+    /// time-placement then stretches each short user utterance across the
+    /// silence until the next one ("Нет" measured at 333 s, "Или как-то…"
+    /// at 447 s on a 24-min meeting where the user actually spoke ~1 min
+    /// total). A human can't say 4 characters in 333 s — so we clamp each
+    /// user turn's DURATION to what its text could plausibly take to
+    /// speak, keeping the placed start.
+    ///
+    /// Safe by construction: monotonic-shortening only — it never
+    /// lengthens a turn, never drops text, and leaves already-tight turns
+    /// untouched, so a clean headphone meeting (timing already correct) is
+    /// a no-op. On the real bleed recording this lands user coverage at
+    /// 61 s, matching the independently measured "mic louder than far-end"
+    /// voiced time — the cap converges on the acoustic ground truth.
+    static func capUserTurnDurations(_ turns: [GeminiTranscriber.Turn]) -> [GeminiTranscriber.Turn] {
+        guard !turns.isEmpty else { return turns }
+        let msPerChar: Int64 = 120     // ~8 characters/second conversational speech
+        let minMs: Int64 = 900         // a one-word turn still gets a visible ~0.9 s block
+        var capped = 0
+        let out = turns.map { t -> GeminiTranscriber.Turn in
+            let dur = max(0, t.endMs - t.startMs)
+            let cap = max(minMs, Int64(t.text.count) * msPerChar)
+            guard dur > cap else { return t }
+            capped += 1
+            return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                          startMs: t.startMs, endMs: t.startMs + cap, text: t.text)
+        }
+        if capped > 0 {
+            let before = turns.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
+            let after = out.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
+            FileLogger.log("B/capUserTurns: capped \(capped)/\(turns.count) user turns, coverage \(before)s → \(after)s")
+        }
+        return out
     }
 
     private func mapDualTrackTurns(meetingId: String, meeting: Meeting,

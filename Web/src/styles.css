@@ -1505,6 +1505,11 @@ input[type="text"]:focus, input[type="search"]:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Fill the column width. In the Dashboard LEFT column
+     (`.dashboard-left-inner` is `align-items:flex-start`) a stack with no
+     width would shrink to its content — the Upcoming cards looked
+     narrower than full width. */
+  width: 100%;
 }
 .dash-recent-card {
   /* Native <button> reset so the `.settings-rows` chrome (border,
@@ -1540,6 +1545,67 @@ input[type="text"]:focus, input[type="search"]:focus {
   background: var(--bg-hover);
   border-color: var(--border-strong);
 }
+
+/* Upcoming tab: a plain chronological list of meetings as rows with
+   full-width hairline dividers (no boxed cards). Title reuses
+   `.clarify-body` (18/300), the time reuses `.meeting-title` (14/500). */
+.upcoming-list {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;        /* fill the dashboard-left column width */
+  /* Break out of `.dashboard-left-inner`'s padding: -20px sides so the
+     dividers span the full column width (the row puts 20px back on the
+     text), and -20px top so the first row sits flush under the tabs
+     header divider with no stray gap (the first row has no top border). */
+  margin: -20px -20px 0;
+}
+.upcoming-row {
+  position: relative;
+  appearance: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  /* Straight, not rounded. */
+  border-radius: 0;
+  padding: 16px 20px;
+  cursor: pointer;
+  color: var(--fg);
+  font: inherit;
+}
+/* No top border on the first row: the tabs header above already draws a
+   full-width divider, so a first-row top border doubled it.
+   The GLOBAL `button:hover` rule tints the background AND darkens
+   `border-color` (to #b8b8b4) — that was darkening the divider on hover.
+   Neutralise it here so the separators never change. */
+.upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+/* Hover fill via an inset pseudo-layer so it never reaches the divider
+   lines; border color pinned so the global `button:hover` can't darken
+   it. Result: a hover highlight, but the separators stay static. */
+.upcoming-row::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 1px; bottom: 1px;
+  background: transparent;
+  pointer-events: none;
+}
+.upcoming-row:hover { background: transparent; border-bottom-color: var(--border); }
+.upcoming-row:hover::before { background: var(--bg-hover); }
+.upcoming-row > * { position: relative; }
+.upcoming-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+.upcoming-row-text { min-width: 0; }
+.upcoming-time { margin-top: 3px; }
 .dash-recent-row {
   /* Inner content layout mirrors `.settings-row` rhythm so the title
      and meta line up the same as a Settings row. Padding lives here
@@ -2331,8 +2397,10 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
-.clarify-btn:hover { background: var(--bg-hover); border-color: #b8b8b4; }
-.clarify-btn:disabled { opacity: 0.5; cursor: pointer; }
+.clarify-btn:not(:disabled):hover { background: var(--bg-hover); border-color: #b8b8b4; }
+/* Disabled / "Soon" state: greyed, inert, no hover, default cursor —
+   the design-system convention for an inactive CTA. */
+.clarify-btn:disabled { opacity: 0.5; cursor: default; }
 /* Dark theme — secondary (non-accent / non-danger / non-active) variants
    invert to a WHITE fill with dark text. The transparent + light-grey
    outline pattern read as a hollow tile on a dark surface and pulled
@@ -2627,6 +2695,29 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: #dff1e5;
 }
 
+/* Inline transcript edit (right-click → Edit text). Sized to flow with
+   the paragraph; widens with content via the field's own min-width. */
+.segment-edit-input {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  min-width: 220px;
+  outline: none;
+}
+
+/* Transcript edit menu reuses the shared `.ctx-menu` / `.ctx-item`
+   vocabulary (see Sidebar). Only the scroll cap + empty-state are
+   transcript-specific. */
+.ctx-menu.ctx-scroll { max-height: 320px; overflow-y: auto; }
+.ctx-empty {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
 /* Right pane (audio controls + timeline). No outer padding — children
    manage their own spacing so the audio controls sit flush with the
    shared tabs row above, matching the transcript column on the left. */
@@ -2635,9 +2726,16 @@ body.resizing { cursor: col-resize; user-select: none; }
      cramped inner scroll with a hidden scrollbar — when a screen video
      was present that box only fit ~2 speaker rows and silently clipped
      the rest, so a 3-speaker meeting looked like 2. Scrolling the panel
-     as one keeps every speaker reachable with a normal, discoverable
-     scrollbar. */
+     as one keeps every speaker reachable. */
   overflow-y: auto;
+  /* Hide the native scrollbar entirely so it NEVER takes layout width.
+     A visible 7px native bar appeared only when the panel scrolled (long
+     timeline) and shrank the content — and the video preview with it —
+     from 342px to 335px. `scrollbar-gutter:stable` made it worse (the
+     whole panel width jittered). Killing the native bar keeps the panel
+     content width constant in every state; scrolling still works via
+     wheel/trackpad. Same treatment as the `.ovsb-scroll` panels. */
+  scrollbar-width: none;
   /* 130 px reserves clearance for the floating start/stop blob
      (110 px tall + 8 px margin + breathing room) so the timeline's
      last row never sits behind the blob. */
@@ -2651,6 +2749,9 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg);
   min-height: 0;
 }
+/* WebKit (the WKWebView) needs the explicit pseudo-element to actually
+   drop the bar — `scrollbar-width:none` alone is the Firefox standard. */
+.right-panel::-webkit-scrollbar { width: 0; height: 0; display: none; }
 /* Screen-capture preview that sits above the audio controls when the
    meeting has a video.mov. Audio is the master clock; this element is
    purely visual, kept in sync from JS.
@@ -2662,6 +2763,22 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin: 20px 20px 0;
   border-radius: 8px;
   overflow: hidden;
+  /* The CARD is a FIXED-HEIGHT box, identical for every recording — not
+     `aspect-ratio` (WKWebView proved unreliable at honouring it here,
+     previews still came out at different heights) and not the <video>'s
+     intrinsic size. A hard pixel height can't vary. The <video> fills it
+     absolutely (below) with `cover` so it spans edge-to-edge with NO
+     letterbox bars (Kostya: "полос быть не должно"); the edges that fall
+     outside the box are cropped, which is the accepted trade for a
+     uniform, bar-free preview. */
+  height: 200px;
+  /* `.right-panel` is a flex column with `overflow-y:auto`. Without this,
+     the card is a shrinkable flex item: a meeting with a tall speaker
+     timeline below squeezed the video down (measured 150px vs 202px on
+     two recordings — the bug Kostya kept seeing). `flex-shrink:0` +
+     min-height pins it to exactly 200px and lets the PANEL scroll. */
+  flex-shrink: 0;
+  min-height: 200px;
   /* THEME-INDEPENDENT chrome (intentional, localised exception to the
      token system). The <video> is a replaced element WebKit never folds
      into the root View-Transition snapshot — left in the root flow it
@@ -2686,21 +2803,21 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding-top: 12px;
 }
 .screen-video {
+  /* Absolute fill of the card's fixed 16:10 box (the card owns the
+     aspect-ratio now — see above). `contain` shows the WHOLE captured
+     frame without cropping; leftover space letterboxes onto the card's
+     neutral grey. This is what makes every preview the SAME size
+     regardless of the recording's native resolution. */
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
   display: block;
-  aspect-ratio: 16 / 10;
-  /* `cover`, not `contain`: every recording captures the screen at its
-     own native resolution, so `contain` letterboxed each one a
-     DIFFERENT amount inside the fixed 16:10 box and the previews looked
-     like random sizes. `cover` fills the box edge-to-edge so every
-     preview is visually identical; the fullscreen lightbox
-     (`.video-fs-video`) still uses `contain` to show the whole frame. */
+  /* `cover`: fill the fixed box edge-to-edge, no bars. Every preview
+     then looks identical regardless of the recording's native ratio
+     (the leftover edges are cropped). */
   object-fit: cover;
-  /* transparent so the parent's grey placeholder shows through until
-     the first frame is decoded — no jarring flash of pure black on
-     load. */
   background: transparent;
-  border-radius: 8px;
 }
 
 /* Ghost shimmer shown where the video will be until its first frame
@@ -2715,6 +2832,8 @@ body.resizing { cursor: col-resize; user-select: none; }
   inset: 0;
   width: 100%;
   height: 100%;
+  /* Match the live <video> fit (cover) so the poster→video swap is
+     pixel-aligned and bar-free. */
   object-fit: cover;
   pointer-events: none;
   user-select: none;

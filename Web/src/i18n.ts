@@ -320,6 +320,26 @@ interface Strings {
   sidebar_pinned: string;
 
   speaker_self: string;
+  // Transcript right-click editing. Optional so the 17 fall-back locales
+  // don't each need a translation; en/ru/uk (+ hi/ar) carry real strings,
+  // the rest resolve through the `?? "English"` defaults at the call site.
+  edit_text?: string;
+  assign_line_to?: string;
+  merge_speaker_into?: string;
+  no_other_speakers?: string;
+  edit_failed?: string;
+  // Dashboard "Upcoming" tab (calendar list). Optional → fall-back locales
+  // resolve through the `?? "English"` defaults at the call site.
+  dashboard_tab_upcoming?: string;
+  upcoming_up_next?: string;
+  upcoming_none?: string;
+  upcoming_none_sub?: string;
+  upcoming_connect_title?: string;
+  upcoming_connect_sub?: string;
+  upcoming_connect_cta?: string;
+  upcoming_untitled?: string;
+  upcoming_soon?: string;
+  upcoming_connecting?: string;
   speaker_rename_title: string;
   inline_editor_placeholder: string;
 
@@ -692,6 +712,21 @@ const ru: Strings = {
   sidebar_pinned: "Закреплённые",
 
   speaker_self: "Я",
+  edit_text: "Редактировать текст",
+  assign_line_to: "Назначить строку",
+  merge_speaker_into: "Объединить со спикером",
+  no_other_speakers: "Других спикеров нет",
+  edit_failed: "Не удалось сохранить правку",
+  dashboard_tab_upcoming: "Предстоящие",
+  upcoming_up_next: "Ближайшая",
+  upcoming_none: "Нет предстоящих встреч",
+  upcoming_none_sub: "В ближайшие 30 дней ничего не запланировано.",
+  upcoming_connect_title: "Смотри предстоящие встречи",
+  upcoming_connect_sub: "Подключи календарь, чтобы видеть встречи, которые можно записать.",
+  upcoming_connect_cta: "Подключить календарь",
+  upcoming_untitled: "Без названия",
+  upcoming_soon: "Скоро",
+  upcoming_connecting: "Ждём Google…",
   speaker_rename_title: "Кликни чтобы переименовать",
   inline_editor_placeholder: "Имя",
 
@@ -709,7 +744,7 @@ const ru: Strings = {
   no_meeting_selected_title: "Запись не выбрана",
   no_meeting_selected_body: "Выбери запись из списка слева, или нажми Start в menu bar.",
   dashboard_heading: "Готов когда ты.",
-  dashboard_subtitle: "Начните запись в фоне.",
+  dashboard_subtitle: "Для лучшей транскрипции проводите митинги в наушниках.",
   dashboard_subtitle_recording: "Corder продолжит писать в фоне.",
   usage_title: "Расход за месяц",
   usage_subtitle: "Минуты транскрипции в этом месяце.",
@@ -1031,6 +1066,21 @@ const en: Strings = {
   sidebar_pinned: "Pinned",
 
   speaker_self: "I",
+  edit_text: "Edit text",
+  assign_line_to: "Assign line to",
+  merge_speaker_into: "Merge speaker into",
+  no_other_speakers: "No other speakers",
+  edit_failed: "Couldn't save the edit",
+  dashboard_tab_upcoming: "Upcoming",
+  upcoming_up_next: "Up next",
+  upcoming_none: "No upcoming meetings",
+  upcoming_none_sub: "Nothing scheduled in the next 30 days.",
+  upcoming_connect_title: "See your upcoming meetings",
+  upcoming_connect_sub: "Connect your calendar to line up the meetings you can record.",
+  upcoming_connect_cta: "Connect calendar",
+  upcoming_untitled: "Untitled meeting",
+  upcoming_soon: "Soon",
+  upcoming_connecting: "Waiting for Google…",
   speaker_rename_title: "Click to rename",
   inline_editor_placeholder: "Name",
 
@@ -1048,7 +1098,7 @@ const en: Strings = {
   no_meeting_selected_title: "No recording selected",
   no_meeting_selected_body: "Pick a recording from the list on the left, or press Start in the menu bar.",
   dashboard_heading: "Ready when you are.",
-  dashboard_subtitle: "Start a recording in the background.",
+  dashboard_subtitle: "For the most accurate transcript, wear headphones during calls.",
   dashboard_subtitle_recording: "Corder keeps recording in the background.",
   usage_title: "Monthly usage",
   usage_subtitle: "Transcription minutes this month.",
@@ -1335,6 +1385,21 @@ const uk: Strings = {
   sidebar_pinned: "Закріплені",
 
   speaker_self: "Я",
+  edit_text: "Редагувати текст",
+  assign_line_to: "Призначити рядок",
+  merge_speaker_into: "Обʼєднати зі спікером",
+  no_other_speakers: "Інших спікерів немає",
+  edit_failed: "Не вдалося зберегти правку",
+  dashboard_tab_upcoming: "Майбутні",
+  upcoming_up_next: "Найближча",
+  upcoming_none: "Немає майбутніх зустрічей",
+  upcoming_none_sub: "На найближчі 30 днів нічого не заплановано.",
+  upcoming_connect_title: "Дивись майбутні зустрічі",
+  upcoming_connect_sub: "Підключи календар, щоб бачити зустрічі, які можна записати.",
+  upcoming_connect_cta: "Підключити календар",
+  upcoming_untitled: "Без назви",
+  upcoming_soon: "Незабаром",
+  upcoming_connecting: "Чекаємо Google…",
   speaker_rename_title: "Клацни, щоб перейменувати",
   inline_editor_placeholder: "Ім'я",
 
@@ -1352,7 +1417,7 @@ const uk: Strings = {
   no_meeting_selected_title: "Запис не вибрано",
   no_meeting_selected_body: "Обери запис зі списку зліва, або натисни Start у menu bar.",
   dashboard_heading: "Готовий, коли ти.",
-  dashboard_subtitle: "Почніть запис у фоні.",
+  dashboard_subtitle: "Для кращої транскрипції проводьте мітинги в навушниках.",
   dashboard_subtitle_recording: "Corder продовжить писати у фоні.",
   usage_title: "Витрати за місяць",
   usage_subtitle: "Хвилини транскрипції за цей місяць.",
@@ -4539,6 +4604,11 @@ const hi: Strings = {
   ctx_rename: "नाम बदलें",
   sidebar_pinned: "पिन किए गए",
   speaker_self: "मैं",
+  edit_text: "टेक्स्ट संपादित करें",
+  assign_line_to: "पंक्ति असाइन करें",
+  merge_speaker_into: "वक्ता को मर्ज करें",
+  no_other_speakers: "कोई अन्य वक्ता नहीं",
+  edit_failed: "संपादन सहेजा नहीं जा सका",
   speaker_rename_title: "नाम बदलने के लिए क्लिक करें",
   inline_editor_placeholder: "नाम",
   toast_copied: "ट्रांसक्रिप्ट कॉपी हुआ",
@@ -4737,6 +4807,11 @@ const ar: Strings = {
   ctx_rename: "إعادة تسمية",
   sidebar_pinned: "مثبَّت",
   speaker_self: "أنا",
+  edit_text: "تعديل النص",
+  assign_line_to: "إسناد السطر إلى",
+  merge_speaker_into: "دمج المتحدث مع",
+  no_other_speakers: "لا يوجد متحدثون آخرون",
+  edit_failed: "تعذّر حفظ التعديل",
   speaker_rename_title: "انقر لإعادة التسمية",
   inline_editor_placeholder: "الاسم",
   toast_copied: "تم نسخ النص",

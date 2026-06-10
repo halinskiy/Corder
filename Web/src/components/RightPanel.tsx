@@ -657,6 +657,21 @@ function AudioCard({
   const [duration, setDuration] = React.useState((detail.duration_ms ?? 0) / 1000);
   const [time, setTime] = React.useState(0);
 
+  // The <audio> element is reused across meeting switches (RightPanel
+  // never unmounts), so changing its `src` doesn't reliably zero
+  // `currentTime` until new metadata loads — meanwhile the scrubber
+  // showed the previous session's position. Hard-reset element +
+  // local state the instant the meeting id changes.
+  React.useEffect(() => {
+    setTime(0);
+    setPlaying(false);
+    setDuration((detail.duration_ms ?? 0) / 1000);
+    const a = audioRef.current;
+    if (a) {
+      try { a.pause(); a.currentTime = 0; } catch { /* not seekable yet */ }
+    }
+  }, [detail.id]);
+
   const togglePlay = () => {
     const a = audioRef.current; if (!a) return;
     if (a.paused) a.play().catch(() => {});
