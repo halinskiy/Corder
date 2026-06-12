@@ -5,10 +5,10 @@ import Foundation
 /// data — "спасибо за просмотр", "Субтитры сделал DimaTorzok", …). This
 /// used to be copy-pasted verbatim into `WhisperTranscriber`,
 /// `LocalWhisperTranscriber`, and `TranscriptionPipeline`; consolidated
-/// here so a new pattern only has to be added once. Behaviour is
-/// byte-identical to the old three copies (same list, same normalization,
-/// same substring match) — this is a pure de-duplication, not a tuning
-/// change.
+/// here so a new pattern only has to be added once. The list now also
+/// covers the English YouTube-outro phrases Whisper emits on silence
+/// ("thank you for watching", "enjoy watching this video", ...), which the
+/// original Russian-only list let through.
 enum Hallucinations {
     static let patterns: [String] = [
         "субтитры сделал dimatorzok",
@@ -22,6 +22,30 @@ enum Hallucinations {
         "не забудьте подписаться",
         "подписывайтесь на канал",
         "ставьте лайк",
+        // English YouTube-outro hallucinations Whisper/WhisperKit emit on
+        // silent stretches (reported by Kostya on a mostly-silent mic
+        // track: "Thank you for watching, and I hope you will have a
+        // wonderful day", "...enjoy watching this video"). Distinctive
+        // multi-word phrases so they don't catch genuine meeting speech.
+        "thank you for watching",
+        "thanks for watching",
+        "thank you for your watching",
+        "thank you so much for watching",
+        "i hope you enjoyed",
+        "i hope you will enjoy",
+        "hope you enjoy this video",
+        "enjoy watching this video",
+        "enjoy this video",
+        "have a wonderful day",
+        "have a great day",
+        "see you in the next video",
+        "see you in the next one",
+        "see you next time",
+        "i will see you in the next video",
+        "dont forget to subscribe",
+        "please subscribe to my channel",
+        "subscribe to my channel",
+        "like and subscribe",
     ]
 
     static func isHallucination(_ text: String) -> Bool {
