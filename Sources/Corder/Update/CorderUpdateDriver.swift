@@ -55,13 +55,19 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
             primaryLabel = "Update"
         }
 
+        let readyToInstall = (phase == "readyToInstall")
         bridge.onPrimary = { [weak self] in
             // Optimistically flip to "downloading" so the user gets
             // immediate feedback while Sparkle works.
-            self?.pushPhase(phase == "readyToInstall" ? "installing" : "downloading",
-                            primaryLabel: phase == "readyToInstall" ? "Installing…" : "Downloading…",
+            self?.pushPhase(readyToInstall ? "installing" : "downloading",
+                            primaryLabel: readyToInstall ? "Installing…" : "Downloading…",
                             primaryEnabled: false)
             reply(.install)
+            // If the update is already downloaded, `.install` proceeds
+            // straight to swapping the bundle — which needs THIS app to
+            // quit. Do it ourselves (the custom driver gets no automatic
+            // termination); Sparkle then relaunches the new version.
+            if readyToInstall { self?.quitForInstall() }
         }
         bridge.onDismiss = { reply(.dismiss) }
 
@@ -182,6 +188,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         bridge.onPrimary = { [weak self] in
             self?.pushPhase("installing", primaryLabel: "Installing…", primaryEnabled: false)
             reply(.install)
+            self?.quitForInstall()
         }
         bridge.onDismiss = { reply(.dismiss) }
         pushPhase("readyToInstall", primaryLabel: "Install and relaunch",
@@ -221,6 +228,18 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     func showUpdateInFocus() { /* WebView is already focused if Library is open */ }
 
     // MARK: - Helpers
+
+    /// Quit the app so Sparkle's already-running installer can swap the
+    /// bundle and relaunch the new version. With a custom SPUUserDriver
+    /// nothing terminates the host automatically, so the install would
+    /// otherwise hang on "Installing…" forever (verified: a manual quit
+    /// completes the staged install). Small delay so the `.install` reply
+    /// is delivered before we exit.
+    private func quitForInstall() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            NSApplication.shared.terminate(nil)
+        }
+    }
 
     private func pushPhase(_ phase: String, primaryLabel: String, primaryEnabled: Bool,
                            statusLine: String? = nil, showsProgress: Bool = false,
