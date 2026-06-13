@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.4] — 2026-06-14
+
+### Fixed
+- In-app updates now install and relaunch on their own. The updater could
+  hang on "Installing..." because the app never quit for Sparkle's
+  installer; it now quits so the swap and relaunch complete.
+
 ## [0.14.3] — 2026-06-14
 
 ### Fixed
