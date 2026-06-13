@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.2] — 2026-06-13
+
+### Fixed
+- In-app updates now finish on their own. The updater used to get stuck
+  on "Installing..." waiting for the app to quit; it now closes and
+  relaunches into the new version automatically.
+- Update prompts show their release notes again.
+
 ## [0.14.1] — 2026-06-13
 
 ### Fixed
