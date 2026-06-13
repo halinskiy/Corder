@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.5] — 2026-06-14
+
+### Fixed
+- In-app updates now install and relaunch on their own, no more getting
+  stuck on "Installing...".
+
 ## [0.14.4] — 2026-06-14
 
 ### Fixed
