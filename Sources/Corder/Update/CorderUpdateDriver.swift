@@ -193,10 +193,18 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Installing
 
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
-        _ = applicationTerminated
-        _ = retryTerminatingApplication
         pushPhase("installing", primaryLabel: "Installing…", primaryEnabled: false,
-                  statusLine: "Installing. Don't quit yet.", showsProgress: false, progress: 0)
+                  statusLine: "Installing. Corder will relaunch.", showsProgress: false, progress: 0)
+        // With a custom SPUUserDriver, terminating the app so Sparkle can
+        // swap the bundle is OUR responsibility (the standard driver does
+        // it too). Without this the install hangs forever at "Installing…"
+        // because the updater is waiting for the host to quit. After we
+        // terminate, Sparkle's installer swaps and relaunches the new
+        // version. Nothing in this app blocks termination
+        // (no applicationShouldTerminate).
+        if !applicationTerminated {
+            DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+        }
     }
 
     // MARK: - Installed
