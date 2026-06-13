@@ -279,20 +279,40 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         bridge.push(state)
     }
 
-    /// Quick HTML → plain text for the appcast description CDATA.
+    /// Quick HTML → plain text for the appcast description CDATA. The
+    /// modal title already shows "Version X.Y.Z", so we strip the
+    /// changelog's leading version heading and collapse the stray
+    /// whitespace it leaves behind — the notes should read as plain
+    /// text, not a sparse indented outline.
     private func htmlToPlain(_ html: String) -> String {
         var s = html
+        // Drop every heading (the changelog prefixes each entry with the
+        // version as <h3>); it only duplicates the title above.
+        s = s.replacingOccurrences(of: "<h[1-6][^>]*>.*?</h[1-6]>",
+                                   with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: "&nbsp;", with: " ")
         s = s.replacingOccurrences(of: "&amp;", with: "&")
         s = s.replacingOccurrences(of: "&lt;", with: "<")
         s = s.replacingOccurrences(of: "&gt;", with: ">")
-        s = s.replacingOccurrences(of: "</p>", with: "\n\n")
+        s = s.replacingOccurrences(of: "&quot;", with: "\"")
+        s = s.replacingOccurrences(of: "&#39;", with: "'")
+        s = s.replacingOccurrences(of: "</p>", with: "\n")
         s = s.replacingOccurrences(of: "<br>", with: "\n")
         s = s.replacingOccurrences(of: "<br/>", with: "\n")
         s = s.replacingOccurrences(of: "<br />", with: "\n")
-        s = s.replacingOccurrences(of: "</h3>", with: "\n\n")
+        // List items → bullet lines.
+        s = s.replacingOccurrences(of: "<li[^>]*>", with: "• ", options: .regularExpression)
         s = s.replacingOccurrences(of: "</li>", with: "\n")
         s = s.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Trim per-line indentation and collapse blank-line runs so a
+        // single-bullet changelog renders as one tight line.
+        let lines = s.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        var out: [String] = []
+        for line in lines {
+            if line.isEmpty && (out.last?.isEmpty ?? true) { continue }
+            out.append(line)
+        }
+        return out.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

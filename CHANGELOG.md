@@ -16,6 +16,22 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.7] — 2026-06-14
+
+### Changed
+- Update dialog polish: the install button keeps a readable label and
+  shows progress inside the button instead of freezing on "Installing…",
+  and the release notes render as clean plain text.
+
+## [0.14.6] — 2026-06-14
+
+### Changed
+- The update button no longer swaps to a frozen "Installing…" label. It
+  keeps its action text and grows a progress fill inside the button,
+  matching the rest of the app.
+- Release notes in the updater render as plain text, dropping the
+  duplicated version heading and the stray gap above the notes.
+
 ## [0.14.5] — 2026-06-14
 
 ### Fixed

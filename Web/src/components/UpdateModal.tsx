@@ -61,6 +61,29 @@ function postAction(action: "primary" | "dismiss") {
   catch { /* dev shell has no native bridge */ }
 }
 
+/// Tidy the release-notes blob before display. The Swift side hands us
+/// plain text already, but the changelog convention prefixes every
+/// entry with the version as a heading — which just duplicates the
+/// modal title and leaves a stray blank line + indentation gap. Strip
+/// the leading version line, trim per-line indentation, and collapse
+/// runs of blank lines so the notes read as plain text, not a sparse
+/// outline.
+function cleanNotes(raw: string, version: string): string {
+  const verNum = version.replace(/^version\s+/i, "").trim();
+  const lines = raw
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((l) => l.replace(/\s+$/g, "").replace(/^\s+/g, (m) => (m.length > 1 ? "" : m)));
+  // Drop leading empty / version-only lines.
+  while (lines.length && (lines[0].trim() === "" || lines[0].trim() === verNum)) {
+    lines.shift();
+  }
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function UpdateModalHost() {
   const [state, setState] = React.useState<UpdateModalState>(HIDDEN);
   const [notesOpen, setNotesOpen] = React.useState(false);
@@ -143,13 +166,29 @@ export function UpdateModalHost() {
     };
   }, [state.visible]);
 
+  // The primary button NEVER swaps to a frozen "Installing…" verb.
+  // Instead it keeps the last actionable label ("Update" while
+  // downloading, "Install and relaunch" while installing) and grows a
+  // progress fill INSIDE the button — same vocabulary as the
+  // Stop-transcription button. `actionLabelRef` latches the label
+  // whenever the button is actionable so the working state has
+  // something stable to show.
+  const working =
+    state.phase === "downloading" ||
+    state.phase === "extracting" ||
+    state.phase === "installing";
+  const determinate = working && state.showsProgress;
+  const actionLabelRef = React.useRef("");
+  if (state.primaryEnabled && state.primaryLabel) actionLabelRef.current = state.primaryLabel;
+  const buttonLabel = working && actionLabelRef.current ? actionLabelRef.current : state.primaryLabel;
+
   if (!state.visible && !leaving) return null;
 
   const onPrimary = () => { if (state.primaryEnabled) postAction("primary"); };
   const onDismiss = () => { postAction("dismiss"); };
   const hasNotes = !!(state.releaseNotes && state.releaseNotes.trim().length > 0);
   const notesBody = hasNotes
-    ? state.releaseNotes
+    ? cleanNotes(state.releaseNotes!, state.version)
     : "No release notes attached to this update.";
 
   // Click on the backdrop (outside the card) closes the modal —
@@ -188,12 +227,6 @@ export function UpdateModalHost() {
           )}
         </div>
 
-        {state.showsProgress && (
-          <div className="update-progress" aria-hidden>
-            <div className="update-progress-fill" style={{ width: `${Math.max(2, state.progress * 100)}%` }} />
-          </div>
-        )}
-
         <div className="update-actions">
           {/* Primary button is hidden when Swift passes an empty label —
               the no-update modal has nothing actionable so the only
@@ -201,11 +234,19 @@ export function UpdateModalHost() {
           {state.primaryLabel && (
             <button
               type="button"
-              className="update-primary"
+              className={"update-primary" + (working ? " is-working" : "")}
               onClick={onPrimary}
               disabled={!state.primaryEnabled}
             >
-              {state.primaryLabel}
+              {working && (
+                <span
+                  className="update-primary-fill"
+                  aria-hidden
+                  data-indeterminate={determinate ? undefined : "true"}
+                  style={determinate ? { width: `${Math.max(4, state.progress * 100)}%` } : undefined}
+                />
+              )}
+              <span className="update-primary-label">{buttonLabel}</span>
             </button>
           )}
           <button
