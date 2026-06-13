@@ -5019,9 +5019,37 @@ body.resizing { cursor: col-resize; user-select: none; }
    Explicit `:hover` selectors here re-pin the resting colours so
    the sheen sweep is the only visible cursor feedback. */
 .update-primary {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: #ffffff;
+}
+/* In-button progress, same idea as `.trans-stop-fill`: a translucent
+   dark layer over the accent fill so a working button reads as "in
+   progress" instead of swapping its label to a frozen "Installing…".
+   Determinate (download/extract) → width tracks `progress`.
+   Indeterminate (install, no byte signal) → a band sweeps across. */
+.update-primary-label {
+  position: relative;
+  z-index: 1;
+}
+.update-primary-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgba(0, 0, 0, 0.22);
+  transition: width 300ms linear;
+  pointer-events: none;
+}
+.update-primary-fill[data-indeterminate="true"] {
+  width: 45%;
+  transition: none;
+  animation: update-primary-sweep 1.15s linear infinite;
+}
+@keyframes update-primary-sweep {
+  from { transform: translateX(-110%); }
+  to   { transform: translateX(260%); }
 }
 .update-primary:hover:not(:disabled) {
   background: var(--accent);
