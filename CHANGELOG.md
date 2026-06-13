@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.1] — 2026-06-13
+
+### Fixed
+- Transcripts no longer pick up stray English lines like "Thank you for
+  watching" or "I hope you enjoy this video" that the recogniser invented
+  over silent stretches. Existing recordings are cleaned up on launch.
+
 ## [0.14.0] — 2026-06-10
 
 ### Added
