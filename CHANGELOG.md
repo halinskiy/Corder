@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.3] — 2026-06-14
+
+### Fixed
+- More invented filler lines (English and Ukrainian YouTube-style
+  sign-offs like "thanks for watching" or "дякую за перегляд") are
+  filtered out of transcripts.
+
 ## [0.14.2] — 2026-06-13
 
 ### Fixed
