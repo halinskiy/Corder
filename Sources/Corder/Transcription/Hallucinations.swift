@@ -46,6 +46,16 @@ enum Hallucinations {
         "please subscribe to my channel",
         "subscribe to my channel",
         "like and subscribe",
+        "if you enjoyed this video",
+        "see you in the next one",
+        "see you guys next time",
+        "subtitles by",
+        "transcribed by",
+        "amaraorg",
+        "редактор субтитров",
+        "субтитри",
+        "дякую за перегляд",
+        "дякую за увагу",
     ]
 
     static func isHallucination(_ text: String) -> Bool {
