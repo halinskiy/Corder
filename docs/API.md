@@ -138,6 +138,13 @@ Settings {
   // also asks Gemini for a structured-markdown summary and persists it
   // on the meeting row. Frontend Summary tab then renders cached.
   auto_summary?: boolean;
+  auto_chapters?: boolean;
+  // Opt-in, default OFF (absent ≡ off): telemetry, launch_at_login, and
+  // stats_enabled. stats_enabled shows the Dashboard statistics card; its
+  // Advanced → Statistics toggle is paid-tier only in the UI.
+  telemetry?: boolean;
+  launch_at_login?: boolean;
+  stats_enabled?: boolean;
   meeting_whitelist?: string[]; // bundle ids: always offer to record
   meeting_blacklist?: string[]; // bundle ids: never offer
   detected_mic_apps?: string[]; // read-only: recent mic owners (UI picker)

@@ -106,7 +106,15 @@ App/                Entry point, app delegate, recording state machine
 ├ Notifications.swift       UNUserNotificationCenter wrapper
 ├ SleepWatchdog.swift       wakes the audio engine on sleep events
 ├ FileLogger.swift          /tmp/corder.log appender (NSLog dual-write)
-└ UpdateController.swift    Sparkle 2 wrapper
+└ UpdateController.swift    Sparkle 2 wrapper (hand-built SPUUpdater)
+
+Update/
+├ CorderUpdateDriver.swift  custom SPUUserDriver — drives the React
+│                           update modal via UpdateBridge; terminates
+│                           the host in ONE place (showInstallingUpdate)
+│                           so the install never double-terminates.
+└ UpdateBridge.swift        Swift↔WebView glue for the update modal
+                            (push state, route primary/dismiss actions).
 
 Capture/
 ├ CaptureEngine.swift       SCStream wiring (.screen video +
