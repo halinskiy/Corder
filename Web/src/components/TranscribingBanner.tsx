@@ -248,10 +248,10 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
       }
       return;
     }
-    // "speed" and "unlimited" route to the public pricing page; the
-    // page itself differentiates Pro vs Max checkout buttons.
-    const w = window as Window & { corderOpenExternal?: (u: string) => void };
-    w.corderOpenExternal?.("https://getcorder.com/#pricing");
+    // "speed" and "unlimited" open the in-app pricing modal (same shell
+    // as the update modal). Its "Upgrade" buttons route to the purchase
+    // page; "Details" flips each plan's feature panel.
+    window.dispatchEvent(new CustomEvent("corder-open-pricing"));
   };
 
   // English fallbacks live next to the consumer because i18n.ts marks
