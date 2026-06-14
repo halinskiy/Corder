@@ -79,9 +79,12 @@ export function SummaryPane({ detail, onToast, t }: Props) {
   // Ship the diagnostic log, same backend as the header's bug-report
   // button. Used by the clickable "report" link in the error card.
   function sendReport() {
-    submitLogs()
-      .then(() => onToast?.(t.report_sent ?? "Report sent. Thank you.", "success"))
-      .catch(() => onToast?.(t.toast_settings_failed, "error"));
+    // Optimistic toast on click: the POST forwards to the Worker →
+    // Resend → GitHub and can take a few seconds, so showing feedback
+    // only on resolve felt like nothing happened. Same instant feedback
+    // as the header bug-report button.
+    onToast?.(t.report_sent ?? "Report sent.", "success");
+    submitLogs().catch(() => onToast?.(t.toast_settings_failed, "error"));
   }
 
   // Error body with a green, clickable "report" link (same vocabulary

@@ -69,9 +69,9 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
   }
 
   function sendReport() {
-    submitLogs()
-      .then(() => onToast?.(t.report_sent ?? "Report sent.", "success"))
-      .catch(() => onToast?.(t.toast_settings_failed, "error"));
+    // Optimistic toast on click (the POST can take a few seconds).
+    onToast?.(t.report_sent ?? "Report sent.", "success");
+    submitLogs().catch(() => onToast?.(t.toast_settings_failed, "error"));
   }
 
   const errorBody: ReactNode = (
