@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.16] — 2026-06-15
+
+### Changed
+- Summary and Chapters now work on the free plan.
+- The "Send a report" link in an AI error card now confirms with a toast
+  the moment you click it.
+
 ## [0.14.15] — 2026-06-15
 
 ### Fixed
