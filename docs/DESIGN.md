@@ -222,6 +222,37 @@ its own `.donate-card` shell because its content is a 3-up amount
 grid with very different geometry. Don't introduce a third modal
 style — extend `.modal-pop` instead.
 
+### Update & Pricing modal (`.update-overlay` / `.update-card`)
+
+A separate, richer shell from `.modal-pop` — a centred card on a
+dimmed full-viewport backdrop with `StarsCanvas`, cursor-tilt
+parallax, a cursor-following sheen, and a scale/fade entrance. Both
+the **UpdateModal** and the **PricingModal** use it; the pricing modal
+is the canonical "reuse, don't reinvent" case.
+
+- Backdrop `.update-overlay`, card `.update-card` (380 px, 16 radius),
+  buttons `.update-primary` (accent fill) / `.update-secondary`
+  (outline). Secondary `is-active` = pressed (used by the pricing
+  "Details" toggle, same vocabulary as the update modal's `?` toggle).
+- **Update modal:** button label is ALWAYS "Install" — never a frozen
+  "Installing…". At rest: no progress, no spinner. After the click:
+  the label is replaced by a centred Loader2 spinner, plus a
+  left-anchored fill (`.update-primary-fill`, like `.trans-stop-fill`)
+  ONLY for a real download. Release notes render as plain text (no
+  markers, no duplicate version heading).
+- **Pricing modal:** ONE card holds Pro + Max columns split by a
+  hairline (Free omitted; it's an upgrade surface). Each column shows
+  name + price + yearly note, with "Upgrade" + "Details"; Details
+  swaps the face for the feature list in place (no grey panel, no
+  scrollbar). Plan data mirrors getcorder.com.
+
+### Inline report link (`.report-link`)
+
+Inside an AI-pane error card, the word "Send a report" is a green
+(`--accent`), bold, borderless button that underlines on hover and
+ships the diagnostic log (same backend as the header bug-report
+button). Use for "this failed, tell us" affordances, not for navigation.
+
 ### Toasts
 
 Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
