@@ -4673,14 +4673,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 /* Pill in busy state — after click, before Sparkle's dialog appears.
-   Slight pulse so the user sees the click registered. */
+   No pulse/glow ring (Костя: «не должно вообще»); the dialog opening
+   is the feedback. */
 .update-pill.busy {
   cursor: pointer;
-  animation: update-pill-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-@keyframes update-pill-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(14, 124, 68, 0.0); }
-  50%      { box-shadow: 0 0 0 6px rgba(14, 124, 68, 0.18); }
 }
 .update-pill:disabled { opacity: 1; } /* keep the green visible while busy */
 
