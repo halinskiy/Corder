@@ -182,8 +182,12 @@ final class TranscriptionPipeline {
             return
         }
 
-        // Idempotent re-runs: clear any prior segments and stale errors.
-        try? repo.clearTranscript(meetingId: meetingId)
+        // Idempotent re-runs: clear stale errors. We do NOT clear the
+        // prior transcript here — keeping it means an interrupted /
+        // failed re-transcribe leaves the previous (already-paid-for)
+        // result readable instead of wiping it. The mapping step clears +
+        // re-inserts atomically once a run actually produces turns, so
+        // success still fully replaces the old segments.
         TranscriptionErrors.clear(meetingId: meetingId)
         // Count this attempt. Reset to 0 once we reach `.ready` below so
         // a row only burns its retry budget on consecutive failures; the

@@ -269,32 +269,51 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     recordingState.active &&
     recordingState.meeting_id === detail.id;
 
+  // Recording / transcribing states take over the pane EVEN IF old
+  // segments still exist. A re-transcribe of an already-ready meeting
+  // keeps the previous transcript in the DB until the new run succeeds,
+  // so we must key the live banner off status, not an empty list —
+  // otherwise the user would stare at the stale transcript with no sign
+  // that a new run is underway.
+  if (isLiveRecording) {
+    return (
+      <div className="transcript ovsb-scroll" ref={containerRef}>
+        <RecordingBanner state={recordingState} onStopped={onRecordingStopped} onToast={onToast} t={t} />
+      </div>
+    );
+  }
+  if (detail.status === "recording") {
+    // Stopped but the pipeline hasn't flipped to transcribing yet — hold
+    // the rec-card so the UI doesn't flash a text placeholder.
+    return (
+      <div className="transcript ovsb-scroll" ref={containerRef}>
+        <RecordingPlaceholder t={t} />
+      </div>
+    );
+  }
+  if (detail.status === "transcribing") {
+    return (
+      <div className="transcript ovsb-scroll" ref={containerRef}>
+        <TranscribingBanner
+          meetingId={detail.id}
+          startedAtMs={detail.transcribing_started_at ?? null}
+          durationMs={detail.duration_ms ?? null}
+          onCancelled={onRecordingStopped}
+          onToast={onToast}
+          t={t}
+        />
+      </div>
+    );
+  }
+
+  // No transcript at all (and not recording/transcribing) → the empty /
+  // failed banner. When a FAILED meeting still HAS segments (an
+  // interrupted re-transcribe), we fall through to render that previous
+  // transcript below; the red header/sidebar still mark it failed.
   if (detail.segments.length === 0) {
     return (
       <div className="transcript ovsb-scroll" ref={containerRef}>
-        {isLiveRecording ? (
-          <RecordingBanner
-            state={recordingState}
-            onStopped={onRecordingStopped}
-            onToast={onToast}
-            t={t}
-          />
-        ) : detail.status === "recording" ? (
-          // Recording session that isn't currently live (we already pressed
-          // Stop and the pipeline hasn't yet flipped status to transcribing).
-          // Hold the rec-card visual so the UI doesn't flash a text-only
-          // placeholder during that race window.
-          <RecordingPlaceholder t={t} />
-        ) : detail.status === "transcribing" ? (
-          <TranscribingBanner
-            meetingId={detail.id}
-            startedAtMs={detail.transcribing_started_at ?? null}
-            durationMs={detail.duration_ms ?? null}
-            onCancelled={onRecordingStopped}
-            onToast={onToast}
-            t={t}
-          />
-        ) : detail.status === "ready" || detail.status === "failed" ? (
+        {detail.status === "ready" || detail.status === "failed" ? (
           <EmptyDeleteBanner
             meetingId={detail.id}
             onDeleted={onDeleted}

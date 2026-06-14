@@ -1387,10 +1387,16 @@ enum Routes {
     private static func retranscribe(id: String, repo: MeetingRepository) -> HttpResponse {
         guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
         FileLogger.log("retranscribe: queued for \(id)")
-        // Flip status + clear old segments synchronously so the very next
-        // GET /api/meetings/:id from the UI returns `transcribing` with an
-        // empty segment list — letting the TranscribingBanner appear
-        // instantly instead of the "Empty transcript" placeholder.
+        // Flip status to `transcribing` so the UI shows the
+        // TranscribingBanner immediately. We DO NOT clear the old
+        // segments here: if this re-transcribe is interrupted, cancelled,
+        // or the model fails, the meeting flips back to `.failed` with
+        // the PREVIOUS transcript still intact (the user already paid for
+        // it). The new segments only replace the old ones once a run
+        // succeeds — the mapping step (`mapDualTrackTurns` etc.) clears +
+        // inserts atomically right before writing the fresh result. The
+        // TranscribingBanner now shows from status alone, not from an
+        // empty segment list, so wiping early is no longer needed.
         if var m = try? repo.meeting(id: id) {
             m.status = .transcribing
             // Reset the start timestamp so the TranscribingBanner
@@ -1402,7 +1408,6 @@ enum Routes {
             m.transcribingStartedAt = nil
             try? repo.updateMeeting(m)
         }
-        try? repo.clearTranscript(meetingId: id)
         TranscriptionErrors.clear(meetingId: id)
         Task { @MainActor in
             TranscriptionPipeline.shared.enqueue(meetingId: id)
