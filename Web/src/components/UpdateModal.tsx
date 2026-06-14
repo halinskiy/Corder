@@ -1,4 +1,5 @@
 import React from "react";
+import { Loader2 } from "lucide-react";
 import { StarsCanvas } from "./StarsCanvas";
 
 /// Full-screen update modal rendered inside the Library WKWebView.
@@ -166,32 +167,25 @@ export function UpdateModalHost() {
     };
   }, [state.visible]);
 
-  // The primary button label is ALWAYS "Install" through the whole
-  // update flow — never a frozen "Installing…" verb. Progress lives
-  // INSIDE the button: a left-anchored fill that grows, same vocabulary
-  // as the Stop-transcription button. For download/extract the fill
-  // tracks real progress; for install (no byte signal) it eases forward
-  // on a timer toward ~92% and never reaches the edge, exactly like the
-  // Stop-transcription estimate creep.
+  // The primary button label is ALWAYS "Install" while at rest — never a
+  // frozen "Installing…" verb. At rest the button shows NO progress and
+  // NO spinner; it only reacts once the user actually clicks Install and
+  // real work begins. `busy` = Sparkle is actively working (the button is
+  // disabled by the Swift side once work starts). When busy the label is
+  // replaced by a centered spinner (the app's standard button loader);
+  // for a real download we ALSO show a left-anchored fill that tracks the
+  // genuine download progress. Install/extract have no byte signal, so
+  // they show only the spinner — never a fake "filling on its own" bar.
   const INSTALL_PHASES = ["available", "downloading", "extracting", "readyToInstall", "installing"];
   const isInstallPhase = INSTALL_PHASES.includes(state.phase);
   const working =
     state.phase === "downloading" ||
     state.phase === "extracting" ||
     state.phase === "installing";
-  const determinate = working && state.showsProgress && state.progress > 0;
+  const busy = working && !state.primaryEnabled;
+  const determinate = busy && state.showsProgress && state.progress > 0;
   const buttonLabel = isInstallPhase ? "Install" : state.primaryLabel;
-
-  const [creep, setCreep] = React.useState(0);
-  React.useEffect(() => {
-    if (!working || determinate) { setCreep(0); return; }
-    setCreep(0.14);
-    const id = window.setInterval(() => {
-      setCreep((c) => c + (0.92 - c) * 0.14);
-    }, 600);
-    return () => window.clearInterval(id);
-  }, [working, determinate]);
-  const fillPct = determinate ? Math.max(4, state.progress * 100) : creep * 100;
+  const fillPct = determinate ? Math.max(4, state.progress * 100) : 0;
 
   if (!state.visible && !leaving) return null;
 
@@ -245,18 +239,22 @@ export function UpdateModalHost() {
           {state.primaryLabel && (
             <button
               type="button"
-              className={"update-primary" + (working ? " is-working" : "")}
+              className={"update-primary" + (busy ? " is-working" : "")}
               onClick={onPrimary}
               disabled={!state.primaryEnabled}
             >
-              {working && (
+              {determinate && (
                 <span
                   className="update-primary-fill"
                   aria-hidden
                   style={{ width: `${fillPct}%` }}
                 />
               )}
-              <span className="update-primary-label">{buttonLabel}</span>
+              <span className="update-primary-label">
+                {busy
+                  ? <Loader2 size={16} strokeWidth={2.5} className="update-primary-spin" aria-label="Working" />
+                  : buttonLabel}
+              </span>
             </button>
           )}
           <button

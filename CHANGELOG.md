@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.12] — 2026-06-14
+
+### Changed
+- Update dialog: the Install button stays still until you click it, then
+  shows a centered loader (and a real download bar only when there is
+  something to download), then relaunches.
+
+## [0.14.11] — 2026-06-14
+
+### Changed
+- The update dialog no longer animates a progress bar before you click.
+  At rest it just shows "Install"; clicking it shows a centered loader,
+  plus a real download progress bar only when an actual download is
+  needed, then installs and relaunches.
+
 ## [0.14.10] — 2026-06-14
 
 ### Fixed
