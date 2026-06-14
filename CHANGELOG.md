@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.14] — 2026-06-15
+
+### Added
+- An in-app upgrade screen with the Pro and Max plans, opened from the
+  Upgrade prompt.
+
+### Changed
+- Statistics is now an optional setting and the dashboard stays cleaner
+  by default.
+- Summary and Chapters show an upgrade option instead of an error when
+  they are not on your plan.
+
+### Fixed
+- Cleaned up stray characters in transcripts and tidied a few labels.
+
 ## [0.14.12] — 2026-06-14
 
 ### Changed
