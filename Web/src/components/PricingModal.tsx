@@ -2,50 +2,40 @@ import React from "react";
 import { StarsCanvas } from "./StarsCanvas";
 import type { T } from "../i18n";
 
-/// Upgrade / pricing modal. Reuses the exact shell of the update modal
-/// (`.update-overlay` + the `.update-card` visual vocabulary: tilt,
-/// sheen, entrance animation) and the same primary/secondary buttons
-/// (`.update-primary` / `.update-secondary`). Opened by dispatching a
+/// Upgrade / pricing modal. ONE unified modal (same shell as the update
+/// modal: `.update-overlay` + the `.update-card` vocabulary — tilt,
+/// sheen, entrance animation) that holds the paid plans as columns,
+/// instead of separate floating cards. Opened by dispatching a
 /// `corder-open-pricing` window event (the "Upgrade" upsell CTA fires
 /// it); closed by clicking the backdrop or Escape.
 ///
-/// Each plan is its own mini-card with two stacked buttons: "Upgrade"
-/// (primary → the purchase page) and "Details" (secondary → flips a
-/// feature panel OVER the plan face; the button takes the same active
-/// state as the update modal's `?` toggle, and a second click flips
-/// back).
+/// Each plan column has two stacked buttons: "Upgrade" (primary → the
+/// purchase page) and "Details" (secondary). Details swaps the plan
+/// face (name + price) for its feature list, in place (no grey panel,
+/// no scrollbar), and takes the pressed/active state like the update
+/// modal's `?` toggle; a second click swaps back.
 
 interface Plan {
   id: string;
   name: string;
   price: string;
   period: string;
+  yearly: string;
   features: string[];
 }
 
-// Plan data mirrors getcorder.com/#pricing verbatim. Kept as a constant
-// (product data / prices, universal across locales) rather than i18n.
+// Plan data mirrors getcorder.com/#pricing verbatim. Free is omitted —
+// this is an upgrade surface, the user is already on it. Kept as a
+// constant (product data / prices, universal across locales).
 const PLANS: Plan[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    features: [
-      "5 hours of transcription a month",
-      "Speakers labelled on every call",
-      "Searchable transcript, drag out to Notion",
-      "Screen video captured alongside the audio",
-      "No bot joins the call",
-    ],
-  },
   {
     id: "pro",
     name: "Pro",
     price: "$8.25",
     period: "per month",
+    yearly: "$99 billed yearly",
     features: [
-      "Everything in Free, and",
+      "Everything in Free, plus:",
       "25 hours a month included",
       "Auto-summary with sections and action items",
       "Custom summary templates for your call type",
@@ -57,8 +47,9 @@ const PLANS: Plan[] = [
     name: "Max",
     price: "$19.92",
     period: "per month",
+    yearly: "$239 billed yearly",
     features: [
-      "Everything in Pro, and",
+      "Everything in Pro, plus:",
       "Unlimited transcription, fair use applies",
       "Stronger handling of accents and crosstalk",
       "Early builds before public release",
@@ -75,8 +66,7 @@ declare global {
   }
 }
 
-/// Cursor-tilt parallax — the same vocabulary as the update modal card
-/// (and UpdatePill). Applied per plan card so each one reacts on its own.
+/// Cursor-tilt parallax — the same vocabulary as the update modal card.
 function useTilt(ref: React.RefObject<HTMLElement>, max: number) {
   React.useEffect(() => {
     const el = ref.current;
@@ -106,27 +96,25 @@ function useTilt(ref: React.RefObject<HTMLElement>, max: number) {
   }, [ref, max]);
 }
 
-function PricingCard({ plan, t, onUpgrade }: { plan: Plan; t: T; onUpgrade: () => void }) {
+function PricingColumn({ plan, t, onUpgrade }: { plan: Plan; t: T; onUpgrade: () => void }) {
   const [detailsOpen, setDetailsOpen] = React.useState(false);
-  const cardRef = React.useRef<HTMLDivElement | null>(null);
-  useTilt(cardRef, 9);
-
   return (
-    <div className="pricing-card" ref={cardRef} onMouseDown={(e) => e.stopPropagation()}>
-      <div className="update-card-sheen" aria-hidden />
-      <div className="pricing-card-top">
-        <div className="pricing-face">
-          <div className="pricing-name">{plan.name}</div>
-          <div className="pricing-price">
-            {plan.price}
-            <span className="pricing-period">{plan.period}</span>
-          </div>
-        </div>
-        {detailsOpen && (
-          <div className="pricing-detail update-notes">
+    <div className="pricing-col">
+      <div className="pricing-col-top">
+        {detailsOpen ? (
+          <div className="pricing-detail">
             {plan.features.map((f, i) => (
               <div className="pricing-feature" key={i}>{f}</div>
             ))}
+          </div>
+        ) : (
+          <div className="pricing-face">
+            <div className="pricing-name">{plan.name}</div>
+            <div className="pricing-price">
+              {plan.price}
+              <span className="pricing-period">{plan.period}</span>
+            </div>
+            <div className="pricing-yearly">{plan.yearly}</div>
           </div>
         )}
       </div>
@@ -150,6 +138,8 @@ export function PricingModalHost({ t }: { t: T }) {
   const [visible, setVisible] = React.useState(false);
   const [leaving, setLeaving] = React.useState(false);
   const leaveTimer = React.useRef<number | null>(null);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  useTilt(cardRef, 7);
 
   const close = React.useCallback(() => {
     setLeaving(true);
@@ -197,11 +187,16 @@ export function PricingModalHost({ t }: { t: T }) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}
     >
       <StarsCanvas />
-      <div className={"pricing-wrap" + (leaving ? " is-leaving" : "")}>
+      <div
+        className={"pricing-modal" + (leaving ? " is-leaving" : "")}
+        ref={cardRef}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="update-card-sheen" aria-hidden />
         <div className="pricing-title">{t.pricing_title ?? "Upgrade Corder"}</div>
-        <div className="pricing-row" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="pricing-row">
           {PLANS.map((plan) => (
-            <PricingCard key={plan.id} plan={plan} t={t} onUpgrade={onUpgrade} />
+            <PricingColumn key={plan.id} plan={plan} t={t} onUpgrade={onUpgrade} />
           ))}
         </div>
       </div>
