@@ -5087,6 +5087,126 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-style: italic;
 }
 
+/* Secondary button "pressed" state — used by the pricing modal's
+   "Details" toggle to read as active while the feature panel is up
+   (same toggle vocabulary as the update modal's `?` help button). */
+.update-secondary.is-active {
+  background: var(--bg-active, var(--bg-hover));
+  border-color: var(--fg-muted);
+  color: var(--fg);
+}
+
+/* ── Pricing / upgrade modal ───────────────────────────────────────
+   Reuses the update-modal shell: same `.update-overlay` backdrop +
+   StarsCanvas, same card vocabulary (tilt vars, sheen, entrance
+   animation, border/radius/shadow) and the same
+   `.update-primary` / `.update-secondary` buttons. Difference: the
+   overlay holds a titled ROW of per-plan cards instead of one card. */
+.pricing-wrap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  animation: update-card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.pricing-wrap.is-leaving {
+  animation: update-card-out 200ms cubic-bezier(0.4, 0.0, 0.6, 1) forwards;
+}
+.pricing-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  text-align: center;
+}
+.pricing-row {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+/* One plan card — mirrors `.update-card` tokens (border, radius,
+   padding, shadow, tilt, sheen, entrance) at a narrower width so three
+   sit side by side. */
+.pricing-card {
+  position: relative;
+  width: 236px;
+  padding: 22px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.45);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --tilt-shine-x: 50%;
+  --tilt-shine-y: 50%;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform 135ms ease;
+  transform-origin: center 70%;
+  overflow: hidden;
+}
+/* Card content sits above the sheen layer (sheen excluded, like the
+   update card). */
+.pricing-card > :not(.update-card-sheen) {
+  position: relative;
+  z-index: 1;
+}
+/* Holds the plan face (name + price) and, when Details is open, the
+   feature panel overlaid on top of it. The buttons live OUTSIDE this
+   region (below), so they stay put when the panel flips in. min-height
+   keeps the three cards the same height face-up or details-up. */
+.pricing-card-top {
+  position: relative;
+  flex: 1;
+  min-height: 224px;
+}
+.pricing-face {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pricing-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.pricing-price {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.pricing-period {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--fg-muted);
+}
+/* Feature panel — covers the plan face when Details is toggled. Same
+   surface as `.update-notes` (var(--bg-elev), 10px radius). */
+.pricing-detail {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+/* Plain feature lines — NO bullet/dash markers, just text. */
+.pricing-feature {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg);
+}
+
 /* Upsell strip pinned to the bottom of the Transcribing banner.
    Same visual family as the rest of the card (typography pair +
    `.clarify-btn` CTA), separated by a hairline so it reads as a

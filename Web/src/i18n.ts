@@ -303,6 +303,9 @@ interface Strings {
   trans_upsell_unlimited_title?: string;
   trans_upsell_unlimited_desc?: string;
   trans_upsell_unlimited_cta?: string;
+  pricing_title?: string;
+  pricing_upgrade?: string;
+  pricing_details?: string;
 
   clarify_question: string;
   clarify_just_me: string;
@@ -802,6 +805,9 @@ const ru: Strings = {
   loading: "Загрузка…",
 
   update_available_label: "Доступен апдейт",
+  pricing_title: "Улучшить Corder",
+  pricing_upgrade: "Апгрейд",
+  pricing_details: "Подробнее",
   update_available_title: "Нажмите чтобы установить",
 
   archive_open_title: "Открыть архив",
@@ -1156,6 +1162,9 @@ const en: Strings = {
   loading: "Loading…",
 
   update_available_label: "Update available",
+  pricing_title: "Upgrade Corder",
+  pricing_upgrade: "Upgrade",
+  pricing_details: "Details",
   update_available_title: "Click to install",
 
   archive_open_title: "Open archive",
@@ -1474,6 +1483,9 @@ const uk: Strings = {
   loading: "Завантаження…",
 
   update_available_label: "Доступне оновлення",
+  pricing_title: "Покращити Corder",
+  pricing_upgrade: "Апгрейд",
+  pricing_details: "Детальніше",
   update_available_title: "Натисни, щоб встановити",
 
   archive_open_title: "Відкрити архів",
