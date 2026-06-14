@@ -74,7 +74,15 @@ function cleanNotes(raw: string, version: string): string {
   const lines = raw
     .replace(/\r/g, "")
     .split("\n")
-    .map((l) => l.replace(/\s+$/g, "").replace(/^\s+/g, (m) => (m.length > 1 ? "" : m)));
+    // Trim each line, drop indentation, and strip ANY leading list
+    // marker (•, ·, -, *, –, —) + spaces — the notes must read as plain
+    // text, never a bulleted list.
+    .map((l) =>
+      l
+        .replace(/\s+$/g, "")
+        .replace(/^\s*[•·\-*–—]+\s+/, "")
+        .replace(/^\s+/g, (m) => (m.length > 1 ? "" : m))
+    );
   // Drop leading empty / version-only lines.
   while (lines.length && (lines[0].trim() === "" || lines[0].trim() === verNum)) {
     lines.shift();
