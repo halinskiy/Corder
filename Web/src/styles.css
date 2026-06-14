@@ -5097,42 +5097,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ── Pricing / upgrade modal ───────────────────────────────────────
-   Reuses the update-modal shell: same `.update-overlay` backdrop +
-   StarsCanvas, same card vocabulary (tilt vars, sheen, entrance
-   animation, border/radius/shadow) and the same
-   `.update-primary` / `.update-secondary` buttons. Difference: the
-   overlay holds a titled ROW of per-plan cards instead of one card. */
-.pricing-wrap {
+   ONE unified modal on the update-modal shell: same `.update-overlay`
+   backdrop + StarsCanvas, same card vocabulary (tilt vars, sheen,
+   entrance animation, border/radius/shadow) and the same
+   `.update-primary` / `.update-secondary` buttons. The single card
+   holds a title and a row of plan columns (Pro, Max). */
+.pricing-modal {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  animation: update-card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.pricing-wrap.is-leaving {
-  animation: update-card-out 200ms cubic-bezier(0.4, 0.0, 0.6, 1) forwards;
-}
-.pricing-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-  text-align: center;
-}
-.pricing-row {
-  display: flex;
-  gap: 16px;
-  align-items: stretch;
-}
-/* One plan card — mirrors `.update-card` tokens (border, radius,
-   padding, shadow, tilt, sheen, entrance) at a narrower width so three
-   sit side by side. */
-.pricing-card {
-  position: relative;
-  width: 236px;
-  padding: 22px;
+  width: 600px;
+  padding: 26px 28px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -5140,7 +5114,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   --tilt-x: 0deg;
   --tilt-y: 0deg;
   --tilt-shine-x: 50%;
@@ -5150,35 +5124,63 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: transform 135ms ease;
   transform-origin: center 70%;
   overflow: hidden;
+  animation: update-card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.pricing-modal.is-leaving {
+  animation: update-card-out 200ms cubic-bezier(0.4, 0.0, 0.6, 1) forwards;
 }
 /* Card content sits above the sheen layer (sheen excluded, like the
    update card). */
-.pricing-card > :not(.update-card-sheen) {
+.pricing-modal > :not(.update-card-sheen) {
   position: relative;
   z-index: 1;
 }
-/* Holds the plan face (name + price) and, when Details is open, the
-   feature panel overlaid on top of it. The buttons live OUTSIDE this
-   region (below), so they stay put when the panel flips in. min-height
-   keeps the three cards the same height face-up or details-up. */
-.pricing-card-top {
-  position: relative;
+.pricing-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  text-align: center;
+}
+/* Plan columns inside the one modal, split by a hairline divider so
+   they read as one surface (not detached cards). */
+.pricing-row {
+  display: flex;
+  align-items: stretch;
+}
+.pricing-col {
   flex: 1;
-  min-height: 224px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 22px;
+}
+.pricing-col + .pricing-col {
+  border-left: 1px solid var(--border);
+}
+/* Holds the plan face (name + price), swapped for the feature list when
+   Details is open. min-height keeps both columns the same height face-up
+   or details-up, so the buttons below stay aligned. */
+.pricing-col-top {
+  flex: 1;
+  min-height: 196px;
 }
 .pricing-face {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 .pricing-name {
-  font-size: 18px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
 }
 .pricing-price {
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--fg);
   display: flex;
@@ -5186,24 +5188,25 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 6px;
 }
 .pricing-period {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--fg-muted);
 }
-/* Feature panel — covers the plan face when Details is toggled. Same
-   surface as `.update-notes` (var(--bg-elev), 10px radius). */
+.pricing-yearly {
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+/* Feature list — plain text, NO grey panel, NO padding, NO scrollbar,
+   NO bullet/dash markers. Just lines, matching the landing page. */
 .pricing-detail {
-  position: absolute;
-  inset: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
+  gap: 9px;
 }
-/* Plain feature lines — NO bullet/dash markers, just text. */
 .pricing-feature {
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--fg);
 }
 
