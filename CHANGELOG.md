@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.17] — 2026-06-15
+
+### Fixed
+- The "Update available" button now shows immediately on every screen
+  once an update is found, instead of disappearing and reappearing after
+  a delay when you switch pages.
+
 ## [0.14.16] — 2026-06-15
 
 ### Changed
