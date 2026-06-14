@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.15] — 2026-06-15
+
+### Fixed
+- A re-transcribe that is interrupted, cancelled, or fails no longer
+  wipes your existing transcript. The meeting still shows as failed, but
+  the previous result stays readable instead of going blank.
+- Removed the green glow ring that pulsed after clicking the update pill.
+
 ## [0.14.14] — 2026-06-15
 
 ### Added
