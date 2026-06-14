@@ -301,8 +301,9 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         s = s.replacingOccurrences(of: "<br>", with: "\n")
         s = s.replacingOccurrences(of: "<br/>", with: "\n")
         s = s.replacingOccurrences(of: "<br />", with: "\n")
-        // List items → bullet lines.
-        s = s.replacingOccurrences(of: "<li[^>]*>", with: "• ", options: .regularExpression)
+        // List items → plain lines (NO bullet prefix — the notes must
+        // read as plain text, no "•"/"-"/"·" markers).
+        s = s.replacingOccurrences(of: "<li[^>]*>", with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: "</li>", with: "\n")
         s = s.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
         // Trim per-line indentation and collapse blank-line runs so a
