@@ -110,6 +110,7 @@ export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onTo
               label: String(n),
             }))}
             disabled={busy}
+            fitMenu
             onChange={(v) => {
               const total = parseInt(v, 10);
               if (!Number.isNaN(total)) select(total - 1);

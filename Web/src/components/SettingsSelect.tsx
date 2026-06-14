@@ -37,6 +37,7 @@ export function SettingsSelect<V extends string = string>({
   onChange,
   onLockedClick,
   ariaLabel,
+  fitMenu,
 }: {
   value: V;
   options: SettingsSelectOption<V>[];
@@ -47,6 +48,10 @@ export function SettingsSelect<V extends string = string>({
   /// changing the actual value. If omitted, disabled clicks no-op.
   onLockedClick?: (v: V) => void;
   ariaLabel?: string;
+  /// When true, the popover sizes to its CONTENT (capped) instead of
+  /// matching the trigger width. Used by pickers whose trigger flex-
+  /// grows wide (e.g. the "4+" headcount) but whose options are tiny.
+  fitMenu?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement>(null);
@@ -174,7 +179,9 @@ export function SettingsSelect<V extends string = string>({
           ref={popRef}
           className={"profile-pop settings-select-pop placement-" + pos.placement}
           role="listbox"
-          style={{ top: pos.top, left: pos.left, width: pos.width }}
+          style={fitMenu
+            ? { top: pos.top, left: pos.left, width: "max-content", minWidth: 88, maxWidth: 220 }
+            : { top: pos.top, left: pos.left, width: pos.width }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
