@@ -16,6 +16,30 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.10] — 2026-06-14
+
+### Fixed
+- The in-app updater installs and relaunches on its own, with a progress
+  fill inside the Install button and no more getting stuck on "Installing…".
+
+## [0.14.9] — 2026-06-14
+
+### Fixed
+- The in-app updater installs and relaunches on its own without ever
+  getting stuck on "Installing…".
+
+## [0.14.8] — 2026-06-14
+
+### Fixed
+- The in-app updater no longer hangs on "Installing…". A second, racing
+  termination was wedging Sparkle's install/relaunch handshake; the app
+  now hands the install to Sparkle and relaunches on its own.
+
+### Changed
+- The update button shows progress inside the button (a left-anchored
+  fill, like Stop transcription) and keeps the label "Install" instead
+  of swapping to "Installing…". Release notes render as clean plain text.
+
 ## [0.14.7] — 2026-06-14
 
 ### Changed

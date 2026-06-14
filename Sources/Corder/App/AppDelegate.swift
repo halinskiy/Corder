@@ -253,6 +253,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in await GoogleCalendar.refreshIfStale() }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        FileLogger.log("AppDelegate: applicationShouldTerminate → .terminateNow")
+        return .terminateNow
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        FileLogger.log("AppDelegate: applicationWillTerminate")
+    }
+
     /// Builds an Edit menu so standard shortcuts (⌘C, ⌘X, ⌘V, ⌘A, ⌘Z) have
     /// real first-responder targets. Without this, an LSUIElement app with a
     /// regular window has no menu, and AppKit beeps when the user presses ⌘C
