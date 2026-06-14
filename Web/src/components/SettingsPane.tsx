@@ -95,6 +95,9 @@ export function SettingsPane({
   // Every toggle defaults ON until the real value loads (matches the
   // backend default, so no flicker to "off" then back).
   const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
+  // Paid tier gates the Statistics toggle (free users don't get the
+  // Dashboard stats block at all, so they never see the switch).
+  const paid = s?.tier === "pro" || s?.tier === "max";
 
   // General vs Advanced split: the "every-day" settings (notifications,
   // mic, language, hotkey, app lists, telemetry, danger zone) live in
@@ -238,6 +241,20 @@ export function SettingsPane({
             onChange={(v) => patch({ auto_chapters: v })}
           />
         </SoloCard>
+
+        {/* Statistics block toggle — paid only. Off by default for
+            everyone; when on, the Dashboard shows the counters card. */}
+        {paid && (
+          <SoloCard>
+            <Toggle
+              label={t.settings_stats_title ?? "Statistics"}
+              desc={t.settings_stats_desc ?? "Show recording counters on the dashboard."}
+              checked={(s?.stats_enabled as boolean | undefined) ?? false}
+              disabled={!loaded}
+              onChange={(v) => patch({ stats_enabled: v })}
+            />
+          </SoloCard>
+        )}
 
         <SoloCard>
           <TranscriptionLanguageRow

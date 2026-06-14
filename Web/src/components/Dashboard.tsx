@@ -152,47 +152,20 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
     }
   }, [isRecording]);
 
-  // Stats + Usage cards stay hidden on a brand-new install — the
-  // first surface the user sees is just "Ready when you are." + the
-  // Start button + the model picker. The cards reveal themselves
-  // when ANY of these is true (and stay revealed forever via a
-  // localStorage latch):
-  //   • the user already has at least one recording
-  //   • the user has been in the app for 10 minutes this session
-  //   • the user has relaunched the app at least once after install
-  //     (we stamp `corder.firstRunAt` on first mount; on any LATER
-  //     mount with that key already set, we reveal immediately)
-  const STATS_REVEAL_KEY = "corder.dashStatsRevealed";
-  const FIRST_RUN_KEY = "corder.firstRunAt";
-  const [statsRevealed, setStatsRevealed] = useState<boolean>(() => {
-    try {
-      if (localStorage.getItem(STATS_REVEAL_KEY) === "1") return true;
-      const firstRunRaw = localStorage.getItem(FIRST_RUN_KEY);
-      if (!firstRunRaw) {
-        localStorage.setItem(FIRST_RUN_KEY, String(Date.now()));
-        return false;
-      }
-      // Key existed BEFORE this mount → relaunch case → reveal.
-      return true;
-    } catch { return false; }
-  });
-  // Recording count > 0 reveals immediately.
+  // The Dashboard statistics card is opt-in: a paid-only toggle in
+  // Advanced → Statistics (off by default for everyone). Poll the
+  // setting so flipping it in Settings reflects here within ~5 s.
+  const [statsEnabled, setStatsEnabled] = useState<boolean>(false);
   useEffect(() => {
-    if (statsRevealed) return;
-    if ((statsMeetings?.length ?? 0) > 0 || (meetings?.length ?? 0) > 0) {
-      setStatsRevealed(true);
-      try { localStorage.setItem(STATS_REVEAL_KEY, "1"); } catch {}
-    }
-  }, [statsRevealed, statsMeetings, meetings]);
-  // 10-minute timeout fallback (clears if already revealed).
-  useEffect(() => {
-    if (statsRevealed) return;
-    const id = window.setTimeout(() => {
-      setStatsRevealed(true);
-      try { localStorage.setItem(STATS_REVEAL_KEY, "1"); } catch {}
-    }, 10 * 60 * 1000);
-    return () => window.clearTimeout(id);
-  }, [statsRevealed]);
+    let alive = true;
+    const tick = async () => {
+      try { const st = await getSettings(); if (alive) setStatsEnabled(st.stats_enabled === true); }
+      catch {}
+    };
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, []);
   const handlePrimary = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -395,7 +368,7 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
               <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
             </div>
 
-            {statsRevealed && (
+            {statsEnabled && (
               <>
                 {/* Stats — one outlined `.settings-rows` card, three rows
                     separated by hairline borders. Same width and look as

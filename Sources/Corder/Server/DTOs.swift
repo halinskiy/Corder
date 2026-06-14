@@ -104,6 +104,9 @@ enum DTO {
         /// app ships diagnostic counts (no PII / no transcript) to
         /// the maintainer's Worker once per 24h.
         let telemetry: Bool?
+        /// Dashboard statistics block visibility. Default off; the toggle
+        /// is paid-only (gated in the web SettingsPane).
+        let stats_enabled: Bool?
         /// User-managed bundle ids: always offer to record for these /
         /// never offer for these. Consumed by `MeetingDetector`.
         let meeting_whitelist: [String]?

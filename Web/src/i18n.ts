@@ -306,6 +306,14 @@ interface Strings {
   pricing_title?: string;
   pricing_upgrade?: string;
   pricing_details?: string;
+  settings_stats_title?: string;
+  settings_stats_desc?: string;
+  summary_failed_short?: string;
+  chapters_failed_short?: string;
+  send_report?: string;
+  report_sent?: string;
+  summary_locked_body?: string;
+  chapters_locked_body?: string;
 
   clarify_question: string;
   clarify_just_me: string;
@@ -808,6 +816,14 @@ const ru: Strings = {
   pricing_title: "Улучшить Corder",
   pricing_upgrade: "Апгрейд",
   pricing_details: "Подробнее",
+  settings_stats_title: "Статистика",
+  settings_stats_desc: "Показывать счётчики записей на дашборде.",
+  summary_failed_short: "Саммари не получилось.",
+  chapters_failed_short: "Главы не получились.",
+  send_report: "Отправить репорт",
+  report_sent: "Репорт отправлен.",
+  summary_locked_body: "Саммари доступно на Pro.",
+  chapters_locked_body: "Главы доступны на Pro.",
   update_available_title: "Нажмите чтобы установить",
 
   archive_open_title: "Открыть архив",
@@ -1165,6 +1181,14 @@ const en: Strings = {
   pricing_title: "Upgrade Corder",
   pricing_upgrade: "Upgrade",
   pricing_details: "Details",
+  settings_stats_title: "Statistics",
+  settings_stats_desc: "Show recording counters on the dashboard.",
+  summary_failed_short: "Summary didn't work.",
+  chapters_failed_short: "Chapters didn't work.",
+  send_report: "Send a report",
+  report_sent: "Report sent.",
+  summary_locked_body: "Summaries are a Pro feature.",
+  chapters_locked_body: "Chapters are a Pro feature.",
   update_available_title: "Click to install",
 
   archive_open_title: "Open archive",
@@ -1486,6 +1510,14 @@ const uk: Strings = {
   pricing_title: "Покращити Corder",
   pricing_upgrade: "Апгрейд",
   pricing_details: "Детальніше",
+  settings_stats_title: "Статистика",
+  settings_stats_desc: "Показувати лічильники записів на дашборді.",
+  summary_failed_short: "Саммарі не вийшло.",
+  chapters_failed_short: "Глави не вийшли.",
+  send_report: "Надіслати репорт",
+  report_sent: "Репорт надіслано.",
+  summary_locked_body: "Саммарі доступне на Pro.",
+  chapters_locked_body: "Глави доступні на Pro.",
   update_available_title: "Натисни, щоб встановити",
 
   archive_open_title: "Відкрити архів",

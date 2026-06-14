@@ -2119,6 +2119,20 @@ body.resizing { cursor: col-resize; user-select: none; }
   line-height: 1.5;
   color: var(--fg-muted);
 }
+/* Inline "report" link inside an AI-pane error card — green, bold,
+   underline on hover, clickable (sends the diagnostic log like the
+   header bug-report button). */
+.report-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+.report-link:hover { text-decoration: underline; }
 .summary-banner-spinner-row {
   display: flex;
   justify-content: center;
