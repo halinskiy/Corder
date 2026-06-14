@@ -14,9 +14,18 @@ interface Props {
 /// is a green fill, a slow diagonal shine that sweeps every ~10 s, and
 /// a handful of small twinkling stars. Click triggers Sparkle's
 /// standard "Update available" panel via /api/update-check.
+// Module-level cache of the last-known update status. The header (and
+// this pill) is re-mounted whenever the user navigates between surfaces
+// (Dashboard ↔ MeetingView), so without a shared cache each new pill
+// would start at `available=false` and flash empty until its own poll
+// returned — the pill "disappears and needs time again" on every page.
+// Seeding state from this cache makes the pill appear instantly on every
+// surface once ANY instance has resolved the status at least once.
+let cachedStatus: { available: boolean; version?: string } = { available: false };
+
 export function UpdatePill({ t, onToast }: Props) {
-  const [available, setAvailable] = React.useState(false);
-  const [version, setVersion] = React.useState<string | undefined>(undefined);
+  const [available, setAvailable] = React.useState(cachedStatus.available);
+  const [version, setVersion] = React.useState<string | undefined>(cachedStatus.version);
   const [busy, setBusy] = React.useState(false);
   const pillRef = React.useRef<HTMLButtonElement | null>(null);
 
@@ -66,6 +75,7 @@ export function UpdatePill({ t, onToast }: Props) {
     const tick = async () => {
       try {
         const s = await getUpdateStatus();
+        cachedStatus = { available: s.available, version: s.version };
         if (!alive) return;
         setAvailable(s.available);
         setVersion(s.version);
