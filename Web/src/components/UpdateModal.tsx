@@ -166,21 +166,32 @@ export function UpdateModalHost() {
     };
   }, [state.visible]);
 
-  // The primary button NEVER swaps to a frozen "Installing…" verb.
-  // Instead it keeps the last actionable label ("Update" while
-  // downloading, "Install and relaunch" while installing) and grows a
-  // progress fill INSIDE the button — same vocabulary as the
-  // Stop-transcription button. `actionLabelRef` latches the label
-  // whenever the button is actionable so the working state has
-  // something stable to show.
+  // The primary button label is ALWAYS "Install" through the whole
+  // update flow — never a frozen "Installing…" verb. Progress lives
+  // INSIDE the button: a left-anchored fill that grows, same vocabulary
+  // as the Stop-transcription button. For download/extract the fill
+  // tracks real progress; for install (no byte signal) it eases forward
+  // on a timer toward ~92% and never reaches the edge, exactly like the
+  // Stop-transcription estimate creep.
+  const INSTALL_PHASES = ["available", "downloading", "extracting", "readyToInstall", "installing"];
+  const isInstallPhase = INSTALL_PHASES.includes(state.phase);
   const working =
     state.phase === "downloading" ||
     state.phase === "extracting" ||
     state.phase === "installing";
-  const determinate = working && state.showsProgress;
-  const actionLabelRef = React.useRef("");
-  if (state.primaryEnabled && state.primaryLabel) actionLabelRef.current = state.primaryLabel;
-  const buttonLabel = working && actionLabelRef.current ? actionLabelRef.current : state.primaryLabel;
+  const determinate = working && state.showsProgress && state.progress > 0;
+  const buttonLabel = isInstallPhase ? "Install" : state.primaryLabel;
+
+  const [creep, setCreep] = React.useState(0);
+  React.useEffect(() => {
+    if (!working || determinate) { setCreep(0); return; }
+    setCreep(0.14);
+    const id = window.setInterval(() => {
+      setCreep((c) => c + (0.92 - c) * 0.14);
+    }, 600);
+    return () => window.clearInterval(id);
+  }, [working, determinate]);
+  const fillPct = determinate ? Math.max(4, state.progress * 100) : creep * 100;
 
   if (!state.visible && !leaving) return null;
 
@@ -242,8 +253,7 @@ export function UpdateModalHost() {
                 <span
                   className="update-primary-fill"
                   aria-hidden
-                  data-indeterminate={determinate ? undefined : "true"}
-                  style={determinate ? { width: `${Math.max(4, state.progress * 100)}%` } : undefined}
+                  style={{ width: `${fillPct}%` }}
                 />
               )}
               <span className="update-primary-label">{buttonLabel}</span>

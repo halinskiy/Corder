@@ -37,44 +37,44 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         pendingUserInitiatedCheck = false
         lastVersion = appcastItem.displayVersionString
         lastReleaseNotes = htmlToPlain(appcastItem.itemDescription ?? "")
+        FileLogger.log("UpdateDriver: showUpdateFound stage=\(updateState.stage.rawValue) version=\(appcastItem.displayVersionString)")
 
+        // The button label is ALWAYS "Install" through the whole flow —
+        // never a frozen "Installing…" verb. Progress is shown inside
+        // the button (an in-button fill), not by swapping the text.
         let phase: String
-        let primaryLabel: String
+        let readyToInstall: Bool
         switch updateState.stage {
         case .notDownloaded:
-            phase = "available"
-            primaryLabel = "Update"
+            phase = "available";       readyToInstall = false
         case .downloaded:
-            phase = "readyToInstall"
-            primaryLabel = "Install and relaunch"
+            phase = "readyToInstall";  readyToInstall = true
         case .installing:
-            phase = "installing"
-            primaryLabel = "Installing…"
+            phase = "installing";      readyToInstall = false
         @unknown default:
-            phase = "available"
-            primaryLabel = "Update"
+            phase = "available";       readyToInstall = false
         }
 
-        let readyToInstall = (phase == "readyToInstall")
         bridge.onPrimary = { [weak self] in
-            // Optimistically flip to "downloading" so the user gets
-            // immediate feedback while Sparkle works.
+            FileLogger.log("UpdateDriver: onPrimary(showUpdateFound) phase=\(phase) → reply(.install)")
+            // Reflect that work started (button shows the in-button
+            // progress fill, label stays "Install", button disabled).
             self?.pushPhase(readyToInstall ? "installing" : "downloading",
-                            primaryLabel: readyToInstall ? "Installing…" : "Downloading…",
-                            primaryEnabled: false)
+                            primaryLabel: "Install", primaryEnabled: false)
+            // Hand off to Sparkle. Sparkle drives download → extract →
+            // install and terminates US via `showInstallingUpdate`
+            // (proven to terminate + relaunch cleanly). We must NOT call
+            // NSApp.terminate here too: a second termination races
+            // Sparkle's install/relaunch handshake and wedges the update
+            // at "Installing…" forever — that was the real hang.
             reply(.install)
-            // If the update is already downloaded, `.install` proceeds
-            // straight to swapping the bundle — which needs THIS app to
-            // quit. Do it ourselves (the custom driver gets no automatic
-            // termination); Sparkle then relaunches the new version.
-            if readyToInstall { self?.quitForInstall() }
         }
         bridge.onDismiss = { reply(.dismiss) }
 
-        push(visible: true, phase: phase, primaryLabel: primaryLabel,
+        push(visible: true, phase: phase, primaryLabel: "Install",
              primaryEnabled: true,
              statusLine: phase == "available"
-                ? "Tap Update to download and install."
+                ? "Tap Install to download and install."
                 : "Ready to install. We'll relaunch Corder.",
              showsProgress: false, progress: 0)
     }
@@ -185,13 +185,17 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Ready to install
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        FileLogger.log("UpdateDriver: showReady(toInstallAndRelaunch)")
         bridge.onPrimary = { [weak self] in
-            self?.pushPhase("installing", primaryLabel: "Installing…", primaryEnabled: false)
+            FileLogger.log("UpdateDriver: onPrimary(showReady) → reply(.install)")
+            // Just reply .install; Sparkle calls showInstallingUpdate
+            // next, which is the single place we terminate. No second
+            // terminate here (see showUpdateFound for why).
+            self?.pushPhase("installing", primaryLabel: "Install", primaryEnabled: false)
             reply(.install)
-            self?.quitForInstall()
         }
         bridge.onDismiss = { reply(.dismiss) }
-        pushPhase("readyToInstall", primaryLabel: "Install and relaunch",
+        pushPhase("readyToInstall", primaryLabel: "Install",
                   primaryEnabled: true,
                   statusLine: "Ready to install. We'll relaunch Corder.",
                   showsProgress: false, progress: 1)
@@ -200,15 +204,17 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Installing
 
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
-        pushPhase("installing", primaryLabel: "Installing…", primaryEnabled: false,
+        FileLogger.log("UpdateDriver: showInstallingUpdate applicationTerminated=\(applicationTerminated)")
+        pushPhase("installing", primaryLabel: "Install", primaryEnabled: false,
                   statusLine: "Installing. Corder will relaunch.", showsProgress: false, progress: 0)
-        // With a custom SPUUserDriver, terminating the app so Sparkle can
-        // swap the bundle is OUR responsibility (the standard driver does
-        // it too). Without this the install hangs forever at "Installing…"
-        // because the updater is waiting for the host to quit. After we
-        // terminate, Sparkle's installer swaps and relaunches the new
-        // version. Nothing in this app blocks termination
-        // (no applicationShouldTerminate).
+        // THE single place we terminate. With a custom SPUUserDriver,
+        // quitting the host so Sparkle's installer can swap the bundle is
+        // our responsibility. Sparkle then relaunches the new version.
+        // Verified end-to-end: this one terminate quits + relaunches in
+        // ~1 s. Do NOT add a second terminate in the onPrimary handlers —
+        // two terminations race the install/relaunch handshake and wedge
+        // the update at "Installing…" forever. Nothing in this app vetoes
+        // termination (applicationShouldTerminate returns .terminateNow).
         if !applicationTerminated {
             DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
         }
@@ -228,18 +234,6 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     func showUpdateInFocus() { /* WebView is already focused if Library is open */ }
 
     // MARK: - Helpers
-
-    /// Quit the app so Sparkle's already-running installer can swap the
-    /// bundle and relaunch the new version. With a custom SPUUserDriver
-    /// nothing terminates the host automatically, so the install would
-    /// otherwise hang on "Installing…" forever (verified: a manual quit
-    /// completes the staged install). Small delay so the `.install` reply
-    /// is delivered before we exit.
-    private func quitForInstall() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            NSApplication.shared.terminate(nil)
-        }
-    }
 
     private func pushPhase(_ phase: String, primaryLabel: String, primaryEnabled: Bool,
                            statusLine: String? = nil, showsProgress: Bool = false,
