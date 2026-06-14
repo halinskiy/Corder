@@ -50,7 +50,14 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         case .downloaded:
             phase = "readyToInstall";  readyToInstall = true
         case .installing:
-            phase = "installing";      readyToInstall = false
+            // A resumed install. Present it as a RESTING "ready to
+            // install" card (enabled "Install", no spinner) — NOT an
+            // in-progress one. The modal must not animate before the
+            // user clicks; the click resumes the install. (Showing this
+            // as "installing" made the progress bar fill on its own at
+            // rest, which read as "it's doing something I didn't ask
+            // for".)
+            phase = "readyToInstall";  readyToInstall = true
         @unknown default:
             phase = "available";       readyToInstall = false
         }

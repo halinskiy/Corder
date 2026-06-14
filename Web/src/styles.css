@@ -5033,7 +5033,14 @@ body.resizing { cursor: col-resize; user-select: none; }
 .update-primary-label {
   position: relative;
   z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+/* Centered button loader while Sparkle works — same keyframe + cadence
+   as the Dashboard Start/Stop button (.dash-primary-spin), one shared
+   "loading" vocabulary. Only rendered once the user clicks Install. */
+.update-primary-spin { animation: spin 0.9s linear infinite; }
 .update-primary-fill {
   position: absolute;
   inset: 0 auto 0 0;          /* top/bottom 0, left 0, width set inline */
