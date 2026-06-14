@@ -380,6 +380,8 @@ export interface Settings {
   auto_title?: boolean;
   auto_summary?: boolean;
   auto_chapters?: boolean;
+  /** Dashboard statistics block visibility (paid-only toggle, default off). */
+  stats_enabled?: boolean;
   /** register Corder as a login item (launch on boot). */
   launch_at_login?: boolean;
   /** forced transcription language (ISO-639-1, e.g. "ru"); "" = auto. */

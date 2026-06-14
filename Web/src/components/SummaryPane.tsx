@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RefreshCw, Search, Copy } from "lucide-react";
-import { MeetingDetail, summarize } from "../api";
+import { MeetingDetail, summarize, submitLogs } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
@@ -40,6 +40,10 @@ export function SummaryPane({ detail, onToast, t }: Props) {
   const [summary, setSummary] = useState<string | null>(initial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `locked` = the server refused because this is a paid feature (HTTP
+  // 403). We show an upsell instead of the generic "didn't work" error,
+  // which read as a bug to free users.
+  const [locked, setLocked] = useState(false);
   const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -48,6 +52,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
   useEffect(() => {
     setSummary(pickStructured(detail.summary ?? null));
     setError(null);
+    setLocked(false);
     setLoading(false);
     setSearch("");
   }, [detail.id, detail.summary]);
@@ -58,15 +63,37 @@ export function SummaryPane({ detail, onToast, t }: Props) {
     if (!ready) return;
     setLoading(true);
     setError(null);
+    setLocked(false);
     try {
       const s = await summarize(detail.id, force);
       setSummary(s);
-    } catch {
-      setError(t.summary_error);
+    } catch (e) {
+      // Paid-feature gate → upsell, not an error card.
+      if (String((e as Error)?.message || "").includes("403")) setLocked(true);
+      else setError(t.summary_error);
     } finally {
       setLoading(false);
     }
   }
+
+  // Ship the diagnostic log, same backend as the header's bug-report
+  // button. Used by the clickable "report" link in the error card.
+  function sendReport() {
+    submitLogs()
+      .then(() => onToast?.(t.report_sent ?? "Report sent. Thank you.", "success"))
+      .catch(() => onToast?.(t.toast_settings_failed, "error"));
+  }
+
+  // Error body with a green, clickable "report" link (same vocabulary
+  // as the header report action).
+  const errorBody: ReactNode = (
+    <>
+      {t.summary_failed_short ?? "Summary didn't work."}{" "}
+      <button type="button" className="report-link" onClick={sendReport}>
+        {t.send_report ?? "Send a report"}
+      </button>
+    </>
+  );
 
   // ── EMPTY STATES — all rendered as `.trans-banner.clarify-banner` ──
   if (!ready) {
@@ -83,12 +110,27 @@ export function SummaryPane({ detail, onToast, t }: Props) {
       </div>
     );
   }
+  if (locked && !summary) {
+    return (
+      <div className="summary-wrap summary-wrap-empty">
+        <SummaryBanner
+          title={t.summary_empty_title}
+          body={t.summary_locked_body ?? "Summaries are a Pro feature."}
+          action={{
+            label: t.pricing_upgrade ?? "Upgrade",
+            onClick: () => window.dispatchEvent(new CustomEvent("corder-open-pricing")),
+            accent: true,
+          }}
+        />
+      </div>
+    );
+  }
   if (error && !summary) {
     return (
       <div className="summary-wrap summary-wrap-empty">
         <SummaryBanner
           title={t.summary_empty_title}
-          body={error}
+          body={errorBody}
           action={{
             label: t.summary_generate, onClick: () => generate(false),
             disabled: loading, accent: true,
@@ -170,7 +212,7 @@ function SummaryBanner({
   title, body, action, spinner,
 }: {
   title: string;
-  body: string;
+  body: ReactNode;
   action?: { label: string; onClick: () => void; disabled?: boolean; accent?: boolean };
   spinner?: boolean;
 }) {

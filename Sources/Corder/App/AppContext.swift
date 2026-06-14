@@ -109,6 +109,7 @@ enum AppSettings {
     private static let kAutoSummary    = "Corder.set.autoSummary"
     private static let kAutoChapters   = "Corder.set.autoChapters"
     private static let kTelemetry      = "Corder.set.telemetry"
+    private static let kStatsEnabled   = "Corder.set.statsEnabled"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
@@ -153,6 +154,12 @@ enum AppSettings {
     static var telemetryEnabled: Bool {
         UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? false
     }
+    /// Dashboard statistics block. Default OFF for everyone; the toggle
+    /// that enables it lives in Advanced and is shown only to paid tiers
+    /// (web SettingsPane). Opt-in, so an absent key ≡ off.
+    static var statsEnabled: Bool {
+        UserDefaults.standard.object(forKey: kStatsEnabled) as? Bool ?? false
+    }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
 
@@ -194,6 +201,9 @@ enum AppSettings {
     static func setAutoChapters(_ v: Bool)   { setFlag(kAutoChapters, v) }
     static func setTelemetryEnabled(_ v: Bool) {
         UserDefaults.standard.set(v, forKey: kTelemetry)
+    }
+    static func setStatsEnabled(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kStatsEnabled)
     }
     static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
     static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }

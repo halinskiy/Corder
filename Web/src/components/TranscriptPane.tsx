@@ -354,7 +354,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
             </div>
             <div className="segment-paragraph">
               {g.segs.map((s, i) => {
-                const display = boostOn && s.text_boost ? s.text_boost : s.text;
+                const display = cleanSegmentText(boostOn && s.text_boost ? s.text_boost : s.text);
                 if (editing && s.id === editing.segId) {
                   return (
                     <React.Fragment key={s.id}>
@@ -425,6 +425,21 @@ function avatarColor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
+}
+
+// Whisper/WhisperKit artefacts that survive the server-side whole-segment
+// hallucination filter: a lone leading punctuation mark (". Ну, …") and a
+// YouTube-style outro appended over trailing silence ("…до связи. Thank
+// you."). Strip both for display so the transcript reads clean. Leading
+// strip is punctuation-only (keeps dialogue dashes/quotes); trailing strip
+// targets the specific Whisper outros, anchored to the end.
+const TRAILING_OUTRO =
+  /(?:[\s.,!?…]*\b(?:thank you(?: very much| so much)?(?: for watching)?|thanks(?: for watching)?|see you (?:next time|in the next (?:video|one))|have a (?:nice|good|great|wonderful) day)\b[\s.!?…]*)+$/iu;
+function cleanSegmentText(t: string): string {
+  let s = t.trim();
+  s = s.replace(/^[\s.,;:!?·•*]+/u, "");
+  s = s.replace(TRAILING_OUTRO, "").trim();
+  return s;
 }
 
 function highlight(text: string, q: string): React.ReactNode {

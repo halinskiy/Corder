@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RefreshCw, Copy, Search } from "lucide-react";
-import { MeetingDetail, generateChapters } from "../api";
+import { MeetingDetail, generateChapters, submitLogs } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
@@ -38,11 +38,14 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
   const [chapters, setChapters] = useState<Chapter[]>(() => parse(detail.chapters));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Paid-feature gate (HTTP 403) → upsell instead of the generic error.
+  const [locked, setLocked] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     setChapters(parse(detail.chapters));
     setError(null);
+    setLocked(false);
     setLoading(false);
     setSearch("");
   }, [detail.id, detail.chapters]);
@@ -53,15 +56,32 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
     if (!ready) return;
     setLoading(true);
     setError(null);
+    setLocked(false);
     try {
       const raw = await generateChapters(detail.id, force);
       setChapters(parse(raw));
-    } catch {
-      setError(t.chapters_error ?? t.summary_error);
+    } catch (e) {
+      if (String((e as Error)?.message || "").includes("403")) setLocked(true);
+      else setError(t.chapters_error ?? t.summary_error);
     } finally {
       setLoading(false);
     }
   }
+
+  function sendReport() {
+    submitLogs()
+      .then(() => onToast?.(t.report_sent ?? "Report sent.", "success"))
+      .catch(() => onToast?.(t.toast_settings_failed, "error"));
+  }
+
+  const errorBody: ReactNode = (
+    <>
+      {t.chapters_failed_short ?? "Chapters didn't work."}{" "}
+      <button type="button" className="report-link" onClick={sendReport}>
+        {t.send_report ?? "Send a report"}
+      </button>
+    </>
+  );
 
   // ── EMPTY STATES — identical shell to SummaryPane.SummaryBanner ──
   if (!ready) {
@@ -85,12 +105,27 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
       </div>
     );
   }
+  if (locked && chapters.length === 0) {
+    return (
+      <div className="summary-wrap summary-wrap-empty">
+        <ChaptersBanner
+          title={t.chapters_empty_title ?? "Chapters appear here"}
+          body={t.chapters_locked_body ?? "Chapters are a Pro feature."}
+          action={{
+            label: t.pricing_upgrade ?? "Upgrade",
+            onClick: () => window.dispatchEvent(new CustomEvent("corder-open-pricing")),
+            accent: true,
+          }}
+        />
+      </div>
+    );
+  }
   if (error && chapters.length === 0) {
     return (
       <div className="summary-wrap summary-wrap-empty">
         <ChaptersBanner
           title={t.chapters_empty_title ?? "Chapters appear here"}
-          body={error}
+          body={errorBody}
           action={{
             label: t.chapters_generate ?? "Generate chapters",
             onClick: () => generate(false),
@@ -226,7 +261,7 @@ function ChaptersBanner({
   title, body, action, spinner,
 }: {
   title: string;
-  body: string;
+  body: ReactNode;
   action?: { label: string; onClick: () => void; disabled?: boolean; accent?: boolean };
   spinner?: boolean;
 }) {
