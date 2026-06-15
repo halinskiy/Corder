@@ -636,7 +636,9 @@ final class LibraryWindow: NSWindowController {
                         await RecordingController.shared.startRecording(source: .fullDisplay)
                     case .recording:
                         await RecordingController.shared.stopRecording()
-                    case .stopping:
+                    // The HUD isn't shown during a silent pre-roll, so this
+                    // tap shouldn't reach here; no-op defensively.
+                    case .stopping, .preroll:
                         return
                     }
                 }

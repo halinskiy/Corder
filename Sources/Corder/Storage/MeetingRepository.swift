@@ -70,6 +70,7 @@ struct MeetingRepository {
         try dbq.read { db in
             try Meeting
                 .filter(Column("archived_at") == nil)
+                .filter(Column("status") != MeetingStatus.preroll.rawValue)
                 .order(Column("started_at").desc)
                 .fetchAll(db)
         }
@@ -127,7 +128,7 @@ struct MeetingRepository {
                            )
                        )) AS speaker_names
                 FROM meetings m
-                WHERE m.archived_at IS NULL
+                WHERE m.archived_at IS NULL AND m.status != 'preroll'
                 ORDER BY (m.pinned_at IS NULL), m.pinned_at DESC, m.started_at DESC
             """)
             return rows.map { r in
@@ -264,6 +265,10 @@ struct MeetingRepository {
         // disk (we only delete them on archive), so resume is free.
         let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 1000
         try dbq.write { db in
+            // Orphaned silent pre-rolls (app died before the user accepted /
+            // declined) were never meant to persist — drop the rows. The
+            // caller deletes their dirs first (see `prerollMeetingIds`).
+            try db.execute(sql: "DELETE FROM meetings WHERE status = 'preroll'")
             try db.execute(sql: """
                 DELETE FROM meetings
                 WHERE status = 'recording' AND duration_ms IS NULL AND started_at < ?
@@ -279,6 +284,14 @@ struct MeetingRepository {
     /// process died. Caller re-enqueues them via TranscriptionPipeline so
     /// the user never has to click "Re-transcribe" manually after a crash
     /// or a forced quit.
+    /// IDs of orphaned silent pre-roll rows, so the caller can delete their
+    /// recording dirs before `resetStuckMeetings()` drops the rows.
+    func prerollMeetingIds() throws -> [String] {
+        try dbq.read { db in
+            try String.fetchAll(db, sql: "SELECT id FROM meetings WHERE status = 'preroll'")
+        }
+    }
+
     func stuckTranscribingMeetingIds() throws -> [String] {
         try dbq.read { db in
             try Meeting

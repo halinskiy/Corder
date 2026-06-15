@@ -36,6 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to 'transcribing' (and picked up by the auto-resume pass), so
         // a crash mid-meeting no longer loses the recording.
         RecordingRecovery.run(repo: AppContext.shared.repo)
+        // Delete the dirs of any orphaned silent pre-rolls (app died while a
+        // call was being pre-rolled, before accept/decline) — then
+        // resetStuckMeetings drops their rows. Pre-roll must leave nothing.
+        if let prerollIds = try? AppContext.shared.repo.prerollMeetingIds() {
+            for pid in prerollIds {
+                try? FileManager.default.removeItem(at: AppPaths.recordingDir(for: pid))
+            }
+        }
         // Recover from prior crashes: drop orphan recording rows and flip
         // bare 'recording' state to failed. Transcribing rows are recovered
         // separately below — they get re-enqueued, not failed.
@@ -162,6 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { await RecordingController.shared.startRecording(source: .fullDisplay) }
             case .recording:
                 Task { await RecordingController.shared.stopRecording() }
+            case .preroll:
+                // Hotkey during a silent pre-roll = "yes, record this" →
+                // promote it (startRecording handles the pre-roll case).
+                Task { await RecordingController.shared.startRecording(source: .fullDisplay) }
             case .stopping:
                 break
             }

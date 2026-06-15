@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class MenuBarController {
+final class MenuBarController: NSObject, NSPopoverDelegate {
     /// Set in init so non-UI singletons (MeetingDetector) can drop the
     /// "Record this call?" offer into the menu-bar popover without
     /// threading a reference through every layer.
@@ -25,6 +25,58 @@ final class MenuBarController {
         popover.behavior = .transient
         popover.close()
     }
+
+    /// Global + local mouse-down monitors installed while the popover is
+    /// up. NSPopover's own `.transient` dismissal is unreliable for a
+    /// status-bar popover in an LSUIElement app (especially after the app
+    /// was activated to present an invite): it sometimes "sticks" and
+    /// ignores outside clicks (Костя's bug — the popover hangs and blocks
+    /// the screen). These monitors guarantee ANY click outside the popover
+    /// window closes it. Torn down in `popoverDidClose`.
+    private var globalClickMonitor: Any?
+    private var localClickMonitor: Any?
+
+    private func installOutsideClickMonitors() {
+        removeOutsideClickMonitors()
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            self?.dismissPopoverFromOutsideClick()
+        }
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            guard let self else { return event }
+            // A click in one of our OWN windows (e.g. the Library) that
+            // isn't the popover itself also dismisses it. Menu-bar clicks
+            // (no event window) are handled by the status-item toggle and
+            // the global monitor, so ignore those here.
+            if let win = event.window, win !== self.popover.contentViewController?.view.window {
+                self.dismissPopoverFromOutsideClick()
+            }
+            return event
+        }
+    }
+
+    private func removeOutsideClickMonitors() {
+        if let m = globalClickMonitor { NSEvent.removeMonitor(m); globalClickMonitor = nil }
+        if let m = localClickMonitor { NSEvent.removeMonitor(m); localClickMonitor = nil }
+    }
+
+    private func dismissPopoverFromOutsideClick() {
+        guard popover.isShown else { return }
+        // An outside click on the invite = decline it (fire onDismiss so the
+        // detector tears down any pre-roll); on the normal menu = just close.
+        if popover.contentViewController !== menuHost {
+            dismissInvite(fireDismiss: true)
+        } else {
+            forceClosePopover()
+        }
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        removeOutsideClickMonitors()
+    }
     private let onOpenLibrary: () -> Void
     private var cancellable: AnyCancellable?
     /// The normal popover content (menu). Stashed while the invite
@@ -35,6 +87,7 @@ final class MenuBarController {
     init(onOpenLibrary: @escaping () -> Void) {
         self.onOpenLibrary = onOpenLibrary
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        super.init()
         // Explicit isVisible = true — macOS Sequoia auto-hides
         // menu-bar items it considers overflow; forcing this on
         // (and persisting via `autosaveName`) prevents Corder
@@ -50,6 +103,7 @@ final class MenuBarController {
         }
 
         popover.behavior = .transient
+        popover.delegate = self
         let host = NSHostingController(rootView: PopoverContentView(ctx: AppContext.shared) { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenLibrary()
@@ -73,7 +127,7 @@ final class MenuBarController {
                 // sees on a normal launch. UI is idempotent; nothing
                 // breaks if it was already correct.
                 switch state {
-                case .recording, .stopping, .idle:
+                case .recording, .stopping, .idle, .preroll:
                     if let menuHost = self.menuHost,
                        self.popover.contentViewController !== menuHost {
                         self.popover.contentViewController = menuHost
@@ -87,9 +141,10 @@ final class MenuBarController {
     private func updateIcon(for state: RecordingState) {
         guard let button = statusItem.button else { return }
         switch state {
-        case .idle:
+        case .idle, .preroll:
             // Outline circle SF Symbol — template-rendered so it
-            // follows the menu bar's light/dark tint.
+            // follows the menu bar's light/dark tint. `.preroll` shows the
+            // SAME idle icon: the silent pre-roll must give no indicator.
             let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
             let img = NSImage(systemSymbolName: "circle", accessibilityDescription: "Corder")?
                 .withSymbolConfiguration(config)
@@ -148,6 +203,7 @@ final class MenuBarController {
             popover.contentViewController?.view.layoutSubtreeIfNeeded()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
+            installOutsideClickMonitors()
         }
     }
 
