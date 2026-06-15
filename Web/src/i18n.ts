@@ -310,6 +310,7 @@ interface Strings {
   settings_stats_desc?: string;
   settings_preroll_title?: string;
   settings_preroll_desc?: string;
+  transcribe_failed_short?: string;
   summary_failed_short?: string;
   chapters_failed_short?: string;
   send_report?: string;
@@ -822,6 +823,7 @@ const ru: Strings = {
   settings_stats_desc: "Показывать счётчики записей на дашборде.",
   settings_preroll_title: "Ловить начало звонков",
   settings_preroll_desc: "Тихо буферизировать задетекченный звонок с самого начала, чтобы при согласии запись сохранила начало. Если откажешься, буфер удаляется.",
+  transcribe_failed_short: "Транскрипция не удалась.",
   summary_failed_short: "Саммари не получилось.",
   chapters_failed_short: "Главы не получились.",
   send_report: "Отправить репорт",
@@ -1189,6 +1191,7 @@ const en: Strings = {
   settings_stats_desc: "Show recording counters on the dashboard.",
   settings_preroll_title: "Catch the start of calls",
   settings_preroll_desc: "Quietly buffer a detected call from its start, so accepting the record offer keeps the beginning. Discarded if you decline.",
+  transcribe_failed_short: "Transcription failed.",
   summary_failed_short: "Summary didn't work.",
   chapters_failed_short: "Chapters didn't work.",
   send_report: "Send a report",
@@ -1520,6 +1523,7 @@ const uk: Strings = {
   settings_stats_desc: "Показувати лічильники записів на дашборді.",
   settings_preroll_title: "Ловити початок дзвінків",
   settings_preroll_desc: "Тихо буферизувати виявлений дзвінок із самого початку, щоб при згоді запис зберіг початок. Якщо відмовишся, буфер видаляється.",
+  transcribe_failed_short: "Транскрипція не вдалася.",
   summary_failed_short: "Саммарі не вийшло.",
   chapters_failed_short: "Глави не вийшли.",
   send_report: "Надіслати репорт",

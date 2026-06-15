@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 // LangPicker — emoji flags render poorly on Windows / some Linux
 // distros, so we ship real SVGs and pay ~10 kB gzipped CSS for it.
 import "flag-icons/css/flag-icons.min.css";
-import { listMeetings, listArchive, MeetingSummary, ArchivedMeeting, RecordingState, getRecordingState, getSettings, setSettings, archiveMeeting, restoreMeeting, startRecordingNow, stopRecordingNow } from "./api";
+import { listMeetings, listArchive, MeetingSummary, ArchivedMeeting, RecordingState, getRecordingState, getSettings, setSettings, archiveMeeting, restoreMeeting, startRecordingNow, stopRecordingNow, submitLogs } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
 import { ArchiveSidebar } from "./components/ArchiveSidebar";
@@ -292,6 +292,16 @@ function App() {
     }, 300);
   }, []);
 
+  // Ref to the latest showToast so the error toast's default "Send a
+  // report" action can show a confirmation without a circular dependency.
+  const showToastRef = React.useRef<((m: string, k?: "success" | "error", o?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean; dedupKey?: string; suppressAfterMs?: number }) => void) | null>(null);
+  // Ship the diagnostic log (same backend as the header bug-report button),
+  // with optimistic confirmation. Attached to every error toast by default.
+  const sendReportFromToast = React.useCallback(() => {
+    showToastRef.current?.("Report sent. Thank you.", "success");
+    submitLogs().catch(() => {});
+  }, []);
+
   const showToast = React.useCallback((msg: string, kind: "success" | "error" = "success", opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean; dedupKey?: string; suppressAfterMs?: number }) => {
     const key = opts?.dedupKey ?? msg;
     const now = Date.now();
@@ -305,19 +315,25 @@ function App() {
     }
     if (toastTimer.current) { window.clearTimeout(toastTimer.current); toastTimer.current = null; }
     if (toastLeaveTimer.current) { window.clearTimeout(toastLeaveTimer.current); toastLeaveTimer.current = null; }
-    const ms = opts?.durationMs ?? 2200;
+    const isError = kind === "error";
+    // Errors linger longer (you need time to read them) and, unless the
+    // caller set its own action, carry a "Send a report" button — same
+    // affordance + backend as the header bug-report button. (Костя.)
+    const ms = opts?.durationMs ?? (isError ? 8000 : 2200);
+    const action = opts?.action ?? (isError ? { label: "Send a report", onClick: sendReportFromToast } : undefined);
     setToastLeaving(false);
     setToast({
       msg,
       kind,
-      action: opts?.action,
+      action,
       expiresAt: opts?.countdown ? Date.now() + ms : undefined,
     });
     toastTimer.current = window.setTimeout(() => {
       // Auto-close: trigger the slide-out, parent unmounts on exit.
       dismissToast();
     }, ms);
-  }, [dismissToast]);
+  }, [dismissToast, sendReportFromToast]);
+  React.useEffect(() => { showToastRef.current = showToast; }, [showToast]);
 
   // Dashboard hint shows the live shortcut label ("⌘⇧F" by default,
   // whatever the user picked in Settings if they remapped it).
