@@ -38,7 +38,10 @@ struct PopoverContentView: View {
                 lockedSection
             } else {
                 switch ctx.recordingState {
-                case .idle:        idleSection
+                // `.preroll` shows the idle section (no indicator); a
+                // "Start recording" there promotes the pre-roll via
+                // startRecording's pre-roll branch.
+                case .idle, .preroll: idleSection
                 case .recording(_, let startedAt): recordingSection(startedAt: startedAt)
                 case .stopping:    stoppingSection
                 }

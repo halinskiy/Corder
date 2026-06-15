@@ -107,6 +107,10 @@ enum DTO {
         /// Dashboard statistics block visibility. Default off; the toggle
         /// is paid-only (gated in the web SettingsPane).
         let stats_enabled: Bool?
+        /// Silent pre-roll: start capturing when a call is detected so
+        /// accepting the offer keeps audio/video from the start. Opt-in,
+        /// default OFF (records before consent, then discards on decline).
+        let preroll: Bool?
         /// User-managed bundle ids: always offer to record for these /
         /// never offer for these. Consumed by `MeetingDetector`.
         let meeting_whitelist: [String]?

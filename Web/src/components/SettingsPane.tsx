@@ -242,6 +242,20 @@ export function SettingsPane({
           />
         </SoloCard>
 
+        {/* Silent pre-roll — start capturing the instant a call is
+            detected, so accepting the record offer keeps audio/video from
+            the start. Off by default (it records before you consent, then
+            discards on decline). Available to all tiers. */}
+        <SoloCard>
+          <Toggle
+            label={t.settings_preroll_title ?? "Catch the start of calls"}
+            desc={t.settings_preroll_desc ?? "Quietly buffer a detected call from its start, so accepting the record offer keeps the beginning. Discarded if you decline."}
+            checked={(s?.preroll as boolean | undefined) ?? false}
+            disabled={!loaded}
+            onChange={(v) => patch({ preroll: v })}
+          />
+        </SoloCard>
+
         {/* Statistics block toggle — paid only. Off by default for
             everyone; when on, the Dashboard shows the counters card. */}
         {paid && (

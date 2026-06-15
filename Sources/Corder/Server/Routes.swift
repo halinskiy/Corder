@@ -747,7 +747,9 @@ enum Routes {
 
     private static func recordingState() -> HttpResponse {
         switch RecordingStateSnapshot.read() {
-        case .idle:
+        // `.preroll` reads as inactive to the web — the silent pre-roll
+        // must not surface a recording indicator anywhere.
+        case .idle, .preroll:
             return jsonResponse(["active": false] as [String: Any])
         case .recording(let meetingId, let startedAt):
             return jsonResponse([
@@ -872,6 +874,7 @@ enum Routes {
             launch_at_login: AppSettings.launchAtLogin,
             telemetry: AppSettings.telemetryEnabled,
             stats_enabled: AppSettings.statsEnabled,
+            preroll: AppSettings.prerollEnabled,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
@@ -1270,6 +1273,7 @@ enum Routes {
             if let v = parsed.launch_at_login  { AppSettings.setLaunchAtLogin(v) }
             if let v = parsed.telemetry        { AppSettings.setTelemetryEnabled(v) }
             if let v = parsed.stats_enabled    { AppSettings.setStatsEnabled(v) }
+            if let v = parsed.preroll          { AppSettings.setPrerollEnabled(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
             if let c = parsed.record_hotkey_code, let m = parsed.record_hotkey_mods {

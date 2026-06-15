@@ -122,7 +122,9 @@ final class MeetingDetector {
         // CaptureEngine is the process holding the mic right now, and we
         // already know about the meeting.
         switch AppContext.shared.recordingState {
-        case .recording, .stopping: return
+        // `.preroll` too: Corder is already silently capturing this call and
+        // an offer is up, so don't re-detect/re-offer.
+        case .recording, .stopping, .preroll: return
         case .idle: break
         }
 
@@ -233,26 +235,41 @@ final class MeetingDetector {
         offeredFor.insert(match.bundle)
         pendingInviteFor = match.bundle
         FileLogger.log("MeetingDetector: offering record for \(match.name)")
-        MenuBarController.shared?.showInviteOffer(
-            appName: match.name,
-            onAccept: { [weak self] in
-                self?.pendingInviteFor = nil
-                Task { @MainActor in
-                    // Seed expectedOtherSpeakers=1 for auto-detected calls
-                    // so Gemini's diarization doesn't fan a single
-                    // interlocutor out into 4-5 phantom speakers. The
-                    // clarify banner is still available for the rare
-                    // 3-way / group-call case.
-                    await RecordingController.shared.startRecording(
-                        source: .fullDisplay,
-                        expectedOtherSpeakers: 1
-                    )
-                }
-            },
-            onDismiss: { [weak self] in
-                self?.pendingInviteFor = nil
+        // expectedOtherSpeakers=1 for auto-detected calls so Gemini's
+        // diarization doesn't fan a single interlocutor out into 4-5 phantom
+        // speakers. The clarify banner still covers the rare group-call case.
+        let appName = match.name
+        Task { @MainActor in
+            // Opt-in silent pre-roll: start capturing BEFORE showing the
+            // offer (await it so accept can't race the warm-up), so accepting
+            // keeps audio/video from the very start of the call. No-op /
+            // returns nil when disabled or permissions aren't already granted.
+            if AppSettings.prerollEnabled {
+                await RecordingController.shared.startPreroll(source: .fullDisplay, expectedOtherSpeakers: 1)
             }
-        )
+            MenuBarController.shared?.showInviteOffer(
+                appName: appName,
+                onAccept: { [weak self] in
+                    self?.pendingInviteFor = nil
+                    Task { @MainActor in
+                        // Promote the pre-roll if one is alive (keeps the
+                        // start); otherwise record fresh from now.
+                        let committed = await RecordingController.shared.commitPreroll()
+                        if !committed {
+                            await RecordingController.shared.startRecording(
+                                source: .fullDisplay,
+                                expectedOtherSpeakers: 1
+                            )
+                        }
+                    }
+                },
+                onDismiss: { [weak self] in
+                    self?.pendingInviteFor = nil
+                    // Declined → throw the silent pre-roll away (no-op if none).
+                    Task { @MainActor in await RecordingController.shared.discardPreroll() }
+                }
+            )
+        }
     }
 
     /// True iff some process has the default input device live. We don't

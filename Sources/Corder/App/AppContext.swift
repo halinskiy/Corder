@@ -110,6 +110,7 @@ enum AppSettings {
     private static let kAutoChapters   = "Corder.set.autoChapters"
     private static let kTelemetry      = "Corder.set.telemetry"
     private static let kStatsEnabled   = "Corder.set.statsEnabled"
+    private static let kPrerollEnabled = "Corder.set.prerollEnabled"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
@@ -160,6 +161,13 @@ enum AppSettings {
     static var statsEnabled: Bool {
         UserDefaults.standard.object(forKey: kStatsEnabled) as? Bool ?? false
     }
+    /// Silent pre-roll: start capturing the instant a call is detected so
+    /// that accepting the "record this call?" offer keeps the audio/video
+    /// from the very start. Default OFF — it records (and then discards on
+    /// decline) before the user consents, so it must be an explicit opt-in.
+    static var prerollEnabled: Bool {
+        UserDefaults.standard.object(forKey: kPrerollEnabled) as? Bool ?? false
+    }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
 
@@ -204,6 +212,9 @@ enum AppSettings {
     }
     static func setStatsEnabled(_ v: Bool) {
         UserDefaults.standard.set(v, forKey: kStatsEnabled)
+    }
+    static func setPrerollEnabled(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kPrerollEnabled)
     }
     static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
     static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }
@@ -624,6 +635,14 @@ enum RecordingState: Equatable {
     case idle
     case recording(meetingId: String, startedAt: Date)
     case stopping
+    /// Silent pre-roll: capture is alive (the meeting is being recorded
+    /// from the moment a call was detected) but nothing is shown — no HUD,
+    /// no menu-bar change, the row is hidden. If the user accepts the
+    /// "record this call?" offer it's promoted to `.recording` keeping the
+    /// captured-from-the-start audio/video; if they decline (or the call
+    /// ends first) it's discarded as if it never happened. Opt-in, gated by
+    /// `AppSettings.prerollEnabled` (default OFF).
+    case preroll(meetingId: String, startedAt: Date)
 }
 
 /// In-memory store for the last transcription error per meeting. Surfaces

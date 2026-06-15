@@ -21,6 +21,19 @@ final class RecordingController {
     /// Pass `nil` (the default, used by manual Start) to let Gemini
     /// pick the count.
     func startRecording(source: CaptureSource, expectedOtherSpeakers: Int? = nil) async {
+        // If a silent pre-roll is already capturing this call, PROMOTE it
+        // (keeps audio/video from the start) instead of opening a second
+        // capture — covers a "Start recording" from the menu/hotkey while
+        // the detector's offer (and its pre-roll) is up.
+        if case .preroll = AppContext.shared.recordingState {
+            await commitPreroll()
+            return
+        }
+        // Never open a second capture over a live recording / teardown.
+        guard AppContext.shared.recordingState == .idle else {
+            FileLogger.log("startRecording: ignored — state is not idle")
+            return
+        }
         // Permissions
         switch await PermissionsChecker.checkScreenRecording() {
         case .granted: break
@@ -96,6 +109,81 @@ final class RecordingController {
             try? AppContext.shared.repo.deleteMeeting(id: id)
             AppContext.shared.recordingState = .idle
         }
+    }
+
+    // MARK: - Silent pre-roll (opt-in)
+
+    /// Begin a SILENT pre-roll capture (no HUD, hidden row) the instant a
+    /// call is detected, so accepting the offer keeps audio/video from the
+    /// very start. Returns the pre-roll meeting id, or nil if it couldn't
+    /// start (permissions not already granted, disk low, or not idle) — the
+    /// caller then falls back to the normal record-on-accept flow. Never
+    /// prompts and never shows an error: pre-roll must be invisible.
+    @discardableResult
+    func startPreroll(source: CaptureSource, expectedOtherSpeakers: Int? = nil) async -> String? {
+        guard AppContext.shared.recordingState == .idle else { return nil }
+        // Silent → require permissions ALREADY granted (we can't prompt
+        // without UI). Screen Recording for SCStream; mic must not be denied.
+        guard case .granted = await PermissionsChecker.checkScreenRecording() else { return nil }
+        if PermissionsChecker.checkMicrophone() == .denied { return nil }
+        if let free = Self.freeDiskBytes(), free < 500 * 1024 * 1024 { return nil }
+
+        RecordingLevelMeter.shared.reset()
+        let id = UUID().uuidString.lowercased()
+        let dir = AppPaths.recordingDir(for: id)
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var meeting = Meeting(
+            id: id,
+            startedAt: now,
+            videoPath: dir.appendingPathComponent("video.mov").path,
+            audioPath: dir.appendingPathComponent("mic.wav").path,
+            status: .preroll
+        )
+        meeting.expectedOtherSpeakers = expectedOtherSpeakers
+        do {
+            try AppContext.shared.repo.insertMeeting(meeting)
+            try await AppContext.shared.capture.start(meetingId: id, source: source)
+            AppContext.shared.recordingState = .preroll(meetingId: id, startedAt: Date())
+            FileLogger.log("RecordingController: pre-roll started \(id)")
+            return id
+        } catch {
+            FileLogger.log("RecordingController: pre-roll start failed \(id): \(error)")
+            try? AppContext.shared.repo.deleteMeeting(id: id)
+            try? FileManager.default.removeItem(at: dir)
+            AppContext.shared.recordingState = .idle
+            return nil
+        }
+    }
+
+    /// Promote the active pre-roll into a real, visible recording (HUD +
+    /// sidebar row). Capture keeps running uninterrupted, so the result
+    /// spans from the moment the call was detected. Returns false if there
+    /// was no active pre-roll (caller falls back to `startRecording`).
+    @discardableResult
+    func commitPreroll() async -> Bool {
+        guard case .preroll(let id, let startedAt) = AppContext.shared.recordingState else { return false }
+        if var m = try? AppContext.shared.repo.meeting(id: id) {
+            m.status = .recording
+            try? AppContext.shared.repo.updateMeeting(m)
+        }
+        AppContext.shared.recordingState = .recording(meetingId: id, startedAt: startedAt)
+        RecordingHUDPanel.shared.show()
+        FileLogger.log("RecordingController: pre-roll committed \(id)")
+        return true
+    }
+
+    /// Throw away the active pre-roll (declined, or the call ended before
+    /// the user decided): stop capture, delete the hidden row + files, as if
+    /// it never happened.
+    func discardPreroll() async {
+        guard case .preroll(let id, _) = AppContext.shared.recordingState else { return }
+        AppContext.shared.recordingState = .stopping
+        await AppContext.shared.capture.stop()
+        try? AppContext.shared.repo.deleteMeeting(id: id)
+        try? FileManager.default.removeItem(at: AppPaths.recordingDir(for: id))
+        AppContext.shared.recordingState = .idle
+        RecordingLevelMeter.shared.reset()
+        FileLogger.log("RecordingController: pre-roll discarded \(id)")
     }
 
     func stopRecording() async {

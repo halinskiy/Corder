@@ -3,6 +3,10 @@ import GRDB
 
 enum MeetingStatus: String, Codable, DatabaseValueConvertible {
     case recording, transcribing, ready, failed
+    /// Silent pre-roll capture (see RecordingState.preroll). Hidden from
+    /// every list until promoted to `.recording` on accept; deleted on
+    /// decline. Opt-in via AppSettings.prerollEnabled.
+    case preroll
 }
 
 struct Meeting: Codable, FetchableRecord, PersistableRecord {
