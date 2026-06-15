@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.18] — 2026-06-15
+
+### Added
+- "Catch the start of calls" (Settings → Advanced, off by default): when a
+  call is detected, Corder can quietly buffer it from the start so
+  accepting the record offer keeps the beginning. Declining discards it.
+
+### Fixed
+- The menu-bar popover now reliably closes when you click outside it.
+
 ## [0.14.17] — 2026-06-15
 
 ### Fixed
