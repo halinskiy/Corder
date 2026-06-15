@@ -331,11 +331,15 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
         if (cancelled || !err) return;
         if (lastErrorShown.current === err) return;
         lastErrorShown.current = err;
-        onToast(err, "error");
+        // Show a SHORT message, never the raw provider error (it used to
+        // dump a wall of "http(403, no X-Goog-Upload-URL — {…}")". The
+        // details live in the log; the error toast carries a Send-a-report
+        // button (added by showToast) for when it keeps happening.
+        onToast(t.transcribe_failed_short ?? "Transcription failed.", "error");
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [detail?.id, detail?.status, onToast]);
+  }, [detail?.id, detail?.status, onToast, t]);
 
   if (error) return <div className="empty"><div className="empty-title">{t.error_label}</div><div>{error}</div></div>;
   if (!detail) {
