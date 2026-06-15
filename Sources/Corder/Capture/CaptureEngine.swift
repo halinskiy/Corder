@@ -378,6 +378,25 @@ final class CaptureEngine: NSObject {
             }
         }
         let inputNode = engine.inputNode
+        // Acoustic echo cancellation. Route the mic through macOS Voice
+        // Processing so the far end's voice coming OUT of the speakers is
+        // cancelled out of the mic — the same AEC Discord/Zoom run on their
+        // own mic streams. Without it, recording on speakers (no headphones)
+        // double-captures the remote (clean via the system tap + bleed via
+        // the mic), and the playback mix sums both → audible echo. Must be
+        // set BEFORE reading the node format / installing the tap. Best-
+        // effort: if Voice Processing can't enable (rare hardware / older
+        // device), fall back to the raw mic so a recording never fails over
+        // an enhancement.
+        do {
+            try inputNode.setVoiceProcessingEnabled(true)
+            FileLogger.log("CaptureEngine.start: mic Voice Processing (AEC) enabled")
+        } catch {
+            FileLogger.log("CaptureEngine.start: Voice Processing unavailable (\(error)) — raw mic, no AEC")
+        }
+        // Read the format AFTER enabling VP — the voice-processing unit can
+        // hand back a different sample rate / channel count than the bare
+        // device, and the tap + file must match the node's actual output.
         let inputFormat = inputNode.outputFormat(forBus: 0)
         FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) ch")
         // Mic init can throw (AVAudioFile open with a zero/invalid input
