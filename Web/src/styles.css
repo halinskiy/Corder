@@ -1950,6 +1950,15 @@ input[type="text"]:focus, input[type="search"]:focus {
   min-height: 0;
   overflow: hidden;
 }
+/* Dashboard with no right column (the Recent/"Longest" session list was
+   removed): the only time a right column exists is Settings. When it
+   doesn't, collapse both the tab strip and the body to a single full-
+   width column so the stats/start content fills the pane instead of
+   leaving a dead 380px gutter on the right. */
+.dashboard-detail.dashboard-solo .detail-tabs,
+.dashboard-detail.dashboard-solo .detail-body {
+  grid-template-columns: minmax(0, 1fr);
+}
 
 /* Drag strips. Invisible until hover; a short centred grip fades in so
    the affordance is discoverable without adding a permanent visual
