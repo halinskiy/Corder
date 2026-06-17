@@ -235,13 +235,20 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // kills the epsilon; "last started" also keeps the highlight stable
   // through the silent gaps between segments instead of vanishing.
   const activeSegmentId = React.useMemo(() => {
+    // Find the last segment whose start_ms <= playhead. Segments are
+    // monotonic by start_ms, so a binary search gives the identical
+    // result as the old linear scan in O(log n) — this recomputes on
+    // every playback tick (~tens of times/second), so the scan added up
+    // on long transcripts.
     const tms = Math.round(currentTimeSec * 1000);
-    let active: number | null = null;
-    for (const s of detail.segments) {
-      if (s.start_ms <= tms) active = s.id;
-      else break;            // segments are monotonic by start_ms
+    const segs = detail.segments;
+    let lo = 0, hi = segs.length - 1, idx = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (segs[mid].start_ms <= tms) { idx = mid; lo = mid + 1; }
+      else hi = mid - 1;
     }
-    return active;
+    return idx >= 0 ? segs[idx].id : null;
   }, [currentTimeSec, detail.segments]);
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);

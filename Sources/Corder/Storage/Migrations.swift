@@ -226,6 +226,13 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN transcribe_attempts INTEGER NOT NULL DEFAULT 0;")
         }
 
+        // Index speakers by meeting so the per-row speaker_names subquery
+        // in listMeetingSummaries (+ speaker merge/reassign) stops full-
+        // scanning the speakers table. Pure perf — no behaviour change.
+        m.registerMigration("v21_speakers_meeting_index") { db in
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_speakers_meeting ON speakers(meeting_id);")
+        }
+
         return m
     }
 }

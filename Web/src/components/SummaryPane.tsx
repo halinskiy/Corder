@@ -121,7 +121,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
           body={t.summary_locked_body ?? "Summaries are a Pro feature."}
           action={{
             label: t.pricing_upgrade ?? "Upgrade",
-            onClick: () => window.dispatchEvent(new CustomEvent("corder-open-pricing")),
+            onClick: () => (window as unknown as { corderOpenExternal?: (u: string) => void }).corderOpenExternal?.("https://getcorder.com/#pricing"),
             accent: true,
           }}
         />

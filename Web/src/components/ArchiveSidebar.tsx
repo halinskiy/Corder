@@ -1,5 +1,5 @@
 import React from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Search } from "lucide-react";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
 import { listArchive, restoreMeeting, deleteMeeting, ArchivedMeeting } from "../api";
@@ -26,6 +26,7 @@ interface MenuState { x: number; y: number; meetingId: string }
 /// click on the selection opens a Restore / Delete-forever menu.
 export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) {
   const [items, setItems] = React.useState<ArchivedMeeting[]>([]);
+  const [query, setQuery] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set());
   const [anchorId, setAnchorId] = React.useState<string | null>(null);
   const [menu, setMenu] = React.useState<MenuState | null>(null);
@@ -60,7 +61,16 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
     };
   }, [menu]);
 
-  const visibleOrder = React.useMemo(() => items.map((it) => it.id), [items]);
+  // Archive rows carry only a date + duration (no transcript preview),
+  // so search matches the formatted date string — the same field the
+  // row actually shows. Mirrors the Sidebar's search-as-you-type.
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((it) => formatDate(it.started_at, lang).toLowerCase().includes(q));
+  }, [items, query, lang]);
+
+  const visibleOrder = React.useMemo(() => filtered.map((it) => it.id), [filtered]);
 
   const handleSelect = (e: React.MouseEvent, id: string) => {
     if (e.shiftKey && anchorId && anchorId !== id) {
@@ -129,17 +139,26 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
   return (
     <aside className="sidebar arc-sidebar" ref={sidebarRef}>
       <div className="sidebar-titlebar-pad" />
-      {/* No "< Library" back button, no retention note — leaving
-          archive is the Archive icon in the main header (it acts
-          as a toggle now). Header just shows the section title. */}
-      <div className="arc-sb-head">
-        <div className="arc-sb-title">{t.archive_title}</div>
+      {/* Identical search header to the meeting Sidebar — no "Archive"
+          title, no "< Library" back button (leaving archive is the
+          Archive icon in the main header, which toggles). Just the
+          same search field so the two panels read as one surface. */}
+      <div className="sidebar-search">
+        <div className="search-field">
+          <Search size={14} strokeWidth={2} />
+          <input
+            type="search"
+            placeholder={t.sidebar_search}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </div>
       <div className="sidebar-list ovsb-scroll" ref={listRef}>
-        {items.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="arc-sb-empty">{t.archive_empty}</div>
         ) : (
-          items.map((it) => (
+          filtered.map((it) => (
             <div
               key={it.id}
               className={"meeting-item arc-item" + (selectedIds.has(it.id) ? " active" : "")}

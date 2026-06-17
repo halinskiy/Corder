@@ -626,13 +626,23 @@ final class TranscriptionPipeline {
                 let roomSize = meeting.expectedOtherSpeakers.map { $0 + 1 }
                 // Immutable copy — captured by the parallel `async let`s
                 // (a captured `var` is a Swift 6 concurrency error).
-                let geminiFallback = !haveRaw
+                // Gemini-diarize fallback is allowed ONLY on a fresh run AND
+                // a paid tier. On Free, Gemini 403s ("tier required") and
+                // hard-fails the whole meeting — even though local Whisper
+                // already produced perfectly good text with real timestamps.
+                // So Free never reaches for Gemini here; if on-device
+                // diarization yields nothing we keep the raw local turns.
+                let geminiFallback = !haveRaw && AppSettings.userTier != .free
+                // Fresh run with no Gemini fallback (Free): keep the raw ASR
+                // turns (their own WhisperKit timing is reliable) instead of
+                // dropping the track. Cache-hit re-derive keeps cached finals.
+                let keepRaw = !haveRaw
                 if systemSilent {
                     // In-person: every turn through the "other" bucket.
                     otherTurns = try await applyTiming(
                         rawTurns: rawOtherTurns, wavURL: micURL,
                         numSpeakers: roomSize, singlePass: true,
-                        allowGeminiFallback: geminiFallback, meetingId: meetingId)
+                        allowGeminiFallback: geminiFallback, keepRawIfNoDiar: keepRaw, meetingId: meetingId)
                     if otherTurns.isEmpty { otherTurns = cachedFinalOther }
                     userTurns = []
                 } else {
@@ -645,11 +655,11 @@ final class TranscriptionPipeline {
                     async let uT = applyTiming(
                         rawTurns: rawU, wavURL: micURL,
                         numSpeakers: 1, singlePass: false,
-                        allowGeminiFallback: geminiFallback, meetingId: meetingId)
+                        allowGeminiFallback: geminiFallback, keepRawIfNoDiar: keepRaw, meetingId: meetingId)
                     async let oT = applyTiming(
                         rawTurns: rawO, wavURL: systemURL,
                         numSpeakers: expectedOther, singlePass: false,
-                        allowGeminiFallback: geminiFallback, meetingId: meetingId)
+                        allowGeminiFallback: geminiFallback, keepRawIfNoDiar: keepRaw, meetingId: meetingId)
                     var (u, o) = try await (uT, oT)
                     if u.isEmpty { u = cachedFinalUser }
                     if o.isEmpty { o = cachedFinalOther }
@@ -1573,6 +1583,7 @@ final class TranscriptionPipeline {
                              numSpeakers: Int?,
                              singlePass: Bool,
                              allowGeminiFallback: Bool,
+                             keepRawIfNoDiar: Bool = false,
                              meetingId: String) async throws -> [GeminiTranscriber.Turn] {
         guard !rawTurns.isEmpty else { return [] }
 
@@ -1585,19 +1596,29 @@ final class TranscriptionPipeline {
         }
 
         if diarSegs.isEmpty {
-            guard allowGeminiFallback else {
-                FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — no on-device diarization, offline re-derive → caller keeps cached finals")
-                return []
+            if allowGeminiFallback {
+                do {
+                    return try await GeminiTranscriber.transcribe(
+                        audioURL: wavURL, mode: .diarize,
+                        singlePass: singlePass, expectedSpeakers: numSpeakers)
+                } catch let err as GeminiTranscriber.GError {
+                    TranscriptionErrors.record(meetingId: meetingId,
+                                               message: err.localizedDescription)
+                    throw err
+                }
             }
-            do {
-                return try await GeminiTranscriber.transcribe(
-                    audioURL: wavURL, mode: .diarize,
-                    singlePass: singlePass, expectedSpeakers: numSpeakers)
-            } catch let err as GeminiTranscriber.GError {
-                TranscriptionErrors.record(meetingId: meetingId,
-                                           message: err.localizedDescription)
-                throw err
+            // No Gemini fallback (Free, or offline). On a FRESH run keep the
+            // raw ASR turns as-is — local Whisper's own timestamps are
+            // reliable, so the transcript is still good (just not re-diarized
+            // into multiple remote speakers). Far better than dropping the
+            // track or 403-failing the whole meeting. A cache-hit re-derive
+            // returns [] so the caller keeps its previously-derived finals.
+            if keepRawIfNoDiar {
+                FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — no on-device diarization, keeping \(rawTurns.count) raw ASR turns with their own timing")
+                return rawTurns
             }
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — no on-device diarization, offline re-derive → caller keeps cached finals")
+            return []
         }
 
         // Forced-alignment when on-device ASR is available; fall back to

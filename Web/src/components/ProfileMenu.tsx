@@ -5,6 +5,9 @@ import { getSettings, signOut, triggerUpdateCheck, openWelcome } from "../api";
 
 const AVATAR_COUNT = 9;
 const AVATAR_STORAGE_KEY = "corder.avatarVariant";
+/// Broadcast across the two header instances (Dashboard + MeetingView)
+/// when the user shuffles their avatar, so both stay in sync.
+const AVATAR_EVENT = "corder-avatar-changed";
 
 /// Returns one of the 9 abstract glyph indices, persisted across
 /// launches. Falls back to a deterministic hash of `seed` if the
@@ -170,6 +173,16 @@ export function ProfileMenu({
 }) {
   const [open, setOpen] = React.useState(false);
   const [variant, setVariant] = React.useState(() => readStoredVariant(t.profile_name));
+  // Listen for an avatar change made by the OTHER header instance and
+  // mirror it, so the glyph is identical on every surface.
+  React.useEffect(() => {
+    const onAvatar = (e: Event) => {
+      const next = (e as CustomEvent).detail;
+      if (typeof next === "number" && next >= 0 && next < AVATAR_COUNT) setVariant(next);
+    };
+    window.addEventListener(AVATAR_EVENT, onAvatar);
+    return () => window.removeEventListener(AVATAR_EVENT, onAvatar);
+  }, []);
   const [userName, setUserName] = React.useState<string | null>(null);
   const [userEmail, setUserEmail] = React.useState<string | null>(null);
   // null = not editing; string = in-progress edit value. Same pattern
@@ -274,6 +287,12 @@ export function ProfileMenu({
     if (next === variant) next = (next + 1) % AVATAR_COUNT;
     setVariant(next);
     try { localStorage.setItem(AVATAR_STORAGE_KEY, String(next)); } catch {}
+    // The header is rendered on TWO surfaces (Dashboard + MeetingView),
+    // so there are two ProfileMenu instances each holding its own
+    // `variant` state. Broadcast the change so the OTHER instance updates
+    // too — otherwise the avatar looked different per page (the choice
+    // only stuck on the surface where it was made).
+    try { window.dispatchEvent(new CustomEvent(AVATAR_EVENT, { detail: next })); } catch {}
   };
 
   const goDashboard = () => { onOpenDashboard(); setOpen(false); };

@@ -113,7 +113,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
           body={t.chapters_locked_body ?? "Chapters are a Pro feature."}
           action={{
             label: t.pricing_upgrade ?? "Upgrade",
-            onClick: () => window.dispatchEvent(new CustomEvent("corder-open-pricing")),
+            onClick: () => (window as unknown as { corderOpenExternal?: (u: string) => void }).corderOpenExternal?.("https://getcorder.com/#pricing"),
             accent: true,
           }}
         />
