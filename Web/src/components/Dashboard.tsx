@@ -111,10 +111,17 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
   // (the live library subset).
-  const total = statsMeetings.length;
-  const totalMs = statsMeetings.reduce((s, m) => s + (m.duration_ms ?? 0), 0);
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const thisWeek = statsMeetings.filter((m) => m.started_at >= weekAgo).length;
+  // Memoised so the two passes over `statsMeetings` (sum + week filter)
+  // only re-run when the list actually changes, not on every Dashboard
+  // re-render (sort change, settings toggle, resize drag, etc.).
+  const { total, totalMs, thisWeek } = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return {
+      total: statsMeetings.length,
+      totalMs: statsMeetings.reduce((s, m) => s + (m.duration_ms ?? 0), 0),
+      thisWeek: statsMeetings.filter((m) => m.started_at >= weekAgo).length,
+    };
+  }, [statsMeetings]);
 
   // `formatDuration` tops out at "Nm SSs" — fine for one session, not
   // for a totals tile where N can be 100s of minutes. Render hours
@@ -264,11 +271,10 @@ export function Dashboard({ meetings, statsMeetings, onPick, onStart, isRecordin
             role="button"
             onClick={() => setLeftTab("stats")}
           >{t.dashboard_tab_stats}</span>
-          <span
-            className={"tab" + (leftTab === "upcoming" ? " active" : "")}
-            role="button"
-            onClick={() => setLeftTab("upcoming")}
-          >{t.dashboard_tab_upcoming ?? "Upcoming"}</span>
+          {/* Upcoming/Calendar tab hidden until Google verifies the
+              calendar.readonly scope (consent currently shows the
+              "unverified app" screen). Re-enable by restoring this
+              span once verification clears. */}
         </div>
         <div className="detail-tab-col detail-tab-col-right">
           {!inSettings ? (

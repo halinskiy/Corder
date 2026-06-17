@@ -108,17 +108,25 @@ private final class HeaderDragView: NSView {
     /// even though AppKit swallowed the original mousedown.
     private func forwardClick(at windowPoint: NSPoint) {
         guard let wv = webView else { return }
+        // WKWebView reports `isFlipped == true`, so `convert(_:from: nil)`
+        // already yields CSS coordinates (top-left origin, Y grows down) —
+        // the SAME convention `headerHits` uses to build `interactiveRects`.
+        // The old code then did `bounds.height - y`, an extra flip that sent
+        // a header click to the bottom of the page (landing on a sidebar
+        // meeting row → "jumps to a random session"). No manual flip now.
         let viewPoint = wv.convert(windowPoint, from: nil)
-        // WKWebView's coordinate system flips with the NSView convention:
-        // AppKit Y grows upward from the bottom-left, CSS Y grows downward
-        // from the top-left.
         let cssX = viewPoint.x
-        let cssY = wv.bounds.height - viewPoint.y
+        let cssY = viewPoint.y
+        // Defensive guard: only forward the synthesised click when the
+        // target actually lives inside `.main-header`. The drag overlay only
+        // ever covers the header, so a click that resolves to anything below
+        // it (sidebar row, transcript) is a coordinate-mapping miss and must
+        // NOT fire — otherwise an empty-header click could navigate sessions.
         let js = """
         (function() {
           var x = \(cssX), y = \(cssY);
           var el = document.elementFromPoint(x, y);
-          if (!el) return;
+          if (!el || !el.closest('.main-header')) return;
           var opts = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 };
           el.dispatchEvent(new MouseEvent('mousedown', opts));
           el.dispatchEvent(new MouseEvent('mouseup', opts));

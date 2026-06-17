@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.20] — 2026-06-18
+
+### Added
+- Search in the Archive, with the same header as your recordings list.
+
+### Changed
+- Upgrade prompts now open the pricing page on the website.
+- The calendar connection is hidden for now while it's being polished.
+
+### Fixed
+- Your avatar now stays the same on every screen.
+- Clicking the empty space in the header no longer jumps to a random recording.
+- Free accounts transcribe reliably again.
+- Faster transcript highlighting during playback and a quicker recordings list.
+
 ## [0.14.18] — 2026-06-15
 
 ### Added

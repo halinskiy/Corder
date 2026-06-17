@@ -248,10 +248,11 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
       }
       return;
     }
-    // "speed" and "unlimited" open the in-app pricing modal (same shell
-    // as the update modal). Its "Upgrade" buttons route to the purchase
-    // page; "Details" flips each plan's feature panel.
-    window.dispatchEvent(new CustomEvent("corder-open-pricing"));
+    // Pricing modal hidden for now — upgrade upsells route straight to
+    // the pricing section on getcorder.com (in-app modal disabled until
+    // the purchase flow is finalised). Re-enable the in-app modal by
+    // dispatching `corder-open-pricing` again.
+    (window as unknown as { corderOpenExternal?: (u: string) => void }).corderOpenExternal?.("https://getcorder.com/#pricing");
   };
 
   // English fallbacks live next to the consumer because i18n.ts marks
