@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.21] — 2026-06-18
+
+### Changed
+- Dashboard is cleaner: the session ranking panel was removed. Your recordings live in the sidebar.
+
 ## [0.14.20] — 2026-06-18
 
 ### Added

@@ -565,9 +565,7 @@ function App() {
                   />
                   <Dashboard
                     onToast={showToast}
-                    meetings={visibleMeetings}
                     statsMeetings={statsMeetings}
-                    onPick={pickMeeting}
                     onStart={async () => {
                       try { await startRecordingNow(); } catch { showToast(t.toast_settings_failed, "error"); }
                     }}
