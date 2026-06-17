@@ -23,6 +23,16 @@ interface Props {
 // surface once ANY instance has resolved the status at least once.
 let cachedStatus: { available: boolean; version?: string } = { available: false };
 
+// The header renders on more than one surface at once (the MeetingView
+// header stays mounted while the Dashboard is showing, etc.), so there
+// can be several UpdatePill instances live at the same time. Each polls
+// independently every 60 s — without a broadcast, the instance that
+// resolved `available` first shows the pill while the others stay blank
+// until their own next poll (the "pill only on Dashboard" report). When
+// any instance learns a new status it dispatches this event so EVERY
+// instance flips in lockstep, identical on every surface.
+const UPDATE_STATUS_EVENT = "corder-update-status";
+
 export function UpdatePill({ t, onToast }: Props) {
   const [available, setAvailable] = React.useState(cachedStatus.available);
   const [version, setVersion] = React.useState<string | undefined>(cachedStatus.version);
@@ -75,20 +85,34 @@ export function UpdatePill({ t, onToast }: Props) {
     const tick = async () => {
       try {
         const s = await getUpdateStatus();
+        const changed = s.available !== cachedStatus.available || s.version !== cachedStatus.version;
         cachedStatus = { available: s.available, version: s.version };
         if (!alive) return;
         setAvailable(s.available);
         setVersion(s.version);
+        // Tell every other pill instance so the header is identical on
+        // all surfaces the instant ANY instance resolves the status.
+        if (changed) {
+          try { window.dispatchEvent(new CustomEvent(UPDATE_STATUS_EVENT, { detail: cachedStatus })); } catch {}
+        }
       } catch {}
     };
     tick();
     const id = window.setInterval(tick, 60_000);
     const onFocus = () => { tick(); };
+    const onPeerStatus = (e: Event) => {
+      const s = (e as CustomEvent).detail as { available: boolean; version?: string } | undefined;
+      if (!s || !alive) return;
+      setAvailable(s.available);
+      setVersion(s.version);
+    };
     window.addEventListener("focus", onFocus);
+    window.addEventListener(UPDATE_STATUS_EVENT, onPeerStatus);
     return () => {
       alive = false;
       window.clearInterval(id);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener(UPDATE_STATUS_EVENT, onPeerStatus);
     };
   }, []);
 

@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.22] — 2026-06-18
+
+### Fixed
+- The "Update available" pill now shows on every screen at once, not just the Dashboard.
+
 ## [0.14.21] — 2026-06-18
 
 ### Changed
