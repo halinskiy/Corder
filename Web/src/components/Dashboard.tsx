@@ -8,7 +8,6 @@ import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
 import { UpcomingPane } from "./UpcomingPane";
-// import { UsageBars } from "./UsageBars"; // hidden for now
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
 /// Same filled-bust glyph the sidebar uses next to each meeting's
@@ -330,11 +329,6 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
                     <div className="dash-stat-value">{thisWeek}</div>
                   </div>
                 </div>
-
-                {/* Usage block hidden for now — re-enable when paid
-                    plans are live and the per-tier limits are real
-                    again (we just rolled the 60-min test cap out). */}
-                {/* <UsageBars t={t} reloadSignal={total} /> */}
               </>
             )}
             </>

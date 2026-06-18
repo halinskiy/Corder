@@ -10,7 +10,6 @@ import { MeetingView } from "./components/MeetingView";
 import { ArchiveSidebar } from "./components/ArchiveSidebar";
 import { Dashboard } from "./components/Dashboard";
 import { UpdateModalHost } from "./components/UpdateModal";
-import { PricingModalHost } from "./components/PricingModal";
 import { MainHeader } from "./components/MainHeader";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { Lang, T, pickStrings, LANGS } from "./i18n";
@@ -645,9 +644,6 @@ function App() {
           `position: fixed; inset: 0` overlay covers the whole Library,
           not a fragment-sized child window. */}
       <UpdateModalHost />
-      {/* Upgrade / pricing modal — same overlay shell as the update
-          modal; opened by the "Upgrade" upsell CTA via a window event. */}
-      <PricingModalHost t={t} />
     </div>
   );
 }
