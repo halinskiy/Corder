@@ -193,6 +193,9 @@ interface Strings {
   settings_ext_badge_soon: string;
   settings_ext_cta: string;
   transcript_search: string;
+  search_prev_match: string;
+  search_next_match: string;
+  settings_video_perf_toast: string;
   transcript_empty_failed: string;
   transcript_empty_recording: string;
   transcript_no_match: (q: string) => string;
@@ -627,6 +630,9 @@ const ru: Strings = {
   settings_ext_badge_soon: "Скоро",
   settings_ext_cta: "Скоро будет доступно",
   transcript_search: "Поиск по транскрипту…",
+  search_prev_match: "Предыдущее совпадение",
+  search_next_match: "Следующее совпадение",
+  settings_video_perf_toast: "Может влиять на производительность",
   transcript_empty_failed: "Расшифровка не получилась.",
   transcript_empty_recording: "Идёт запись…",
   transcript_no_match: (q) => `Нет совпадений по «${q}».`,
@@ -994,6 +1000,9 @@ const en: Strings = {
   settings_ext_badge_soon: "Soon",
   settings_ext_cta: "Available soon",
   transcript_search: "Search the transcript…",
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   transcript_empty_failed: "Transcription failed.",
   transcript_empty_recording: "Recording…",
   transcript_no_match: (q) => `No matches for “${q}”.`,
@@ -1346,6 +1355,9 @@ const uk: Strings = {
   settings_ext_badge_soon: "Скоро",
   settings_ext_cta: "Скоро буде доступно",
   transcript_search: "Пошук у транскрипті…",
+  search_prev_match: "Попередній збіг",
+  search_next_match: "Наступний збіг",
+  settings_video_perf_toast: "Може впливати на продуктивність",
   transcript_empty_failed: "Розшифровка не вдалася.",
   transcript_empty_recording: "Триває запис…",
   transcript_no_match: (q) => `Нічого не знайдено за «${q}».`,
@@ -1556,6 +1568,9 @@ const uk: Strings = {
 // German — "du" register (Apple-style informal for consumer apps).
 // ─────────────────────────────────────────────────────────────
 const de: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Aufnahmen",
   breadcrumb_dashboard: "Dashboard",
   sidebar_search: "Aufnahmen suchen…",
@@ -1753,6 +1768,9 @@ const de: Strings = {
 // French — "tu" register, consumer-app neutral.
 // ─────────────────────────────────────────────────────────────
 const fr: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Enregistrements",
   breadcrumb_dashboard: "Tableau de bord",
   sidebar_search: "Rechercher des enregistrements…",
@@ -1954,6 +1972,9 @@ const fr: Strings = {
 // Spanish — "tú" register, neutral LatAm/ES compatible.
 // ─────────────────────────────────────────────────────────────
 const es: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Grabaciones",
   breadcrumb_dashboard: "Panel",
   sidebar_search: "Buscar grabaciones…",
@@ -2151,6 +2172,9 @@ const es: Strings = {
 // Portuguese — Brazilian/global neutral, "você" register.
 // ─────────────────────────────────────────────────────────────
 const pt: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Gravações",
   breadcrumb_dashboard: "Painel",
   sidebar_search: "Buscar gravações…",
@@ -2348,6 +2372,9 @@ const pt: Strings = {
 // Italian — "tu" register.
 // ─────────────────────────────────────────────────────────────
 const it: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Registrazioni",
   breadcrumb_dashboard: "Dashboard",
   sidebar_search: "Cerca registrazioni…",
@@ -2551,6 +2578,9 @@ function pluralPl(n: number, one: string, few: string, many: string): string {
   return many;
 }
 const pl: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Nagrania",
   breadcrumb_dashboard: "Pulpit",
   sidebar_search: "Szukaj nagrań…",
@@ -2753,6 +2783,9 @@ function pluralCs(n: number, one: string, few: string, many: string): string {
   return many;
 }
 const cs: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Nahrávky",
   breadcrumb_dashboard: "Dashboard",
   sidebar_search: "Hledat nahrávky…",
@@ -2950,6 +2983,9 @@ const cs: Strings = {
 // Turkish — "sen" register; no plural complexity (single form).
 // ─────────────────────────────────────────────────────────────
 const tr: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Kayıtlar",
   breadcrumb_dashboard: "Pano",
   sidebar_search: "Kayıtları ara…",
@@ -3147,6 +3183,9 @@ const tr: Strings = {
 // Dutch — "je" register.
 // ─────────────────────────────────────────────────────────────
 const nl: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Opnames",
   breadcrumb_dashboard: "Dashboard",
   sidebar_search: "Opnames zoeken…",
@@ -3344,6 +3383,9 @@ const nl: Strings = {
 // Swedish — "du" register (Swedish default in IT/consumer apps).
 // ─────────────────────────────────────────────────────────────
 const sv: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Inspelningar",
   breadcrumb_dashboard: "Dashboard",
   sidebar_search: "Sök inspelningar…",
@@ -3541,6 +3583,9 @@ const sv: Strings = {
 // Indonesian — neutral "kamu" register; single noun form.
 // ─────────────────────────────────────────────────────────────
 const id_: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Rekaman",
   breadcrumb_dashboard: "Dasbor",
   sidebar_search: "Cari rekaman…",
@@ -3738,6 +3783,9 @@ const id_: Strings = {
 // Vietnamese — neutral "bạn" register.
 // ─────────────────────────────────────────────────────────────
 const vi: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "Bản ghi",
   breadcrumb_dashboard: "Trang chính",
   sidebar_search: "Tìm bản ghi…",
@@ -3935,6 +3983,9 @@ const vi: Strings = {
 // Japanese — polite ですます register, professional but friendly.
 // ─────────────────────────────────────────────────────────────
 const ja: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "録音",
   breadcrumb_dashboard: "ダッシュボード",
   sidebar_search: "録音を検索…",
@@ -4132,6 +4183,9 @@ const ja: Strings = {
 // Korean — 해요체 register, friendly polite.
 // ─────────────────────────────────────────────────────────────
 const ko: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "녹음",
   breadcrumb_dashboard: "대시보드",
   sidebar_search: "녹음 검색…",
@@ -4329,6 +4383,9 @@ const ko: Strings = {
 // Chinese (Simplified) — neutral 你 register, professional.
 // ─────────────────────────────────────────────────────────────
 const zh: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "录音",
   breadcrumb_dashboard: "面板",
   sidebar_search: "搜索录音…",
@@ -4526,6 +4583,9 @@ const zh: Strings = {
 // Hindi — formal आप register for product UI.
 // ─────────────────────────────────────────────────────────────
 const hi: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "रिकॉर्डिंग",
   breadcrumb_dashboard: "डैशबोर्ड",
   sidebar_search: "रिकॉर्डिंग खोजें…",
@@ -4729,6 +4789,9 @@ const hi: Strings = {
 // Renderer handles RTL via dir="rtl" on <html>.
 // ─────────────────────────────────────────────────────────────
 const ar: Strings = {
+  search_prev_match: "Previous match",
+  search_next_match: "Next match",
+  settings_video_perf_toast: "May affect performance",
   breadcrumb_records: "التسجيلات",
   breadcrumb_dashboard: "لوحة المعلومات",
   sidebar_search: "ابحث في التسجيلات…",

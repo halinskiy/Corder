@@ -1,5 +1,5 @@
 import React from "react";
-import { Copy, Users, Search } from "lucide-react";
+import { Copy, Users, Search, ChevronUp, ChevronDown } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { Tooltip } from "./Tooltip";
 import { MainHeader } from "./MainHeader";
@@ -135,6 +135,24 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
+  // cmd+F-style search: match segment ids (in document order) + a current
+  // index. The transcript isn't filtered; we scroll to the active match and
+  // step through with the arrows / Enter.
+  const [matchIdx, setMatchIdx] = React.useState(0);
+  const matchIds = React.useMemo(() => {
+    const qq = search.trim().toLowerCase();
+    if (!qq || !detail) return [] as number[];
+    return detail.segments
+      .filter((s) => s.text.toLowerCase().includes(qq))
+      .map((s) => s.id);
+  }, [search, detail]);
+  React.useEffect(() => { setMatchIdx(0); }, [search]);
+  const matchCount = matchIds.length;
+  const activeMatchId = matchCount ? matchIds[Math.min(matchIdx, matchCount - 1)] : null;
+  const stepMatch = (dir: 1 | -1) => {
+    if (!matchCount) return;
+    setMatchIdx((i) => (i + dir + matchCount) % matchCount);
+  };
   // Local rightTab is now derived from the lifted `settingsSection`
   // (Settings open survives navigation). "recording" is the default
   // when no settings slice is active.
@@ -530,7 +548,35 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                   placeholder={t.transcript_search}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); stepMatch(e.shiftKey ? -1 : 1); }
+                  }}
                 />
+                {search.trim() && (
+                  <div className="search-nav">
+                    <span className="search-count">
+                      {matchCount ? `${Math.min(matchIdx, matchCount - 1) + 1}/${matchCount}` : "0/0"}
+                    </span>
+                    <button
+                      type="button"
+                      className="search-nav-btn"
+                      onClick={() => stepMatch(-1)}
+                      disabled={!matchCount}
+                      aria-label={t.search_prev_match ?? "Previous match"}
+                    >
+                      <ChevronUp size={14} strokeWidth={2.5} />
+                    </button>
+                    <button
+                      type="button"
+                      className="search-nav-btn"
+                      onClick={() => stepMatch(1)}
+                      disabled={!matchCount}
+                      aria-label={t.search_next_match ?? "Next match"}
+                    >
+                      <ChevronDown size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                )}
               </div>
               <span className="toolbar-sep" />
               {detail.status === "ready" && detail.segments.length > 0 && (
@@ -561,6 +607,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               onSeek={onSeek}
               onSpeakersUpdated={load}
               query={search}
+              activeMatchId={activeMatchId}
               boostOn={false}
               recordingState={recordingState}
               onRecordingStopped={onRecordingStopped}
