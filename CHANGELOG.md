@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.26] — 2026-06-19
+
+### Changed
+- Reverted the hover-only scrollbars (they flickered) back to always visible, and restored resizing the Settings panel width.
+
 ## [0.14.25] — 2026-06-19
 
 ### Fixed
