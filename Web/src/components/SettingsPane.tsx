@@ -985,8 +985,7 @@ function ThemeToggleRow({ t }: { t: T }) {
   const desc = isDark
     ? (t.settings_theme_desc_dark ?? "Currently dark.")
     : (t.settings_theme_desc_light ?? "Currently light.");
-  const options: SettingsSelectOption<"system" | "light" | "dark">[] = [
-    { value: "system", label: t.settings_theme_opt_system ?? "Follow system" },
+  const options: SettingsSelectOption<"light" | "dark">[] = [
     { value: "light",  label: t.settings_theme_opt_light  ?? "Light" },
     { value: "dark",   label: t.settings_theme_opt_dark   ?? "Dark" },
   ];
@@ -994,7 +993,7 @@ function ThemeToggleRow({ t }: { t: T }) {
     <div className="hk-block mic-block" aria-label={label} ref={triggerRef}>
       <div className="settings-row-label">{label}</div>
       <div className="settings-row-desc">{desc}</div>
-      <SettingsSelect<"system" | "light" | "dark">
+      <SettingsSelect<"light" | "dark">
         value={mode}
         options={options}
         onChange={(next) => {

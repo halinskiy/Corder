@@ -11,23 +11,21 @@ import { flushSync } from "react-dom";
 /// survive a restart. The choice still persists for the whole
 /// session; a cross-launch store would need a native bridge.
 const KEY = "corder.theme";
-export type ThemeMode = "system" | "light" | "dark";
+// "Follow system" was removed — everyone defaults to light, and only an
+// explicit "dark" choice opts into dark. A stale stored "system" value
+// falls through to the light default below.
+export type ThemeMode = "light" | "dark";
 
 function storedMode(): ThemeMode {
   try {
     const v = localStorage.getItem(KEY);
-    if (v === "dark" || v === "light" || v === "system") return v;
+    if (v === "dark" || v === "light") return v;
   } catch {}
-  return "system";
-}
-
-function systemPrefersDark(): boolean {
-  try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
-  catch { return false; }
+  return "light";
 }
 
 function resolveDark(mode: ThemeMode): boolean {
-  return mode === "dark" || (mode === "system" && systemPrefersDark());
+  return mode === "dark";
 }
 
 function stored(): "light" | "dark" {
@@ -67,16 +65,6 @@ export function useTheme() {
   React.useEffect(() => {
     apply(isDark);
   }, [isDark]);
-
-  // Re-resolve when the OS theme changes while we're on "system".
-  React.useEffect(() => {
-    if (mode !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const sync = () => setIsDark(mq.matches);
-    sync();
-    mq.addEventListener?.("change", sync);
-    return () => mq.removeEventListener?.("change", sync);
-  }, [mode]);
 
   /// Apply a new mode with the cursor-origin radial reveal. `origin`
   /// is the click point in viewport coords — pass the event from a

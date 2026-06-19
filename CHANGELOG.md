@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.24] — 2026-06-19
+
+### Changed
+- Theme is now just Light or Dark (the "Follow system" option was removed). New installs default to Light.
+
 ## [0.14.23] — 2026-06-19
 
 ### Changed
