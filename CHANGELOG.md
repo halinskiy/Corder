@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.27] — 2026-06-19
+
+### Fixed
+- Dashboard: no empty right column or divider anymore, and opening Settings slides its panel in without shifting the content. The Settings panel width is still resizable.
+
 ## [0.14.26] — 2026-06-19
 
 ### Changed

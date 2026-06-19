@@ -202,17 +202,41 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
   // Settings opens.
   const [leftTab, setLeftTab] = useState<"stats" | "upcoming">("stats");
 
+  // Dashboard content column is a FIXED width (its OWN var, NOT the shared
+  // MeetingView --right-w). Same width with Settings open or closed, so the
+  // content never moves when you open Settings — no jump. When Settings is
+  // open the panel fills the space to its right and the splitter drags THIS
+  // width (content vs Settings). When closed there's a single column and no
+  // divider, so no empty right column. The old --right-w splitter props are
+  // unused now.
+  void onResizeSplit; void onResetSplit;
+  const DASH_W_KEY = "corder.dashContentW";
+  const [dashW, setDashW] = useState<number>(() => {
+    try {
+      const v = parseInt(localStorage.getItem(DASH_W_KEY) ?? "", 10);
+      if (Number.isFinite(v) && v >= 420 && v <= 900) return v;
+    } catch {}
+    return 640;
+  });
+  useEffect(() => {
+    try { localStorage.setItem(DASH_W_KEY, String(dashW)); } catch {}
+  }, [dashW]);
+
   return (
-    <div className="detail dashboard-detail">
-      {/* Grid stays two-column ALWAYS so the left column never reflows
-          when Settings opens/closes — that reflow was the "divider jumps,
-          layout only looks right in Settings" bug. The Recent/"Longest"
-          session list was removed, so on the plain Dashboard the right
-          cell is just empty; Settings fills it. The splitter renders only
-          in Settings (no divider next to an empty cell), and because the
-          column boundary is fixed it fades in at the same spot, no jump. */}
+    <div
+      className={"detail dashboard-detail" + (inSettings ? "" : " dashboard-solo")}
+      style={{ ["--dash-w" as string]: `${dashW}px` } as React.CSSProperties}
+    >
+      {/* Splitter only in Settings (nothing to resize on the plain
+          dashboard). It drags the FIXED content width (--dash-w), so the
+          content keeps the same width whether Settings is open or not — the
+          divider sits at the content's right edge and never jumps. */}
       {inSettings && (
-        <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
+        <ResizeHandle
+          className="resizer-dash"
+          onDrag={(dx) => setDashW((w) => Math.max(420, Math.min(900, w + dx)))}
+          onReset={() => setDashW(640)}
+        />
       )}
       <div className="detail-tabs">
         <div className="detail-tab-col detail-tab-col-left">
