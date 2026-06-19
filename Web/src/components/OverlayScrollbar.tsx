@@ -43,21 +43,7 @@ export function OverlayScrollbar({
   }>({ visible: false, left: 0, top: 0, height: 0 });
   const drag = React.useRef<{ startY: number; startScroll: number } | null>(null);
   const [active, setActive] = React.useState(false);
-  // Hover/scroll reveal: the thumb is hidden at rest and only shows while
-  // the pointer is over the pane or the user is actively scrolling (then it
-  // fades out), like a native macOS overlay scrollbar. It used to be
-  // always-on, which read as a permanent heavy bar in the sidebar.
-  const [show, setShow] = React.useState(false);
-  const hideTimer = React.useRef<number | null>(null);
   const raf = React.useRef<number | null>(null);
-
-  const reveal = React.useCallback(() => {
-    setShow(true);
-    if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => {
-      if (!drag.current) setShow(false);
-    }, 1200);
-  }, []);
 
   const THUMB_W = 7;
   const MIN_THUMB = 40;
@@ -100,19 +86,7 @@ export function OverlayScrollbar({
     const el = scrollRef.current;
     if (!el) return;
     measure();
-    const onScroll = () => { schedule(); reveal(); };
-    const onEnter = () => {
-      if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
-      setShow(true);
-    };
-    const onLeave = () => {
-      if (drag.current) return;
-      if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
-      hideTimer.current = window.setTimeout(() => { if (!drag.current) setShow(false); }, 400);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("mouseenter", onEnter);
-    el.addEventListener("mouseleave", onLeave);
+    el.addEventListener("scroll", schedule, { passive: true });
     const ro = new ResizeObserver(schedule);
     ro.observe(el);
     // Content height can change without a resize (list filter, transcript
@@ -121,16 +95,13 @@ export function OverlayScrollbar({
     mo.observe(el, { childList: true, subtree: true, characterData: true });
     window.addEventListener("resize", schedule);
     return () => {
-      el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("mouseenter", onEnter);
-      el.removeEventListener("mouseleave", onLeave);
+      el.removeEventListener("scroll", schedule);
       ro.disconnect();
       mo.disconnect();
       window.removeEventListener("resize", schedule);
       if (raf.current != null) cancelAnimationFrame(raf.current);
-      if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
     };
-  }, [scrollRef, measure, schedule, reveal]);
+  }, [scrollRef, measure, schedule]);
 
   React.useEffect(() => {
     if (!drag.current) return;
@@ -163,9 +134,7 @@ export function OverlayScrollbar({
     };
   }, [active, scrollRef]);
 
-  // Hidden at rest; only painted while hovering the pane, scrolling, or
-  // dragging the thumb.
-  if (!box.visible || (!show && !active)) return null;
+  if (!box.visible) return null;
   return (
     <div
       className={"ovsb-thumb" + (active ? " dragging" : "")}
