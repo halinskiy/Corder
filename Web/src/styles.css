@@ -1951,6 +1951,34 @@ input[type="text"]:focus, input[type="search"]:focus {
   overflow: hidden;
 }
 
+/* Dashboard (session list removed). The content column is a FIXED width
+   (--dash-w) in BOTH layouts, so opening Settings never moves it — no jump.
+   Plain dashboard = one column, no second column, no divider (no empty
+   right column). Settings = content + panel filling the rest, with a
+   splitter at the content's right edge that drags --dash-w. */
+.dashboard-detail.dashboard-solo .detail-tabs,
+.dashboard-detail.dashboard-solo .detail-body {
+  grid-template-columns: var(--dash-w, 640px);
+}
+.dashboard-detail:not(.dashboard-solo) .detail-tabs,
+.dashboard-detail:not(.dashboard-solo) .detail-body {
+  grid-template-columns: var(--dash-w, 640px) minmax(0, 1fr);
+}
+/* No divider-to-nowhere on the plain dashboard: flatten the 1px right-edge
+   seam the tab/body left columns paint. It returns in Settings to separate
+   the content from the panel. */
+.dashboard-detail.dashboard-solo .detail-tab-col-left,
+.dashboard-detail.dashboard-solo .dashboard-left {
+  background: var(--bg);
+}
+/* Empty right tab cell must not spawn an implicit grid track on the plain
+   dashboard. */
+.dashboard-detail.dashboard-solo .detail-tab-col-right { display: none; }
+/* Dashboard splitter sits at the content column's right edge (--dash-w from
+   the left of .detail), unlike the MeetingView splitter which hangs off the
+   right edge (--right-w). */
+.resizer-dash { left: var(--dash-w, 640px); transform: translateX(-6px); }
+
 /* Drag strips. Invisible until hover; a short centred grip fades in so
    the affordance is discoverable without adding a permanent visual
    seam. Double-click resets to the default width. */
