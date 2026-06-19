@@ -198,7 +198,17 @@ export function SettingsPane({
             desc={t.settings_video_desc}
             checked={on("capture_video")}
             disabled={!loaded}
-            onChange={(v) => patch({ capture_video: v })}
+            onChange={(v) => {
+              patch({ capture_video: v });
+              // Screen video is a heavy HEVC encode — warn on enable.
+              if (v) {
+                try {
+                  window.dispatchEvent(new CustomEvent("corder-toast", {
+                    detail: { title: t.settings_video_perf_toast, kind: "success" },
+                  }));
+                } catch { /* dev shell */ }
+              }
+            }}
           />
         </SoloCard>
 

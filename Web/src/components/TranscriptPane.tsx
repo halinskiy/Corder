@@ -97,6 +97,10 @@ interface Props {
   onSeek: (sec: number) => void;
   onSpeakersUpdated: () => void;
   query: string;
+  /// The segment id of the CURRENT search match (cmd+F-style nav). The
+  /// pane scrolls it into view and emphasises it; all matches stay
+  /// highlighted, nothing is filtered out.
+  activeMatchId?: number | null;
   boostOn: boolean;
   recordingState: RecordingState;
   onRecordingStopped: () => void;
@@ -108,7 +112,7 @@ interface Props {
   t: T;
 }
 
-export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, t }: Props) {
+export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, activeMatchId, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, t }: Props) {
   const speakerById = React.useMemo(() => {
     const map = new Map<string, SpeakerDTO>();
     detail.speakers.forEach((s) => map.set(s.id, s));
@@ -218,12 +222,10 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     return out;
   }, [detail.segments]);
 
-  // Filter when search query is set: hide groups with no matching segment.
+  // Search no longer FILTERS the transcript — it highlights matches in
+  // place (cmd+F style). The toolbar drives which match is current via
+  // `activeMatchId`; we just scroll to it and emphasise it below.
   const q = query.trim().toLowerCase();
-  const filteredGroups = React.useMemo(() => {
-    if (!q) return groups;
-    return groups.filter((g) => g.segs.some((s) => s.text.toLowerCase().includes(q)));
-  }, [groups, q]);
 
   // The segment that is currently playing = the LAST one whose
   // start_ms is at/before now. The old half-open test
@@ -251,7 +253,16 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     return idx >= 0 ? segs[idx].id : null;
   }, [currentTimeSec, detail.segments]);
 
+  // Scroll the current search match into view (cmd+F-style anchoring).
+  // Separate from the playback auto-scroll below; fires only when the
+  // toolbar moves the active match.
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!activeMatchId || !containerRef.current) return;
+    const el = containerRef.current.querySelector<HTMLElement>(`[data-segid="${activeMatchId}"]`);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeMatchId]);
+
   React.useEffect(() => {
     if (!activeSegmentId || !containerRef.current) return;
     const el = containerRef.current.querySelector<HTMLElement>(`[data-segid="${activeSegmentId}"]`);
@@ -360,7 +371,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
           t={t}
         />
       )}
-      {filteredGroups.map((g, gi) => {
+      {groups.map((g, gi) => {
         const sp = speakerById.get(g.speakerId);
         const name = displaySpeakerName(sp?.custom_name, sp?.label, profileName);
         const color = avatarColor(name);
@@ -404,7 +415,9 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
                   <React.Fragment key={s.id}>
                     <span
                       data-segid={s.id}
-                      className={"segment-line" + (s.id === activeSegmentId ? " active" : "")}
+                      className={"segment-line"
+                        + (s.id === activeSegmentId ? " active" : "")
+                        + (q && s.id === activeMatchId ? " search-hit" : "")}
                       onClick={() => onSeek(s.start_ms / 1000)}
                       onContextMenu={(e) => s.id != null && startEdit(e, s.id, display)}
                     >
@@ -418,9 +431,6 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
           </div>
         );
       })}
-      {filteredGroups.length === 0 && q && (
-        <div className="transcript-empty">{t.transcript_no_match(q)}</div>
-      )}
       {showRating && (
         <RatingBanner
           t={t}

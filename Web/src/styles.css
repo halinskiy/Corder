@@ -779,8 +779,11 @@ input[type="text"]:focus, input[type="search"]:focus {
    Left padding matches a toolbar `button`: 14 px from the field's edge to
    the icon (same as button left padding to its leading icon), then a 6 px
    gap, then the placeholder/text — total left padding 14 + 14 + 6 = 34 px. */
-.search-field { position: relative; display: block; }
-.search-field svg {
+.search-field { position: relative; display: flex; align-items: center; }
+/* Only the leading magnifier is the absolutely-positioned icon — scope to
+   the direct child so the cmd+F nav chevrons (nested in .search-nav) keep
+   their normal flow layout. */
+.search-field > svg {
   position: absolute;
   left: 14px;
   top: 50%;
@@ -791,9 +794,42 @@ input[type="text"]:focus, input[type="search"]:focus {
   height: 14px;
 }
 .search-field input {
+  flex: 1;
+  min-width: 0;
   padding-left: 34px;
-  padding-right: 14px;
+  padding-right: 10px;
 }
+/* cmd+F-style match counter + prev/next, inline at the right of the field. */
+.search-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  flex: none;
+}
+.search-count {
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.search-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.search-nav-btn svg { width: 14px; height: 14px; color: inherit; }
+.search-nav-btn:hover:not(:disabled) { background: var(--bg-elev); color: var(--fg); }
+.search-nav-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* Active-recording card — same shape as IdleStatus / RecordingStatus in the
    popover so the visual language matches across the menu-bar and Library. */
@@ -2735,6 +2771,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .segment-line:hover { background: #ececea; }
 .segment-line.active {
   background: #dff1e5;
+}
+/* Current search match (cmd+F nav target): a soft accent ring so the
+   anchored line stands out from the in-word `.tp-hl` marks around it. */
+.segment-line.search-hit {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* Inline transcript edit (right-click → Edit text). Sized to flow with

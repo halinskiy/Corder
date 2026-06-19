@@ -671,8 +671,14 @@ final class TranscriptionPipeline {
                     // next one ("Нет" measured at 333 s on a 24-min meeting
                     // where the user actually spoke ~1 min). Clamp each user
                     // turn's duration to what its text could plausibly take.
-                    userTurns = Self.capUserTurnDurations(u)
-                    otherTurns = o
+                    userTurns = Self.capTurnDurations(u)
+                    // Cap the OTHER (system / remote) turns too. Without it,
+                    // the proportional time-placement stretches the far-end
+                    // turns to fill silences and one speaker's timeline bar
+                    // reads ~100% (e.g. other-0 covering the whole call when
+                    // VAD found speech in only ~half of it). Same text-rate
+                    // clamp, monotonic-shortening, no-op on tight turns.
+                    otherTurns = Self.capTurnDurations(o)
                 }
                 FileLogger.log("transcribe(): timing re-derived — \(userTurns.count) user / \(otherTurns.count) other")
             }
@@ -1159,7 +1165,7 @@ final class TranscriptionPipeline {
     /// a no-op. On the real bleed recording this lands user coverage at
     /// 61 s, matching the independently measured "mic louder than far-end"
     /// voiced time — the cap converges on the acoustic ground truth.
-    static func capUserTurnDurations(_ turns: [GeminiTranscriber.Turn]) -> [GeminiTranscriber.Turn] {
+    static func capTurnDurations(_ turns: [GeminiTranscriber.Turn]) -> [GeminiTranscriber.Turn] {
         guard !turns.isEmpty else { return turns }
         let msPerChar: Int64 = 120     // ~8 characters/second conversational speech
         let minMs: Int64 = 900         // a one-word turn still gets a visible ~0.9 s block
@@ -1175,7 +1181,7 @@ final class TranscriptionPipeline {
         if capped > 0 {
             let before = turns.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
             let after = out.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
-            FileLogger.log("B/capUserTurns: capped \(capped)/\(turns.count) user turns, coverage \(before)s → \(after)s")
+            FileLogger.log("B/capTurns: capped \(capped)/\(turns.count) turns, coverage \(before)s → \(after)s")
         }
         return out
     }

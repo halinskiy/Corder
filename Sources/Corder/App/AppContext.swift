@@ -140,7 +140,12 @@ enum AppSettings {
     static func setScreenGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenGrantedOnce) }
 
     static var notificationsEnabled: Bool { flag(kNotifications) }
-    static var captureVideo: Bool          { flag(kCaptureVideo) }
+    // Screen video recording defaults OFF (opt-in): the HEVC screen encode
+    // is a heavy continuous load that can make the machine lag during a
+    // recording. Most users only need audio. `object(forKey:) as? Bool ?? false`
+    // (NOT `flag()`, which defaults true) so a fresh install + anyone who
+    // never touched the toggle gets audio-only.
+    static var captureVideo: Bool          { UserDefaults.standard.object(forKey: kCaptureVideo) as? Bool ?? false }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
     static var autoTitle: Bool             { flag(kAutoTitle) }

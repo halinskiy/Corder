@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.28] — 2026-06-19
+
+### Changed
+- Transcript search now works like Find (cmd+F): it scrolls to each match with prev/next arrows and a match count, instead of hiding everything else.
+- Screen video recording is now OFF by default (it could make the machine lag). Turning it on shows a quick "may affect performance" note.
+
+### Fixed
+- Speaker timeline no longer shows one speaker at ~100%: every speaker's turns are now duration-capped to their text, so the bars reflect who actually spoke (re-transcribe an old meeting to refresh it).
+
 ## [0.14.27] — 2026-06-19
 
 ### Fixed
