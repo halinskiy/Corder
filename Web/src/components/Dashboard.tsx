@@ -4,7 +4,6 @@ import { getSettings } from "../api";
 import { NewsBanner } from "./NewsBanner";
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
-import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
 import { UpcomingPane } from "./UpcomingPane";
@@ -202,18 +201,21 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
   // Settings opens.
   const [leftTab, setLeftTab] = useState<"stats" | "upcoming">("stats");
 
+  // onResizeSplit/onResetSplit are no longer used — the dashboard content
+  // column is a FIXED width, so there's nothing to drag-resize (and the
+  // shared --right-w splitter would be mispositioned against a fixed-left
+  // layout). Referenced so the unused-params check stays quiet.
+  void onResizeSplit; void onResetSplit;
+
   return (
-    <div className="detail dashboard-detail">
-      {/* Grid stays two-column ALWAYS so the left column never reflows
-          when Settings opens/closes — that reflow was the "divider jumps,
-          layout only looks right in Settings" bug. The Recent/"Longest"
-          session list was removed, so on the plain Dashboard the right
-          cell is just empty; Settings fills it. The splitter renders only
-          in Settings (no divider next to an empty cell), and because the
-          column boundary is fixed it fades in at the same spot, no jump. */}
-      {inSettings && (
-        <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
-      )}
+    <div className={"detail dashboard-detail" + (inSettings ? "" : " dashboard-solo")}>
+      {/* The session list was removed, so the plain Dashboard has NO right
+          column and NO divider — just the Stats/Start content in a
+          FIXED-width column. Opening Settings slides its panel into the
+          space to the right WITHOUT moving the content (fixed column width
+          in both layouts), and the 1px divider only appears then. That kills
+          the "empty column + jumping divider under Stats" problem. No
+          splitter: the content width is fixed, nothing to resize. */}
       <div className="detail-tabs">
         <div className="detail-tab-col detail-tab-col-left">
           <span

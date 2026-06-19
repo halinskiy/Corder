@@ -680,14 +680,18 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
+/* Hidden at rest, revealed only while the scrollable area is hovered —
+   native macOS overlay-scrollbar behaviour. The 7px gutter stays reserved
+   (transparent thumb) so toggling visibility never reflows content. */
 ::-webkit-scrollbar-thumb {
-  background: #d8d8d4;
+  background: transparent;
   border-radius: 4px;
   /* Without min-height the thumb collapses into a stubby pill that reads
      as a dot rather than a scrollbar — see the transcript pane where
      content overflow is small relative to the viewport. */
   min-height: 48px;
 }
+:hover::-webkit-scrollbar-thumb { background: #d8d8d4; }
 ::-webkit-scrollbar-thumb:hover { background: #b8b8b4; }
 
 /* Custom overlay scrollbar (OverlayScrollbar.tsx). Containers that opt
@@ -1950,6 +1954,30 @@ input[type="text"]:focus, input[type="search"]:focus {
   min-height: 0;
   overflow: hidden;
 }
+
+/* Dashboard layout (the session list was removed). The content column is a
+   FIXED width in BOTH the plain and the Settings layouts, so opening
+   Settings slides its panel into the space on the right WITHOUT shifting
+   the Stats/Start content — the old "divider jumps under Stats" bug.
+   Plain Dashboard = one fixed column, no second column, no divider. */
+.dashboard-detail.dashboard-solo .detail-tabs,
+.dashboard-detail.dashboard-solo .detail-body {
+  grid-template-columns: minmax(0, 640px);
+}
+.dashboard-detail:not(.dashboard-solo) .detail-tabs,
+.dashboard-detail:not(.dashboard-solo) .detail-body {
+  grid-template-columns: minmax(0, 640px) minmax(0, 1fr);
+}
+/* No divider-to-nowhere on the plain dashboard: flatten the 1px right-edge
+   seam the tab/body left columns paint. It returns in Settings to separate
+   the content from the panel. */
+.dashboard-detail.dashboard-solo .detail-tab-col-left,
+.dashboard-detail.dashboard-solo .dashboard-left {
+  background: var(--bg);
+}
+/* Empty right tab cell must not spawn an implicit grid track on the plain
+   dashboard. */
+.dashboard-detail.dashboard-solo .detail-tab-col-right { display: none; }
 
 /* Drag strips. Invisible until hover; a short centred grip fades in so
    the affordance is discoverable without adding a permanent visual

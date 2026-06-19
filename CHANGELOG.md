@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.25] — 2026-06-19
+
+### Fixed
+- The Dashboard no longer shows an empty right column or a stray divider. Opening Settings now slides its panel in without shifting the content.
+- Scrollbars stay hidden until you hover the panel (or scroll), instead of a permanent heavy bar.
+
 ## [0.14.24] — 2026-06-19
 
 ### Changed
