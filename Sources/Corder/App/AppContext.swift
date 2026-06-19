@@ -251,9 +251,17 @@ enum AppSettings {
             return p
         }
         // Tier-driven default.
+        //   • Free → on-device WhisperKit ($0/h).
+        //   • Pro/Max → Groq Whisper-large-v3-turbo. Benchmark (2026-06-18,
+        //     same 100s session through all three) showed transcript quality
+        //     identical to OpenAI whisper-1 and Gemini, at ~$0.08/meeting-hour
+        //     vs whisper-1 ~$0.72 and Gemini ~$0.28. Cheapest of the three at
+        //     equal quality, so it's the paid default. (Was `.whisper` =
+        //     OpenAI whisper-1, ~9x dearer for no quality gain.) Groq runs no
+        //     gpt-4o-mini polish; add it back if cleanup ever regresses.
         switch userTier {
         case .free:           return .whisperLocal
-        case .pro, .max:      return .whisper
+        case .pro, .max:      return .groq
         }
     }
     static func setTranscriptionProvider(_ v: TranscriptionProvider) {
@@ -591,15 +599,18 @@ enum UserTier: String { case free, pro, max }
 
 extension UserTier {
     /// Per-tier monthly cap on "advanced" transcription seconds —
-    /// the cloud models (Gemini, Whisper-cloud) that cost real
-    /// compute. Returning `nil` means unlimited (the Max tier; the
-    /// Usage bar pins to "unlimited"). On-device `whisperLocal` is
-    /// unmetered for every tier.
+    /// the cloud models (Groq/Gemini/Whisper-cloud) that cost real
+    /// compute. On-device `whisperLocal` is unmetered for every tier.
+    /// HIDDEN limits (not surfaced on the site yet). Over-cap → the
+    /// pipeline silently falls back to on-device Whisper for the run;
+    /// the Cloudflare Worker enforces the same caps server-side as a
+    /// non-bypassable backstop. Numbers set 2026-06-18 against Groq's
+    /// ~$0.08/meeting-hour: comfortably profitable at every cap.
     var advancedMonthlyLimitSeconds: Int? {
         switch self {
-        case .free: return 60 * 60        // 1 hour / month
-        case .pro:  return 1500 * 60      // 25 hours / month
-        case .max:  return nil            // unlimited
+        case .free: return 60 * 60        // 1 hour / month (free is local-only anyway)
+        case .pro:  return 25 * 3600      // 25 hours / month
+        case .max:  return 250 * 3600     // 250 hours / month (fair-use; marketed "unlimited")
         }
     }
 }
