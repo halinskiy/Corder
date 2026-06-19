@@ -471,6 +471,13 @@ enum WhisperTranscriber {
         req.httpMethod = "POST"
         req.setValue(route.authHeader, forHTTPHeaderField: "Authorization")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        // Report this chunk's audio length so the Worker can meter monthly
+        // cloud usage per tier. Best-effort: 0 means "don't count" — the
+        // server fails open and never blocks on a missing/zero value.
+        let chunkSec = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
+        if chunkSec > 0 {
+            req.setValue(String(Int(chunkSec.rounded())), forHTTPHeaderField: "X-Corder-Audio-Sec")
+        }
         req.timeoutInterval = 600
 
         var body = Data()
@@ -555,7 +562,12 @@ enum WhisperTranscriber {
             // downgrade, manual UserDefaults edit). Surface a dedicated
             // error case so the pipeline can fall back to whisperLocal
             // silently instead of treating it as a real failure.
-            if status == 403 && bodyText.lowercased().contains("tier required") {
+            // Same silent-fallback path for the server-side monthly cap
+            // backstop ("monthly_limit"): the Worker says this paid user is
+            // over their hidden cloud-hours cap, so use the on-device model
+            // for the rest of the month instead of failing the meeting.
+            if status == 403 && (bodyText.lowercased().contains("tier required")
+                                 || bodyText.lowercased().contains("monthly_limit")) {
                 throw WhisperError.tierRequired
             }
             throw WhisperError.apiFailure(status: status, body: bodyText)

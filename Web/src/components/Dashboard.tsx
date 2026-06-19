@@ -203,11 +203,14 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
   const [leftTab, setLeftTab] = useState<"stats" | "upcoming">("stats");
 
   return (
-    <div className={"detail dashboard-detail" + (inSettings ? "" : " dashboard-solo")}>
-      {/* The right column only exists in Settings mode now (the Recent /
-          "Longest" session list was removed — sessions live in the left
-          sidebar). So the splitter + the right tab column only render
-          while Settings is open; otherwise the left column fills. */}
+    <div className="detail dashboard-detail">
+      {/* Grid stays two-column ALWAYS so the left column never reflows
+          when Settings opens/closes — that reflow was the "divider jumps,
+          layout only looks right in Settings" bug. The Recent/"Longest"
+          session list was removed, so on the plain Dashboard the right
+          cell is just empty; Settings fills it. The splitter renders only
+          in Settings (no divider next to an empty cell), and because the
+          column boundary is fixed it fades in at the same spot, no jump. */}
       {inSettings && (
         <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
       )}

@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.23] — 2026-06-19
+
+### Changed
+- Faster, lighter cloud transcription on Pro and Max (same accuracy).
+
+### Fixed
+- The Dashboard no longer jumps its layout and divider when you open Settings.
+- A few more silence hallucinations ("до скорых встреч", "продолжение в следующем видео") are filtered out of transcripts.
+
 ## [0.14.22] — 2026-06-18
 
 ### Fixed

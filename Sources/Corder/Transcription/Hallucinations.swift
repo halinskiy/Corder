@@ -17,8 +17,15 @@ enum Hallucinations {
         "субтитры подобрал dimatorzok",
         "субтитры от dimatorzok",
         "продолжение следует",
+        "продолжение в следующем видео",
+        "продолжение в следующем выпуске",
         "спасибо за просмотр",
         "спасибо за внимание",
+        // Russian YouTube-outro farewells Whisper emits over near-silence
+        // (seen in benchmark: "До скорых встреч, пока, до."). Distinctive
+        // multi-word phrases so genuine "до встречи завтра" speech is safe.
+        "до скорых встреч",
+        "до новых встреч",
         "не забудьте подписаться",
         "подписывайтесь на канал",
         "ставьте лайк",
