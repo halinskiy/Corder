@@ -833,11 +833,13 @@ private struct BlobShape: Shape {
     var levels: [CGFloat]
 
     // Tuning.
-    private static let pointCount = 32          // fine enough for pointed tentacles
+    private static let pointCount = 32          // fine enough for smooth tentacles
     private static let historyHz: Double = 12   // matches RecordingLevelMeter
-    private static let releaseTau: Double = 0.55 // slow inward return (s)
-    private static let lobeSigma: Double = 0.26  // thin tentacle (rad ≈ 15°)
-    private static let reach: CGFloat = 0.9      // how far a tentacle lunges out
+    private static let bucketSec: Double = 0.2  // ONE tentacle per ~0.2 s beat (not 12/s)
+    private static let attackSec: Double = 0.13 // smooth grow-out (no abrupt pop)
+    private static let releaseTau: Double = 0.6 // slow inward return (s)
+    private static let lobeSigma: Double = 0.34 // softer, wider limb (rad ≈ 20°)
+    private static let reach: CGFloat = 1.05    // longer lunge
 
     /// Deterministic scatter: integer onset-bucket → a fixed angle in
     /// 0…2π. Consecutive buckets land far apart (no monotonic sweep), and
@@ -848,34 +850,47 @@ private struct BlobShape: Shape {
         return (x - floor(x)) * 2 * .pi
     }
 
+    /// Per-tentacle envelope: a smooth grow-out over `attackSec`
+    /// (smoothstep, so it eases rather than pops) then a slow exponential
+    /// retract. `age` is seconds since the beat's onset.
+    private static func envelope(age: Double) -> Double {
+        if age <= 0 { return 0 }
+        if age < attackSec {
+            let p = age / attackSec
+            return p * p * (3 - 2 * p)          // smoothstep 0→1
+        }
+        return exp(-(age - attackSec) / releaseTau)
+    }
+
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let baseRadius = min(rect.width, rect.height) / 2 * 0.78
         let n = Self.pointCount
 
-        // One strike per audible history sample, each pinned to a fixed
-        // angle (frame-stable onset bucket) and decayed by age. Silent
-        // samples are skipped, so true silence yields zero strikes → a
-        // perfectly still circle.
-        struct Strike { let angle: Double; let strength: Double }
-        var strikes: [Strike] = []
-        strikes.reserveCapacity(levels.count)
+        // Group the level history into ~0.2 s beats: one tentacle per
+        // beat (its loudest sample), NOT one per 12 Hz sample. That alone
+        // cuts the spawn rate ~3× so a few expressive limbs appear instead
+        // of a rapid swarm. Each beat is pinned to a frame-stable onset
+        // bucket → fixed angle, smooth attack + slow release. Silence
+        // produces no beats → a perfectly still circle.
+        var beatPeak: [Int: Double] = [:]
         for (j, lv) in levels.enumerated() {
             let v = Double(lv)
-            if v < 0.03 { continue }
-            let ageSec = Double(j) / Self.historyHz
-            // Sharp attack (newest = full), slow exponential return.
-            let envelope = exp(-ageSec / Self.releaseTau)
-            // Lift mid-levels so normal speech throws a tentacle, not only shouting.
-            let strength = pow(v, 0.8) * envelope
+            if v < 0.04 { continue }
+            let onset = time - Double(j) / Self.historyHz
+            let bucket = Int((onset / Self.bucketSec).rounded())
+            let lifted = pow(v, 0.8)
+            if let cur = beatPeak[bucket] { if lifted > cur { beatPeak[bucket] = lifted } }
+            else { beatPeak[bucket] = lifted }
+        }
+
+        struct Strike { let angle: Double; let strength: Double }
+        var strikes: [Strike] = []
+        strikes.reserveCapacity(beatPeak.count)
+        for (bucket, peak) in beatPeak {
+            let onsetTime = Double(bucket) * Self.bucketSec
+            let strength = peak * Self.envelope(age: time - onsetTime)
             if strength < 0.02 { continue }
-            // Absolute onset bucket (frame-stable): time of this sound,
-            // quantised to the history step. As the sample ages, j grows
-            // and ageSec grows in lockstep, so the bucket — and thus the
-            // angle — stays constant. THIS is what keeps a tentacle from
-            // travelling around the rim.
-            let onset = time - ageSec
-            let bucket = Int((onset * Self.historyHz).rounded())
             strikes.append(Strike(angle: Self.angleFor(bucket: bucket), strength: strength))
         }
 
