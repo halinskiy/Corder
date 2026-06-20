@@ -202,41 +202,17 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
   // Settings opens.
   const [leftTab, setLeftTab] = useState<"stats" | "upcoming">("stats");
 
-  // Dashboard content column is a FIXED width (its OWN var, NOT the shared
-  // MeetingView --right-w). Same width with Settings open or closed, so the
-  // content never moves when you open Settings — no jump. When Settings is
-  // open the panel fills the space to its right and the splitter drags THIS
-  // width (content vs Settings). When closed there's a single column and no
-  // divider, so no empty right column. The old --right-w splitter props are
-  // unused now.
-  void onResizeSplit; void onResetSplit;
-  const DASH_W_KEY = "corder.dashContentW";
-  const [dashW, setDashW] = useState<number>(() => {
-    try {
-      const v = parseInt(localStorage.getItem(DASH_W_KEY) ?? "", 10);
-      if (Number.isFinite(v) && v >= 420 && v <= 900) return v;
-    } catch {}
-    return 640;
-  });
-  useEffect(() => {
-    try { localStorage.setItem(DASH_W_KEY, String(dashW)); } catch {}
-  }, [dashW]);
-
   return (
-    <div
-      className={"detail dashboard-detail" + (inSettings ? "" : " dashboard-solo")}
-      style={{ ["--dash-w" as string]: `${dashW}px` } as React.CSSProperties}
-    >
-      {/* Splitter only in Settings (nothing to resize on the plain
-          dashboard). It drags the FIXED content width (--dash-w), so the
-          content keeps the same width whether Settings is open or not — the
-          divider sits at the content's right edge and never jumps. */}
+    <div className={"detail dashboard-detail" + (inSettings ? "" : " dashboard-solo")}>
+      {/* Plain dashboard = ONE column (Home content), no divider, no empty
+          right column. Opening Settings adds the right panel at the SHARED
+          --right-w width (same as MeetingView's settings/right pane); the
+          Home card is left-aligned so the reflow doesn't visibly move it.
+          The splitter drags --right-w, so resizing here resizes the right
+          pane everywhere — identical to how the left sidebar width is shared
+          across sessions/archive. */}
       {inSettings && (
-        <ResizeHandle
-          className="resizer-dash"
-          onDrag={(dx) => setDashW((w) => Math.max(420, Math.min(900, w + dx)))}
-          onReset={() => setDashW(640)}
-        />
+        <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
       )}
       <div className="detail-tabs">
         <div className="detail-tab-col detail-tab-col-left">
@@ -244,7 +220,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
             className={"tab" + (leftTab === "stats" ? " active" : "")}
             role="button"
             onClick={() => setLeftTab("stats")}
-          >{t.dashboard_tab_stats}</span>
+          >{t.dashboard_tab_home ?? "Home"}</span>
           {/* Upcoming/Calendar tab hidden until Google verifies the
               calendar.readonly scope (consent currently shows the
               "unverified app" screen). Re-enable by restoring this

@@ -1987,18 +1987,15 @@ input[type="text"]:focus, input[type="search"]:focus {
   overflow: hidden;
 }
 
-/* Dashboard (session list removed). The content column is a FIXED width
-   (--dash-w) in BOTH layouts, so opening Settings never moves it — no jump.
-   Plain dashboard = one column, no second column, no divider (no empty
-   right column). Settings = content + panel filling the rest, with a
-   splitter at the content's right edge that drags --dash-w. */
+/* Dashboard (session list removed). Plain dashboard = ONE full-width column
+   (Home content left-aligned), no divider, no empty right column. Opening
+   Settings switches to the SAME `1fr | --right-w` grid MeetingView uses, so
+   the Settings panel is identical width everywhere and the shared splitter
+   (resizer-split, drags --right-w) resizes the right pane app-wide. The Home
+   card is left-aligned, so the content reflow on open doesn't visibly move it. */
 .dashboard-detail.dashboard-solo .detail-tabs,
 .dashboard-detail.dashboard-solo .detail-body {
-  grid-template-columns: var(--dash-w, 640px);
-}
-.dashboard-detail:not(.dashboard-solo) .detail-tabs,
-.dashboard-detail:not(.dashboard-solo) .detail-body {
-  grid-template-columns: var(--dash-w, 640px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 /* No divider-to-nowhere on the plain dashboard: flatten the 1px right-edge
    seam the tab/body left columns paint. It returns in Settings to separate
@@ -2010,10 +2007,6 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* Empty right tab cell must not spawn an implicit grid track on the plain
    dashboard. */
 .dashboard-detail.dashboard-solo .detail-tab-col-right { display: none; }
-/* Dashboard splitter sits at the content column's right edge (--dash-w from
-   the left of .detail), unlike the MeetingView splitter which hangs off the
-   right edge (--right-w). */
-.resizer-dash { left: var(--dash-w, 640px); transform: translateX(-6px); }
 
 /* Drag strips. Invisible until hover; a short centred grip fades in so
    the affordance is discoverable without adding a permanent visual
