@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { LANGS, type Lang, type T } from "../i18n";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
+import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
 import { useTheme } from "../theme";
 
 /// Settings page (right column, next to "Recording"). Toggles are
@@ -110,6 +111,11 @@ export function SettingsPane({
   return (
     <div className="settings-pane">
       <div style={{ display: section === "general" ? "contents" : "none" }}>
+        {/* Language sits at the very top of General per request. */}
+        <SoloCard>
+          <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
+        </SoloCard>
+
         <SoloCard>
           <ThemeToggleRow t={t} />
         </SoloCard>
@@ -159,11 +165,6 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Language picker — same `.hk-block` shell as Microphone. */}
-        <SoloCard>
-          <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
-        </SoloCard>
-
         <div className="settings-divider" />
         <SoloCard>
           <HotkeyRow
@@ -192,6 +193,17 @@ export function SettingsPane({
       </div>
 
       <div style={{ display: section === "advanced" ? "contents" : "none" }}>
+        {/* Transcription model picker — moved here from the (now hidden)
+            Dashboard. Lives at the very top of Advanced, wrapped in the
+            same label/desc block shell as the other pickers. */}
+        <SoloCard>
+          <div className="hk-block mic-block">
+            <div className="settings-row-label">{t.settings_model_label ?? "Transcription model"}</div>
+            <div className="settings-row-desc">{t.settings_model_desc ?? "Which model the next recording is transcribed with."}</div>
+            <WhisperPrefetchPill t={t} />
+          </div>
+        </SoloCard>
+
         <SoloCard>
           <Toggle
             label={t.settings_video}
@@ -989,9 +1001,9 @@ function TierTestRow({
 function ThemeToggleRow({ t }: { t: T }) {
   const { mode, isDark, setMode } = useTheme();
   const triggerRef = React.useRef<HTMLDivElement | null>(null);
-  const label = isDark
-    ? (t.settings_theme_label_to_light ?? "Switch to light theme")
-    : (t.settings_theme_label_to_dark ?? "Switch to dark theme");
+  // Plain static label per request — "Change theme" / "Сменить тему",
+  // not the old direction-specific "Switch to dark/light theme".
+  const label = t.settings_theme_change ?? "Change theme";
   const desc = isDark
     ? (t.settings_theme_desc_dark ?? "Currently dark.")
     : (t.settings_theme_desc_light ?? "Currently light.");

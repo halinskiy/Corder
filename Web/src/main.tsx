@@ -234,17 +234,17 @@ function App() {
       setMeetingsLoaded(true);
       // Validate the current selection against the fresh list:
       //   • still there → keep it.
-      //   • gone (just archived / deleted by us or another tab) → fall
-      //     back to null = Dashboard.
-      //   • already null (user is ON the Dashboard) → keep null, do NOT
-      //     auto-jump to the first meeting. The previous behaviour
-      //     "snap to visible[0] on null" silently kicked the user out
-      //     of the Dashboard every poll tick (5 s).
+      //   • gone / none selected → open the MOST RECENT meeting. The
+      //     start screen (Dashboard) is now shown ONLY when the library
+      //     is completely empty; once there's at least one recording the
+      //     window always lands on a session, never the dashboard.
       const dropped = softDeletedRef.current;
       const visible = m.filter((x) => !dropped.has(x.id));
-      setActiveId((cur) =>
-        cur && visible.some((x) => x.id === cur) ? cur : null
-      );
+      setActiveId((cur) => {
+        if (cur && visible.some((x) => x.id === cur)) return cur;
+        if (visible.length === 0) return null; // empty library → start screen
+        return visible.reduce((a, b) => (b.started_at > a.started_at ? b : a)).id;
+      });
     } catch {}
   }, []);
 
@@ -384,7 +384,15 @@ function App() {
   const handleArchived = React.useCallback((archivedId?: string) => {
     if (!archivedId) return;
 
-    setActiveId((prev) => prev === archivedId ? null : prev);
+    // If we archived the open meeting, fall to the landing target (most
+    // recent remaining meeting, or the empty start screen when none left)
+    // instead of the dashboard — it's hidden while recordings exist.
+    setActiveId((prev) => {
+      if (prev !== archivedId) return prev;
+      const visible = meetings.filter((m) => !softDeleted.has(m.id) && m.id !== archivedId);
+      if (visible.length === 0) return null;
+      return visible.reduce((a, b) => (b.started_at > a.started_at ? b : a)).id;
+    });
     // Also clear `lastSeenMeetingRef` if it points at the row we're
     // archiving. MeetingView is mount-stable via a `display:none`
     // wrapper that keys off `lastSeen`, so without this clear it stays
@@ -449,7 +457,7 @@ function App() {
       durationMs: 5_000,
       countdown: true,
     });
-  }, [refresh, showToast, dismissToast, t]);
+  }, [refresh, showToast, dismissToast, t, meetings, softDeleted]);
 
   const visibleMeetings = React.useMemo(
     () => meetings.filter((m) => !softDeleted.has(m.id)),
@@ -479,6 +487,15 @@ function App() {
     );
     setActiveId(id);
   }, []);
+
+  // "Home" / landing target. The Dashboard start screen only exists when
+  // the library is empty; otherwise Home opens the most recent meeting so
+  // the dashboard is never shown once there are recordings.
+  const goLanding = React.useCallback(() => {
+    const visible = meetings.filter((m) => !softDeleted.has(m.id));
+    if (visible.length === 0) { setActiveId(null); return; }
+    setActiveId(visible.reduce((a, b) => (b.started_at > a.started_at ? b : a)).id);
+  }, [meetings, softDeleted]);
 
   const [sidebarW, setSidebarW] = React.useState(() =>
     clamp(readNum("corder.sidebarW", SIDEBAR_DEFAULT), SIDEBAR_MIN, SIDEBAR_MAX)
@@ -558,7 +575,7 @@ function App() {
                     archiveEmpty={archived.length === 0}
                     onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
                     settingsOpen={settingsOpenUI}
-                    onOpenDashboard={() => setActiveId(null)}
+                    onOpenDashboard={goLanding}
                     onToast={showToast}
                     t={t}
                   />
@@ -616,7 +633,7 @@ function App() {
                     archiveOpen={archiveOpen}
                     archiveEmpty={archived.length === 0}
                     onOpenSettings={() => setOpenSettingsNonce((n) => n + 1)}
-                    onOpenDashboard={() => setActiveId(null)}
+                    onOpenDashboard={goLanding}
                     onToast={showToast}
                     recordingState={recState}
                     onRecordingStopped={() => { setRecState({ active: false }); refresh(); }}

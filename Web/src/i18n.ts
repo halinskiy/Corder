@@ -218,6 +218,9 @@ interface Strings {
   btn_theme_to_light?: string;
   settings_theme_label_to_dark?: string;
   settings_theme_label_to_light?: string;
+  settings_theme_change?: string;
+  settings_model_label?: string;
+  settings_model_desc?: string;
   settings_theme_desc_light?: string;
   settings_theme_desc_dark?: string;
   settings_theme_opt_system?: string;
@@ -444,6 +447,7 @@ interface Strings {
   dashboard_recent: string;
   dashboard_recent_empty: string;
   dashboard_tab_stats: string;
+  dashboard_tab_home?: string;
   dashboard_tab_recent: string;
   dashboard_sort_duration: string;
   dashboard_sort_recent: string;
@@ -651,6 +655,9 @@ const ru: Strings = {
   btn_theme_to_dark: "Тёмная тема",
   btn_theme_to_light: "Светлая тема",
   settings_theme_label_to_dark: "Сменить тему на тёмную",
+  settings_theme_change: "Сменить тему",
+  settings_model_label: "Модель транскрипции",
+  settings_model_desc: "Какой моделью расшифровывается следующая запись.",
   settings_theme_label_to_light: "Сменить тему на светлую",
   settings_theme_desc_light: "Сейчас светлая.",
   settings_theme_desc_dark: "Сейчас тёмная.",
@@ -806,6 +813,7 @@ const ru: Strings = {
   dashboard_recent: "Недавнее",
   dashboard_recent_empty: "Записей пока нет.",
   dashboard_tab_stats: "Статистика",
+  dashboard_tab_home: "Главная",
   dashboard_tab_recent: "Недавнее",
   dashboard_sort_duration: "Самые длительные",
   dashboard_sort_recent: "Недавние",
@@ -1021,6 +1029,9 @@ const en: Strings = {
   btn_theme_to_dark: "Dark theme",
   btn_theme_to_light: "Light theme",
   settings_theme_label_to_dark: "Switch to dark theme",
+  settings_theme_change: "Change theme",
+  settings_model_label: "Transcription model",
+  settings_model_desc: "Which model the next recording is transcribed with.",
   settings_theme_label_to_light: "Switch to light theme",
   settings_theme_desc_light: "Currently light.",
   settings_theme_desc_dark: "Currently dark.",
@@ -1177,6 +1188,7 @@ const en: Strings = {
   dashboard_recent: "Recent",
   dashboard_recent_empty: "No recordings yet.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Recent",
   dashboard_sort_duration: "Longest",
   dashboard_sort_recent: "Most recent",
@@ -1376,6 +1388,9 @@ const uk: Strings = {
   btn_theme_to_dark: "Темна тема",
   btn_theme_to_light: "Світла тема",
   settings_theme_label_to_dark: "Перемкнути на темну",
+  settings_theme_change: "Змінити тему",
+  settings_model_label: "Модель транскрипції",
+  settings_model_desc: "Якою моделлю розшифровується наступний запис.",
   settings_theme_label_to_light: "Перемкнути на світлу",
   settings_theme_desc_light: "Зараз світла.",
   settings_theme_desc_dark: "Зараз темна.",
@@ -1512,6 +1527,7 @@ const uk: Strings = {
   dashboard_recent: "Нещодавнє",
   dashboard_recent_empty: "Записів ще немає.",
   dashboard_tab_stats: "Статистика",
+  dashboard_tab_home: "Головна",
   dashboard_tab_recent: "Нещодавнє",
   dashboard_sort_duration: "Найдовші",
   dashboard_sort_recent: "Нещодавні",
@@ -1729,6 +1745,7 @@ const de: Strings = {
   dashboard_recent: "Zuletzt",
   dashboard_recent_empty: "Noch keine Aufnahmen.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Zuletzt",
   dashboard_sort_duration: "Längste",
   dashboard_sort_recent: "Neueste",
@@ -1929,6 +1946,7 @@ const fr: Strings = {
   dashboard_recent: "Récents",
   dashboard_recent_empty: "Pas encore d'enregistrement.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Récents",
   dashboard_sort_duration: "Les plus longs",
   dashboard_sort_recent: "Les plus récents",
@@ -2133,6 +2151,7 @@ const es: Strings = {
   dashboard_recent: "Recientes",
   dashboard_recent_empty: "Aún no hay grabaciones.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Recientes",
   dashboard_sort_duration: "Más largas",
   dashboard_sort_recent: "Más recientes",
@@ -2333,6 +2352,7 @@ const pt: Strings = {
   dashboard_recent: "Recentes",
   dashboard_recent_empty: "Ainda sem gravações.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Recentes",
   dashboard_sort_duration: "Mais longas",
   dashboard_sort_recent: "Mais recentes",
@@ -2533,6 +2553,7 @@ const it: Strings = {
   dashboard_recent: "Recenti",
   dashboard_recent_empty: "Nessuna registrazione ancora.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Recenti",
   dashboard_sort_duration: "Più lunghe",
   dashboard_sort_recent: "Più recenti",
@@ -2739,6 +2760,7 @@ const pl: Strings = {
   dashboard_recent: "Ostatnie",
   dashboard_recent_empty: "Brak nagrań.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Ostatnie",
   dashboard_sort_duration: "Najdłuższe",
   dashboard_sort_recent: "Najnowsze",
@@ -2944,6 +2966,7 @@ const cs: Strings = {
   dashboard_recent: "Nedávné",
   dashboard_recent_empty: "Žádné nahrávky.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Nedávné",
   dashboard_sort_duration: "Nejdelší",
   dashboard_sort_recent: "Nejnovější",
@@ -3144,6 +3167,7 @@ const tr: Strings = {
   dashboard_recent: "Son",
   dashboard_recent_empty: "Henüz kayıt yok.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Son",
   dashboard_sort_duration: "En uzun",
   dashboard_sort_recent: "En yeni",
@@ -3344,6 +3368,7 @@ const nl: Strings = {
   dashboard_recent: "Recent",
   dashboard_recent_empty: "Nog geen opnames.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Recent",
   dashboard_sort_duration: "Langste",
   dashboard_sort_recent: "Nieuwste",
@@ -3544,6 +3569,7 @@ const sv: Strings = {
   dashboard_recent: "Senaste",
   dashboard_recent_empty: "Inga inspelningar än.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Senaste",
   dashboard_sort_duration: "Längst",
   dashboard_sort_recent: "Senaste",
@@ -3744,6 +3770,7 @@ const id_: Strings = {
   dashboard_recent: "Terbaru",
   dashboard_recent_empty: "Belum ada rekaman.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Terbaru",
   dashboard_sort_duration: "Terpanjang",
   dashboard_sort_recent: "Paling baru",
@@ -3944,6 +3971,7 @@ const vi: Strings = {
   dashboard_recent: "Gần đây",
   dashboard_recent_empty: "Chưa có bản ghi.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "Gần đây",
   dashboard_sort_duration: "Dài nhất",
   dashboard_sort_recent: "Mới nhất",
@@ -4144,6 +4172,7 @@ const ja: Strings = {
   dashboard_recent: "最近",
   dashboard_recent_empty: "まだ録音はありません。",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "最近",
   dashboard_sort_duration: "長い順",
   dashboard_sort_recent: "新しい順",
@@ -4344,6 +4373,7 @@ const ko: Strings = {
   dashboard_recent: "최근",
   dashboard_recent_empty: "녹음이 아직 없습니다.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "최근",
   dashboard_sort_duration: "가장 긴 순",
   dashboard_sort_recent: "가장 최근",
@@ -4544,6 +4574,7 @@ const zh: Strings = {
   dashboard_recent: "最近",
   dashboard_recent_empty: "还没有录音。",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "最近",
   dashboard_sort_duration: "最长",
   dashboard_sort_recent: "最新",
@@ -4749,6 +4780,7 @@ const hi: Strings = {
   dashboard_recent: "हाल के",
   dashboard_recent_empty: "अभी कोई रिकॉर्डिंग नहीं।",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "हाल के",
   dashboard_sort_duration: "सबसे लंबे",
   dashboard_sort_recent: "सबसे नए",
@@ -4955,6 +4987,7 @@ const ar: Strings = {
   dashboard_recent: "الأخيرة",
   dashboard_recent_empty: "لا توجد تسجيلات بعد.",
   dashboard_tab_stats: "Stats",
+  dashboard_tab_home: "Home",
   dashboard_tab_recent: "الأخيرة",
   dashboard_sort_duration: "الأطول",
   dashboard_sort_recent: "الأحدث",

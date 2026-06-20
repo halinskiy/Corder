@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.29] — 2026-06-20
+
+### Changed
+- The Dashboard is no longer shown once you have recordings — the app opens your most recent session instead. The start screen only appears on a brand-new, empty library.
+- Settings panel is now the same width on every screen, and dragging its edge resizes it everywhere.
+- The transcription model picker moved into Settings → Advanced (top).
+- Settings → General: Language is now at the top; the theme row reads "Change theme".
+
 ## [0.14.28] — 2026-06-19
 
 ### Changed
