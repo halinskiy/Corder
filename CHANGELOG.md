@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.31] — 2026-06-20
+
+### Fixed
+- Removed the "Dashboard" breadcrumb that could still navigate back to the now-hidden start screen.
+
 ## [0.14.30] — 2026-06-20
 
 ### Changed
