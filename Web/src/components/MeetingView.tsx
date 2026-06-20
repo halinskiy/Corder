@@ -130,7 +130,7 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onBackToDashboard, onSettingsOpenChange, t }: Props) {
+export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onSettingsOpenChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
@@ -412,15 +412,10 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
       <MainHeader
         breadcrumb={(
           <>
-            <span
-              className="breadcrumb-root"
-              onClick={onBackToDashboard}
-              role={onBackToDashboard ? "button" : undefined}
-              tabIndex={onBackToDashboard ? 0 : undefined}
-            >
-              {t.breadcrumb_dashboard}
-            </span>
-            <span style={{ opacity: 0.4 }}>›</span>
+            {/* No "Dashboard ›" root crumb — the dashboard is hidden once
+                recordings exist, so navigating back to it would just show
+                the empty start screen. The breadcrumb is now only the
+                (click-to-rename) meeting title. */}
             {titleEdit !== null ? (
               <input
                 className="breadcrumb-edit"

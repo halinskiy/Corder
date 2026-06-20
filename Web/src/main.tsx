@@ -646,7 +646,6 @@ function App() {
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     onPlayingChange={(playing) => setPlayingId(playing && activeId ? activeId : null)}
-                    onBackToDashboard={() => setActiveId(null)}
                     onSettingsOpenChange={() => {}}
                     t={t}
                   />
