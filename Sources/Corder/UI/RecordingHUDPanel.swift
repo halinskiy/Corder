@@ -575,17 +575,13 @@ struct RecordingHUDView: View {
                 let levelsArr: [CGFloat] = welcomeActive
                     ? (0..<24).map { k in CGFloat(Self.syntheticLevel(t: t - Double(k) / 12.0)) }
                     : meter.history.map { CGFloat($0) * energy }
-                // Whole-blob size pulse: the entire silhouette kicks in/out
-                // with the live level so every sound visibly pulses the
-                // blob, not just bends one edge. Snappy (instantaneous
-                // level), up to +18% scale, composes with entry/hover.
-                let instLevel = CGFloat(max(0, level * Float(energy)))
-                let pulse = 1.0 + min(1.0, instLevel * 3.0) * 0.18
+                // NO whole-blob size pulse: the BODY stays put — only the
+                // tentacles (the BlobShape rim) react to sound, per the
+                // "symbiote" brief. Entry/hover scale below still applies.
                 blobLayer(time: t,
                           level: level * Float(energy),
                           levels: levelsArr,
                           palette: palette)
-                    .scaleEffect(pulse)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -814,60 +810,73 @@ private struct BlobPalette {
 
 // MARK: - Shape
 
-/// Voice-reactive blob. The shape is a pure function of `time` plus the
-/// level history buffer — NO constant rotation, NO template morph, NO
-/// idle breathing. In silence (all history ≈ 0) every point sits exactly
-/// on the base radius, so the blob is a perfectly STILL circle: that
-/// stillness is the "not capturing sound" signal.
+/// Voice-reactive blob. The BODY never moves, never rotates, never
+/// breathes — in silence it's a perfectly still circle (that stillness is
+/// the "not capturing sound" signal). On sound, thin TENTACLES lunge out
+/// of the rim like a symbiote: sharp outward attack, slow inward return.
 ///
-/// Each history sample is treated as a sound impulse that strikes ONE
-/// side of the blob (the strike angle sweeps, so consecutive sounds hit
-/// different sides) and then relaxes: a sharp outward attack (the newest
-/// samples) and a slow inward return (older samples decay over ~0.5 s).
-/// Because newer impulses land on a different angle while older ones are
-/// still easing back, one grань can be lunging out while another recovers
-/// — the overlapping stretch/return the user asked for. The whole-blob
-/// size pulse (scaleEffect in `blobLayer`) is driven separately by the
-/// instantaneous level, so each sound both kicks the size and stretches a
-/// side.
+/// Each level-history sample is a sound impulse pinned to a FIXED rim
+/// angle for the whole life of that sound (the angle is hashed from the
+/// sample's absolute onset-time bucket, which is frame-stable, so a
+/// tentacle stays put and retracts in place — it does NOT sweep around,
+/// which was the old "spinning" bug). Different sounds hash to scattered
+/// angles; if a fresh, louder sound lands on a spot that's still
+/// retracting, `max()` re-extends it. Thin lobes (small σ) + many points
+/// make each protrusion read as a pointed tentacle, not a broad swell.
 private struct BlobShape: Shape {
     var time: TimeInterval
-    /// Instantaneous level (snappy, for the per-frame attack edge).
+    /// Instantaneous level — kept only so `animatableData` interpolates
+    /// smoothly between 30 Hz publishes; the silhouette is driven by the
+    /// history buffer below.
     var level: CGFloat
     /// Rolling level history, newest first, at ~12 Hz (`RecordingLevelMeter.history`).
     var levels: [CGFloat]
 
     // Tuning.
-    private static let pointCount = 12
-    private static let historyHz: Double = 12          // matches RecordingLevelMeter
-    private static let releaseTau: Double = 0.5        // slow inward return (s)
-    private static let sweepSpeed: Double = 7.5        // rad/s the strike angle travels
-    private static let lobeSigma: Double = 0.6         // angular width of one strike (rad)
-    private static let reach: CGFloat = 0.7            // how far a strike pulls the edge out
+    private static let pointCount = 32          // fine enough for pointed tentacles
+    private static let historyHz: Double = 12   // matches RecordingLevelMeter
+    private static let releaseTau: Double = 0.55 // slow inward return (s)
+    private static let lobeSigma: Double = 0.26  // thin tentacle (rad ≈ 15°)
+    private static let reach: CGFloat = 0.9      // how far a tentacle lunges out
+
+    /// Deterministic scatter: integer onset-bucket → a fixed angle in
+    /// 0…2π. Consecutive buckets land far apart (no monotonic sweep), and
+    /// the SAME bucket always maps to the SAME angle so a tentacle is
+    /// anchored for its whole life.
+    private static func angleFor(bucket: Int) -> Double {
+        let x = sin(Double(bucket) * 127.1 + 311.7) * 43758.5453
+        return (x - floor(x)) * 2 * .pi
+    }
 
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let baseRadius = min(rect.width, rect.height) / 2 * 0.78
         let n = Self.pointCount
 
-        // Precompute each impulse's strike angle + decayed strength once.
-        // Skip near-silent samples so silence costs nothing and stays
-        // perfectly round.
+        // One strike per audible history sample, each pinned to a fixed
+        // angle (frame-stable onset bucket) and decayed by age. Silent
+        // samples are skipped, so true silence yields zero strikes → a
+        // perfectly still circle.
         struct Strike { let angle: Double; let strength: Double }
         var strikes: [Strike] = []
         strikes.reserveCapacity(levels.count)
         for (j, lv) in levels.enumerated() {
             let v = Double(lv)
-            if v < 0.02 { continue }
+            if v < 0.03 { continue }
             let ageSec = Double(j) / Self.historyHz
             // Sharp attack (newest = full), slow exponential return.
             let envelope = exp(-ageSec / Self.releaseTau)
-            // Lift mid-levels so normal speech moves the edge, not only shouting.
+            // Lift mid-levels so normal speech throws a tentacle, not only shouting.
             let strength = pow(v, 0.8) * envelope
-            if strength < 0.01 { continue }
-            // Strike angle for the sound that landed `ageSec` ago.
-            let angle = (time - ageSec) * Self.sweepSpeed
-            strikes.append(Strike(angle: angle, strength: strength))
+            if strength < 0.02 { continue }
+            // Absolute onset bucket (frame-stable): time of this sound,
+            // quantised to the history step. As the sample ages, j grows
+            // and ageSec grows in lockstep, so the bucket — and thus the
+            // angle — stays constant. THIS is what keeps a tentacle from
+            // travelling around the rim.
+            let onset = time - ageSec
+            let bucket = Int((onset * Self.historyHz).rounded())
+            strikes.append(Strike(angle: Self.angleFor(bucket: bucket), strength: strength))
         }
 
         var points: [CGPoint] = []
@@ -875,14 +884,11 @@ private struct BlobShape: Shape {
         let twoSigmaSq = 2 * Self.lobeSigma * Self.lobeSigma
 
         for i in 0..<n {
-            // Drawing angle (−π/2 = top), and the matching 0…2π position
-            // angle used to measure distance to each strike.
             let drawAngle = (Double(i) / Double(n)) * 2 * .pi - .pi / 2
             let pointAngle = Double(i) / Double(n) * 2 * .pi
 
-            // The edge displacement at this point = the strongest strike
-            // overlapping it (max, not sum, so lobes stay clean and the
-            // blob never balloons uniformly).
+            // Edge displacement = the strongest tentacle overlapping this
+            // point (max, not sum — clean separate spikes, no uniform balloon).
             var stretch: Double = 0
             for s in strikes {
                 var d = abs((pointAngle - s.angle).truncatingRemainder(dividingBy: 2 * .pi))
@@ -911,9 +917,6 @@ private struct BlobShape: Shape {
         CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
     }
 
-    /// Animate the instantaneous level so the size pulse stays smooth
-    /// between 30 Hz publishes. (The strike field is driven by `time` +
-    /// the discrete history buffer, which already moves every frame.)
     var animatableData: CGFloat {
         get { level }
         set { level = newValue }
