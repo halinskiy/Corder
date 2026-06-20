@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Search, Loader2 } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  deleteAccount, getMcpToken, setTestTier,
+  deleteAccount, setTestTier,
   type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
 import { LANGS, type Lang, type T } from "../i18n";
@@ -301,19 +301,10 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        <div className="settings-divider" />
-        <SoloCard>
-          <ApiTokenRow
-            label={t.settings_api_label ?? "API access"}
-            desc={t.settings_api_desc
-              ?? "Use this token to connect Corder to MCP clients (Claude Desktop, Cursor) or call the REST API directly. Anyone with the token can read your meetings — treat it like a password."}
-            reveal={t.settings_api_reveal ?? "Reveal MCP token"}
-            copied={t.settings_api_copied ?? "Copied"}
-            copy={t.settings_api_copy ?? "Copy"}
-            docsLabel={t.settings_api_docs ?? "API docs ↗"}
-            disabled={!loaded}
-          />
-        </SoloCard>
+        {/* API access (MCP/REST token) removed from Settings — the
+            MCP server / public API isn't a product surface we're
+            promoting. the `/mcp-token` endpoint stays server-side
+            for a future power-user reintroduction. */}
 
         <div className="settings-divider" />
         <SoloCard>
@@ -355,94 +346,6 @@ export function SettingsPane({
   );
 }
 
-/// Settings row for the personal API/MCP token reveal. Idle state
-/// shows just the label/desc + a "Reveal" button. Clicking it
-/// fetches the JWT from the Swift backend, swaps the button for a
-/// monospace token strip + a Copy button + a link to the API docs
-/// on getcorder.com. Token re-fetches on every reveal so the user
-/// can grab a fresh one when the previous one expired.
-function ApiTokenRow({
-  label, desc, reveal, copy, copied, docsLabel, disabled,
-}: {
-  label: string;
-  desc: string;
-  reveal: string;
-  copy: string;
-  copied: string;
-  docsLabel: string;
-  disabled?: boolean;
-}) {
-  const [token, setToken] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const [justCopied, setJustCopied] = React.useState(false);
-  return (
-    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
-         aria-label={label}>
-      <div className="settings-row-label">{label}</div>
-      <div className="settings-row-desc">{desc}</div>
-      {token == null ? (
-        <button
-          type="button"
-          className="clarify-btn"
-          style={{ width: "100%", marginTop: 8 }}
-          disabled={disabled || busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              const t = await getMcpToken();
-              setToken(t);
-            } catch {
-              // Stays in reveal-button state; user re-tries.
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          {busy ? "…" : reveal}
-        </button>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-          <input
-            type="text"
-            readOnly
-            value={token}
-            onFocus={(e) => e.currentTarget.select()}
-            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}
-          />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              className="clarify-btn"
-              style={{ flex: 1 }}
-              onClick={() => {
-                const w = window as unknown as { corderCopy?: (s: string) => void };
-                try {
-                  if (w.corderCopy) w.corderCopy(token);
-                  else navigator.clipboard?.writeText(token);
-                  setJustCopied(true);
-                  window.setTimeout(() => setJustCopied(false), 1200);
-                } catch {}
-              }}
-            >
-              {justCopied ? copied : copy}
-            </button>
-            <button
-              type="button"
-              className="clarify-btn"
-              style={{ flex: 1 }}
-              onClick={() => {
-                const w = window as unknown as { corderOpenExternal?: (u: string) => void };
-                w.corderOpenExternal?.("https://getcorder.com/docs/api/");
-              }}
-            >
-              {docsLabel}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /// Settings row for irreversible destructive actions (Delete
 /// account today; future "Wipe local cache", etc.). Same

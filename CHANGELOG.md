@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.32] — 2026-06-20
+
+### Changed
+- Recording blob reworked again: the body stays perfectly still and no longer spins. Sound makes thin tentacles lunge out at fixed spots (sharp out, slow back), like a symbiote, exactly in time with your voice.
+- Removed "API access" from Settings.
+
+### Fixed
+- Removed the "Dashboard" breadcrumb that could still navigate back to the now-hidden start screen.
+
 ## [0.14.31] — 2026-06-20
 
 ### Fixed
