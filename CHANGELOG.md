@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.30] — 2026-06-20
+
+### Changed
+- The recording blob now clearly shows it's capturing your voice: it stays completely still in silence, pulses with each sound, and its edges stretch out sharply then ease back. No more constant spinning and morphing.
+
 ## [0.14.29] — 2026-06-20
 
 ### Changed

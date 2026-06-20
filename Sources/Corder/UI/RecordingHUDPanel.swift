@@ -2,11 +2,11 @@ import AppKit
 import SwiftUI
 
 /// Floating panel that hovers over every other window while Corder is
-/// recording. The visual is a Liquid Blob — an organic shape that
-/// morphs through several geometric templates (blob → star →
-/// hexagon → squircle) on a slow cycle, while reacting in real time
-/// to mic + system audio level. Click stops the recording; drag
-/// repositions the panel.
+/// recording. The visual is a voice-reactive blob: perfectly still in
+/// silence, and on each sound it pulses (size kick) while one edge
+/// stretches sharply outward and eases slowly back — overlapping strikes
+/// land on different sides, so the deformation reads as live voice
+/// capture. Click stops the recording; drag repositions the panel.
 @MainActor
 final class RecordingHUDPanel {
     static let shared = RecordingHUDPanel()
@@ -447,14 +447,6 @@ struct RecordingHUDView: View {
         return Float(max(0, raw) * 0.35)
     }
 
-    /// Slow-moving peak envelope (decoupled period from `syntheticLevel`)
-    /// — sits in 0.18…0.45 so `audioActivity = clamp((peak - 0.05) * 6)`
-    /// stays in the 0.8…1.0 band: the blob runs through templates
-    /// continuously, just at varying intensity.
-    fileprivate static func syntheticPeak(t: TimeInterval) -> Float {
-        let p = sin(t * 0.7) * 0.5 + 0.5    // 0…1
-        return Float(0.18 + p * 0.27)       // 0.18…0.45
-    }
 
     @ObservedObject private var meter = RecordingLevelMeter.shared
     /// Lets the view know when a recording is actually in flight — used
@@ -495,7 +487,6 @@ struct RecordingHUDView: View {
         // EXCEPT the welcome-active path, which synthesises its
         // own gentle wave from the timeline clock further down.
         let liveLevel = max(meter.micLevel, meter.systemLevel)
-        let liveRecentPeak = meter.history.max() ?? 0
 
         // `welcomeActive` co-opts the recording-mode morph (active
         // templates + amplitude) without entering true recording
@@ -575,22 +566,24 @@ struct RecordingHUDView: View {
                 let level: Float = welcomeActive
                     ? Self.syntheticLevel(t: t)
                     : liveLevel
-                let recentPeak: Float = welcomeActive
-                    ? Self.syntheticPeak(t: t)
-                    : liveRecentPeak
-                let audioActivity = CGFloat(min(1, max(0, (recentPeak - 0.05) * 6)))
-                // Whole-blob size pulse: on top of the shape morph, the
-                // entire silhouette breathes in/out with the live level
-                // so every sound visibly "kicks" the blob, not just bends
-                // its outline. Driven by the instantaneous level (snappy,
-                // per-sound) — `* 3` lifts the 0.05…0.35 live range into a
-                // usable 0…1, clamped, then up to +15% scale. Multiplies
-                // with the entry/hover scaleEffect below, so both compose.
+                // Level history feeds the per-side strike field. Multiply
+                // every sample by `energy` so on stop the whole field eases
+                // to 0 → the silhouette settles smoothly back to a still
+                // circle instead of snapping. Welcome mode synthesises a
+                // short decaying history from the clock so the demo blob
+                // still reacts without real audio.
+                let levelsArr: [CGFloat] = welcomeActive
+                    ? (0..<24).map { k in CGFloat(Self.syntheticLevel(t: t - Double(k) / 12.0)) }
+                    : meter.history.map { CGFloat($0) * energy }
+                // Whole-blob size pulse: the entire silhouette kicks in/out
+                // with the live level so every sound visibly pulses the
+                // blob, not just bends one edge. Snappy (instantaneous
+                // level), up to +18% scale, composes with entry/hover.
                 let instLevel = CGFloat(max(0, level * Float(energy)))
-                let pulse = 1.0 + min(1.0, instLevel * 3.0) * 0.15
+                let pulse = 1.0 + min(1.0, instLevel * 3.0) * 0.18
                 blobLayer(time: t,
                           level: level * Float(energy),
-                          activity: audioActivity * energy,
+                          levels: levelsArr,
                           palette: palette)
                     .scaleEffect(pulse)
             }
@@ -739,10 +732,10 @@ struct RecordingHUDView: View {
     }
 
     @ViewBuilder
-    private func blobLayer(time: TimeInterval, level: Float, activity: CGFloat,
+    private func blobLayer(time: TimeInterval, level: Float, levels: [CGFloat],
                            palette: BlobPalette) -> some View {
         let lvl = CGFloat(level)
-        BlobShape(time: time, level: lvl, activity: activity)
+        BlobShape(time: time, level: lvl, levels: levels)
             .fill(
                 RadialGradient(
                     colors: palette.fillStops,
@@ -752,7 +745,7 @@ struct RecordingHUDView: View {
                 )
             )
             .overlay(
-                BlobShape(time: time, level: lvl, activity: activity)
+                BlobShape(time: time, level: lvl, levels: levels)
                     .stroke(
                         LinearGradient(
                             colors: [
@@ -819,188 +812,96 @@ private struct BlobPalette {
     )
 }
 
-// MARK: - Shape morphing
+// MARK: - Shape
 
-/// 12 control points distributed evenly around a circle. Each shape
-/// in the morph cycle is a 12-element array of radius multipliers
-/// (1.0 = sit on the base radius, <1.0 = pull toward the centre,
-/// >1.0 = push away). The shape itself is drawn as a closed loop
-/// of quadratic Béziers between successive midpoints, with each
-/// control point as the curve's control — gives continuous tangents
-/// at every joint.
-private enum ShapeTemplate {
-    /// Lazy organic — varying radius, no symmetry.
-    static let blob: [CGFloat] = [
-        1.05, 0.92, 1.02, 0.95, 1.08, 0.94,
-        0.98, 1.06, 0.92, 1.04, 0.96, 1.00
-    ]
-    /// 6-pointed star: alternating peak / valley.
-    static let star: [CGFloat] = [
-        1.18, 0.62, 1.18, 0.62, 1.18, 0.62,
-        1.18, 0.62, 1.18, 0.62, 1.18, 0.62
-    ]
-    /// Hexagon: every other point sits slightly inset so the shape
-    /// reads as 6 corners with mid-edges between them.
-    static let hexagon: [CGFloat] = [
-        1.05, 0.93, 1.05, 0.93, 1.05, 0.93,
-        1.05, 0.93, 1.05, 0.93, 1.05, 0.93
-    ]
-    /// Squircle / soft square: 4 broad corners with flatter sides.
-    static let squircle: [CGFloat] = [
-        1.10, 0.92, 0.85, 0.92, 1.10, 0.92,
-        0.85, 0.92, 1.10, 0.92, 0.85, 0.92
-    ]
-
-    /// The wobble amplitude scales down on near-rigid shapes so they
-    /// stay legible as a star / hexagon instead of mushing back into
-    /// a generic blob.
-    static let cycle: [(points: [CGFloat], wobbleScale: CGFloat)] = [
-        (blob,     1.00),
-        (star,     0.30),
-        (hexagon,  0.45),
-        (squircle, 0.45)
-    ]
-
-    /// One full pass through all four templates.
-    static let cycleDurationSec: Double = 4.0
-}
-
+/// Voice-reactive blob. The shape is a pure function of `time` plus the
+/// level history buffer — NO constant rotation, NO template morph, NO
+/// idle breathing. In silence (all history ≈ 0) every point sits exactly
+/// on the base radius, so the blob is a perfectly STILL circle: that
+/// stillness is the "not capturing sound" signal.
+///
+/// Each history sample is treated as a sound impulse that strikes ONE
+/// side of the blob (the strike angle sweeps, so consecutive sounds hit
+/// different sides) and then relaxes: a sharp outward attack (the newest
+/// samples) and a slow inward return (older samples decay over ~0.5 s).
+/// Because newer impulses land on a different angle while older ones are
+/// still easing back, one grань can be lunging out while another recovers
+/// — the overlapping stretch/return the user asked for. The whole-blob
+/// size pulse (scaleEffect in `blobLayer`) is driven separately by the
+/// instantaneous level, so each sound both kicks the size and stretches a
+/// side.
 private struct BlobShape: Shape {
     var time: TimeInterval
+    /// Instantaneous level (snappy, for the per-frame attack edge).
     var level: CGFloat
-    /// 0 = silence (frozen on the static blob template, faint
-    /// breath only); 1 = active speech (full morph through the
-    /// shape cycle, full-amplitude wobble).
-    var activity: CGFloat
+    /// Rolling level history, newest first, at ~12 Hz (`RecordingLevelMeter.history`).
+    var levels: [CGFloat]
+
+    // Tuning.
+    private static let pointCount = 12
+    private static let historyHz: Double = 12          // matches RecordingLevelMeter
+    private static let releaseTau: Double = 0.5        // slow inward return (s)
+    private static let sweepSpeed: Double = 7.5        // rad/s the strike angle travels
+    private static let lobeSigma: Double = 0.6         // angular width of one strike (rad)
+    private static let reach: CGFloat = 0.7            // how far a strike pulls the edge out
 
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let baseRadius = min(rect.width, rect.height) / 2 * 0.78
-        let pointCount = 12
+        let n = Self.pointCount
 
-        // Pick the two templates we're currently morphing between
-        // and our 0…1 progress through that morph.
-        let cycle = ShapeTemplate.cycle
-        let phase = time.truncatingRemainder(dividingBy: ShapeTemplate.cycleDurationSec)
-                  / ShapeTemplate.cycleDurationSec
-        let scaled = phase * Double(cycle.count)
-        let idx = Int(scaled) % cycle.count
-        let nextIdx = (idx + 1) % cycle.count
-        var local = scaled - Double(idx)
-        // Smoothstep keeps the curve soft at the joins so the shape
-        // doesn't visibly accelerate at integer boundaries.
-        local = local * local * (3 - 2 * local)
-
-        let from = cycle[idx]
-        let to   = cycle[nextIdx]
-        let wobbleScaleMorphed = lerp(from.wobbleScale, to.wobbleScale, CGFloat(local))
-
-        // Activity gates two things at once: the morph amplitude
-        // (at 0 we drop fully back to the canonical blob template,
-        // at 1 we let the cycle fully express stars / hexagons /
-        // squircles) and the wobble amplitude (very faint at silence
-        // so the resting blob reads as calm, full-amplitude when
-        // someone is speaking).
-        let act = max(0, min(1, activity))
-        // Tiny baseline wobble at idle (just enough to breathe), full
-        // amplitude under speech.
-        let wobbleAmplitude = 0.15 + 0.85 * act
+        // Precompute each impulse's strike angle + decayed strength once.
+        // Skip near-silent samples so silence costs nothing and stays
+        // perfectly round.
+        struct Strike { let angle: Double; let strength: Double }
+        var strikes: [Strike] = []
+        strikes.reserveCapacity(levels.count)
+        for (j, lv) in levels.enumerated() {
+            let v = Double(lv)
+            if v < 0.02 { continue }
+            let ageSec = Double(j) / Self.historyHz
+            // Sharp attack (newest = full), slow exponential return.
+            let envelope = exp(-ageSec / Self.releaseTau)
+            // Lift mid-levels so normal speech moves the edge, not only shouting.
+            let strength = pow(v, 0.8) * envelope
+            if strength < 0.01 { continue }
+            // Strike angle for the sound that landed `ageSec` ago.
+            let angle = (time - ageSec) * Self.sweepSpeed
+            strikes.append(Strike(angle: angle, strength: strength))
+        }
 
         var points: [CGPoint] = []
-        points.reserveCapacity(pointCount)
+        points.reserveCapacity(n)
+        let twoSigmaSq = 2 * Self.lobeSigma * Self.lobeSigma
 
-        for i in 0..<pointCount {
-            let angle = (Double(i) / Double(pointCount)) * 2 * .pi - .pi / 2
-            let morphedR = lerp(from.points[i], to.points[i], CGFloat(local))
-            // At act=0 we lock onto a perfect circle (all radii = 1.0)
-            // so the resting blob reads as truly round; the "blob"
-            // template only kicks in as activity ramps up.
-            let circleR: CGFloat = 1.0
-            let baseR = lerp(circleR, morphedR, act)
+        for i in 0..<n {
+            // Drawing angle (−π/2 = top), and the matching 0…2π position
+            // angle used to measure distance to each strike.
+            let drawAngle = (Double(i) / Double(n)) * 2 * .pi - .pi / 2
+            let pointAngle = Double(i) / Double(n) * 2 * .pi
 
-            // Base breathing wobble — present even at activity=0 so
-            // the resting blob never looks frozen. Amplitude is tiny
-            // (≈ 1 % radius variation) so the shape stays visibly round.
-            // Frequencies are close-but-not-commensurate so it never
-            // settles into a repeating loop.
-            let phase1 = time * 1.6 + Double(i) * 0.71
-            let phase2 = time * 2.7 + Double(i) * 1.23
-            let wobbleRaw = sin(phase1) * 0.05 + sin(phase2) * 0.03
-            let baseWobble = wobbleRaw * Double(wobbleScaleMorphed) * Double(wobbleAmplitude)
+            // The edge displacement at this point = the strongest strike
+            // overlapping it (max, not sum, so lobes stay clean and the
+            // blob never balloons uniformly).
+            var stretch: Double = 0
+            for s in strikes {
+                var d = abs((pointAngle - s.angle).truncatingRemainder(dividingBy: 2 * .pi))
+                if d > .pi { d = 2 * .pi - d }
+                let falloff = exp(-(d * d) / twoSigmaSq)
+                let contrib = s.strength * falloff
+                if contrib > stretch { stretch = contrib }
+            }
 
-            // High-frequency jitter that fades in with activity *and*
-            // amplifies with instantaneous audio level — each spoken
-            // syllable causes a visible twitch, not just a slow inflate.
-            let jitterPhase1 = time * 7.5 + Double(i) * 1.13
-            let jitterPhase2 = time * 13.1 + Double(i) * 2.37
-            let jitterAmp = (0.08 + 0.9 * Double(level)) * Double(act)
-            let jitter = (sin(jitterPhase1) * 0.06 + sin(jitterPhase2) * 0.04) * jitterAmp
-            let wobble = baseWobble + jitter
-
-            // Audio level pushes the radius outward. Phase rotates
-            // per-point so loud audio bulges different sides at
-            // different times rather than uniformly inflating.
-            // Gated by `act`: at rest (act≈0) this is exactly zero even
-            // if `level` carries a stale value from a just-finished
-            // recording — otherwise a paused idle frame freezes the blob
-            // mid-bulge ("застыл в растёкшемся состоянии").
-            let levelPhase = sin(time * 2.1 + Double(i) * 1.2)
-            let levelBoost = Double(level) * 0.9 * (0.55 + 0.45 * levelPhase) * Double(act)
-
-            // Directional "audio tongue": a single localised edge that
-            // lunges OUT hard when sound hits, instead of the whole blob
-            // inflating uniformly. The pull is centred on a slowly
-            // sweeping angle and falls off (gaussian) with angular
-            // distance, so the silhouette grows a living, stretching
-            // grань that tracks volume — exactly the "an edge pulls on
-            // the beat" read the user wanted. Driven by `level`
-            // directly (not gated by `act`): `level` is already ~0 in
-            // silence, so the tongue only appears when there's actual
-            // sound, and its reach scales with how loud it is.
-            let pointAngle = Double(i) / Double(pointCount) * 2 * .pi
-            let tongueDir = time * 0.85
-            var dAng = abs((pointAngle - tongueDir)
-                .truncatingRemainder(dividingBy: 2 * .pi))
-            if dAng > .pi { dAng = 2 * .pi - dAng }
-            // σ ≈ 0.5 rad (~30°) — a focused lobe, not a soft swell.
-            let tongueFalloff = exp(-(dAng * dAng) / (2 * 0.5 * 0.5))
-            // Lift mid-levels (pow < 1) so normal speech — not just
-            // shouting — moves the edge. Reach kept modest (×1.0) so it
-            // reads as "an edge leans out on the beat", not a spike
-            // lashing out — the previous ×2.4 was way too violent.
-            let levelLifted = pow(max(0, Double(level)), 0.8)
-            // Also gated by `act` so the resting blob can never grow a
-            // tongue from a stale level — only a live recording with
-            // real speech activity does.
-            let tongue = levelLifted * 1.0 * tongueFalloff * Double(act)
-
-            // Idle "breath bulge": even with zero audio, one side leans
-            // gently out and the lobe slowly travels around the rim, so
-            // the resting blob reads as alive instead of a frozen circle.
-            // Always on (NOT gated by act/level), tiny (~3.5% radius),
-            // slow — "a side just barely wants to break out, regularly".
-            let idleDir = time * 0.55
-            var dIdle = abs((pointAngle - idleDir)
-                .truncatingRemainder(dividingBy: 2 * .pi))
-            if dIdle > .pi { dIdle = 2 * .pi - dIdle }
-            let idleLobe = exp(-(dIdle * dIdle) / (2 * 0.8 * 0.8))
-            let idlePulse = (0.5 + 0.5 * sin(time * 1.3)) * 0.035 * idleLobe
-
-            let r = baseRadius * (baseR + CGFloat(wobble)
-                                  + CGFloat(levelBoost) + CGFloat(tongue)
-                                  + CGFloat(idlePulse))
-            let px = center.x + CGFloat(cos(angle)) * r
-            let py = center.y + CGFloat(sin(angle)) * r
-            points.append(CGPoint(x: px, y: py))
+            let r = baseRadius * (1.0 + CGFloat(stretch) * Self.reach)
+            points.append(CGPoint(x: center.x + CGFloat(cos(drawAngle)) * r,
+                                  y: center.y + CGFloat(sin(drawAngle)) * r))
         }
 
         var path = Path()
-        let startMid = midpoint(points.last!, points.first!)
-        path.move(to: startMid)
-        for i in 0..<pointCount {
-            let next = points[(i + 1) % pointCount]
-            let mid = midpoint(points[i], next)
-            path.addQuadCurve(to: mid, control: points[i])
+        path.move(to: midpoint(points.last!, points.first!))
+        for i in 0..<n {
+            let next = points[(i + 1) % n]
+            path.addQuadCurve(to: midpoint(points[i], next), control: points[i])
         }
         path.closeSubpath()
         return path
@@ -1010,18 +911,11 @@ private struct BlobShape: Shape {
         CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
     }
 
-    private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
-        a + (b - a) * t
-    }
-
-    /// Two animatable scalars — level + activity — kept here so the
-    /// Canvas redraws smoothly as RecordingLevelMeter publishes new
-    /// values instead of snapping.
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(level, activity) }
-        set {
-            level = newValue.first
-            activity = newValue.second
-        }
+    /// Animate the instantaneous level so the size pulse stays smooth
+    /// between 30 Hz publishes. (The strike field is driven by `time` +
+    /// the discrete history buffer, which already moves every frame.)
+    var animatableData: CGFloat {
+        get { level }
+        set { level = newValue }
     }
 }
