@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.33] — 2026-06-20
+
+### Fixed
+- The other person is now captured on Bluetooth output. The system-audio backup was recording silence whenever a recording used Bluetooth (AirPods etc.); now the far end is saved so it transcribes.
+
+### Changed
+- Recording blob tentacles are calmer: fewer, longer, and they grow out smoothly instead of popping.
+
 ## [0.14.32] — 2026-06-20
 
 ### Changed
