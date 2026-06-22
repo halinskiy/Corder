@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.37] — 2026-06-22
+
+### Fixed
+- The other person is captured more reliably on Bluetooth. Diagnosed from logs: the system-audio tap sometimes started but delivered zero audio when Bluetooth was switching modes at that instant. It now detects "no audio after start" and rebuilds itself automatically (up to a few attempts), which recovers the far end in that case.
+
 ## [0.14.36] — 2026-06-22
 
 ### Fixed
