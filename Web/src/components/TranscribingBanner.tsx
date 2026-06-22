@@ -57,24 +57,6 @@ interface Props {
   t: T;
 }
 
-/// Asymptotic progress estimate for the Stop-button fill. We have no
-/// byte-accurate signal (the heavy ASR stage is opaque and the banner
-/// unmounts the instant the backend flips the row to `ready`), so we
-/// model a believable "work is happening" curve instead: a fast initial
-/// rise that decelerates and approaches — but never reaches — a 94%
-/// ceiling. It NEVER claims done; completion is signalled by the banner
-/// disappearing. `tau` (the time constant) scales with the recording
-/// length so a 2-hour meeting doesn't slam to 94% in ten seconds.
-function estimateProgress(elapsedSec: number, durationMs: number | null): number {
-  const durationSec = durationMs && durationMs > 0 ? durationMs / 1000 : 0;
-  // Cloud/local ASR runs many times faster than real time; ~15% of the
-  // recording length is a decent middle-ground time constant, floored so
-  // short clips still animate over a few seconds rather than instantly.
-  const tau = Math.max(6, durationSec * 0.15);
-  const ceiling = 0.94;
-  return ceiling * (1 - Math.exp(-elapsedSec / tau));
-}
-
 type UpsellKind = "speed" | "best" | "unlimited" | null;
 /// Just the concrete upsell variants — `null` is the "nothing to push"
 /// sentinel and isn't a valid map key. Split out so the snooze record
@@ -138,7 +120,7 @@ function resolveUpsell(s: Settings | null, u: Usage | null): UpsellKind {
 /// between recording / transcribing / failed / empty states. The
 /// spinner sits inline next to the headline so the "this is moving"
 /// signal is part of the title, not a separate row that grows the card.
-export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCancelled, onToast, t }: Props) {
+export function TranscribingBanner({ meetingId, startedAtMs, onCancelled, onToast, t }: Props) {
   // Backend mark when the pipeline went into .transcribing. Falling
   // back to Date.now() for legacy rows that don't carry the field —
   // keeps the timer monotonic rather than negative.
@@ -197,12 +179,6 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
   const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
   const m = Math.floor(elapsed / 60).toString().padStart(2, "0");
   const s = (elapsed % 60).toString().padStart(2, "0");
-
-  // Progress fill (0…1) painted as a translucent dark overlay creeping
-  // across the Stop button — so a long transcribe reads as "moving",
-  // not a frozen spinner. Frozen at full while the user is actually
-  // cancelling (the spinner takes over then).
-  const progress = stopping ? 1 : estimateProgress(elapsed, durationMs);
 
   const onStop = async () => {
     setStopping(true);
@@ -296,14 +272,10 @@ export function TranscribingBanner({ meetingId, startedAtMs, durationMs, onCance
           disabled={stopping}
           aria-busy={stopping}
         >
-          {/* Translucent progress fill behind the label. width tracks the
-              asymptotic estimate; the 1s timer re-renders it so it eases
-              forward. CSS transition smooths each step. */}
-          <span
-            className="trans-stop-fill"
-            style={{ width: `${Math.round(progress * 100)}%` }}
-            aria-hidden
-          />
+          {/* Indeterminate "working" sweep behind the label — see the CSS.
+              No fake percentage: we have no real ASR progress signal, so a
+              value-driven fill mis-finished / animated backwards. */}
+          <span className="trans-stop-fill" aria-hidden />
           <span className="trans-stop-label">
             {stopping ? (
               <Loader2 size={18} className="trans-inline-spinner trans-stop-spinner" aria-hidden />

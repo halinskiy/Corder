@@ -2520,14 +2520,27 @@ body.resizing { cursor: col-resize; user-select: none; }
    approaches but never reaches the right edge — completion is signalled
    by the banner disappearing, never by the bar hitting 100%. */
 .trans-stop-btn { position: relative; overflow: hidden; }
+/* Indeterminate "working" sweep. We have NO real per-chunk progress
+   signal from the ASR, so a value-driven fill was dishonest: it could
+   finish at 24% (a fast cache-hit re-map) or animate BACKWARDS from a
+   stale full width when a new run reset it. A continuously sweeping
+   translucent band reads as "transcribing" without claiming a percentage,
+   never reverses, and just stops when the banner unmounts on `ready`. */
 .trans-stop-fill {
   position: absolute;
-  inset: 0 auto 0 0;          /* top/bottom 0, left 0, width set inline */
-  background: rgba(0, 0, 0, 0.22);
-  /* Long ease so each 1 s width bump glides instead of stepping. */
-  transition: width 1000ms linear;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  background: rgba(0, 0, 0, 0.18);
   pointer-events: none;
+  animation: trans-stop-sweep 1.4s ease-in-out infinite;
 }
+@keyframes trans-stop-sweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(285%); }
+}
+.dark .trans-stop-fill { background: rgba(255, 255, 255, 0.12); }
 .trans-stop-label {
   position: relative;          /* sit above the fill */
   display: inline-flex;
