@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.39] — 2026-06-22
+
+### Fixed
+- Timeline speaker percentages now show share of talking (they sum to 100%) instead of share of the whole recording, which could read past 100% on calls where both tracks overlap.
+
 ## [0.14.38] — 2026-06-22
 
 ### Changed
