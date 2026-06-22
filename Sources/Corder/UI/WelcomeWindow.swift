@@ -159,7 +159,13 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         // No `.fullScreenAuxiliary` in collectionBehavior below —
         // we want fullscreen apps (YouTube etc) to obscure the
         // wizard, not vice versa.
-        let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        // NOT `.resizable`. The window is a FIXED 380×516 (min==max==default),
+        // but keeping `.resizable` left a live resize path: on macOS 26 a
+        // hover-driven SwiftUI relayout could kick AppKit into a resize that
+        // the `windowWillResize`/`windowDidResize` clamps fought every frame,
+        // walking the window off the bottom of the screen ("окно улетает вниз
+        // при наведении на инпут"). A non-resizable window has no such path.
+        let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.kDefaultContentSize),
             styleMask: style,
@@ -240,34 +246,10 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
-    /// Hard-pin the wizard window to the fixed kDefaultContentSize.
-    /// NSHostingView + SwiftUI sometimes asks AppKit to grow the
-    /// window after a step swap (the confirmation card published a
-    /// larger `intrinsicContentSize` and AppKit walked the window
-    /// frame to it, ignoring contentMaxSize). Returning the constant
-    /// size from `windowWillResize` traps any such attempt before it
-    /// reaches the screen.
-    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        // frameSize is the WINDOW frame size (includes titlebar). We
-        // want the CONTENT to stay kHeight, so compute the titlebar
-        // chrome height and add it back.
-        let chrome = sender.frame.height - sender.contentLayoutRect.height
-        return NSSize(width: Self.kWidth, height: Self.kHeight + chrome)
-    }
-
-    /// Last-resort snap: if something programmatic still moved the
-    /// frame past the cap, force it back the moment AppKit reports
-    /// the resize done.
-    func windowDidResize(_ notification: Notification) {
-        guard let w = notification.object as? NSWindow else { return }
-        let chrome = w.frame.height - w.contentLayoutRect.height
-        let target = NSSize(width: Self.kWidth, height: Self.kHeight + chrome)
-        if w.frame.size != target {
-            var f = w.frame
-            f.size = target
-            w.setFrame(f, display: true, animate: false)
-        }
-    }
+    // The window is non-resizable now (see the styleMask above), so the
+    // old `windowWillResize` / `windowDidResize` size-clamping delegate
+    // methods are gone — they were the very feedback loop that walked the
+    // window off-screen. A fixed-size NSWindow needs no clamping.
 
     /// Shift the three standard titlebar buttons so the leftmost
     /// (close) sits `leftInset` pt from the window edge. The default
