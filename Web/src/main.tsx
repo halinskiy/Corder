@@ -564,9 +564,16 @@ function App() {
           // skeleton on every click ("postoянно подгружается").
           if (activeId) lastSeenMeetingRef.current = activeId;
           const lastSeen = lastSeenMeetingRef.current;
+          // Show the Dashboard (start screen) ONLY once we've confirmed the
+          // library is actually empty. On launch the meetings list is still
+          // loading and `activeId` is null, which used to flash the
+          // Dashboard for a beat before the auto-open of the latest session
+          // kicked in. While loading (or when meetings exist) we render
+          // nothing here instead of that flash.
+          const showDashboard = !activeId && meetingsLoaded && visibleMeetings.length === 0;
           return (
             <>
-              {!activeId && (
+              {showDashboard && (
                 <>
                   <MainHeader
                     breadcrumb={<span className="breadcrumb-current">{t.breadcrumb_dashboard}</span>}

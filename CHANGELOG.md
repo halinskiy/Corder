@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.34] — 2026-06-22
+
+### Fixed
+- No more Dashboard flash on launch — the app goes straight to your latest recording. The start screen only shows when the library is empty.
+
 ## [0.14.33] — 2026-06-20
 
 ### Fixed
