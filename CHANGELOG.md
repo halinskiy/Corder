@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.40] — 2026-06-22
+
+### Fixed
+- Timeline is accurate now. When the two audio tracks bleed into each other, each speaker was placed across almost the whole recording (one solid bar, overlapping ~50% of the time). Each speaker is now kept only where their own track is the louder one, so the bars show real segments with gaps and the talk split is honest. Measured on a real call: overlap dropped from 50% to 10%.
+
 ## [0.14.39] — 2026-06-22
 
 ### Fixed
