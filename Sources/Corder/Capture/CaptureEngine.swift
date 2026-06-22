@@ -446,24 +446,20 @@ final class CaptureEngine: NSObject {
                 self?.writeSystemAudioPCM(pcm)
             }
         }
-        // Core-Audio process tap vs SCStream .audio are MUTUALLY
-        // EXCLUSIVE in practice: while the tap's private aggregate device
-        // is live it zeros every SCStream .audio sample (measured rms=0 on
-        // every recording, regardless of `excludesCurrentProcessAudio`).
-        // And the tap itself is silent/unreliable on a Bluetooth OUTPUT
-        // route. So on BT we DON'T start the tap — that frees SCStream
-        // .audio to actually capture the system mix (the far end) into
-        // system_sck.wav. Off-BT we keep the tap (primary, reliable, gets
-        // VPIO/WebRTC call audio SCStream can miss) and accept that SCK
-        // stays silent (the chooser prefers the tap there anyway).
-        if outputBluetoothAtStart {
-            FileLogger.log("CaptureEngine.start: BT output — skipping Core-Audio process tap so SCStream .audio (system_sck.wav) can capture the far end (the live tap zeros SCK).")
-        } else {
-            do {
-                try systemTap.start()
-            } catch {
-                FileLogger.log("CaptureEngine.start: system audio tap failed: \(error.localizedDescription). Recording mic-only.")
-            }
+        // ALWAYS start the Core-Audio process tap — including on Bluetooth.
+        // Earlier (0.14.33) we skipped the tap on BT on the theory that the
+        // live tap zeros SCStream .audio, so SCK could then capture the far
+        // end. MEASURED WRONG: system_sck.wav is rms=0 (pure silence) on
+        // EVERY recording, with OR without the tap — SCStream .audio simply
+        // doesn't capture system audio on this macOS, so it's never a real
+        // backup. Meanwhile the tap DOES capture the far end on BT in many
+        // sessions (e.g. 824320 voiced frames). Skipping it therefore
+        // GUARANTEED far-end loss on BT, which was strictly worse. The tap
+        // is the only path that ever works, so it always runs now.
+        do {
+            try systemTap.start()
+        } catch {
+            FileLogger.log("CaptureEngine.start: system audio tap failed: \(error.localizedDescription). Recording mic-only.")
         }
 
         // 7. Mark recording state

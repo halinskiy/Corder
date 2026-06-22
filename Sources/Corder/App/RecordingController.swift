@@ -223,6 +223,15 @@ final class RecordingController {
                     title: L.notif("notif_bt_title"),
                     body: L.notif("notif_bt_body"))
             }
+            // Always surface it in-window too (not gated by the
+            // notifications toggle) — losing the far end is important
+            // enough that the user must see it even if they record with a
+            // BT headset on a call (HFP), where macOS gives us no reliable
+            // way to capture the remote side.
+            LibraryWindow.shared.postToast(
+                title: L.notif("notif_bt_title"),
+                body: L.notif("notif_bt_body"),
+                kind: "error")
         }
 
         let endedAtMs = Int64(Date().timeIntervalSince1970 * 1000)

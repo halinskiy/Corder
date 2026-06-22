@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.36] — 2026-06-22
+
+### Fixed
+- Reverted a change that made the other person MORE likely to be missed on Bluetooth. The system-audio tap (which does capture the far end when it can) now always runs. On a Bluetooth headset call macOS may still route the audio where it can't be captured — for a guaranteed full transcript, use built-in speakers or wired output. When the far end is missed on Bluetooth you now get a clear in-app notice.
+
 ## [0.14.35] — 2026-06-22
 
 ### Fixed
