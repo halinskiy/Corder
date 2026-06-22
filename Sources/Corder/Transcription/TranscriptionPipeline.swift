@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import AVFoundation
 
 /// Drives the post-recording pipeline: mix audio → Gemini transcribe →
 /// channel-gate "user" identification → DB writes → optional auto-Boost
@@ -679,6 +680,20 @@ final class TranscriptionPipeline {
                     // VAD found speech in only ~half of it). Same text-rate
                     // clamp, monotonic-shortening, no-op on tight turns.
                     otherTurns = Self.capTurnDurations(o)
+
+                    // Cross-track dominance gate. Dual-track bleed makes both
+                    // the mic and the system track look voiced at the same
+                    // time, so each speaker's turns end up spread across the
+                    // WHOLE recording and the timeline shows ~50% phantom
+                    // overlap (the far-end as one solid 100% stripe). Keep
+                    // each speaker's turns only where THEIR OWN track is the
+                    // louder one. Computed once per track (100ms RMS), so
+                    // it's cheap; a clean headphone recording is a near no-op.
+                    if let micRMS = Self.frameRMS(micURL),
+                       let sysRMS = Self.frameRMS(systemURL) {
+                        userTurns = Self.gateTurnsByDominance(userTurns, own: micRMS, rival: sysRMS)
+                        otherTurns = Self.gateTurnsByDominance(otherTurns, own: sysRMS, rival: micRMS)
+                    }
                 }
                 FileLogger.log("transcribe(): timing re-derived — \(userTurns.count) user / \(otherTurns.count) other")
             }
@@ -1182,6 +1197,98 @@ final class TranscriptionPipeline {
             let before = turns.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
             let after = out.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
             FileLogger.log("B/capTurns: capped \(capped)/\(turns.count) turns, coverage \(before)s → \(after)s")
+        }
+        return out
+    }
+
+    /// Per-100ms RMS of a WAV, mono-mixed, on a wall-clock grid (index i =
+    /// [i*100ms, (i+1)*100ms)). Sample rate is normalised out, so the two
+    /// dual-track files share one comparable time grid regardless of their
+    /// individual rates. nil on read error.
+    static func frameRMS(_ url: URL, hopMs: Int = 100) -> [Float]? {
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let format = file.processingFormat
+        let sr = format.sampleRate
+        guard sr > 0, file.length > 0 else { return [] }
+        let total = AVAudioFrameCount(file.length)
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: total),
+              (try? file.read(into: buf, frameCount: total)) != nil,
+              let chans = buf.floatChannelData else { return nil }
+        let frames = Int(buf.frameLength)
+        let chCount = Int(format.channelCount)
+        let hop = max(1, Int(Double(hopMs) * sr / 1000.0))
+        var out: [Float] = []
+        out.reserveCapacity(frames / hop + 1)
+        var pos = 0
+        while pos < frames {
+            let end = min(pos + hop, frames)
+            var sumSq: Float = 0
+            for ch in 0..<chCount {
+                let d = chans[ch]
+                for i in pos..<end { sumSq += d[i] * d[i] }
+            }
+            out.append(sqrtf(sumSq / Float(max(1, (end - pos) * chCount))))
+            pos += hop
+        }
+        return out
+    }
+
+    /// Cross-track dominance gate. Dual-track bleed (mic hears the far end
+    /// and vice versa) makes BOTH tracks look "voiced" at the same time, so
+    /// each speaker's turns get placed across ~the whole recording — the
+    /// far-end timeline reads as one solid 100% stripe. We keep each turn
+    /// only where ITS OWN track is louder than the rival, on a 100ms grid,
+    /// after normalising each track by its own loud level (so a quieter
+    /// recorded track isn't unfairly beaten everywhere). A turn with no
+    /// own-dominant frame collapses to a point (text kept, no timeline
+    /// block). Clean headphone meetings (no bleed) are a near no-op: the
+    /// own track is the only one voiced in its turns. Returns turns clipped
+    /// to [first dominant, last dominant] inside each original span.
+    static func gateTurnsByDominance(_ turns: [GeminiTranscriber.Turn],
+                                     own: [Float], rival: [Float],
+                                     hopMs: Int = 100) -> [GeminiTranscriber.Turn] {
+        guard !turns.isEmpty, !own.isEmpty else { return turns }
+        // Reference level per track = 90th percentile of its non-trivial
+        // frames, a robust proxy for that track's normal speech loudness.
+        func ref(_ a: [Float]) -> Float {
+            let v = a.filter { $0 > 0.003 }.sorted()
+            if v.isEmpty { return 1 }
+            let idx = min(v.count - 1, max(0, Int(Double(v.count) * 0.9)))
+            return max(1e-4, v[idx])
+        }
+        let rOwn = ref(own), rRival = ref(rival)
+        let floor: Float = 0.004
+        func dominant(_ i: Int) -> Bool {
+            let o = i < own.count ? own[i] : 0
+            let r = i < rival.count ? rival[i] : 0
+            return o >= floor && (o / rOwn) > (r / rRival)
+        }
+        var gated = 0
+        let out = turns.map { t -> GeminiTranscriber.Turn in
+            let f0 = Int(t.startMs) / hopMs
+            let f1 = max(f0, Int(t.endMs) / hopMs)
+            var first = -1, last = -1
+            var i = f0
+            while i <= f1 {
+                if dominant(i) { if first < 0 { first = i }; last = i }
+                i += 1
+            }
+            guard first >= 0 else {
+                gated += 1
+                return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                              startMs: t.startMs, endMs: t.startMs, text: t.text)
+            }
+            let ns = Int64(first * hopMs), ne = Int64((last + 1) * hopMs)
+            let cs = max(t.startMs, min(ns, t.endMs))
+            let ce = max(cs, min(ne, t.endMs))
+            if cs != t.startMs || ce != t.endMs { gated += 1 }
+            return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                          startMs: cs, endMs: ce, text: t.text)
+        }
+        if gated > 0 {
+            let before = turns.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
+            let after = out.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
+            FileLogger.log("dominanceGate: clipped \(gated)/\(turns.count) turns, coverage \(before)s → \(after)s")
         }
         return out
     }
