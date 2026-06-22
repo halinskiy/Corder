@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.35] — 2026-06-22
+
+### Fixed
+- Sign-in window no longer flies off-screen when you move the cursor over a field. The window is now a fixed size.
+
 ## [0.14.34] — 2026-06-22
 
 ### Fixed
