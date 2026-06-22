@@ -19,6 +19,35 @@ enum TelemetryService {
     private static let lastSentKey = "Corder.telemetry.lastSentAt"
     private static let oneDay: TimeInterval = 24 * 3600
 
+    // MARK: - Reliability counters (the whole point: measure far-end loss)
+    //
+    // Rolling, anonymous integer counters bumped by the capture pipeline.
+    // No identifiers, no content. Read + reset into each daily ping so we
+    // can finally SEE how often the other person is lost, split by BT.
+    // Thread-safe via UserDefaults' own atomicity (single-key int writes).
+    enum Counter: String {
+        case recordings        = "Corder.tele.recordings"        // total stopped recordings
+        case btRecordings      = "Corder.tele.btRecordings"      // output was Bluetooth at start
+        case farEndLost        = "Corder.tele.farEndLost"        // system track came out silent
+        case btFarEndLost      = "Corder.tele.btFarEndLost"      // silent AND Bluetooth
+        case tapRebuilds       = "Corder.tele.tapRebuilds"       // watchdog rebuilt the tap
+    }
+    /// Bump a reliability counter by one. Safe to call from any actor —
+    /// it's a plain UserDefaults integer increment.
+    nonisolated static func bump(_ c: Counter) {
+        let d = UserDefaults.standard
+        d.set(d.integer(forKey: c.rawValue) + 1, forKey: c.rawValue)
+    }
+    private static func drainCounters() -> [String: Int] {
+        let d = UserDefaults.standard
+        var out: [String: Int] = [:]
+        for c in [Counter.recordings, .btRecordings, .farEndLost, .btFarEndLost, .tapRebuilds] {
+            out[c.rawValue.replacingOccurrences(of: "Corder.tele.", with: "")] = d.integer(forKey: c.rawValue)
+            d.removeObject(forKey: c.rawValue)   // reset the window after reading
+        }
+        return out
+    }
+
     /// Call from `applicationDidFinishLaunching` AND from a 1-hour
     /// timer. Returns immediately if telemetry is off or the 24h
     /// window hasn't elapsed yet.
@@ -80,6 +109,10 @@ enum TelemetryService {
             let totalDur = recent.compactMap { $0.durationMs }.reduce(0, +)
             stats["total_duration_ms"] = totalDur
         }
+        // Capture-reliability counters (drained + reset for this window).
+        // This is what tells us how often the far end is lost, and how
+        // much of it is Bluetooth — the core risk we couldn't see before.
+        for (k, v) in drainCounters() { stats["reliab_\(k)"] = v }
         return [stats]
     }
 

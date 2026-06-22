@@ -102,6 +102,7 @@ final class SystemAudioTap {
             let attempt = self.restarts
             self.stateLock.unlock()
             FileLogger.log("SystemAudioTap: no IOProc audio within \(self.watchdogDelay)s — rebuilding tap (attempt \(attempt)/\(self.maxRestarts)).")
+            TelemetryService.bump(.tapRebuilds)
             self.teardownCoreAudio()
             do {
                 try self.buildAndStart()
