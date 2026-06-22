@@ -151,14 +151,15 @@ enum AppSettings {
     static var autoTitle: Bool             { flag(kAutoTitle) }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
-    /// Diagnostic telemetry. Default OFF — opt-in only. The paid plans
-    /// have shipped and the landing promises "No telemetry, no analytics,
-    /// no pings" inside the app, so the default MUST stay off to keep that
-    /// claim true. A user who explicitly enables it sends aggregate signal
-    /// only: no transcripts, no raw email; everything through
-    /// `TelemetryService` is aggregate + a SHA-256 anonymous id.
+    /// Diagnostic telemetry. Default ON now (opt-OUT) — capture reliability
+    /// (far-end lost on Bluetooth) is the product's core risk and can't be
+    /// measured without real-world numbers. Strictly ANONYMOUS aggregate
+    /// counts: no transcripts, no titles, no speaker names, no raw email
+    /// (SHA-256 id only), no audio. The landing copy was updated to match
+    /// ("anonymous diagnostics, opt-out anytime; never your meeting content").
+    /// A user who explicitly turned it OFF keeps their stored false.
     static var telemetryEnabled: Bool {
-        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? false
+        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? true
     }
     /// Dashboard statistics block. Default OFF for everyone; the toggle
     /// that enables it lives in Advanced and is shown only to paid tiers

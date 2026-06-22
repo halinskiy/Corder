@@ -201,7 +201,19 @@ final class RecordingController {
         let maxMic = RecordingLevelMeter.shared.sessionMaxMic
         let maxSys = RecordingLevelMeter.shared.sessionMaxSystem
         RecordingHUDPanel.shared.hide()
+        let btAtStart = AppContext.shared.capture.outputBluetoothAtStart
         await AppContext.shared.capture.stop()
+
+        // Reliability telemetry (anonymous counts only). `farEndLost` =
+        // we DID record (mic had audio) but the system track came out
+        // silent, i.e. the other person was lost — the exact failure we
+        // need real-world numbers on, split by Bluetooth.
+        TelemetryService.bump(.recordings)
+        if btAtStart { TelemetryService.bump(.btRecordings) }
+        if !capturedSilence && maxSys < 0.004 {
+            TelemetryService.bump(.farEndLost)
+            if btAtStart { TelemetryService.bump(.btFarEndLost) }
+        }
 
         // Tell the user *now* if nothing was actually captured (mic muted,
         // wrong input, permission silently lost). The silent-recording

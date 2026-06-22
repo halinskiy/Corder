@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.38] — 2026-06-22
+
+### Changed
+- Anonymous reliability diagnostics are now on by default (still opt-out in Settings). They measure how often the other side is lost on Bluetooth, so it can be fixed. Never include recordings, transcripts, or audio. Privacy copy updated to match.
+
 ## [0.14.37] — 2026-06-22
 
 ### Fixed
