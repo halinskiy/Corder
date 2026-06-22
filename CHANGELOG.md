@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.41] — 2026-06-23
+
+### Changed
+- The Stop-transcription progress bar is now an honest "working" animation instead of a fake percentage. It no longer animates backwards when a re-transcribe starts, and no longer pretends to be half-done when the work is actually finished. (There is no true per-chunk progress signal from the transcriber, so showing a real percentage would be misleading.)
+
 ## [0.14.40] — 2026-06-22
 
 ### Fixed
