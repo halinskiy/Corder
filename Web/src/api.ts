@@ -60,6 +60,7 @@ export interface MeetingDetail {
   transcribing_started_at?: number | null;
   /// Real transcription progress 0…1 while transcribing; null otherwise.
   transcribe_progress?: number | null;
+  model_download_progress?: number | null;
 }
 
 export interface UsageBucket {

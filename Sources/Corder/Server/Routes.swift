@@ -648,7 +648,13 @@ enum Routes {
                 chapters: m.chapters,
                 transcribing_started_at: m.transcribingStartedAt,
                 transcribe_progress: m.status == .transcribing
-                    ? TranscriptionProgressStore.read(meetingId: id) : nil
+                    ? TranscriptionProgressStore.read(meetingId: id) : nil,
+                // Surface the on-device model download while a transcription
+                // waits on it (new free-tier user, ~1.5 GB first fetch). Only
+                // meaningful when the active provider is whisperLocal.
+                model_download_progress: m.status == .transcribing
+                    && AppSettings.transcriptionProvider == .whisperLocal
+                    ? LocalWhisperTranscriber.currentProgress(AppSettings.whisperLocalVariant) : nil
             )
             return jsonResponse(dto)
         } catch {

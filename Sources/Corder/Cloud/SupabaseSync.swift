@@ -117,7 +117,12 @@ enum SupabaseSync {
             started_at: iso(m.startedAt) ?? Self.isoFormatter.string(from: Date()),
             ended_at: iso(m.endedAt),
             duration_ms: m.durationMs ?? 0,
-            status: m.status.rawValue,
+            // The server's `meetings_status_check` constraint predates the
+            // `preroll` status, so pushing it raw 23514-fails the whole row
+            // (the meeting never syncs). `preroll` is a transient pre-record
+            // buffer anyway, so map it to `recording` for the server; once
+            // the meeting finishes it updates to ready/failed normally.
+            status: m.status == .preroll ? MeetingStatus.recording.rawValue : m.status.rawValue,
             has_video: !m.videoPath.isEmpty,
             pinned: m.pinnedAt != nil,
             archived_at: iso(m.archivedAt),

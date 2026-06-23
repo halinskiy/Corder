@@ -285,6 +285,7 @@ interface Strings {
   rec_label: string;
   rec_stop: string;
   trans_label: string;
+  trans_downloading_model?: string;
   trans_stop: string;
   trans_cancelled: string;
   /// Upsell strip under the Transcribing banner. Three exclusive
@@ -699,6 +700,7 @@ const ru: Strings = {
   rec_label: "Идёт запись",
   rec_stop: "Остановить запись",
   trans_label: "Идёт расшифровка",
+  trans_downloading_model: "Загрузка модели…",
   trans_stop: "Остановить расшифровку",
   trans_cancelled: "Расшифровка остановлена",
   trans_upsell_speed_title: "Ускорьте расшифровку",
@@ -1068,6 +1070,7 @@ const en: Strings = {
   rec_label: "Recording",
   rec_stop: "Stop recording",
   trans_label: "Transcribing",
+  trans_downloading_model: "Downloading model…",
   trans_stop: "Stop transcription",
   trans_cancelled: "Transcription stopped",
   trans_upsell_speed_title: "Upgrade for speed",
@@ -1405,6 +1408,7 @@ const uk: Strings = {
   rec_label: "Триває запис",
   rec_stop: "Зупинити запис",
   trans_label: "Триває розшифровка",
+  trans_downloading_model: "Завантаження моделі…",
   trans_stop: "Зупинити розшифровку",
   trans_cancelled: "Розшифровку зупинено",
   trans_upsell_speed_title: "Прискорте розшифровку",

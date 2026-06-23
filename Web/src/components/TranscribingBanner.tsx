@@ -57,6 +57,11 @@ interface Props {
   /// stream per-window callbacks) — we then render an empty fill and
   /// rely on the spinner + elapsed counter for the "moving" signal.
   progress: number | null;
+  /// On-device model download progress in [0, 1] while a transcription is
+  /// waiting on the ~1.5 GB local model to fetch (new free-tier Mac).
+  /// When set, the banner shows a "Downloading model" state and the fill
+  /// tracks THIS, then switches to `progress` once the model lands.
+  modelDownloadProgress: number | null;
   onCancelled: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
@@ -125,7 +130,17 @@ function resolveUpsell(s: Settings | null, u: Usage | null): UpsellKind {
 /// between recording / transcribing / failed / empty states. The
 /// spinner sits inline next to the headline so the "this is moving"
 /// signal is part of the title, not a separate row that grows the card.
-export function TranscribingBanner({ meetingId, startedAtMs, progress, onCancelled, onToast, t }: Props) {
+export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDownloadProgress, onCancelled, onToast, t }: Props) {
+  // When the on-device model is still downloading, the banner reads
+  // "Downloading model" and the fill tracks the download; once the model
+  // lands, modelDownloadProgress goes null and we fall back to the real
+  // transcription progress. This is what tells a first-run free user
+  // "it's fetching a 1.5 GB model" instead of looking frozen.
+  const downloadingModel = modelDownloadProgress != null;
+  const fillFraction = downloadingModel ? (modelDownloadProgress ?? 0) : (progress ?? 0);
+  const headline = downloadingModel
+    ? (t.trans_downloading_model ?? "Downloading model…")
+    : t.trans_label;
   // Backend mark when the pipeline went into .transcribing. Falling
   // back to Date.now() for legacy rows that don't carry the field —
   // keeps the timer monotonic rather than negative.
@@ -266,7 +281,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, onCancell
       <div className="clarify-text">
         <div className="clarify-body clarify-body-with-icon">
           <Loader2 size={16} className="trans-inline-spinner" aria-hidden />
-          <span>{t.trans_label}</span>
+          <span>{headline}</span>
         </div>
         <div className="dash-sub clarify-sub-mono">{m}:{s}</div>
       </div>
@@ -285,7 +300,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, onCancell
               running. */}
           <span
             className="trans-stop-fill"
-            style={{ width: `${Math.round(Math.max(0, Math.min(1, progress ?? 0)) * 100)}%` }}
+            style={{ width: `${Math.round(Math.max(0, Math.min(1, fillFraction)) * 100)}%` }}
             aria-hidden
           />
           <span className="trans-stop-label">
