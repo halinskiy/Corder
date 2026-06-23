@@ -26,7 +26,7 @@ enum GeminiChapters {
     /// stringify them as `[mm:ss] text` and ask Gemini to pick
     /// natural chapter boundaries that line up with topic shifts
     /// rather than fixed time intervals.
-    static func generate(timedLines: [(startMs: Int64, text: String)]) async -> [Chapter]? {
+    static func generate(timedLines: [(startMs: Int64, text: String)]) async throws -> [Chapter]? {
         guard !timedLines.isEmpty else { return nil }
         let jwt = await GeminiTranscriber.jwtForProxy()
         let key = GeminiTranscriber.apiKey ?? ""
@@ -110,7 +110,10 @@ enum GeminiChapters {
         req.httpBody = payload
 
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let http = resp as? HTTPURLResponse else { return nil }
+        // Surface the Worker's tier-gate distinctly (see PaidFeatureError).
+        if http.statusCode == 403 { throw PaidFeatureError.tierRequired }
+        guard (200..<300).contains(http.statusCode),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let candidates = json["candidates"] as? [[String: Any]],
               let content = candidates.first?["content"] as? [String: Any],

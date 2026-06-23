@@ -397,11 +397,26 @@ enum LocalWhisperTranscriber {
 
         // Single-flight: if an init is already running (the parallel
         // mic/system call beat us here, or a download-time prewarm is
-        // compiling), await THAT one instead of kicking a second
-        // WhisperKit(cfg). See `initTask` docs.
+        // compiling), await it — but ONLY up to THIS caller's own budget. A
+        // transcribe (aneBudget 30 + GPU fallback) must NOT inherit a
+        // download-time prewarm's ~40-min compile (aneBudget 2400, no
+        // fallback) just because it arrived second; that was the bug where a
+        // free first-run hung until the watchdog flipped it failed. If the
+        // in-flight init doesn't produce a pipe within our budget (or fails),
+        // we do our OWN bounded GPU load instead — the in-flight compile
+        // keeps running + caches for next time.
         if let inFlight = initTask {
-            try await inFlight.value
-            return
+            do {
+                try await withDeadline(aneBudget) { try await inFlight.value }
+                return   // the in-flight init set `pipe`
+            } catch {
+                if !allowGPUFallback {
+                    throw LocalWhisperError.transcribeFailed("model load timed out")
+                }
+                FileLogger.log("LocalWhisper: in-flight init didn't finish in \(Int(aneBudget))s (\(error)) — loading GPU directly for this run")
+                try await loadGPU(variant)
+                return
+            }
         }
         let task = Task<Void, Error> { try await loadPipe(variant, aneBudget: aneBudget, allowGPUFallback: allowGPUFallback) }
         initTask = task
@@ -483,26 +498,41 @@ enum LocalWhisperTranscriber {
             FileLogger.log("LocalWhisper: ANE compile over \(Int(aneBudget))s — falling back to GPU encoder for this run")
             // fall through to the GPU path
         } catch {
-            // A real init ERROR (not a timeout) almost always means a
-            // corrupt / incomplete bundle — wipe it so the NEXT attempt
-            // re-downloads a clean copy instead of re-failing on bad files.
-            FileLogger.log("LocalWhisper: model init error (\(error)) — deleting model for a clean re-download")
-            try? FileManager.default.removeItem(at: modelFolderURL(variant))
-            throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
+            // A real init ERROR (not a timeout). DON'T delete the ~1.5 GB
+            // model here — an ANE-only error can be transient (OOM, Core ML
+            // hiccup), and the GPU path below often loads the SAME files
+            // fine. Only `loadGPU` deletes, and only when GPU ALSO fails
+            // (both encoders failing = genuinely corrupt bundle).
+            if !allowGPUFallback {
+                FileLogger.log("LocalWhisper: ANE init error (\(error)) (prewarm, no GPU fallback) — model kept, failing this run")
+                throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
+            }
+            FileLogger.log("LocalWhisper: ANE init error (\(error)) — trying GPU encoder")
+            // fall through to the GPU path
         }
 
         // 2. GPU fallback (reliable ~50 s compile, identical transcript).
+        try await loadGPU(variant)
+    }
+
+    /// Load the model on the GPU encoder. Sets `pipe`. Reached as the
+    /// fallback when ANE busts its budget or errors, and called directly by
+    /// `stageAndLoad` when a transcribe gives up waiting on an in-flight
+    /// (prewarm) compile. On a real init error here the model has failed
+    /// BOTH encoders, so it's treated as corrupt and wiped for a clean
+    /// re-download; a load timeout keeps the model (slow compile ≠ corruption).
+    private static func loadGPU(_ variant: Variant) async throws {
+        let t0 = Date()
         do {
-            let t0 = Date()
             pipe = try await Self.withDeadline(180) { try await WhisperKit(makeConfig(variant, useANE: false)) }
-            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU fallback)",
+            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU)",
                                   Date().timeIntervalSince(t0), variant.rawValue))
             pipeVariant = variant
         } catch is DeadlineError {
-            FileLogger.log("LocalWhisper: GPU fallback also timed out (>180s) — failing this run, model kept")
+            FileLogger.log("LocalWhisper: GPU load timed out (>180s) — failing this run, model kept")
             throw LocalWhisperError.transcribeFailed("model load timed out")
         } catch {
-            FileLogger.log("LocalWhisper: GPU fallback init error (\(error)) — deleting model for a clean re-download")
+            FileLogger.log("LocalWhisper: GPU init error (\(error)) — both encoders failed, deleting model for a clean re-download")
             try? FileManager.default.removeItem(at: modelFolderURL(variant))
             throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
         }

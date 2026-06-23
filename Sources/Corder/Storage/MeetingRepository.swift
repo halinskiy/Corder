@@ -470,6 +470,24 @@ struct MeetingRepository {
         }
     }
 
+    /// Targeted UPDATE of exactly the columns a transcribe START sets,
+    /// WITHOUT a full `updateMeeting` round-trip. A full-struct write here
+    /// would carry the stale `transcribe_attempts` value read before
+    /// `incrementTranscribeAttempts` ran and silently revert the just-bumped
+    /// retry counter — defeating the retry budget (a row that always fails
+    /// would re-bill the cloud on every launch). Mirrors `setStatus`'s
+    /// surgical-write contract.
+    func setTranscribeStart(meetingId: String,
+                            status: MeetingStatus,
+                            transcribingStartedAt: Int64?,
+                            transcriptionClass: String) throws {
+        try dbq.write { db in
+            try db.execute(
+                sql: "UPDATE meetings SET status = ?, transcribing_started_at = ?, transcription_class = ? WHERE id = ?",
+                arguments: [status.rawValue, transcribingStartedAt, transcriptionClass, meetingId])
+        }
+    }
+
     /// Bump the consecutive-attempt counter at the start of a transcribe.
     func incrementTranscribeAttempts(meetingId: String) throws {
         try dbq.write { db in

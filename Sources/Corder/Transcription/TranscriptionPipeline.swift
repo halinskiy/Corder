@@ -269,7 +269,14 @@ final class TranscriptionPipeline {
         // not the cap'd advanced one). The Dashboard Usage bars
         // and the /api/usage aggregator key off this.
         meeting.transcriptionClass = effective.usageClass
-        try? repo.updateMeeting(meeting)
+        // Persist via a TARGETED update, not `updateMeeting(meeting)`: the
+        // full struct still carries the pre-increment `transcribe_attempts`
+        // and a full write would revert the bump from line ~226, wiping the
+        // retry budget (always-failing rows would re-bill cloud every run).
+        try? repo.setTranscribeStart(meetingId: meetingId,
+                                     status: meeting.status,
+                                     transcribingStartedAt: meeting.transcribingStartedAt,
+                                     transcriptionClass: meeting.transcriptionClass ?? effective.usageClass)
 
         do {
             // 1. Locate raw recording files. Dual-track path needs both
@@ -900,7 +907,11 @@ final class TranscriptionPipeline {
                 let spks = (try? repo.speakers(forMeeting: meetingId)) ?? []
                 if !segs.isEmpty {
                     let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
-                    if let summary = await GeminiSummarizer.generate(transcript: text) {
+                    // Auto path is best-effort: a tier-gate (throws
+                    // PaidFeatureError) or any failure just skips silently —
+                    // the on-demand route surfaces the upsell when the user
+                    // opens the tab.
+                    if let summary = try? await GeminiSummarizer.generate(transcript: text) {
                         try? repo.setSummary(meetingId: meetingId, summary: summary)
                         FileLogger.log("transcribe(): summarised \(meetingId) (\(summary.count) chars)")
                     }
@@ -919,7 +930,7 @@ final class TranscriptionPipeline {
                 let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
                 if !segs.isEmpty {
                     let timed = segs.map { ($0.startMs, $0.text) }
-                    if let chapters = await GeminiChapters.generate(timedLines: timed),
+                    if let chapters = try? await GeminiChapters.generate(timedLines: timed),
                        !chapters.isEmpty,
                        let data = try? JSONEncoder().encode(chapters),
                        let json = String(data: data, encoding: .utf8) {
