@@ -182,6 +182,31 @@ final class TranscriptionPipeline {
         // clear on exit so a finished row stops reporting.
         TranscriptionProgressStore.begin(meetingId: meetingId)
         defer { TranscriptionProgressStore.clear(meetingId: meetingId) }
+
+        // Watchdog: if this meeting is STILL `.transcribing` after the
+        // deadline, something hung (a stalled model download, a wedged Core
+        // ML load, an uncancellable WhisperKit call) — flip it to `.failed`
+        // so the UI stops showing "transcribing" forever and the user can
+        // re-try. Decoupled from this task's own cancellability: even if the
+        // work below is wedged in a call that ignores cancellation, the DB
+        // status changes and the polling Library UI unblocks. 45 min is well
+        // past any real run (a one-time ~1.5 GB model fetch + a long meeting),
+        // so a legitimate transcription is never killed.
+        let watchdog = Task.detached {
+            try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
+            if Task.isCancelled { return }
+            await MainActor.run {
+                let repo = AppContext.shared.repo
+                if let m = try? repo.meeting(id: meetingId), m.status == .transcribing {
+                    FileLogger.log("transcribe(): WATCHDOG — \(meetingId) stuck > 45 min, marking failed")
+                    TranscriptionErrors.record(meetingId: meetingId,
+                                               message: "Transcription took too long and was stopped. Please try again.")
+                    try? repo.setStatus(meetingId: meetingId, status: .failed)
+                }
+            }
+        }
+        defer { watchdog.cancel() }
+
         let repo = AppContext.shared.repo
         guard var meeting = (try? repo.meeting(id: meetingId)) else {
             FileLogger.log("transcribe(): meeting \(meetingId) not found in DB")

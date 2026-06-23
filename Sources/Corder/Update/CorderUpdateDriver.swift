@@ -28,7 +28,20 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
         pendingUserInitiatedCheck = true
-        _ = cancellation
+        // ALWAYS give visible feedback the instant the pill is clicked. The
+        // old no-op (just setting the flag) left the click silent whenever
+        // Sparkle already had a cached / downloaded update and didn't
+        // re-present it — the user just saw a pressed pill and nothing else.
+        // We push a "checking" modal here; Sparkle then transitions it to
+        // the real Install card (showUpdateFound) or "up to date"
+        // (showUpdateNotFound). `onPrimary` stays a no-op until a real
+        // update is reported (the Install button is disabled meanwhile).
+        bridge.onDismiss = { cancellation() }
+        bridge.onPrimary = { }
+        push(visible: true, phase: "available", primaryLabel: "Install",
+             primaryEnabled: false,
+             statusLine: "Checking for updates…",
+             showsProgress: false, progress: 0)
     }
 
     // MARK: - Update found

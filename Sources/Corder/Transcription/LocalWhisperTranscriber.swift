@@ -309,7 +309,18 @@ enum LocalWhisperTranscriber {
         // model folder.
         if !isModelDownloaded(variant), currentProgress(variant) != nil {
             FileLogger.log("LocalWhisper: \(variant.rawValue) prewarm in flight — waiting")
+            // Bounded wait — a stalled prewarm download (CDN/network hiccup)
+            // must NOT block the transcription forever (the "transcribing for
+            // 56 minutes" hang). After the deadline, give up waiting and let
+            // the download-ourselves path below take over; if the model
+            // genuinely never lands, that path throws and the meeting fails
+            // cleanly instead of spinning.
+            let waitDeadline = Date().addingTimeInterval(600)   // 10 min
             while currentProgress(variant) != nil {
+                if Date() >= waitDeadline {
+                    FileLogger.log("LocalWhisper: prewarm wait exceeded 10 min — proceeding without it")
+                    break
+                }
                 try await Task.sleep(nanoseconds: 500_000_000)
             }
         }

@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.47] — 2026-06-23
+
+### Changed
+- Timeline percentages are now honest: each speaker's share is measured against the whole session, so silent stretches show as the missing remainder and the speakers no longer add up to a forced 100%.
+
+### Fixed
+- The "Update available" pill always opens the update dialog when clicked. It could previously do nothing (silent no-op) if an update had already been checked.
+- A transcription can no longer get stuck forever. A wedged transcription (for example a stalled on-device model download) now fails after a watchdog timeout instead of showing "transcribing" indefinitely, and the wait for an in-progress model download is bounded.
+
 ## [0.14.46] — 2026-06-23
 
 ### Changed
