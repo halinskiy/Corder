@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.46] — 2026-06-23
+
+### Changed
+- While the on-device model is downloading on first run, the Stop button is now temporarily replaced (same size) by a "Downloading model · X%" progress button, then reverts to "Stop transcription" once the model is ready. This makes the wait clear for everyone, including normal users who have no model picker.
+
+### Removed
+- The cloud upsell card under the transcription banner is hidden for now (paid plans are not offered yet).
+
 ## [0.14.45] — 2026-06-23
 
 ### Added
