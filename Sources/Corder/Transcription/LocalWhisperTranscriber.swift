@@ -400,10 +400,55 @@ enum LocalWhisperTranscriber {
             download: true
         )
         do {
-            pipe = try await WhisperKit(cfg)
+            // Bounded load. `WhisperKit(cfg)` compiles + loads the Core ML
+            // model and can WEDGE on a corrupt / incompletely-downloaded
+            // bundle (an interrupted fetch leaves a broken .mlmodelc), and
+            // that call doesn't honour cancellation — it hangs forever
+            // ("transcribing for 48 minutes", the same line repeating every
+            // relaunch). `withDeadline` stops waiting after 2 min even though
+            // the underlying call can't be cancelled.
+            pipe = try await Self.withDeadline(120) { try await WhisperKit(cfg) }
             pipeVariant = variant
         } catch {
-            throw LocalWhisperError.transcribeFailed("init failed: \(error.localizedDescription)")
+            // A hung or failed load almost always means the model on disk is
+            // bad. Wipe it so the NEXT attempt re-downloads a clean copy
+            // (and shows the "Downloading model" button) instead of
+            // re-hanging on the same broken files forever.
+            FileLogger.log("LocalWhisper: model load failed/timed out (\(error)) — deleting model for a clean re-download")
+            try? FileManager.default.removeItem(at: modelFolderURL(variant))
+            throw LocalWhisperError.transcribeFailed("model load failed: \(error.localizedDescription)")
+        }
+    }
+
+    private enum DeadlineError: Error { case timedOut }
+
+    /// Thread-safe single-shot guard so a deadline race resumes its
+    /// continuation exactly once.
+    private final class DeadlineOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func claim() -> Bool { lock.lock(); defer { lock.unlock() }
+            if done { return false }; done = true; return true }
+    }
+
+    /// Run `op`, but give up after `seconds` even if `op` is wedged in a
+    /// call that ignores cancellation (e.g. a Core ML model load). The op's
+    /// task is left to finish or leak in the background; we just stop
+    /// waiting for it and throw `DeadlineError.timedOut`.
+    private static func withDeadline<T: Sendable>(
+        _ seconds: Double,
+        _ op: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        let once = DeadlineOnce()
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<T, Error>) in
+            Task.detached {
+                do { let r = try await op(); if once.claim() { cont.resume(returning: r) } }
+                catch { if once.claim() { cont.resume(throwing: error) } }
+            }
+            Task.detached {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                if once.claim() { cont.resume(throwing: DeadlineError.timedOut) }
+            }
         }
     }
 

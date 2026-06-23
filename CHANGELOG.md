@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.48] — 2026-06-23
+
+### Fixed
+- A corrupt or incompletely-downloaded on-device model could wedge the model load forever, leaving a transcription stuck on "transcribing" through every relaunch. The model load now times out, the bad model is deleted, and the next attempt re-downloads a clean copy (showing the "Downloading model" progress).
+
 ## [0.14.47] — 2026-06-23
 
 ### Changed
