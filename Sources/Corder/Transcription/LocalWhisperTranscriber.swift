@@ -136,6 +136,13 @@ enum LocalWhisperTranscriber {
     /// be moved`. Funnelling both callers through one Task makes the
     /// second await the first instead of starting a competing download.
     private static var initTask: Task<Void, Error>?
+    /// True when the in-flight `initTask` is a download-time PREWARM (long
+    /// budget, no GPU fallback) vs a transcribe (short budget, GPU fallback).
+    /// A second transcribe must NOT inherit a prewarm's ~40-min wait, but it
+    /// MUST fully await another transcribe's load — starting its own GPU load
+    /// alongside one already running crashes Metal (concurrent MPSGraph
+    /// inference → SIGABRT). See the in-flight branch in `stageAndLoad`.
+    private static var initTaskIsPrewarm = false
 
     /// Per-variant in-flight download progress (0.0…1.0). Read by the
     /// HTTP `/api/whisper-local/status` poll so the React DownloadButton
@@ -395,31 +402,47 @@ enum LocalWhisperTranscriber {
         // Already loaded for this variant — nothing to do.
         guard pipe == nil else { return }
 
-        // Single-flight: if an init is already running (the parallel
-        // mic/system call beat us here, or a download-time prewarm is
-        // compiling), await it — but ONLY up to THIS caller's own budget. A
-        // transcribe (aneBudget 30 + GPU fallback) must NOT inherit a
-        // download-time prewarm's ~40-min compile (aneBudget 2400, no
-        // fallback) just because it arrived second; that was the bug where a
-        // free first-run hung until the watchdog flipped it failed. If the
-        // in-flight init doesn't produce a pipe within our budget (or fails),
-        // we do our OWN bounded GPU load instead — the in-flight compile
-        // keeps running + caches for next time.
+        // Single-flight: if an init is already running, coordinate with it.
+        // Two cases, and the distinction matters (a regression here SIGABRT'd
+        // Metal — two concurrent GPU model loads → MPSGraph assert):
+        //
+        //  • The in-flight is ANOTHER TRANSCRIBE (its own 30s ANE + GPU
+        //    fallback, bounded). AWAIT IT FULLY and reuse its `pipe`. We must
+        //    NOT start our own load here — a second GPU load running next to
+        //    the first crashes Metal. The in-flight resolves in bounded time.
+        //
+        //  • The in-flight is a download-time PREWARM (aneBudget 2400, no GPU
+        //    fallback). We must NOT inherit its ~40-min wait, so give up at
+        //    OUR budget and load GPU directly. That GPU load runs alongside
+        //    the prewarm's leaked ANE compile, which is SAFE — different
+        //    engines (Neural Engine vs Metal), no Metal contention.
         if let inFlight = initTask {
-            do {
-                try await withDeadline(aneBudget) { try await inFlight.value }
-                return   // the in-flight init set `pipe`
-            } catch {
-                if !allowGPUFallback {
-                    throw LocalWhisperError.transcribeFailed("model load timed out")
+            if !initTaskIsPrewarm {
+                do {
+                    try await inFlight.value
+                    if pipe != nil { return }         // reuse the in-flight's pipe
+                    // it finished without a usable pipe — fall through to load
+                } catch {
+                    // it failed — fall through to our own load (it's done now)
+                    FileLogger.log("LocalWhisper: in-flight transcribe load failed (\(error)) — loading ourselves")
                 }
-                FileLogger.log("LocalWhisper: in-flight init didn't finish in \(Int(aneBudget))s (\(error)) — loading GPU directly for this run")
-                try await loadGPU(variant)
-                return
+            } else {
+                do {
+                    try await withDeadline(aneBudget) { try await inFlight.value }
+                    return   // the prewarm produced `pipe` within our budget
+                } catch {
+                    if !allowGPUFallback {
+                        throw LocalWhisperError.transcribeFailed("model load timed out")
+                    }
+                    FileLogger.log("LocalWhisper: in-flight prewarm didn't finish in \(Int(aneBudget))s (\(error)) — loading GPU directly (safe alongside the ANE compile)")
+                    try await loadGPU(variant)
+                    return
+                }
             }
         }
         let task = Task<Void, Error> { try await loadPipe(variant, aneBudget: aneBudget, allowGPUFallback: allowGPUFallback) }
         initTask = task
+        initTaskIsPrewarm = !allowGPUFallback
         defer { initTask = nil }
         try await task.value
     }
