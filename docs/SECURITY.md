@@ -34,11 +34,17 @@ The transcription provider depends on tier:
 
 - **Free tier** — on-device WhisperKit (`large-v3-turbo` Core ML, ≈1.5 GB
   one-time download). Audio never leaves the Mac.
-- **Pro / Max** — OpenAI Whisper (`whisper-1`) **via the Cloudflare
-  Worker proxy** (`/transcribe/whisper`). The user sends the audio over
-  TLS to our Worker with their Supabase JWT; the Worker forwards to
-  OpenAI with our server-side key. Audio is not retained by OpenAI
-  (`store=false` flag).
+- **Pro / Max** : Groq Whisper (`whisper-large-v3-turbo`) **via the
+  Cloudflare Worker proxy** (`/transcribe/groq`). The user sends the
+  audio over TLS to our Worker with their Supabase JWT; the Worker
+  forwards to Groq with our server-side key.
+
+Non-admin users transcribe through Groq (paid) or the on-device model
+(free) only. Gemini and OpenAI whisper-1 (`/transcribe/gemini` and
+`/transcribe/whisper`) are **admin-only**, kept so the dev can benchmark
+providers; the Worker returns 403 for those paths from a non-admin
+token. So a normal user's audio can only ever reach Groq, and only on a
+paid tier.
 
 Auto-title / auto-summary / auto-chapters on the paid path use Gemini
 2.5 Flash through the same Worker proxy

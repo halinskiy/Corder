@@ -447,26 +447,64 @@ struct RecordingHUDView: View {
         return Float(max(0, raw) * 0.35)
     }
 
-    /// Centred size-pulse factor from the level history — the ONLY motion
-    /// the blob has now (deformation removed per Костя's brief). It must
-    /// "дёргаться под такт": snap UP fast when sound arrives, drop back
-    /// quickly, matching the beat. So: near-instant attack, quick release,
-    /// and a big visible amplitude. Envelope follower over newest→oldest
-    /// samples; silence → 1.0 (resting). Centred scale → never moves. Kept
-    /// out of the TimelineView ViewBuilder closure so the compiler can
-    /// type-check it.
-    fileprivate static func pulseScale(levels: [CGFloat]) -> CGFloat {
-        var env: CGFloat = 0
-        let attack: CGFloat = 0.85   // near-instant snap to a new peak
-        let release: CGFloat = 0.25  // quick drop back → reads as a "kick", not a sag
-        for lv in levels.reversed() {
-            let target = max(0, lv)
-            let coeff = target > env ? attack : release
-            env += (target - env) * coeff
+    /// Number of bars in the equalizer.
+    fileprivate static let barCount = 11
+    private static let barBaseH: CGFloat = 5    // resting height — short bars, never dots
+    private static let barMaxExtra: CGFloat = 30
+
+    /// Per-bar HEIGHTS for the REAL spectrum equalizer. Each bar is a
+    /// genuine FFT frequency band from `RecordingLevelMeter.spectrum`
+    /// (low → high), so lows / mids / highs react independently to the
+    /// actual sound — not one level faked across bars. Folds in the stop
+    /// ease-out so it settles flat instead of snapping. Welcome mode
+    /// synthesises a moving spectrum from the clock. Kept out of the
+    /// ViewBuilder for type-check.
+    private func barHeights(t: TimeInterval, isRecording: Bool, relax: TimeInterval) -> [CGFloat] {
+        let energy: CGFloat
+        if isRecording {
+            energy = 1
+        } else if let s = stopAt {
+            let p = (t - s) / relax
+            let e = 1 - p
+            energy = p >= 1 ? 0 : CGFloat(e * e)
+        } else {
+            energy = 0
         }
-        // Map typical speech levels (~0.12–0.30) to a strong bounce.
-        let boosted = min(1.0, env * 3.6)
-        return 1.0 + 0.32 * boosted   // up to ~+32 % — a clear subwoofer kick
+        let n = Self.barCount
+        let spec: [CGFloat]
+        if welcomeActive {
+            // A gently shifting fake spectrum for the onboarding demo.
+            spec = (0..<n).map { i in
+                let a = sin(t * 2.1 + Double(i) * 0.7)
+                let b = sin(t * 3.3 + Double(i) * 1.9)
+                return CGFloat(max(0, (a + b) * 0.5)) * 0.7
+            }
+        } else {
+            spec = meter.spectrum.map { CGFloat($0) }
+        }
+        return (0..<n).map { i in
+            let v = i < spec.count ? min(1, spec[i] * energy) : 0
+            return Self.barBaseH + v * Self.barMaxExtra
+        }
+    }
+
+    /// The live equalizer: a centred row of vertical bars from `heights`.
+    /// Each bar animates toward its new height, so the ~10 Hz spectrum
+    /// updates (mic buffers are ~93 ms) glide instead of jumping — that's
+    /// what was reading as "дёргается". Per-bar `.animation(value:)` only
+    /// re-fires when THAT bar's height changes.
+    private func barsLayer(heights: [CGFloat], palette: BlobPalette) -> some View {
+        let color = palette.fillStops.first ?? Color.white
+        return HStack(alignment: .center, spacing: 3.5) {
+            ForEach(0..<heights.count, id: \.self) { i in
+                Capsule()
+                    .fill(color)
+                    .frame(width: 4, height: heights[i])
+                    .animation(.easeOut(duration: 0.11), value: heights[i])
+            }
+        }
+        .frame(height: Self.barBaseH + Self.barMaxExtra)   // fixed → stable vertical centring
+        .shadow(color: palette.glowOuter.opacity(0.35), radius: 5)
     }
 
 
@@ -570,52 +608,24 @@ struct RecordingHUDView: View {
         Group {
             TimelineView(.animation(minimumInterval: 1.0 / fps,
                                     paused: !visible)) { timeline in
+                // LIVE BARS (equalizer). A row of vertical bars built from
+                // the recent level history — newest on the right, scrolling
+                // left as the meter shifts. Each bar IS a real sample, so the
+                // bars jump with every syllable and lie flat in silence:
+                // unmistakable "sound is being captured". Level math lives in
+                // `meterBars` (out of this ViewBuilder closure for type-check).
                 let t = timeline.date.timeIntervalSinceReferenceDate
-                let energy: CGFloat = {
-                    if isRecording { return 1 }
-                    guard let s = stopAt else { return 0 }
-                    let p = (t - s) / relax
-                    if p >= 1 { return 0 }
-                    // easeOut: quick initial give, long soft settle.
-                    let e = 1 - p
-                    return CGFloat(e * e)
-                }()
-                // Welcome-mode synthesises gentle audio levels from
-                // the clock so the morph keeps moving — three
-                // overlaid sines at distinct periods so the shape
-                // doesn't look mechanically rhythmic. Live mode
-                // reads from the level meter as before.
-                let level: Float = welcomeActive
-                    ? Self.syntheticLevel(t: t)
-                    : liveLevel
-                // Level history feeds the per-side strike field. Multiply
-                // every sample by `energy` so on stop the whole field eases
-                // to 0 → the silhouette settles smoothly back to a still
-                // circle instead of snapping. Welcome mode synthesises a
-                // short decaying history from the clock so the demo blob
-                // still reacts without real audio.
-                let levelsArr: [CGFloat] = welcomeActive
-                    ? (0..<24).map { k in CGFloat(Self.syntheticLevel(t: t - Double(k) / 12.0)) }
-                    : meter.history.map { CGFloat($0) * energy }
-                // PRIMARY motion = a smooth, centred SIZE pulse. The blob
-                // stays put and gently grows-then-returns with the sound,
-                // like a subwoofer cone — frequent but never jerky, and it
-                // NEVER moves (scale only, anchored at centre).
-                //
-                // Smoothness comes from an envelope follower over the level
-                // history (fast attack, slow release) instead of the raw
-                // per-frame level (which was spiky → the "дёрганый" look).
-                // The deformation (BlobShape rim) is now small + rare, so
-                // the silhouette no longer lurches sideways.
-                let pulse = Self.pulseScale(levels: levelsArr)
-                blobLayer(time: t,
-                          level: level * Float(energy),
-                          levels: levelsArr,
+                barsLayer(heights: barHeights(t: t, isRecording: isRecording, relax: relax),
                           palette: palette)
-                    .scaleEffect(pulse)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Solid (but invisible) hit target across the WHOLE pill. The thin
+        // equalizer bars leave most of the pill empty, so without this a
+        // click between bars hit nothing and "Stop" didn't fire. An almost-
+        // transparent fill is hit-testable everywhere; the real tap handler
+        // is `.contentShape` + `.onTapGesture` further down.
+        .background(Color.black.opacity(0.001))
         // Entry animation: blob "leaks out" from a tiny dot in the
         // centre. Spring keeps it organic — no hard endpoint snap.
         .scaleEffect((appeared ? 1.0 : 0.05) * (hovering ? 1.18 : 1.0))

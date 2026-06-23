@@ -201,11 +201,12 @@ that touches those modules, also run the manual smoke test:
    appears, row disappears immediately, comes back if Undo clicked.
 5. Tail `/tmp/corder.log` for errors. Expected log lines:
    - `CaptureEngine.start: …`
-   - `transcribe(): …`
-   - `Diarizer: …` (Whisper provider)
-   - `GeminiTranscriber: …` (Gemini provider)
+   - `transcribe(): …` (provider chosen: Groq for paid, on-device
+     WhisperKit for free; Gemini / whisper-1 only on an admin token)
+   - `EchoSuppressor: …` (suppressing on speakers, or skipping on
+     headphones / BT)
    - `dropbox: …` if Dropbox is configured
-   - `transcribe(): dropping Whisper hallucination: …` for known
+   - `transcribe(): dropping … hallucination: …` for known
      YouTube-subtitle artefacts
 6. Toggle Boost; record a new meeting; watch each segment grow a
    `text_boost` value within ~5-10 s after recording ends.
@@ -264,9 +265,16 @@ See `docs/RELEASE.md` for the Sparkle workflow. TL;DR:
 
 ## Useful one-liners
 
+The in-app 🐞 bug reporter (header Bug icon, or the "Send a report"
+link in an error card) ships the log to the maintainer. Its scope is the
+last ~3 launch sessions (not just the current one), and it keeps the
+full transcription / capture pipeline flow lines, not only error lines,
+so a quality bug that throws no error is still explainable. The button
+is always available when there's a log to send.
+
 ```bash
 # What did the pipeline log for the latest meeting?
-tail -200 /tmp/corder.log | grep -E "transcribe|Diarizer|Gemini"
+tail -200 /tmp/corder.log | grep -E "transcribe|EchoSuppressor|Groq|Whisper"
 
 # Wipe local SQLite (forget all meetings, audio files stay):
 rm ~/Library/Application\ Support/Corder/corder.db

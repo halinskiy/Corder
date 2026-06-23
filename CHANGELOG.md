@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.43] — 2026-06-23
+
+### Changed
+- The floating recording indicator is now a real-time frequency-spectrum equalizer (FFT of the live audio, per-band auto-levelling) instead of the blob. Each bar is a genuine frequency band, so it reacts to your actual voice. The indicator lives only in the floating pill (when Corder is minimised); there is no recording blob inside the window anymore.
+- Dark mode is now a simple on/off switch ("Enable dark theme") instead of a Light/Dark picker.
+- "Catch the start of calls" is on by default (the pre-roll buffer is silent and discarded if you decline), and its description is a single line.
+
+### Removed
+- The Statistics settings block.
+- The transcription-model picker is hidden for non-admins (everyone transcribes through Groq cloud or the on-device model; there is nothing to choose).
+
 ## [0.14.42] — 2026-06-23
 
 ### Added

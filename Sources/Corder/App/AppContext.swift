@@ -169,10 +169,12 @@ enum AppSettings {
     }
     /// Silent pre-roll: start capturing the instant a call is detected so
     /// that accepting the "record this call?" offer keeps the audio/video
-    /// from the very start. Default OFF — it records (and then discards on
-    /// decline) before the user consents, so it must be an explicit opt-in.
+    /// from the very start. Default ON for everyone (Костя 2026-06-23): the
+    /// buffer is silent and is discarded the moment the user declines the
+    /// record offer, so the only effect of "on" is that accepting keeps the
+    /// beginning. A user can still turn it off in Settings.
     static var prerollEnabled: Bool {
-        UserDefaults.standard.object(forKey: kPrerollEnabled) as? Bool ?? false
+        UserDefaults.standard.object(forKey: kPrerollEnabled) as? Bool ?? true
     }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
