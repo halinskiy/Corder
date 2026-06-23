@@ -58,6 +58,8 @@ export interface MeetingDetail {
   /// inline elapsed counter so it reflects real backend work, not
   /// the moment the user opened MeetingView.
   transcribing_started_at?: number | null;
+  /// Real transcription progress 0…1 while transcribing; null otherwise.
+  transcribe_progress?: number | null;
 }
 
 export interface UsageBucket {
@@ -532,6 +534,19 @@ export function audioSrc(id: string): string {
 
 export function videoSrc(id: string): string {
   return `/api/meetings/${id}/video`;
+}
+
+/// Download-only: the screen video muxed WITH the mixed audio into one
+/// .mp4 (video passthrough, AAC audio). `videoSrc` above stays the
+/// silent stream the in-app preview player uses.
+export function videoWithAudioSrc(id: string): string {
+  return `/api/meetings/${id}/video-audio.mp4`;
+}
+
+/// Download-only: the audio mix as compressed AAC .m4a (the playback
+/// `audioSrc` serves the raw .wav the scrubber needs for instant seeks).
+export function audioM4ASrc(id: string): string {
+  return `/api/meetings/${id}/audio.m4a`;
 }
 
 export function transcriptSrc(id: string): string {

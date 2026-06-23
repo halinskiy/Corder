@@ -39,6 +39,17 @@ enum Routes {
         server.get["/api/meetings/:id/bundle.zip"] = { req in
             bundleZip(id: req.params[":id"] ?? "", repo: repo)
         }
+        // Download chooser: compressed audio (AAC m4a) and the muxed
+        // video+audio mp4. Generated on demand by MediaExporter, then
+        // streamed to disk-saver. The silent raw video.mov is still
+        // served at /video for the in-app preview player; it's just no
+        // longer offered as a standalone download.
+        server.get["/api/meetings/:id/audio.m4a"] = { req in
+            serveExport(id: req.params[":id"] ?? "", kind: .audioM4A, repo: repo)
+        }
+        server.get["/api/meetings/:id/video-audio.mp4"] = { req in
+            serveExport(id: req.params[":id"] ?? "", kind: .videoWithAudio, repo: repo)
+        }
         server.post["/api/meetings/:id/speakers/:sid/rename"] = { req in
             renameSpeaker(req: req, repo: repo)
         }
@@ -635,7 +646,9 @@ enum Routes {
                 expected_other_speakers: m.expectedOtherSpeakers,
                 has_video: hasVideo,
                 chapters: m.chapters,
-                transcribing_started_at: m.transcribingStartedAt
+                transcribing_started_at: m.transcribingStartedAt,
+                transcribe_progress: m.status == .transcribing
+                    ? TranscriptionProgressStore.read(meetingId: id) : nil
             )
             return jsonResponse(dto)
         } catch {
@@ -965,35 +978,69 @@ enum Routes {
             ?? NSRegularExpression()
     }()
 
+    /// Transcription + capture PIPELINE flow. These are INFO lines, not
+    /// errors, but they're exactly what we need to debug a "wrong text"
+    /// report (provider chosen, dual-track mode, per-track turn counts,
+    /// dominance gate, capture device / Bluetooth route). The error regex
+    /// alone is useless for a QUALITY bug that throws no error — e.g. the
+    /// far-end voice bleeding into the mic on speakers and being
+    /// re-transcribed as the user. Kept separate so the two intents stay
+    /// readable.
+    private static let flowLineRegex: NSRegularExpression = {
+        let pattern = "(transcribe\\(\\)|TranscriptionPipeline|Diarizer|Gemini|Whisper|Groq|whisperLocal|dual-track|timing re-derived|dominance|capUserTurn|CaptureEngine|SystemAudioTap|VoiceProcessing|mic\\.wav|system\\.wav|provider|voiced|bluetooth)"
+        return (try? NSRegularExpression(pattern: pattern, options: .caseInsensitive))
+            ?? NSRegularExpression()
+    }()
+
     /// Whether the current session has any matching event lines.
     /// Frontend polls this to decide whether to show the Bug icon
     /// at all — no events → button hidden.
     private static func hasBugEvents() -> HttpResponse {
-        let lines = currentSessionLines()
+        // The report button is now ALWAYS available when there's any log
+        // to send. Gating it on error-regex hits hid the button exactly
+        // when we most needed the report: a transcription-QUALITY bug
+        // (wrong text, far-end bleed, mislabelled speaker) throws no error,
+        // so `count` was 0 and the user couldn't reach "Send a report" at
+        // all. We still surface a matched-event count for context.
+        let lines = diagnosticScopeLines()
+        let has = !lines.isEmpty
         var count = 0
         for line in lines {
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
             if bugLineRegex.firstMatch(in: line, range: range) != nil { count += 1 }
         }
-        return jsonResponse(["count": count, "has": count > 0])
+        return jsonResponse(["count": count, "has": has])
     }
 
     /// Filter the log to ONLY the lines that match `bugLineRegex`,
     /// plus 2 lines of context above and 2 below each hit. Vastly
     /// shorter than the previous whole-tail dump.
     private static func bugEventLog() -> String {
-        let lines = currentSessionLines()
+        let lines = diagnosticScopeLines()
         if lines.isEmpty { return "(log file missing or unreadable)" }
         var keep = Array(repeating: false, count: lines.count)
         for i in lines.indices {
             let line = lines[i]
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
-            if bugLineRegex.firstMatch(in: line, range: range) != nil {
-                let from = max(0, i - 2)
-                let to = min(lines.count - 1, i + 2)
+            // Keep both the error lines AND the transcription/capture flow
+            // lines (see flowLineRegex) with ±3 lines of context each. The
+            // wider context window matters for the pipeline lines — the
+            // per-track turn counts and the chosen audio file are logged a
+            // few lines apart.
+            let hit = bugLineRegex.firstMatch(in: line, range: range) != nil
+                || flowLineRegex.firstMatch(in: line, range: range) != nil
+            if hit {
+                let from = max(0, i - 3)
+                let to = min(lines.count - 1, i + 3)
                 for j in from...to { keep[j] = true }
             }
         }
+        // Always include the raw tail — the immediate state when the user
+        // hit "Send a report", even if none of it matched. Cheap insurance
+        // against a quiet failure mode we don't have a keyword for yet.
+        let tailStart = max(0, lines.count - 200)
+        if tailStart < lines.count { for j in tailStart..<lines.count { keep[j] = true } }
+
         var out: [String] = []
         var lastKept = -10
         for i in lines.indices where keep[i] {
@@ -1001,8 +1048,34 @@ enum Routes {
             out.append(lines[i])
             lastKept = i
         }
-        if out.isEmpty { return "(no bug events detected in the current session)" }
-        return out.joined(separator: "\n")
+        if out.isEmpty { return "(no events in the recent window)" }
+        // Byte-cap the payload, keeping the MOST RECENT slice. Worker
+        // stores ~200 KB/row comfortably; this just bounds a pathological
+        // marathon session.
+        let joined = out.joined(separator: "\n")
+        let maxBytes = 200_000
+        if joined.utf8.count > maxBytes {
+            let tail = String(decoding: Array(joined.utf8.suffix(maxBytes)), as: UTF8.self)
+            return "…(truncated to last \(maxBytes / 1000) KB)…\n" + tail
+        }
+        return joined
+    }
+
+    /// Diagnostic scope = the last few launches, not just the current one.
+    /// A user usually reopens the app before reporting, so the meeting that
+    /// misbehaved is one (or two) sessions back; the old
+    /// current-session-only scope returned a clean startup tail with none
+    /// of the transcription it was supposed to explain. We keep everything
+    /// from the 3rd-most-recent `applicationDidFinishLaunching` marker
+    /// onward (bounded by the 12k-line `readLogTail` read).
+    private static func diagnosticScopeLines() -> [String] {
+        let lines = readLogTail(maxLines: 12_000)
+        var markerIdx: [Int] = []
+        for i in lines.indices where lines[i].contains(sessionMarker) { markerIdx.append(i) }
+        if let start = markerIdx.suffix(3).first { return Array(lines[start...]) }
+        // No marker in the window (a single marathon session) — return all
+        // of it rather than nothing.
+        return lines
     }
 
     /// Last `maxLines` of `/tmp/corder.log`.
@@ -1316,7 +1389,18 @@ enum Routes {
                 if raw == "auto" {
                     AppSettings.clearTranscriptionProviderOverride()
                 } else if let p = TranscriptionProvider(rawValue: raw) {
-                    AppSettings.setTranscriptionProvider(p)
+                    // HARD provider lock: only admins may pin a cloud model
+                    // other than Groq. A non-admin trying to set gemini /
+                    // whisper-1 (stale client, hand-crafted POST) is coerced
+                    // to clearing the override → tier default (Groq/local).
+                    // `transcriptionProvider` clamps reads too, so this is
+                    // belt-and-suspenders, but it keeps a junk value from
+                    // ever landing in UserDefaults.
+                    if !AppSettings.isAdmin && (p == .gemini || p == .whisper) {
+                        AppSettings.clearTranscriptionProviderOverride()
+                    } else {
+                        AppSettings.setTranscriptionProvider(p)
+                    }
                 }
             }
             // Whisper Local variant override (Tiny / Base / Small /
@@ -1818,6 +1902,58 @@ enum Routes {
                 "Content-Range": "bytes \(r.start)-\(r.end)/\(size)",
                 "Content-Length": "\(r.length)"
             ]) { try $0.write(chunk) }
+        } catch {
+            return .internalServerError
+        }
+    }
+
+    private enum MediaExportKind { case audioM4A, videoWithAudio }
+
+    /// Build (or reuse a cached) export via MediaExporter, then STREAM it
+    /// to the client in chunks. The video+audio mux can be ~1.6 GB —
+    /// loading that into memory with `Data(contentsOf:)` the way the
+    /// playback path does would spike RAM by the whole file size, so this
+    /// path reads a sliding window off a FileHandle and writes each chunk
+    /// straight to the socket. `Content-Disposition` names the saved file
+    /// (the chooser navigates to the URL, so the OS Save panel takes the
+    /// name from here).
+    private static func serveExport(id: String, kind: MediaExportKind, repo: MeetingRepository) -> HttpResponse {
+        do {
+            guard let m = try repo.meeting(id: id) else { return .notFound }
+            let url: URL?
+            let contentType: String
+            let filename: String
+            switch kind {
+            case .audioM4A:
+                url = MediaExporter.audioM4A(meetingId: id)
+                contentType = "audio/mp4"
+                filename = "corder-\(id).m4a"
+            case .videoWithAudio:
+                url = MediaExporter.videoWithAudio(meetingId: id, videoPath: m.videoPath)
+                contentType = "video/mp4"
+                filename = "corder-\(id).mp4"
+            }
+            guard let fileURL = url,
+                  let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+                  let size = (attrs[.size] as? NSNumber)?.int64Value, size > 0 else {
+                FileLogger.log("serveExport: export unavailable for \(id) (\(kind))")
+                return .internalServerError
+            }
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            return .raw(200, "OK", [
+                "Content-Type": contentType,
+                "Content-Length": "\(size)",
+                "Content-Disposition": "attachment; filename=\"\(filename)\"",
+                "Accept-Ranges": "none",
+            ]) { writer in
+                defer { try? handle.close() }
+                let chunkSize = 1 << 20   // 1 MiB
+                while true {
+                    let chunk = handle.readData(ofLength: chunkSize)
+                    if chunk.isEmpty { break }
+                    try writer.write(chunk)
+                }
+            }
         } catch {
             return .internalServerError
         }

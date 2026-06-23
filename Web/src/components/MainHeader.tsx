@@ -202,9 +202,10 @@ function SubmitLogsButton({
   const inCooldown = now < cooldownEnd;
   // The button DISAPPEARS the instant the user clicks it: while the
   // 10-s undo window is open, while the POST is in flight, and for the
-  // full 60-min cooldown after a successful send. Also hidden when
-  // the log has no flagged events — no point letting the user submit
-  // a clean session.
+  // full 60-min cooldown after a successful send. `hasEvents` is now
+  // true whenever there's ANY log to send (the backend stopped gating
+  // on error lines) — a transcription-QUALITY bug throws no error, so
+  // gating here hid the report button exactly when we needed it.
   if (pending || inCooldown || !hasEvents) return null;
 
   const onClick = () => {

@@ -193,16 +193,19 @@ export function SettingsPane({
       </div>
 
       <div style={{ display: section === "advanced" ? "contents" : "none" }}>
-        {/* Transcription model picker — moved here from the (now hidden)
-            Dashboard. Lives at the very top of Advanced, wrapped in the
-            same label/desc block shell as the other pickers. */}
-        <SoloCard>
-          <div className="hk-block mic-block">
-            <div className="settings-row-label">{t.settings_model_label ?? "Transcription model"}</div>
-            <div className="settings-row-desc">{t.settings_model_desc ?? "Which model the next recording is transcribed with."}</div>
-            <WhisperPrefetchPill t={t} />
-          </div>
-        </SoloCard>
+        {/* Transcription model picker — ADMIN-ONLY. Normal users have no
+            model choice (the hard provider lock pins them to Groq cloud +
+            on-device), so the whole block is hidden for non-admins; only
+            admins (who can benchmark cloud models) see and use it. */}
+        {s?.is_admin === true && (
+          <SoloCard>
+            <div className="hk-block mic-block">
+              <div className="settings-row-label">{t.settings_model_label ?? "Transcription model"}</div>
+              <div className="settings-row-desc">{t.settings_model_desc ?? "Which model the next recording is transcribed with."}</div>
+              <WhisperPrefetchPill t={t} />
+            </div>
+          </SoloCard>
+        )}
 
         <SoloCard>
           <Toggle

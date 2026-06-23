@@ -48,10 +48,15 @@ interface Props {
   /// `null` for legacy rows; we fall back to "now" so the counter
   /// still ticks instead of going negative.
   startedAtMs: number | null;
-  /// Recording length in ms — anchors the progress estimate so a long
-  /// meeting fills slower than a short one. `null` falls back to a
-  /// fixed time constant.
+  /// Recording length in ms. Kept for callers; no longer drives the
+  /// fill now that we have a real backend progress signal.
   durationMs: number | null;
+  /// Real transcription progress in [0, 1], polled from the backend
+  /// (`MeetingDetail.transcribe_progress`). `null` when the backend
+  /// hasn't reported yet (legacy rows / cloud providers that don't
+  /// stream per-window callbacks) — we then render an empty fill and
+  /// rely on the spinner + elapsed counter for the "moving" signal.
+  progress: number | null;
   onCancelled: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
@@ -120,7 +125,7 @@ function resolveUpsell(s: Settings | null, u: Usage | null): UpsellKind {
 /// between recording / transcribing / failed / empty states. The
 /// spinner sits inline next to the headline so the "this is moving"
 /// signal is part of the title, not a separate row that grows the card.
-export function TranscribingBanner({ meetingId, startedAtMs, onCancelled, onToast, t }: Props) {
+export function TranscribingBanner({ meetingId, startedAtMs, progress, onCancelled, onToast, t }: Props) {
   // Backend mark when the pipeline went into .transcribing. Falling
   // back to Date.now() for legacy rows that don't carry the field —
   // keeps the timer monotonic rather than negative.
@@ -272,10 +277,17 @@ export function TranscribingBanner({ meetingId, startedAtMs, onCancelled, onToas
           disabled={stopping}
           aria-busy={stopping}
         >
-          {/* Indeterminate "working" sweep behind the label — see the CSS.
-              No fake percentage: we have no real ASR progress signal, so a
-              value-driven fill mis-finished / animated backwards. */}
-          <span className="trans-stop-fill" aria-hidden />
+          {/* Real progress fill behind the label. Driven by the backend
+              per-window signal (`transcribe_progress`), monotonic on the
+              server so it never animates backwards. Caps at 0.99 there
+              until the pipeline actually finishes (this banner then
+              unmounts), so the bar never "completes" while work is still
+              running. */}
+          <span
+            className="trans-stop-fill"
+            style={{ width: `${Math.round(Math.max(0, Math.min(1, progress ?? 0)) * 100)}%` }}
+            aria-hidden
+          />
           <span className="trans-stop-label">
             {stopping ? (
               <Loader2 size={18} className="trans-inline-spinner trans-stop-spinner" aria-hidden />

@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Download, Maximize2, X } from "lucide-react";
 import {
-  MeetingDetail, audioSrc, videoSrc,
+  MeetingDetail, audioSrc, videoSrc, videoWithAudioSrc, audioM4ASrc,
   transcriptSrc, transcriptMdSrc, transcriptJsonSrc, bundleSrc,
 } from "../api";
 import { formatDuration } from "../format";
@@ -92,8 +92,12 @@ function DownloadView({
 }) {
   type Row = { value: string; label: string; href: string; file: string; show: boolean };
   const rows: Row[] = [
-    { value: "video",      label: t.download_video,      href: videoSrc(detail.id),         file: `corder-${detail.id}.mov`,  show: !!detail.has_video },
-    { value: "audio",      label: t.download_audio,      href: audioSrc(detail.id),         file: `corder-${detail.id}.wav`,  show: true },
+    // Video is offered ONLY muxed with audio — a silent .mov download was
+    // useless and huge (it has no audio track; we capture sound
+    // separately). Audio-only is the compressed AAC .m4a, not the
+    // half-gigabyte raw .wav.
+    { value: "video",      label: t.download_video,      href: videoWithAudioSrc(detail.id), file: `corder-${detail.id}.mp4`,  show: !!detail.has_video },
+    { value: "audio",      label: t.download_audio,      href: audioM4ASrc(detail.id),       file: `corder-${detail.id}.m4a`,  show: true },
     { value: "transcript", label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: detail.segments.length > 0 },
     { value: "markdown",   label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: detail.segments.length > 0 },
     { value: "json",       label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: detail.segments.length > 0 },

@@ -16,6 +16,22 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.42] — 2026-06-23
+
+### Added
+- Speaker-bleed echo suppression. When you record on speakers (no headphones), the other person's voice used to leak into your mic and get transcribed as if you said it — sometimes even translated into your language. Corder now subtracts the far-end from your mic track before transcription, so each speaker stays on their own side. Validated on a real recording: the far end no longer contaminates your turns.
+- Download now offers "Video + audio" (one file with sound) and a compact "Audio" (AAC .m4a) — the old silent video-only download is gone. Audio downloads are ~10× smaller.
+
+### Changed
+- The Stop-transcription progress bar now shows REAL progress for cloud (Groq) transcription, advancing as each chunk finishes (it already did for the on-device model).
+- Recording blob: a clean centred size-pulse that kicks to the beat of incoming sound.
+- Screen video recording is lighter — half resolution and 10 fps (down from full-res/15 fps), cutting CPU and file size with no real quality loss for a meeting.
+- Cloud transcription is locked to Groq Whisper for everyone (cheapest at equal quality); other cloud models are no longer used.
+- Chapters now have dividers between them.
+
+### Fixed
+- Bug reports now capture the full transcription/capture log across recent sessions (not just the last few startup lines), and the report button is always available — so transcript issues can actually be diagnosed.
+
 ## [0.14.41] — 2026-06-23
 
 ### Changed

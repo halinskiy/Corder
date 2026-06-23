@@ -177,6 +177,11 @@ final class TranscriptionPipeline {
         // following transcribe() always begins by re-evaluating the
         // user setting + cap.
         defer { activeProvider = nil }
+        // Real progress bar: start at 0 (a fresh run / re-transcribe begins
+        // empty, no leftover full value to animate backward from) and always
+        // clear on exit so a finished row stops reporting.
+        TranscriptionProgressStore.begin(meetingId: meetingId)
+        defer { TranscriptionProgressStore.clear(meetingId: meetingId) }
         let repo = AppContext.shared.repo
         guard var meeting = (try? repo.meeting(id: meetingId)) else {
             FileLogger.log("transcribe(): meeting \(meetingId) not found in DB")
@@ -425,7 +430,10 @@ final class TranscriptionPipeline {
                 let sh = (try? Self.md5OfFile(at: systemURL)) ?? ""
                 if mh.isEmpty || sh.isEmpty { cacheUsable = false }
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
-                cacheKey = "\(providerTag)dual:v10:\(ex):\(mh):\(sh)"
+                // v11: mic.wav now passes through EchoSuppressor (far-end
+                // bleed removed) before ASR when on speakers — the raw mic
+                // text changes, so the key must bust the v10 cache once.
+                cacheKey = "\(providerTag)dual:v11:\(ex):\(mh):\(sh)"
             } else {
                 if !FileManager.default.fileExists(atPath: mixURL.path),
                    let remote = meeting.dropboxAudioPath {
@@ -492,9 +500,26 @@ final class TranscriptionPipeline {
                     // unless explicitly overridden); WHEN/WHO is the
                     // on-device re-derive step below.
                     FileLogger.log("transcribe(): dual-track — \(currentProvider.rawValue) .single on mic + system (raw text only)")
+                    // Speaker-bleed suppression. On speakers the far-end
+                    // leaks into mic.wav and gets transcribed as the user
+                    // (cross-language, even translated). Run the offline echo
+                    // suppressor with system.wav as the clean reference and
+                    // transcribe the CLEANED mic. Self-gating: returns nil on
+                    // a headphone/BT recording (no acoustic coupling) → we
+                    // fall back to the raw mic, so this is a no-op there.
+                    let aecTempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("corder-aec-\(meetingId).wav")
+                    let micTranscribeURL = EchoSuppressor.suppress(micURL: micURL, systemURL: systemURL, outURL: aecTempURL) ?? micURL
+                    defer { if micTranscribeURL != micURL { try? FileManager.default.removeItem(at: aecTempURL) } }
                     do {
-                        async let micPart = geminiRawTurns(wavURL: micURL, meetingId: meetingId)
-                        async let sysPart = geminiRawTurns(wavURL: systemURL, meetingId: meetingId)
+                        // Combine the two concurrent tracks' real per-window
+                        // progress into one 0…0.9 fraction (last 10% is the
+                        // diarization/mapping stage below). Monotonic.
+                        let agg = ProgressAggregator(meetingId: meetingId)
+                        async let micPart = geminiRawTurns(wavURL: micTranscribeURL, meetingId: meetingId,
+                                                           onProgress: { agg.report(mic: $0) })
+                        async let sysPart = geminiRawTurns(wavURL: systemURL, meetingId: meetingId,
+                                                           onProgress: { agg.report(sys: $0) })
                         let (u, o) = try await (micPart, sysPart)
                         rawUserTurns = u
                         rawOtherTurns = o
@@ -589,24 +614,37 @@ final class TranscriptionPipeline {
                         throw err
                     }
                 case .whisperLocal:
-                    // Local Whisper has no diarize mode — fall back to
-                    // Gemini for the legacy mix case (the on-device
-                    // pipeline can't attribute speakers without a known
-                    //-stream input). This branch is rare in practice:
-                    // it only fires when the original wavs are gone and
-                    // we're transcribing a Dropbox-hydrated mix.
-                    if !LocalWhisperTranscriber.isAvailable() {
-                        FileLogger.log("transcribe(): whisperLocal on Intel + legacy mix → falling back to Gemini")
+                    // Local Whisper has no diarize mode, so the legacy mix
+                    // case needs a cloud diarizer. Gemini is ADMIN-ONLY now
+                    // (the hard provider lock), so only admins take the
+                    // Gemini path; non-admins use Groq (paid) and Free —
+                    // which has no cloud at all — fails cleanly rather than
+                    // ever reaching Gemini. Rare branch: only fires when the
+                    // original wavs are gone and we transcribe a hydrated mix.
+                    if AppSettings.isAdmin {
+                        FileLogger.log("transcribe(): admin — whisperLocal + legacy mix → Gemini diarize")
+                        do {
+                            legacyTurns = try await GeminiTranscriber.transcribe(
+                                audioURL: mixURL, mode: .diarize)
+                        } catch let err as GeminiTranscriber.GError {
+                            TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
+                            throw err
+                        }
+                    } else if AppSettings.userTier != .free {
+                        FileLogger.log("transcribe(): whisperLocal + legacy mix → Groq diarize (Gemini is admin-only)")
+                        do {
+                            let prompt = AppVocabulary.current.nilIfEmpty
+                            legacyTurns = try await WhisperTranscriber.transcribe(
+                                audioURL: mixURL, mode: .diarize, initialPrompt: prompt, backend: .groq)
+                        } catch let err as WhisperTranscriber.WhisperError {
+                            TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
+                            throw err
+                        }
                     } else {
-                        FileLogger.log("transcribe(): whisperLocal + legacy mix not supported (no diarize on-device) → falling back to Gemini")
-                    }
-                    do {
-                        legacyTurns = try await GeminiTranscriber.transcribe(
-                            audioURL: mixURL, mode: .diarize)
-                    } catch let err as GeminiTranscriber.GError {
+                        FileLogger.log("transcribe(): whisperLocal + legacy mix on Free — no cloud diarizer available")
                         TranscriptionErrors.record(meetingId: meetingId,
-                                                   message: err.localizedDescription)
-                        throw err
+                                                   message: "This archived recording needs a cloud model to separate speakers. Upgrade to Pro.")
+                        throw WhisperTranscriber.WhisperError.tierRequired
                     }
                 }
                 usingDualTrack = false
@@ -627,13 +665,14 @@ final class TranscriptionPipeline {
                 let roomSize = meeting.expectedOtherSpeakers.map { $0 + 1 }
                 // Immutable copy — captured by the parallel `async let`s
                 // (a captured `var` is a Swift 6 concurrency error).
-                // Gemini-diarize fallback is allowed ONLY on a fresh run AND
-                // a paid tier. On Free, Gemini 403s ("tier required") and
-                // hard-fails the whole meeting — even though local Whisper
-                // already produced perfectly good text with real timestamps.
-                // So Free never reaches for Gemini here; if on-device
-                // diarization yields nothing we keep the raw local turns.
-                let geminiFallback = !haveRaw && AppSettings.userTier != .free
+                // Gemini-diarize fallback is allowed ONLY on a fresh run, a
+                // paid tier, AND an admin. Gemini is admin-only now (the
+                // hard provider lock — normal users transcribe through Groq
+                // or the on-device model, never Gemini). For a non-admin
+                // whose on-device diarization yields nothing we keep the raw
+                // local turns (their WhisperKit timing is reliable), exactly
+                // as Free already does — never reach for Gemini.
+                let geminiFallback = !haveRaw && AppSettings.userTier != .free && AppSettings.isAdmin
                 // Fresh run with no Gemini fallback (Free): keep the raw ASR
                 // turns (their own WhisperKit timing is reliable) instead of
                 // dropping the track. Cache-hit re-derive keeps cached finals.
@@ -691,8 +730,18 @@ final class TranscriptionPipeline {
                     // it's cheap; a clean headphone recording is a near no-op.
                     if let micRMS = Self.frameRMS(micURL),
                        let sysRMS = Self.frameRMS(systemURL) {
+                        let uBefore = userTurns.count
+                        let oBefore = otherTurns.count
                         userTurns = Self.gateTurnsByDominance(userTurns, own: micRMS, rival: sysRMS)
                         otherTurns = Self.gateTurnsByDominance(otherTurns, own: sysRMS, rival: micRMS)
+                        // Log the gate's effect — when far-end voice bleeds
+                        // into the mic (user on speakers), the gate is what
+                        // SHOULD strip the bleed turns. A report showing
+                        // bleed text with "user N→N" (nothing dropped) means
+                        // the gate didn't fire on that recording.
+                        FileLogger.log("transcribe(): dominance gate — user \(uBefore)→\(userTurns.count), other \(oBefore)→\(otherTurns.count)")
+                    } else {
+                        FileLogger.log("transcribe(): dominance gate SKIPPED — frameRMS unreadable (no bleed suppression this run)")
                     }
                 }
                 FileLogger.log("transcribe(): timing re-derived — \(userTurns.count) user / \(otherTurns.count) other")
@@ -1582,8 +1631,28 @@ final class TranscriptionPipeline {
             audioURL: wavURL, mode: .single, variant: variant, initialPrompt: prompt)
     }
 
+    /// Thread-safe combiner for the two concurrent tracks' real progress.
+    /// Each track reports 0…1; we publish the average scaled to 0…0.9
+    /// (the final 10% is the on-device diarize/map stage). Monotonic via
+    /// the store's max-on-write. `@unchecked Sendable` is safe: all mutable
+    /// state is guarded by the lock.
+    private final class ProgressAggregator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var micFrac = 0.0
+        private var sysFrac = 0.0
+        private let meetingId: String
+        init(meetingId: String) { self.meetingId = meetingId }
+        func report(mic f: Double) { publish { self.micFrac = max(self.micFrac, f) } }
+        func report(sys f: Double) { publish { self.sysFrac = max(self.sysFrac, f) } }
+        private func publish(_ mutate: () -> Void) {
+            lock.lock(); mutate(); let c = (micFrac + sysFrac) / 2 * 0.9; lock.unlock()
+            TranscriptionProgressStore.set(meetingId: meetingId, fraction: c)
+        }
+    }
+
     private func geminiRawTurns(wavURL: URL,
-                                meetingId: String) async throws -> [GeminiTranscriber.Turn] {
+                                meetingId: String,
+                                onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
         switch currentProvider {
         case .gemini:
             do {
@@ -1610,7 +1679,8 @@ final class TranscriptionPipeline {
                 // whole meeting (only when that model is already on disk).
                 return try await WhisperTranscriber.transcribe(
                     audioURL: wavURL, mode: .single, initialPrompt: prompt,
-                    localFallbackVariant: LocalWhisperTranscriber.fallbackVariant())
+                    localFallbackVariant: LocalWhisperTranscriber.fallbackVariant(),
+                    onProgress: onProgress)
             } catch WhisperTranscriber.WhisperError.tierRequired {
                 return try await fallbackToLocalAfterTierGate(
                     wavURL: wavURL, meetingId: meetingId)
@@ -1629,7 +1699,8 @@ final class TranscriptionPipeline {
                 return try await WhisperTranscriber.transcribe(
                     audioURL: wavURL, mode: .single,
                     initialPrompt: prompt, backend: .groq,
-                    localFallbackVariant: LocalWhisperTranscriber.fallbackVariant())
+                    localFallbackVariant: LocalWhisperTranscriber.fallbackVariant(),
+                    onProgress: onProgress)
             } catch WhisperTranscriber.WhisperError.tierRequired {
                 return try await fallbackToLocalAfterTierGate(
                     wavURL: wavURL, meetingId: meetingId)
@@ -1639,19 +1710,35 @@ final class TranscriptionPipeline {
                 throw err
             }
         case .whisperLocal:
-            // Apple-Silicon-only — gracefully fall back to Gemini on
-            // Intel rather than hard-failing the meeting. The provider
-            // toggle keeps the user's preference; we just override the
-            // execution path for this single run.
+            // Apple-Silicon-only — gracefully fall back on Intel rather than
+            // hard-failing the meeting. Gemini is ADMIN-ONLY now (the hard
+            // provider lock), so only admins fall back to Gemini; non-admins
+            // use Groq (paid), and Free — no cloud at all — hard-fails.
             guard LocalWhisperTranscriber.isAvailable() else {
-                FileLogger.log("LocalWhisper: not available on Intel, falling back to Gemini for this track")
-                do {
-                    return try await GeminiTranscriber.transcribe(
-                        audioURL: wavURL, mode: .single, singlePass: false)
-                } catch let err as GeminiTranscriber.GError {
+                if AppSettings.isAdmin {
+                    FileLogger.log("LocalWhisper: Intel + admin — falling back to Gemini for this track")
+                    do {
+                        return try await GeminiTranscriber.transcribe(
+                            audioURL: wavURL, mode: .single, singlePass: false)
+                    } catch let err as GeminiTranscriber.GError {
+                        TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
+                        throw err
+                    }
+                } else if AppSettings.userTier != .free {
+                    FileLogger.log("LocalWhisper: Intel — falling back to Groq for this track (Gemini is admin-only)")
+                    do {
+                        let prompt = AppVocabulary.current.nilIfEmpty
+                        return try await WhisperTranscriber.transcribe(
+                            audioURL: wavURL, mode: .single, initialPrompt: prompt, backend: .groq)
+                    } catch let err as WhisperTranscriber.WhisperError {
+                        TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
+                        throw err
+                    }
+                } else {
+                    FileLogger.log("LocalWhisper: Intel + Free — no local model and no cloud allowed")
                     TranscriptionErrors.record(meetingId: meetingId,
-                                               message: err.localizedDescription)
-                    throw err
+                                               message: "The on-device model needs Apple Silicon. Upgrade to Pro for cloud transcription.")
+                    throw WhisperTranscriber.WhisperError.tierRequired
                 }
             }
             do {
@@ -1665,7 +1752,8 @@ final class TranscriptionPipeline {
                 try await LocalWhisperTranscriber.ensureModelReady(variant)
                 let prompt = AppVocabulary.current.nilIfEmpty
                 return try await LocalWhisperTranscriber.transcribe(
-                    audioURL: wavURL, mode: .single, variant: variant, initialPrompt: prompt)
+                    audioURL: wavURL, mode: .single, variant: variant,
+                    initialPrompt: prompt, onProgress: onProgress)
             } catch let err as LocalWhisperTranscriber.LocalWhisperError {
                 TranscriptionErrors.record(meetingId: meetingId,
                                            message: err.localizedDescription)

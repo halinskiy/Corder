@@ -45,6 +45,9 @@ enum DTO {
         /// MeetingView mount. `nil` for legacy rows (banner falls
         /// back to "now").
         let transcribing_started_at: Int64?
+        /// REAL transcription progress 0…1 while `status == "transcribing"`,
+        /// fed by the local ASR window-by-window. `nil` when not in flight.
+        let transcribe_progress: Double?
     }
 
     struct ExpectedSpeakersRequest: Codable {

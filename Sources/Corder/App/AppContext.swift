@@ -246,6 +246,28 @@ enum AppSettings {
     /// Cache keys are prefixed with the provider name so the three
     /// providers' raw outputs never replay each other.
     static var transcriptionProvider: TranscriptionProvider {
+        let resolved = resolvedTranscriptionProvider
+        // HARD provider lock for non-admins. The ONLY allowed cloud
+        // transcriber is Groq; Gemini and OpenAI whisper-1 are admin-only
+        // (kept so the dev can benchmark). Any other resolution — a stale
+        // UserDefaults override, a legacy account, a future bug — collapses
+        // to Groq (paid) or the on-device model (free). This is the client
+        // wall that guarantees "Gemini never suddenly transcribes" for a
+        // normal user; the Worker enforces the same rule server-side.
+        if !isAdmin {
+            switch resolved {
+            case .whisperLocal: return .whisperLocal
+            case .groq, .gemini, .whisper:
+                return userTier == .free ? .whisperLocal : .groq
+            }
+        }
+        return resolved
+    }
+
+    /// Pre-lock resolution: explicit override (admin/QA) → tier default.
+    /// `transcriptionProvider` clamps this to the allowed set for
+    /// non-admins; admins get it verbatim.
+    private static var resolvedTranscriptionProvider: TranscriptionProvider {
         // Explicit override wins — except for legacy `gemini`, which
         // we no longer offer in the picker (Whisper Cloud is the
         // single cloud option). A stale `gemini` override coerces
@@ -681,6 +703,39 @@ enum TranscriptionErrors {
     }
 
     static func read(meetingId: String) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return byMeeting[meetingId]
+    }
+}
+
+/// REAL transcription progress (0…1) per in-flight meeting, fed by the
+/// pipeline as the local Whisper model decodes window-by-window. Read by
+/// the `/api/meetings/:id` handler so the Stop-button fill shows actual
+/// progress, not a time guess. Lock-protected (pipeline writes off-main,
+/// Swifter handlers read off background threads). Monotonic on the write
+/// side (`set` ignores a value lower than the current one) so the bar
+/// never visibly steps backward.
+enum TranscriptionProgressStore {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var byMeeting: [String: Double] = [:]
+
+    static func set(meetingId: String, fraction: Double) {
+        let f = max(0, min(1, fraction))
+        lock.lock(); defer { lock.unlock() }
+        let cur = byMeeting[meetingId] ?? 0
+        if f >= cur { byMeeting[meetingId] = f }
+    }
+    /// Begin a fresh run: reset to 0 so a re-transcribe starts from empty
+    /// (no leftover full value to animate backward from).
+    static func begin(meetingId: String) {
+        lock.lock(); defer { lock.unlock() }
+        byMeeting[meetingId] = 0
+    }
+    static func clear(meetingId: String) {
+        lock.lock(); defer { lock.unlock() }
+        byMeeting.removeValue(forKey: meetingId)
+    }
+    static func read(meetingId: String) -> Double? {
         lock.lock(); defer { lock.unlock() }
         return byMeeting[meetingId]
     }
