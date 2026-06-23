@@ -66,18 +66,33 @@ final class SleepWatchdog {
     }
 
     private func handle(reason: String, message: String) {
-        // Only react if we're actually recording. Sleep events fire
-        // routinely; we don't want to spam notifications while the user
-        // is just closing the lid with nothing in flight.
-        guard case .recording = AppContext.shared.recordingState else { return }
-
-        FileLogger.log("SleepWatchdog: \(reason) — auto-stopping recording")
-        Task { @MainActor in
-            await RecordingController.shared.stopRecording()
-            NotificationsService.post(
-                title: L.notif("notif_stopped_title"),
-                body: message
-            )
+        // React to BOTH a live recording AND a silent pre-roll. Pre-roll
+        // (now default-ON, auto-armed when a meeting app grabs the mic) arms
+        // a FULL capture — SCStream + Core-Audio tap + mic — so if the Mac
+        // sleeps / the screen sleeps / the user switches accounts while an
+        // unanswered invite-offer popover sits open, the OS would suspend the
+        // process with capture still live (zombie capture, stuck privacy
+        // indicator) exactly as it would for a real recording. Sleep events
+        // fire routinely, so do nothing when nothing is in flight.
+        switch AppContext.shared.recordingState {
+        case .recording:
+            FileLogger.log("SleepWatchdog: \(reason) — auto-stopping recording")
+            Task { @MainActor in
+                await RecordingController.shared.stopRecording()
+                NotificationsService.post(
+                    title: L.notif("notif_stopped_title"),
+                    body: message
+                )
+            }
+        case .preroll:
+            // Tear the pre-roll capture down silently — there's no committed
+            // meeting to notify about, just a buffered offer in flight.
+            FileLogger.log("SleepWatchdog: \(reason) — discarding live pre-roll capture")
+            Task { @MainActor in
+                await RecordingController.shared.discardPreroll()
+            }
+        default:
+            return
         }
     }
 }

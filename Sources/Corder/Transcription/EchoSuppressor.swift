@@ -63,7 +63,16 @@ enum EchoSuppressor {
             return nil
         }
         FileLogger.log("EchoSuppressor: delay=\(delay) (\(String(format: "%.0f", Double(delay)/sampleRate*1000))ms) corr=\(String(format: "%.3f", corr)) — suppressing")
-        if delay > 0 { ref = [Float](repeating: 0, count: delay) + Array(ref[0..<(n - delay)]) }
+        // Delay-align the reference. Clamp `delay` to < n: on a very short
+        // recording (quick start/stop) the cross-correlation lag can exceed
+        // the sample count, and an unclamped `ref[0..<(n - delay)]` is a
+        // NEGATIVE range → process-wide fatal on the universal dual-track
+        // path. With the clamp a too-large delay simply zeroes the reference
+        // (nothing to subtract), the correct degenerate behaviour.
+        if delay > 0 {
+            let d = min(delay, n)
+            ref = [Float](repeating: 0, count: d) + Array(ref[0..<(n - d)])
+        }
 
         // 2. Spectral suppression.
         guard let cleaned = process(mic: micA, ref: ref) else { return nil }
@@ -201,7 +210,10 @@ enum EchoSuppressor {
         vDSP_measqv(Array(mic[0..<chunk]), 1, &em, vDSP_Length(chunk))
         vDSP_measqv(Array(ref[0..<chunk]), 1, &er, vDSP_Length(chunk))
         let denom = sqrtf(em * Float(chunk)) * sqrtf(er * Float(chunk)) * Float(2 * nfft) + 1e-9
-        let maxLag = min(nfft - 1, Int(maxLagMs / 1000 * sampleRate))
+        // Cap the lag by the actual chunk length too — on a short recording
+        // nfft (next pow2 of 2*chunk) can exceed the sample count, and a lag
+        // bigger than `n` would make the caller's delay-align slice crash.
+        let maxLag = min(nfft - 1, chunk - 1, Int(maxLagMs / 1000 * sampleRate))
         var best = 0
         var bestVal: Float = -.infinity
         for lag in 0...maxLag where abs(corr[lag]) > bestVal {

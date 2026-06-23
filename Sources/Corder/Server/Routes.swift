@@ -1523,12 +1523,20 @@ enum Routes {
 
         let sema = DispatchSemaphore(value: 0)
         var result: String?
+        var tierGated = false
         Task {
-            result = await GeminiSummarizer.generate(transcript: text)
+            do { result = try await GeminiSummarizer.generate(transcript: text) }
+            catch is PaidFeatureError { tierGated = true }
+            catch { }
             sema.signal()
         }
         sema.wait()
 
+        // A 403 tier-gate must surface as a real 403 so the frontend shows the
+        // Upgrade upsell (api.ts throws "HTTP 403", SummaryPane keys off it),
+        // NOT the generic "generation failed" error card. Load-bearing per
+        // the "Paid feature gate" gotcha in NOTES.md.
+        if tierGated { return tierGatedResponse("summary") }
         guard let summary = result, !summary.isEmpty else {
             return jsonResponse(["summary": "", "error": "generation failed"])
         }
@@ -1559,11 +1567,16 @@ enum Routes {
         }
         let sema = DispatchSemaphore(value: 0)
         var result: [GeminiChapters.Chapter]?
+        var tierGated = false
         Task {
-            result = await GeminiChapters.generate(timedLines: timed)
+            do { result = try await GeminiChapters.generate(timedLines: timed) }
+            catch is PaidFeatureError { tierGated = true }
+            catch { }
             sema.signal()
         }
         sema.wait()
+        // Real 403 on a tier-gate so the upsell fires (see summarize()).
+        if tierGated { return tierGatedResponse("chapters") }
         guard let chapters = result, !chapters.isEmpty,
               let data = try? JSONEncoder().encode(chapters),
               let json = String(data: data, encoding: .utf8) else {
@@ -2024,6 +2037,16 @@ enum Routes {
     }
 
     // MARK: helpers
+
+    /// HTTP 403 envelope for a paid-feature tier-gate. The frontend's
+    /// `api.ts` throws `HTTP 403` on `!r.ok`, which the Summary/Chapters
+    /// panes detect (`message.includes("403")`) to show the Upgrade upsell
+    /// instead of the generic error card.
+    private static func tierGatedResponse(_ field: String) -> HttpResponse {
+        .raw(403, "Forbidden", ["Content-Type": "application/json; charset=utf-8"]) {
+            try? $0.write([UInt8]("{\"\(field)\":\"\",\"error\":\"tier_required\"}".utf8))
+        }
+    }
 
     private static func jsonResponse<T: Encodable>(_ value: T) -> HttpResponse {
         do {

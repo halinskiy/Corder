@@ -1,5 +1,12 @@
 import Foundation
 
+/// Thrown by a paid-feature generator (Summary / Chapters) when the Worker
+/// returns HTTP 403 — a tier gate, NOT a generic failure. The route maps it
+/// to a real 403 so the frontend shows the Upgrade upsell instead of the
+/// "didn't work, send a report" error card. (See the "Paid feature gate"
+/// gotcha in NOTES.md — a 403 must surface as an upsell.)
+enum PaidFeatureError: Error { case tierRequired }
+
 /// Generates a Markdown meeting summary from a finished transcript via
 /// a text-only Gemini call. Heavier than the title (longer input +
 /// output) so it runs on demand — only when the user opens the Summary
@@ -12,7 +19,7 @@ enum GeminiSummarizer {
     private static let model = "gemini-2.5-flash-lite"
     private static let endpoint = "https://generativelanguage.googleapis.com/v1beta"
 
-    static func generate(transcript: String) async -> String? {
+    static func generate(transcript: String) async throws -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         // Same routing as GeminiTranscriber / GeminiTitler — go
@@ -129,7 +136,11 @@ enum GeminiSummarizer {
         req.httpBody = payload
 
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let http = resp as? HTTPURLResponse else { return nil }
+        // Surface the Worker's tier-gate distinctly so the route returns a
+        // real 403 → Upgrade upsell, not a generic "generation failed".
+        if http.statusCode == 403 { throw PaidFeatureError.tierRequired }
+        guard (200..<300).contains(http.statusCode),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let candidates = json["candidates"] as? [[String: Any]],
               let content = candidates.first?["content"] as? [String: Any],
