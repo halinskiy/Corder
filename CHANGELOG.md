@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.52] — 2026-06-24
+
+### Changed
+- Switching between the Turbo and Small on-device models now always re-transcribes with the model you picked (it could previously reuse the other model's result).
+- On long meetings the app stays responsive while a transcript is being prepared (heavy audio analysis moved off the UI thread).
+- On Macs with 8 GB of memory the on-device model now loads straight on the GPU path, avoiding a memory spike.
+
+### Fixed
+- The Library window now recovers on its own if its web view crashes, instead of going blank until restart.
+- Transcripts are less likely to drop a real sentence that happens to contain a common closing phrase.
+
 ## [0.14.51] — 2026-06-24
 
 ### Fixed
