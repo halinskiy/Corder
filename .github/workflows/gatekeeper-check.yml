@@ -26,9 +26,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-15 = Sequoia, macos-14 = Sonoma. Add new images here as
-        # GitHub ships them so every shipped macOS is covered.
-        os: [macos-15, macos-14]
+        # macos-26 = Tahoe, macos-15 = Sequoia, macos-14 = Sonoma (our min
+        # is 14.2, so older images aren't relevant). Add new images here as
+        # GitHub ships them so every shipped macOS is covered. fail-fast is
+        # off, so a not-yet-available runner image fails its own job without
+        # blocking the others.
+        os: [macos-26, macos-15, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Resolve tag

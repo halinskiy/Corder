@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.44] — 2026-06-23
+
+### Changed
+- Internal cleanup and stability. No user-facing changes since 0.14.43 (removed the old recording-blob code now that the spectrum equalizer has replaced it).
+
 ## [0.14.43] — 2026-06-23
 
 ### Changed
