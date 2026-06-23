@@ -876,13 +876,12 @@ function SpeakerTimeline({
   const activeSpeakers = detail.speakers.filter((sp) => (totals.get(sp.id) || 0) > 0);
   if (activeSpeakers.length === 0) return null;
 
-  // Percentage is "share of talking" (sums to 100% across speakers), NOT
-  // share of wall-clock. Dual-track timing can mark both speakers active in
-  // the same instant (mic + system tracks bleed into each other), so % of
-  // the recording would sum well past 100% and read as broken. Talk-share
-  // is the standard meeting-tool metric and always sums to 100%.
-  const talkTotal = Array.from(totals.values()).reduce((a, b) => a + b, 0);
-
+  // HONEST percentage: each speaker's voiced time as a share of the WHOLE
+  // session, so silent stretches show up as the missing remainder (the
+  // speakers no longer sum to a forced 100%). This is now safe because the
+  // EchoSuppressor + dominance gate removed the dual-track bleed that used
+  // to mark both speakers active at once; residual overlap is clamped per
+  // row at 100%.
   const cursorPct = Math.min(100, Math.max(0, (currentTimeSec * 1000 / totalMs) * 100));
 
   const onBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -900,7 +899,7 @@ function SpeakerTimeline({
       {activeSpeakers.map((sp) => {
         const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
         const sum = totals.get(sp.id) || 0;
-        const pct = talkTotal > 0 ? Math.round((sum / talkTotal) * 100) : 0;
+        const pct = totalMs > 0 ? Math.min(100, Math.round((sum / totalMs) * 100)) : 0;
         const name = displaySpeakerName(sp.custom_name, sp.label, profileName);
         const color = sp.color_hex && /^#[0-9a-f]{6}$/i.test(sp.color_hex)
           ? sp.color_hex
