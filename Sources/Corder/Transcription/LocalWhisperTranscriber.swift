@@ -348,6 +348,38 @@ enum LocalWhisperTranscriber {
             FileLogger.log("LocalWhisper: download complete (\(variant.rawValue))")
         }
 
+        // Pre-stage the tokenizer BEFORE constructing WhisperKit. The Core ML
+        // packages live in `argmaxinc/whisperkit-coreml`, but the tokenizer
+        // ships in a separate `openai/whisper-<size>` repo that WhisperKit
+        // fetches lazily INSIDE `WhisperKit(cfg)` at load — with NO timeout.
+        // A stalled fetch there wedged the entire load for 40+ minutes on two
+        // machines (model bytes already on disk, so the user saw no progress
+        // and the transcription hung on "transcribing" forever). Fetching it
+        // here, under our own deadline + the visible progress banner, makes
+        // the subsequent load purely-local Core ML work that can't hang on
+        // the network. Idempotent + fast when the tokenizer is already staged.
+        if !isTokenizerDownloaded(variant) {
+            FileLogger.log("LocalWhisper: tokenizer missing — pre-fetching (bounded) for \(variant.rawValue)")
+            setProgress(variant, 0.99)   // model bytes are there; this is the last piece
+            defer { setProgress(variant, nil) }
+            do {
+                try await withDeadline(120) {
+                    _ = try await ModelUtilities.loadTokenizer(
+                        for: tokenizerModelVariant(variant),
+                        tokenizerFolder: downloadBaseURL,
+                        additionalSearchPaths: [modelFolderURL(variant)]
+                    )
+                }
+                FileLogger.log("LocalWhisper: tokenizer staged for \(variant.rawValue)")
+            } catch is DeadlineError {
+                FileLogger.log("LocalWhisper: tokenizer fetch timed out (>120s) — failing this run, model kept")
+                throw LocalWhisperError.transcribeFailed("tokenizer download timed out")
+            } catch {
+                FileLogger.log("LocalWhisper: tokenizer fetch failed (\(error)) — failing this run, model kept")
+                throw LocalWhisperError.transcribeFailed("tokenizer download failed: \(error.localizedDescription)")
+            }
+        }
+
         // Variant switch invalidates the cached WhisperKit instance.
         if pipe != nil, pipeVariant != variant {
             FileLogger.log("LocalWhisper: variant changed (\(pipeVariant?.rawValue ?? "?") → \(variant.rawValue)) — reloading")
@@ -401,22 +433,29 @@ enum LocalWhisperTranscriber {
         )
         do {
             // Bounded load. `WhisperKit(cfg)` compiles + loads the Core ML
-            // model and can WEDGE on a corrupt / incompletely-downloaded
-            // bundle (an interrupted fetch leaves a broken .mlmodelc), and
-            // that call doesn't honour cancellation — it hangs forever
-            // ("transcribing for 48 minutes", the same line repeating every
-            // relaunch). `withDeadline` stops waiting after 2 min even though
+            // model and can WEDGE (uncancellable) so a transcription hangs
+            // on "transcribing" forever, re-loading the same files every
+            // relaunch. `withDeadline` stops waiting after 3 min even though
             // the underlying call can't be cancelled.
-            pipe = try await Self.withDeadline(120) { try await WhisperKit(cfg) }
+            pipe = try await Self.withDeadline(180) { try await WhisperKit(cfg) }
             pipeVariant = variant
+        } catch is DeadlineError {
+            // Load wedged. Do NOT delete the model — a timeout can be a slow
+            // first compile, not corruption, and deleting would trigger an
+            // endless re-download loop (fetch 1.5 GB → time out → delete →
+            // fetch again). Just fail this run; the user can retry (Core ML
+            // may have cached the compile) or switch to cloud. If a machine
+            // consistently wedges here it's a WhisperKit/Core ML load issue,
+            // visible from this log line.
+            FileLogger.log("LocalWhisper: model load timed out (>180s) — failing this run, model kept")
+            throw LocalWhisperError.transcribeFailed("model load timed out")
         } catch {
-            // A hung or failed load almost always means the model on disk is
-            // bad. Wipe it so the NEXT attempt re-downloads a clean copy
-            // (and shows the "Downloading model" button) instead of
-            // re-hanging on the same broken files forever.
-            FileLogger.log("LocalWhisper: model load failed/timed out (\(error)) — deleting model for a clean re-download")
+            // A real init ERROR (not a timeout) almost always means a
+            // corrupt / incomplete bundle — wipe it so the NEXT attempt
+            // re-downloads a clean copy instead of re-failing on bad files.
+            FileLogger.log("LocalWhisper: model init error (\(error)) — deleting model for a clean re-download")
             try? FileManager.default.removeItem(at: modelFolderURL(variant))
-            throw LocalWhisperError.transcribeFailed("model load failed: \(error.localizedDescription)")
+            throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
         }
     }
 
@@ -484,6 +523,33 @@ enum LocalWhisperTranscriber {
         return downloadBaseURL
             .appendingPathComponent("models", isDirectory: true)
             .appendingPathComponent(repo, isDirectory: true)
+    }
+
+    /// Our `Variant` → WhisperKit `ModelVariant` for the tokenizer fetch.
+    /// Turbo shares the large-v3 tokenizer (`openai/whisper-large-v3`).
+    /// Mirrors WhisperKit's internal `tokenizerNameForVariant`.
+    nonisolated private static func tokenizerModelVariant(_ variant: Variant) -> ModelVariant {
+        switch variant {
+        case .turbo: return .largev3
+        case .small: return .small
+        case .base:  return .base
+        case .tiny:  return .tiny
+        }
+    }
+
+    /// True iff `tokenizer.json` is already on disk in one of the folders
+    /// WhisperKit's `loadTokenizer` searches (its Hub repo folder, or the
+    /// model folder itself). The Core ML model packages come from
+    /// `argmaxinc/whisperkit-coreml`, but the TOKENIZER lives in a separate
+    /// `openai/whisper-<size>` repo that `isModelDownloaded` does NOT cover —
+    /// so a model can be "downloaded" yet still need a network fetch for the
+    /// tokenizer at load time. We pre-stage it so the load is fully offline.
+    nonisolated static func isTokenizerDownloaded(_ variant: Variant) -> Bool {
+        let candidates = [
+            tokenizerRepoFolderURL(variant).appendingPathComponent("tokenizer.json"),
+            modelFolderURL(variant).appendingPathComponent("tokenizer.json"),
+        ]
+        return candidates.contains { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     /// If the tokenizer repo folder exists but is missing `tokenizer.json`,
