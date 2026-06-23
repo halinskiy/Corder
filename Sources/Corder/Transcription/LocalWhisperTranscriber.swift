@@ -46,25 +46,18 @@ enum LocalWhisperTranscriber {
         /// trade-off for "feels instant" on a 30-min meeting.
         case turbo = "openai_whisper-large-v3_turbo"
         /// Multilingual small — ~480 MB, faster decode than turbo,
-        /// modest accuracy drop. Good middle-ground when the user
-        /// doesn't want to ship 1.5 GB or wait on a slow link.
+        /// modest accuracy drop. The lightweight floor: still good
+        /// enough for real meetings (unlike base/tiny, which were
+        /// dropped — too lossy on Russian / noisy / overlapping speech),
+        /// and the only on-device option that fits an 8 GB Mac where
+        /// turbo swaps the machine to death.
         case small = "openai_whisper-small"
-        /// Multilingual base — ~150 MB. Decent for clean podcast/voice
-        /// content, struggles with overlapping speech and noise.
-        case base = "openai_whisper-base"
-        /// Multilingual tiny — ~75 MB. The "kick the tyres" option;
-        /// the model fits in memory anywhere but accuracy is noticeably
-        /// worse than base. Useful for offline emergencies / metered
-        /// connections more than for primary use.
-        case tiny = "openai_whisper-tiny"
 
         /// Display name shown in the picker / download button.
         var label: String {
             switch self {
             case .turbo: return "Whisper Turbo"
             case .small: return "Whisper Small"
-            case .base:  return "Whisper Base"
-            case .tiny:  return "Whisper Tiny"
             }
         }
         /// Human-readable approximate download size (HuggingFace).
@@ -72,8 +65,6 @@ enum LocalWhisperTranscriber {
             switch self {
             case .turbo: return "1.5 GB"
             case .small: return "480 MB"
-            case .base:  return "150 MB"
-            case .tiny:  return "75 MB"
             }
         }
         /// Integer MB for sorting / UI conditionals.
@@ -81,8 +72,6 @@ enum LocalWhisperTranscriber {
             switch self {
             case .turbo: return 1500
             case .small: return 480
-            case .base:  return 150
-            case .tiny:  return 75
             }
         }
     }
@@ -116,13 +105,13 @@ enum LocalWhisperTranscriber {
     /// ~1.5 GB on disk, ~3 GB RAM at inference) is the "feels instant"
     /// floor on M-series with 16 GB+ RAM. On an 8 GB M1, though, turbo
     /// swaps the whole machine into the ground and transcription
-    /// effectively hangs — we silently default to Base (~150 MB, ~500
-    /// MB RAM) on those Macs so the on-device path actually completes.
-    /// The picker still lets the user upgrade to Turbo if they want.
+    /// effectively hangs — we silently default to Small (~480 MB,
+    /// ~1.3 GB RAM) on those Macs so the on-device path actually
+    /// completes. The picker still lets the user upgrade to Turbo.
     nonisolated static var defaultVariant: Variant {
         let bytes = ProcessInfo.processInfo.physicalMemory
         let gb = bytes / 1_073_741_824 // 1024^3
-        return gb <= 8 ? .base : .turbo
+        return gb <= 8 ? .small : .turbo
     }
 
     /// VAD pre-pass thresholds, mirror cloud Whisper. Talk-heavy meetings
@@ -256,25 +245,26 @@ enum LocalWhisperTranscriber {
     /// connection mid-run — we can only fall back to a model that's
     /// already on disk (the network just dropped).
     nonisolated static func firstDownloadedVariant() -> Variant? {
-        for v in [Variant.turbo, .small, .base, .tiny] where isModelDownloaded(v) {
+        for v in [Variant.turbo, .small] where isModelDownloaded(v) {
             return v
         }
         return nil
     }
 
-    /// Small, universally-runnable model we keep on disk as the offline
-    /// safety net for cloud users — ~150 MB, decent quality, fast even
-    /// on weaker Macs. Deliberately NOT the machine-scaled `defaultVariant`
-    /// (turbo is 1.5 GB — too much to auto-download for a net that may
-    /// never trigger).
-    nonisolated static var offlineFallbackVariant: Variant { .base }
+    /// Lightest runnable model we keep on disk as the offline safety net
+    /// for cloud users — Small (~480 MB, ~1.3 GB RAM), still good enough
+    /// for real meetings. Deliberately NOT the machine-scaled
+    /// `defaultVariant` (turbo is 1.5 GB — too much to auto-download for
+    /// a net that may never trigger). Was `.base` before base/tiny were
+    /// dropped for quality; Small is the new floor.
+    nonisolated static var offlineFallbackVariant: Variant { .small }
 
     /// Variant to use for a mid-run network-loss fallback. Prefers the
-    /// LIGHT offline-net model (`.base`, ~500 MB RAM) when it's on disk —
+    /// LIGHT offline-net model (`.small`, ~1.3 GB RAM) when it's on disk —
     /// prewarm stages it for cloud users — so an emergency fallback never
     /// spins up a 3 GB `.turbo` on a RAM-starved Mac (the swap-to-death
     /// `firstDownloadedVariant` would pick, since it prefers best quality).
-    /// Falls back to whatever IS downloaded if base isn't present.
+    /// Falls back to whatever IS downloaded if small isn't present.
     nonisolated static func fallbackVariant() -> Variant? {
         if isModelDownloaded(offlineFallbackVariant) { return offlineFallbackVariant }
         return firstDownloadedVariant()
@@ -526,7 +516,7 @@ enum LocalWhisperTranscriber {
     /// `"…couldn't be moved"` / `"configuration file missing"`.
     /// Scoped to the variant on purpose: a blanket walk of the whole models
     /// dir would delete a CONCURRENT prewarm's in-flight `.incomplete`
-    /// (e.g. a `.turbo` transcribe purging a `.base` offline-net download).
+    /// (e.g. a `.turbo` transcribe purging a `.small` offline-net download).
     nonisolated private static func purgeIncompleteDownloads(_ variant: Variant) {
         let fm = FileManager.default
         for root in [modelFolderURL(variant), tokenizerRepoFolderURL(variant)] {
@@ -545,8 +535,6 @@ enum LocalWhisperTranscriber {
         switch variant {
         case .turbo: repo = "openai/whisper-large-v3"
         case .small: repo = "openai/whisper-small"
-        case .base:  repo = "openai/whisper-base"
-        case .tiny:  repo = "openai/whisper-tiny"
         }
         return downloadBaseURL
             .appendingPathComponent("models", isDirectory: true)
@@ -560,8 +548,6 @@ enum LocalWhisperTranscriber {
         switch variant {
         case .turbo: return .largev3
         case .small: return .small
-        case .base:  return .base
-        case .tiny:  return .tiny
         }
     }
 
