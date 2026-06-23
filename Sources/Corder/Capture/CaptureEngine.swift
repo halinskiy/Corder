@@ -225,8 +225,19 @@ final class CaptureEngine: NSObject {
         // mono (Bluetooth headsets, some external DACs, AirPods in HFP mode).
         let config = SCStreamConfiguration()
         let scale = NSScreen.main?.backingScaleFactor ?? 2
-        config.width = Int(CGFloat(captureWidth) * scale)
-        config.height = Int(CGFloat(captureHeight) * scale)
+        // Screen video is captured at HALF the backing resolution. A
+        // meeting screen-share reads perfectly fine at this, and it cuts
+        // the encoder's per-frame pixel count to ~1/4 — the single biggest
+        // lever on the "screen recording loads the CPU/memory" complaint.
+        // SCStream does the downscale in its own capture pipeline (cheap,
+        // GPU), so the encoder never sees the full-res frame. Audio capture
+        // is entirely unaffected. Round to even dimensions — YUV 4:2:0
+        // requires it.
+        let videoScale: CGFloat = 0.5
+        let vw = Int(CGFloat(captureWidth) * scale * videoScale)
+        let vh = Int(CGFloat(captureHeight) * scale * videoScale)
+        config.width = vw - (vw % 2)
+        config.height = vh - (vh % 2)
         // YUV (4:2:0) is the H.264 encoder's native input format; using BGRA
         // forces SCStream → encoder to do an RGB↔YUV pass internally, and on
         // some macOS builds the converter throws -16122 partway through and
@@ -234,11 +245,11 @@ final class CaptureEngine: NSObject {
         // avoids the conversion path entirely.
         config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         config.queueDepth = 6
-        // 15 fps is plenty for meeting recordings — cursor and window
-        // motion read fine at that rate, and the encoder's per-second
-        // bitrate target shrinks accordingly. 30 fps would just double
-        // the data with no perceptible quality gain on screen content.
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 15)
+        // 10 fps is plenty for meeting recordings — cursor and window
+        // motion read fine at that rate, and it's a third fewer frames for
+        // the encoder than 15 fps (less CPU, smaller file) with no
+        // perceptible loss on mostly-static screen content.
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 10)
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
         // We deliberately do NOT use SCStream's `.microphone` output even on
@@ -276,14 +287,15 @@ final class CaptureEngine: NSObject {
                 AVVideoWidthKey: config.width,
                 AVVideoHeightKey: config.height,
                 AVVideoCompressionPropertiesKey: [
-                    // Average ~1.5 Mbps. Screen content is mostly static so
-                    // the encoder dips well below this most of the time.
-                    AVVideoAverageBitRateKey: 1_500_000,
-                    AVVideoExpectedSourceFrameRateKey: 15,
-                    // I-frame every 4s at 15fps. Lets the user scrub the
+                    // Average ~1.0 Mbps. Half-resolution + 10 fps screen
+                    // content is mostly static, so the encoder dips well
+                    // below this most of the time.
+                    AVVideoAverageBitRateKey: 1_000_000,
+                    AVVideoExpectedSourceFrameRateKey: 10,
+                    // I-frame every 4s at 10fps. Lets the user scrub the
                     // recorded video in the Library without long waits to
                     // the next keyframe.
-                    AVVideoMaxKeyFrameIntervalKey: 60,
+                    AVVideoMaxKeyFrameIntervalKey: 40,
                     AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel as String
                 ]
             ]
@@ -297,7 +309,7 @@ final class CaptureEngine: NSObject {
                 self.videoInput = input
                 self.videoSessionStarted = false
                 self.videoFramesAppended = 0
-                FileLogger.log("CaptureEngine.start: AVAssetWriter armed (HEVC, \(config.width)x\(config.height), 15fps, 1.5 Mbps)")
+                FileLogger.log("CaptureEngine.start: AVAssetWriter armed (HEVC, \(config.width)x\(config.height), 10fps, 1.0 Mbps)")
             } else {
                 FileLogger.log("CaptureEngine.start: AVAssetWriter.startWriting failed: \(writer.error?.localizedDescription ?? "?"). Continuing without video.")
             }

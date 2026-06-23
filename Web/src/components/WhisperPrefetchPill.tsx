@@ -27,6 +27,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
   const [variant, setVariant] = React.useState<string | undefined>(undefined);
   const [provider, setProvider] = React.useState<string | undefined>(undefined);
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
+  const [isAdmin, setIsAdmin] = React.useState(false);
   // False until the first /api/settings poll lands. The provider/models
   // arrive a beat after mount, so without this the slot flashed an empty
   // picker ("Whisper Cloud · cloud" popping in late looked broken).
@@ -42,6 +43,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
         setModels(s.whisper_local_models ?? []);
         setProvider(s.transcription_provider);
         setTier((s.tier === "pro" || s.tier === "max") ? s.tier : "free");
+        setIsAdmin(s.is_admin === true);
         setLoaded(true);
       } catch { /* keep last-known; next poll recovers */ }
     };
@@ -62,33 +64,24 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     variant?: string;
     disabled?: boolean;
   };
-  // Gemini Flash was removed from the picker — Whisper Cloud is the
-  // only cloud option we offer now (cheaper per-minute, better-quality
-  // English, no proxy round-trip through Google). The `transcription_provider="gemini"`
-  // value stays valid in the backend for back-compat with any cached
-  // settings, but it's no longer selectable.
-  // Free users see ONLY local models in the picker — cloud Whisper
-  // isn't listed (even as a locked option). It reappears the moment
-  // tier flips to Pro / Max.
+  // HARD provider lock. The ONLY cloud model a paying user can pick is
+  // Groq Whisper — Gemini and OpenAI whisper-1 are ADMIN-ONLY (kept so
+  // the dev can benchmark). Free users see ONLY local models (cloud
+  // appears the moment tier flips to Pro / Max). The Worker enforces the
+  // same rule server-side, so even a hand-crafted request can't route a
+  // normal user through Gemini.
+  const groqChoice: Choice = {
+    value: "groq",
+    label: t.model_groq ?? "Groq Whisper",
+    meta: t.model_cloud ?? "cloud",
+    provider: "groq",
+  };
+  const adminCloud: Choice[] = [
+    { value: "gemini",  label: "Gemini Flash",  meta: "admin · cloud", provider: "gemini" },
+    { value: "whisper", label: t.model_whisper_cloud ?? "Whisper Cloud", meta: "admin · cloud", provider: "whisper" },
+  ];
   const cloudChoices: Choice[] = paid
-    ? [
-        {
-          value: "whisper",
-          label: t.model_whisper_cloud ?? "Whisper Cloud",
-          meta: t.model_cloud ?? "cloud",
-          provider: "whisper",
-        },
-        {
-          // Groq Whisper-large-v3-turbo — same OpenAI-compatible
-          // interface, ~10× cheaper than whisper-1. Surfaced as an
-          // explicit alternative so users (and we) can A/B before
-          // making it the default.
-          value: "groq",
-          label: t.model_groq ?? "Groq Whisper",
-          meta: t.model_cloud ?? "cloud",
-          provider: "groq",
-        },
-      ]
+    ? (isAdmin ? [groqChoice, ...adminCloud] : [groqChoice])
     : [];
   const localChoices: Choice[] = models.map((m) => ({
     value: `local:${m.id}`,
@@ -102,10 +95,13 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
   const currentValue = (() => {
     if (provider === "whisperLocal" && variant) return `local:${variant}`;
     if (provider === "groq" && paid) return "groq";
-    // Legacy `gemini` accounts get coerced to `whisper` in the UI so
-    // the picker shows a valid selection. The backend reconciles on
-    // the next /api/settings POST.
-    if ((provider === "whisper" || provider === "gemini") && paid) return "whisper";
+    // gemini / whisper-1: admins keep the explicit selection; for a
+    // non-admin these aren't selectable (hard lock), so the picker shows
+    // Groq — their only cloud model. The backend already coerces the
+    // stored value on the next POST.
+    if ((provider === "whisper" || provider === "gemini") && paid) {
+      return isAdmin ? (provider === "gemini" ? "gemini" : "whisper") : "groq";
+    }
     // Free users have no cloud option — fall back to the first
     // available local variant (or the first option overall).
     return allChoices[0]?.value ?? "";

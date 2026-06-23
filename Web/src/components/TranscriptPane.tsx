@@ -316,6 +316,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
           meetingId={detail.id}
           startedAtMs={detail.transcribing_started_at ?? null}
           durationMs={detail.duration_ms ?? null}
+          progress={detail.transcribe_progress ?? null}
           onCancelled={onRecordingStopped}
           onToast={onToast}
           t={t}

@@ -484,7 +484,8 @@ enum LocalWhisperTranscriber {
     static func transcribe(audioURL: URL,
                            mode: WMode,
                            variant: Variant,
-                           initialPrompt: String?) async throws -> [GeminiTranscriber.Turn] {
+                           initialPrompt: String?,
+                           onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
         guard isAvailable() else { throw LocalWhisperError.notAvailableOnIntel }
         guard mode == .single else { throw LocalWhisperError.diarizeNotSupported }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -570,11 +571,25 @@ enum LocalWhisperTranscriber {
             decodeOpts.promptTokens = tokenizer.encode(text: " " + prompt)
         }
 
+        // Real progress: WhisperKit decodes in ~30s windows, reporting the
+        // current `windowId` per callback. Estimate total windows from the
+        // WORK audio length (VAD-compressed if used) and report the
+        // fraction. Real, monotonic, and tied to actual ASR work — not a
+        // wall-clock guess.
+        let workSec = useVad ? Double(speechMs) / 1000.0 : durationSec
+        let estWindows = max(1.0, (workSec / 30.0).rounded(.up))
+        let progressCb: TranscriptionCallback? = onProgress.map { cb in
+            { @Sendable (p: TranscriptionProgress) -> Bool? in
+                cb(min(0.99, Double(p.windowId + 1) / estWindows))
+                return nil   // never request cancellation from here
+            }
+        }
+
         let results: [TranscriptionResult]
         do {
             results = try await pipe.transcribe(audioPath: workURL.path,
                                                  decodeOptions: decodeOpts,
-                                                 callback: nil)
+                                                 callback: progressCb)
         } catch is CancellationError {
             // User-initiated cancel — bubble a clean CancellationError
             // so `TranscriptionPipeline.transcribe()` catches it in its

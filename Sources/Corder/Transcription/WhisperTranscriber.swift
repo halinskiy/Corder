@@ -164,7 +164,8 @@ enum WhisperTranscriber {
                            mode: WMode,
                            initialPrompt: String?,
                            backend: Backend = .openai,
-                           localFallbackVariant: LocalWhisperTranscriber.Variant? = nil) async throws -> [GeminiTranscriber.Turn] {
+                           localFallbackVariant: LocalWhisperTranscriber.Variant? = nil,
+                           onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
         // Signed-in users go through the Worker proxy (server-side
         // OpenAI key). Only when there's no Supabase session do we
         // require the legacy local key — keeps `swift test` / dev
@@ -233,7 +234,8 @@ enum WhisperTranscriber {
                                                             mode: mode,
                                                             initialPrompt: initialPrompt,
                                                             backend: backend,
-                                                            localFallbackVariant: localFallbackVariant)
+                                                            localFallbackVariant: localFallbackVariant,
+                                                            onProgress: onProgress)
         } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
             throw WhisperError.network("No internet — try again when you're online.")
         }
@@ -275,7 +277,8 @@ enum WhisperTranscriber {
                                                    mode: WMode,
                                                    initialPrompt: String?,
                                                    backend: Backend,
-                                                   localFallbackVariant: LocalWhisperTranscriber.Variant? = nil) async throws -> [GeminiTranscriber.Turn] {
+                                                   localFallbackVariant: LocalWhisperTranscriber.Variant? = nil,
+                                                   onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let durationSec = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
 
@@ -290,11 +293,17 @@ enum WhisperTranscriber {
 
         let fitsInOnePost = fileSize <= maxBytesPerChunk && durationSec <= maxSecondsPerChunk
         if fitsInOnePost {
+            // One upload — no per-chunk granularity, so creep to a holding
+            // value while the single request is in flight (the banner still
+            // reads as "moving"), then complete on return.
+            onProgress?(0.15)
             do {
-                return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey,
+                let single = try await transcribeSingle(audioURL: audioURL, apiKey: apiKey,
                                                   offsetMs: 0, mode: mode,
                                                   initialPrompt: initialPrompt,
                                                   backend: backend)
+                onProgress?(0.99)
+                return single
             } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
                 guard let turns = try await localChunkFallback(
                     chunkURL: audioURL, offsetMs: 0, variant: localFallbackVariant,
@@ -328,6 +337,13 @@ enum WhisperTranscriber {
         let cacheTag = "\(backend):\(mode)"
         for (i, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
+            // Real progress: fraction of chunks finished so far. Reported at
+            // the TOP so a resume-cache-hit chunk (which `continue`s) still
+            // advances the bar. A small floor (0.06) means the bar shows
+            // "engaged" the moment chunk 1 starts uploading instead of
+            // sitting at literal zero; capped at 0.99 until the pipeline's
+            // mapping stage finishes.
+            onProgress?(min(0.99, max(0.06, Double(i) / Double(chunks.count))))
 
             // Resume: if this exact chunk was already transcribed on a
             // prior (interrupted) run, reuse it and skip the upload. The
@@ -371,6 +387,7 @@ enum WhisperTranscriber {
             if let key = cacheKey, !fromLocalFallback { ChunkTranscriptCache.put(key, turns) }
             all.append(contentsOf: turns)
         }
+        onProgress?(0.99)
         FileLogger.log("WhisperTranscriber: stitched \(all.count) turns from \(chunks.count) chunks")
         return all
     }

@@ -447,6 +447,28 @@ struct RecordingHUDView: View {
         return Float(max(0, raw) * 0.35)
     }
 
+    /// Centred size-pulse factor from the level history — the ONLY motion
+    /// the blob has now (deformation removed per Костя's brief). It must
+    /// "дёргаться под такт": snap UP fast when sound arrives, drop back
+    /// quickly, matching the beat. So: near-instant attack, quick release,
+    /// and a big visible amplitude. Envelope follower over newest→oldest
+    /// samples; silence → 1.0 (resting). Centred scale → never moves. Kept
+    /// out of the TimelineView ViewBuilder closure so the compiler can
+    /// type-check it.
+    fileprivate static func pulseScale(levels: [CGFloat]) -> CGFloat {
+        var env: CGFloat = 0
+        let attack: CGFloat = 0.85   // near-instant snap to a new peak
+        let release: CGFloat = 0.25  // quick drop back → reads as a "kick", not a sag
+        for lv in levels.reversed() {
+            let target = max(0, lv)
+            let coeff = target > env ? attack : release
+            env += (target - env) * coeff
+        }
+        // Map typical speech levels (~0.12–0.30) to a strong bounce.
+        let boosted = min(1.0, env * 3.6)
+        return 1.0 + 0.32 * boosted   // up to ~+32 % — a clear subwoofer kick
+    }
+
 
     @ObservedObject private var meter = RecordingLevelMeter.shared
     /// Lets the view know when a recording is actually in flight — used
@@ -575,13 +597,22 @@ struct RecordingHUDView: View {
                 let levelsArr: [CGFloat] = welcomeActive
                     ? (0..<24).map { k in CGFloat(Self.syntheticLevel(t: t - Double(k) / 12.0)) }
                     : meter.history.map { CGFloat($0) * energy }
-                // NO whole-blob size pulse: the BODY stays put — only the
-                // tentacles (the BlobShape rim) react to sound, per the
-                // "symbiote" brief. Entry/hover scale below still applies.
+                // PRIMARY motion = a smooth, centred SIZE pulse. The blob
+                // stays put and gently grows-then-returns with the sound,
+                // like a subwoofer cone — frequent but never jerky, and it
+                // NEVER moves (scale only, anchored at centre).
+                //
+                // Smoothness comes from an envelope follower over the level
+                // history (fast attack, slow release) instead of the raw
+                // per-frame level (which was spiky → the "дёрганый" look).
+                // The deformation (BlobShape rim) is now small + rare, so
+                // the silhouette no longer lurches sideways.
+                let pulse = Self.pulseScale(levels: levelsArr)
                 blobLayer(time: t,
                           level: level * Float(energy),
                           levels: levelsArr,
                           palette: palette)
+                    .scaleEffect(pulse)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -833,13 +864,16 @@ private struct BlobShape: Shape {
     var levels: [CGFloat]
 
     // Tuning.
-    private static let pointCount = 32          // fine enough for smooth tentacles
+    private static let pointCount = 36          // smooth rim
     private static let historyHz: Double = 12   // matches RecordingLevelMeter
-    private static let bucketSec: Double = 0.2  // ONE tentacle per ~0.2 s beat (not 12/s)
-    private static let attackSec: Double = 0.13 // smooth grow-out (no abrupt pop)
-    private static let releaseTau: Double = 0.6 // slow inward return (s)
-    private static let lobeSigma: Double = 0.34 // softer, wider limb (rad ≈ 20°)
-    private static let reach: CGFloat = 1.05    // longer lunge
+    private static let bucketSec: Double = 0.55 // (unused while reach == 0)
+    private static let attackSec: Double = 0.3
+    private static let releaseTau: Double = 1.1
+    private static let lobeSigma: Double = 0.5
+    // Deformation DISABLED (reach 0): the blob is a pure circle that only
+    // pulses in SIZE (see `pulseScale`). Per Костя — drop the tentacle/
+    // wobble entirely for now, the size kick to the beat is the whole show.
+    private static let reach: CGFloat = 0.0
 
     /// Deterministic scatter: integer onset-bucket → a fixed angle in
     /// 0…2π. Consecutive buckets land far apart (no monotonic sweep), and
@@ -876,7 +910,7 @@ private struct BlobShape: Shape {
         var beatPeak: [Int: Double] = [:]
         for (j, lv) in levels.enumerated() {
             let v = Double(lv)
-            if v < 0.04 { continue }
+            if v < 0.11 { continue }   // only notable peaks deform — keeps the wobble RARE
             let onset = time - Double(j) / Self.historyHz
             let bucket = Int((onset / Self.bucketSec).rounded())
             let lifted = pow(v, 0.8)

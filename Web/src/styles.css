@@ -2520,25 +2520,17 @@ body.resizing { cursor: col-resize; user-select: none; }
    approaches but never reaches the right edge — completion is signalled
    by the banner disappearing, never by the bar hitting 100%. */
 .trans-stop-btn { position: relative; overflow: hidden; }
-/* Indeterminate "working" sweep. We have NO real per-chunk progress
-   signal from the ASR, so a value-driven fill was dishonest: it could
-   finish at 24% (a fast cache-hit re-map) or animate BACKWARDS from a
-   stale full width when a new run reset it. A continuously sweeping
-   translucent band reads as "transcribing" without claiming a percentage,
-   never reverses, and just stops when the banner unmounts on `ready`. */
+/* Left-anchored fill driven by REAL transcription progress (the local ASR
+   reports window-by-window via /api/meetings/:id → transcribe_progress).
+   width is set inline. Long linear ease so it glides between the 2s polls
+   instead of stepping. A fresh run resets progress to 0 server-side and the
+   banner remounts at 0, so the fill never animates backward. */
 .trans-stop-fill {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 45%;
+  inset: 0 auto 0 0;
   background: rgba(0, 0, 0, 0.18);
+  transition: width 2000ms linear;
   pointer-events: none;
-  animation: trans-stop-sweep 1.4s ease-in-out infinite;
-}
-@keyframes trans-stop-sweep {
-  0%   { transform: translateX(-120%); }
-  100% { transform: translateX(285%); }
 }
 .dark .trans-stop-fill { background: rgba(255, 255, 255, 0.12); }
 .trans-stop-label {
@@ -4806,12 +4798,11 @@ body.resizing { cursor: col-resize; user-select: none; }
    between the two tabs reads as one surface. */
 /* Whole row is the click target — a chapter is one seek action, so
    the entire block lights up on hover, not just the time pill. */
-/* Each chapter is one clickable rounded row. No dividers + no negative
-   margin: the old version mixed a rounded hover highlight with full-
-   width border-top dividers (corners clashed with the lines) AND used a
-   `:has()` trick to hide adjacent borders on hover, which read as a
-   glitch ("обводка пропадает"). Spacing + the hover highlight separate
-   the rows cleanly instead. */
+/* Each chapter is one clickable rounded row. An INSET hairline divider
+   sits between rows (iOS-settings style) so the list doesn't read as
+   "floating" — short, inset 12px from both edges so it never touches the
+   rounded hover highlight (the old full-width border clashed with the
+   rounded corners; this doesn't). */
 .chapter-block {
   appearance: none;
   border: 0;
@@ -4821,11 +4812,27 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   font: inherit;
   display: block;
+  position: relative;
   padding: 12px;
-  margin: 2px 0;
+  margin: 0;
   border-radius: 10px;
   transition: background 80ms ease;
 }
+.chapter-block + .chapter-block::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: var(--border);
+}
+/* Hide the divider touching a hovered/active row so the rounded
+   highlight reads cleanly. */
+.chapter-block:hover::before,
+.chapter-block:hover + .chapter-block::before,
+.chapter-block.is-active::before,
+.chapter-block.is-active + .chapter-block::before { background: transparent; }
 .chapter-block:hover { background: var(--bg-hover); }
 /* Timestamp — same type as `.md-h3` (16/500, fg) so it sits at
    section-heading weight. Tabular-nums keeps the column flush. */
