@@ -338,16 +338,31 @@ enum LocalWhisperTranscriber {
             FileLogger.log("LocalWhisper: download complete (\(variant.rawValue))")
         }
 
-        // Pre-stage the tokenizer BEFORE constructing WhisperKit. The Core ML
-        // packages live in `argmaxinc/whisperkit-coreml`, but the tokenizer
-        // ships in a separate `openai/whisper-<size>` repo that WhisperKit
-        // fetches lazily INSIDE `WhisperKit(cfg)` at load — with NO timeout.
-        // A stalled fetch there wedged the entire load for 40+ minutes on two
-        // machines (model bytes already on disk, so the user saw no progress
-        // and the transcription hung on "transcribing" forever). Fetching it
-        // here, under our own deadline + the visible progress banner, makes
-        // the subsequent load purely-local Core ML work that can't hang on
-        // the network. Idempotent + fast when the tokenizer is already staged.
+        // Transcribe path: TINY ANE budget + GPU fallback. A warm ANE cache
+        // loads in ~2.7 s, so 30 s catches it with margin; a cold machine
+        // (cache not built yet) busts in 30 s and falls back to GPU so the
+        // user gets a transcript fast — we deliberately do NOT wait out the
+        // ~12 min cold compile here. That compile keeps running in the
+        // background and caches, so a later transcribe loads warm. The big
+        // budget is spent ONCE up-front at download time (see `downloadOnly`).
+        try await stageAndLoad(variant, aneBudget: 30, allowGPUFallback: true)
+    }
+
+    /// Stage the tokenizer (separate HF repo, fetched here under a deadline
+    /// so the load can't hang on the network) then load/compile the model
+    /// through the single-flight `initTask`. Shared by `ensureModelReady`
+    /// (transcribe) and `downloadOnly` (proactive prewarm) so both honour
+    /// the same single-flight + tokenizer invariants, differing only in the
+    /// ANE compile budget + whether a GPU fallback is allowed.
+    private static func stageAndLoad(_ variant: Variant,
+                                     aneBudget: Double,
+                                     allowGPUFallback: Bool) async throws {
+        // The Core ML packages live in `argmaxinc/whisperkit-coreml`, but the
+        // tokenizer ships in a separate `openai/whisper-<size>` repo that
+        // WhisperKit otherwise fetches lazily INSIDE `WhisperKit(cfg)` at load
+        // with NO timeout — a stalled fetch wedged the whole load for 40+ min.
+        // Staging it here (bounded, under the progress banner) makes the load
+        // purely-local. Idempotent + fast when already staged.
         if !isTokenizerDownloaded(variant) {
             FileLogger.log("LocalWhisper: tokenizer missing — pre-fetching (bounded) for \(variant.rawValue)")
             setProgress(variant, 0.99)   // model bytes are there; this is the last piece
@@ -381,17 +396,41 @@ enum LocalWhisperTranscriber {
         guard pipe == nil else { return }
 
         // Single-flight: if an init is already running (the parallel
-        // mic/system call beat us here), await THAT one instead of
-        // kicking a second WhisperKit(cfg) that would race on the
-        // tokenizer download. See `initTask` docs.
+        // mic/system call beat us here, or a download-time prewarm is
+        // compiling), await THAT one instead of kicking a second
+        // WhisperKit(cfg). See `initTask` docs.
         if let inFlight = initTask {
             try await inFlight.value
             return
         }
-        let task = Task<Void, Error> { try await loadPipe(variant) }
+        let task = Task<Void, Error> { try await loadPipe(variant, aneBudget: aneBudget, allowGPUFallback: allowGPUFallback) }
         initTask = task
         defer { initTask = nil }
         try await task.value
+    }
+
+    /// Build the WhisperKit config for `variant`. `useANE` picks the audio
+    /// encoder's compute units: Neural Engine (fast decode, but a slow
+    /// one-time compile) vs GPU (reliable ~50 s compile, ~2× slower decode).
+    /// `download: true` lets WhisperKit fetch the tokenizer sidecar if it's
+    /// somehow not staged (idempotent — model files on disk are reused).
+    /// `prewarm: false` skips the redundant second compile we don't need for
+    /// batch transcription.
+    private static func makeConfig(_ variant: Variant, useANE: Bool) -> WhisperKitConfig {
+        let compute = useANE
+            ? ModelComputeOptions(audioEncoderCompute: .cpuAndNeuralEngine)
+            : ModelComputeOptions(audioEncoderCompute: .cpuAndGPU)
+        return WhisperKitConfig(
+            model: variant.rawValue,
+            downloadBase: downloadBaseURL,
+            modelFolder: modelFolderURL(variant).path,
+            computeOptions: compute,
+            verbose: false,
+            logLevel: .error,
+            prewarm: false,
+            load: true,
+            download: true
+        )
     }
 
     /// Actual WhisperKit construction. Runs exactly once at a time
@@ -400,78 +439,70 @@ enum LocalWhisperTranscriber {
     /// leaves `*.incomplete` files that Hub's resume can't always
     /// recover, then reports the final file as "missing". A clean slate
     /// forces a correct fresh fetch.
-    private static func loadPipe(_ variant: Variant) async throws {
+    ///
+    /// **Neural Engine first, GPU fallback.** Measured (M1/16 GB): the ANE
+    /// path decodes ~2× faster and, once Core ML caches the specialised
+    /// graph, loads in ~2.4 s — BUT the first ANE compile is slow (~12 min,
+    /// longer on weaker Macs) and uncancellable. It completes and CACHES to
+    /// disk, so it's a one-time cost we pay up-front at download time
+    /// (`downloadOnly`, generous `aneBudget`, no fallback). The transcribe
+    /// path passes a SHORT `aneBudget` + `allowGPUFallback: true`: a warm
+    /// cache loads in ~2.4 s; a cold machine busts the budget and falls back
+    /// to the GPU encoder so the user gets a transcript NOW, while the leaked
+    /// ANE compile keeps running in the background and caches for next time
+    /// (self-healing). `prewarm:false` + GPU was the previous reliable-but-
+    /// slow default; this keeps that as the floor and adds ANE on top.
+    private static func loadPipe(_ variant: Variant,
+                                 aneBudget: Double,
+                                 allowGPUFallback: Bool) async throws {
         purgeIncompleteDownloads(variant)
         clearStaleTokenizer(variant)
-        FileLogger.log("LocalWhisper: loading WhisperKit from \(modelFolderURL(variant).path)")
-        // `download: true` so WhisperKit can fetch the tokenizer
-        // sidecar (lives in the HF repo `openai/whisper-large-v3`,
-        // not in `argmaxinc/whisperkit-coreml/<variant>` — they
-        // ship the Core ML packages, not the text tokenizer).
-        // Without it, init throws "Tokenizer configuration is
-        // missing" on the very first transcribe. `WhisperKit.download`
-        // is idempotent: model files already on disk are reused.
-        // Audio encoder OFF the Neural Engine. WhisperKit defaults the
-        // encoder to `.cpuAndNeuralEngine`, but the first ANE compile of
-        // large-v3-turbo (~1.5 GB) is pathologically slow on M-series — it
-        // can take many minutes or wedge outright (observed: >180 s on an
-        // M1/16 GB and ~42 min on a tester's Mac), and because our load
-        // deadline kills it before Core ML can cache the specialised graph,
-        // it re-wedges every attempt. Running the encoder on `.cpuAndGPU`
-        // compiles fast and reliably (GPU path doesn't hit the ANE
-        // specialiser) for an identical transcript — only marginally slower
-        // inference, which is a non-issue for batch file transcription.
-        // Mel + text-decoder keep their defaults (GPU / ANE) — they're small
-        // and compile fine.
-        let compute = ModelComputeOptions(audioEncoderCompute: .cpuAndGPU)
-        let cfg = WhisperKitConfig(
-            model: variant.rawValue,
-            downloadBase: downloadBaseURL,
-            modelFolder: modelFolderURL(variant).path,
-            computeOptions: compute,
-            verbose: false,
-            logLevel: .error,
-            // No prewarm: it compiles the model a SECOND time just to warm
-            // the ANE for low first-inference latency, which we don't need
-            // for batch transcription — it only doubled the slow load.
-            prewarm: false,
-            load: true,
-            download: true
-        )
-        // Keep the "preparing model" progress lit through the load itself.
-        // The GPU compile of the encoder takes ~50 s on first load; without
-        // this the button would sit on a frozen "Stop transcription" with no
-        // feedback for the whole compile. Surfacing it under the same
-        // download progress (held near-complete) tells the user the model is
-        // still spinning up rather than stuck. Cleared once the pipe is live.
+        // Keep the "preparing model" progress lit through the whole load so
+        // the button shows activity instead of a frozen Stop during the
+        // compile. Cleared once a pipe is live (either path).
         setProgress(variant, 0.99)
         defer { setProgress(variant, nil) }
+
+        // 1. Neural Engine.
+        FileLogger.log("LocalWhisper: loading WhisperKit (ANE) from \(modelFolderURL(variant).path), budget \(Int(aneBudget))s")
         do {
-            // Bounded load. `WhisperKit(cfg)` compiles + loads the Core ML
-            // model and can WEDGE (uncancellable) so a transcription hangs
-            // on "transcribing" forever, re-loading the same files every
-            // relaunch. `withDeadline` stops waiting after 3 min even though
-            // the underlying call can't be cancelled.
-            let loadStart = Date()
-            pipe = try await Self.withDeadline(180) { try await WhisperKit(cfg) }
-            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU)",
-                                  Date().timeIntervalSince(loadStart), variant.rawValue))
+            let t0 = Date()
+            pipe = try await Self.withDeadline(aneBudget) { try await WhisperKit(makeConfig(variant, useANE: true)) }
+            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=ANE)",
+                                  Date().timeIntervalSince(t0), variant.rawValue))
             pipeVariant = variant
+            return
         } catch is DeadlineError {
-            // Load wedged. Do NOT delete the model — a timeout can be a slow
-            // first compile, not corruption, and deleting would trigger an
-            // endless re-download loop (fetch 1.5 GB → time out → delete →
-            // fetch again). Just fail this run; the user can retry (Core ML
-            // may have cached the compile) or switch to cloud. If a machine
-            // consistently wedges here it's a WhisperKit/Core ML load issue,
-            // visible from this log line.
-            FileLogger.log("LocalWhisper: model load timed out (>180s) — failing this run, model kept")
-            throw LocalWhisperError.transcribeFailed("model load timed out")
+            // ANE compile didn't finish in budget. The withDeadline loser
+            // (the WhisperKit init) keeps compiling in the background and
+            // caches when done — so the NEXT load is fast. For THIS run:
+            if !allowGPUFallback {
+                FileLogger.log("LocalWhisper: ANE compile over \(Int(aneBudget))s (prewarm) — leaving it to finish + cache in background")
+                throw LocalWhisperError.transcribeFailed("model load timed out")
+            }
+            FileLogger.log("LocalWhisper: ANE compile over \(Int(aneBudget))s — falling back to GPU encoder for this run")
+            // fall through to the GPU path
         } catch {
             // A real init ERROR (not a timeout) almost always means a
             // corrupt / incomplete bundle — wipe it so the NEXT attempt
             // re-downloads a clean copy instead of re-failing on bad files.
             FileLogger.log("LocalWhisper: model init error (\(error)) — deleting model for a clean re-download")
+            try? FileManager.default.removeItem(at: modelFolderURL(variant))
+            throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
+        }
+
+        // 2. GPU fallback (reliable ~50 s compile, identical transcript).
+        do {
+            let t0 = Date()
+            pipe = try await Self.withDeadline(180) { try await WhisperKit(makeConfig(variant, useANE: false)) }
+            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU fallback)",
+                                  Date().timeIntervalSince(t0), variant.rawValue))
+            pipeVariant = variant
+        } catch is DeadlineError {
+            FileLogger.log("LocalWhisper: GPU fallback also timed out (>180s) — failing this run, model kept")
+            throw LocalWhisperError.transcribeFailed("model load timed out")
+        } catch {
+            FileLogger.log("LocalWhisper: GPU fallback init error (\(error)) — deleting model for a clean re-download")
             try? FileManager.default.removeItem(at: modelFolderURL(variant))
             throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
         }
@@ -586,31 +617,38 @@ enum LocalWhisperTranscriber {
         }
     }
 
-    /// Pre-fetch a variant without immediately loading the WhisperKit
-    /// instance. Used by the Settings UI's `Download model` button so
-    /// the user can stage a model in the background while another
-    /// variant is still active. Returns once the bytes are on disk;
-    /// the actual WhisperKit init runs lazily on first transcribe.
+    /// Pre-fetch AND compile a variant proactively — the "pay the one-time
+    /// cost up-front" path. Used by the Settings UI's `Download model` button
+    /// and the picker's select-a-local-model action (fire-and-forget on the
+    /// server, progress polled). Downloads the bytes, then runs the SLOW
+    /// first ANE compile here (generous budget, no GPU fallback) so it caches
+    /// to disk and the user's first real transcribe loads warm (~2.4 s)
+    /// instead of compiling. A very slow machine that busts even the generous
+    /// budget keeps compiling in the background and the first transcribe
+    /// falls back to GPU in the meantime — never a hang.
     static func downloadOnly(_ variant: Variant) async throws {
         guard isAvailable() else { throw LocalWhisperError.notAvailableOnIntel }
         try FileManager.default.createDirectory(at: AppPaths.modelsDir,
                                                 withIntermediateDirectories: true)
-        if isModelDownloaded(variant) { return }
-        setProgress(variant, 0.0)
         defer { setProgress(variant, nil) }
-        FileLogger.log("LocalWhisper: pre-fetch \(variant.rawValue)")
-        _ = try await WhisperKit.download(
-            variant: variant.rawValue,
-            downloadBase: downloadBaseURL,
-            useBackgroundSession: false,
-            progressCallback: { progress in
-                let f = progress.totalUnitCount > 0
-                    ? max(0.0, min(1.0, progress.fractionCompleted))
-                    : 0.0
-                setProgress(variant, f)
-            }
-        )
-        FileLogger.log("LocalWhisper: pre-fetch complete (\(variant.rawValue))")
+        if !isModelDownloaded(variant) {
+            setProgress(variant, 0.0)
+            FileLogger.log("LocalWhisper: pre-fetch \(variant.rawValue)")
+            _ = try await WhisperKit.download(
+                variant: variant.rawValue,
+                downloadBase: downloadBaseURL,
+                useBackgroundSession: false,
+                progressCallback: { progress in
+                    let f = progress.totalUnitCount > 0
+                        ? max(0.0, min(1.0, progress.fractionCompleted))
+                        : 0.0
+                    setProgress(variant, f)
+                }
+            )
+            FileLogger.log("LocalWhisper: pre-fetch complete (\(variant.rawValue))")
+        }
+        // Compile now (the one-time ANE cost), so the first transcribe is fast.
+        try await stageAndLoad(variant, aneBudget: 2400, allowGPUFallback: false)
     }
 
     /// Whole-file transcription. Mirrors `WhisperTranscriber.transcribe`:
