@@ -421,23 +421,51 @@ enum LocalWhisperTranscriber {
         // Without it, init throws "Tokenizer configuration is
         // missing" on the very first transcribe. `WhisperKit.download`
         // is idempotent: model files already on disk are reused.
+        // Audio encoder OFF the Neural Engine. WhisperKit defaults the
+        // encoder to `.cpuAndNeuralEngine`, but the first ANE compile of
+        // large-v3-turbo (~1.5 GB) is pathologically slow on M-series — it
+        // can take many minutes or wedge outright (observed: >180 s on an
+        // M1/16 GB and ~42 min on a tester's Mac), and because our load
+        // deadline kills it before Core ML can cache the specialised graph,
+        // it re-wedges every attempt. Running the encoder on `.cpuAndGPU`
+        // compiles fast and reliably (GPU path doesn't hit the ANE
+        // specialiser) for an identical transcript — only marginally slower
+        // inference, which is a non-issue for batch file transcription.
+        // Mel + text-decoder keep their defaults (GPU / ANE) — they're small
+        // and compile fine.
+        let compute = ModelComputeOptions(audioEncoderCompute: .cpuAndGPU)
         let cfg = WhisperKitConfig(
             model: variant.rawValue,
             downloadBase: downloadBaseURL,
             modelFolder: modelFolderURL(variant).path,
+            computeOptions: compute,
             verbose: false,
             logLevel: .error,
-            prewarm: true,
+            // No prewarm: it compiles the model a SECOND time just to warm
+            // the ANE for low first-inference latency, which we don't need
+            // for batch transcription — it only doubled the slow load.
+            prewarm: false,
             load: true,
             download: true
         )
+        // Keep the "preparing model" progress lit through the load itself.
+        // The GPU compile of the encoder takes ~50 s on first load; without
+        // this the button would sit on a frozen "Stop transcription" with no
+        // feedback for the whole compile. Surfacing it under the same
+        // download progress (held near-complete) tells the user the model is
+        // still spinning up rather than stuck. Cleared once the pipe is live.
+        setProgress(variant, 0.99)
+        defer { setProgress(variant, nil) }
         do {
             // Bounded load. `WhisperKit(cfg)` compiles + loads the Core ML
             // model and can WEDGE (uncancellable) so a transcription hangs
             // on "transcribing" forever, re-loading the same files every
             // relaunch. `withDeadline` stops waiting after 3 min even though
             // the underlying call can't be cancelled.
+            let loadStart = Date()
             pipe = try await Self.withDeadline(180) { try await WhisperKit(cfg) }
+            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU)",
+                                  Date().timeIntervalSince(loadStart), variant.rawValue))
             pipeVariant = variant
         } catch is DeadlineError {
             // Load wedged. Do NOT delete the model — a timeout can be a slow

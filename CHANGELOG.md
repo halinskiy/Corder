@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.49] — 2026-06-23
+
+### Fixed
+- On-device (free) transcription no longer hangs while loading the model. The audio model was being compiled for the Neural Engine, whose first-time compile of the large model is pathologically slow on Apple Silicon (minutes, sometimes an outright hang). It now compiles on the GPU instead, which is fast and reliable for an identical transcript. The model-loading step also shows progress now instead of a frozen button.
+
 ## [0.14.48] — 2026-06-23
 
 ### Fixed
