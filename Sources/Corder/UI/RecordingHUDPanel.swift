@@ -2,11 +2,11 @@ import AppKit
 import SwiftUI
 
 /// Floating panel that hovers over every other window while Corder is
-/// recording. The visual is a voice-reactive blob: perfectly still in
-/// silence, and on each sound it pulses (size kick) while one edge
-/// stretches sharply outward and eases slowly back — overlapping strikes
-/// land on different sides, so the deformation reads as live voice
-/// capture. Click stops the recording; drag repositions the panel.
+/// recording. The visual is a live frequency-spectrum equalizer: a row of
+/// bars driven by an FFT of the captured audio (RecordingLevelMeter), flat
+/// in silence and reacting per-band to real sound. Click stops the
+/// recording. (This replaced the old "blob"; the in-window indicator is
+/// gone too, recording is started/stopped from the popover + hotkey.)
 @MainActor
 final class RecordingHUDPanel {
     static let shared = RecordingHUDPanel()
@@ -438,15 +438,6 @@ struct RecordingHUDView: View {
     /// Three-sine synthetic instantaneous level — gives the morph a
     /// believable "voice" amplitude without real audio. Peaks ~ 0.35
     /// so the shape deforms generously but never spikes into a star.
-    fileprivate static func syntheticLevel(t: TimeInterval) -> Float {
-        let a = sin(t * 1.6)               // base breath
-        let b = sin(t * 2.7 + 1.1) * 0.6   // syllable-rate ripple
-        let c = sin(t * 0.55 + 2.3) * 0.4  // slow envelope
-        let raw = (a + b + c) / 2.0
-        // Rectify + scale to 0…~0.35.
-        return Float(max(0, raw) * 0.35)
-    }
-
     /// Number of bars in the equalizer.
     fileprivate static let barCount = 11
     private static let barBaseH: CGFloat = 5    // resting height — short bars, never dots
@@ -493,7 +484,7 @@ struct RecordingHUDView: View {
     /// updates (mic buffers are ~93 ms) glide instead of jumping — that's
     /// what was reading as "дёргается". Per-bar `.animation(value:)` only
     /// re-fires when THAT bar's height changes.
-    private func barsLayer(heights: [CGFloat], palette: BlobPalette) -> some View {
+    private func barsLayer(heights: [CGFloat], palette: MeterPalette) -> some View {
         let color = palette.fillStops.first ?? Color.white
         return HStack(alignment: .center, spacing: 3.5) {
             ForEach(0..<heights.count, id: \.self) { i in
@@ -532,8 +523,6 @@ struct RecordingHUDView: View {
     /// so the resting blob feels alive without burning a per-frame
     /// view recompute. Four independent periods make the cycle look
     /// organic rather than mechanically clocked.
-    @State private var idleHueShift: Double = -6
-    @State private var idleBrightness: Double = -0.02
     /// Wall-clock instant the recording ended (matching `timeline.date`'s
     /// reference epoch). The persistent inline blob eases its audio-
     /// reactive energy down from this point instead of snapping; `nil`
@@ -554,7 +543,7 @@ struct RecordingHUDView: View {
         // breathes. The Library / HUD callers pass `false` and get
         // exactly the prior behaviour.
         let isRecording = welcomeActive || (ctx.recordingState != .idle)
-        let palette: BlobPalette =
+        let palette: MeterPalette =
             welcomeActive ? .silentGreen
                           : (isRecording ? .activeRed : .silentGreen)
 
@@ -630,14 +619,6 @@ struct RecordingHUDView: View {
         // centre. Spring keeps it organic — no hard endpoint snap.
         .scaleEffect((appeared ? 1.0 : 0.05) * (hovering ? 1.18 : 1.0))
         .opacity(appeared ? 1.0 : 0.0)
-        // Ambient idle shimmer — colour only, NO positional drift. The
-        // blob must stay anchored in place; the "movement" the user
-        // wants is the shape gently flexing while it rotates (that's the
-        // BlobShape baseline wobble driven by the timeline), not the
-        // whole thing sliding around. Keep the faint hue/brightness
-        // breathing (±6°, ±0.04) — that reads as alive without moving.
-        .hueRotation(.degrees(idleHueShift))
-        .brightness(idleBrightness)
         .animation(.spring(response: 0.55, dampingFraction: 0.72), value: appeared)
         .animation(.easeOut(duration: 0.22), value: hovering)
         // Fast palette change on recording-state transitions. Scoped to
@@ -711,19 +692,6 @@ struct RecordingHUDView: View {
         }
         .onAppear {
             appeared = true
-            // Start the ambient loops after the entry spring lands so
-            // they don't fight the leak-from-a-dot scale animation.
-            // Four different periods keep the cycle visibly irregular —
-            // the blob never lines up with itself, which is what makes
-            // the motion feel "alive" instead of "looping".
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                withAnimation(.easeInOut(duration: 5.5).repeatForever(autoreverses: true)) {
-                    idleHueShift = 6
-                }
-                withAnimation(.easeInOut(duration: 3.9).repeatForever(autoreverses: true)) {
-                    idleBrightness = 0.04
-                }
-            }
         }
         // SwiftUI hover drives only the scale-up. The cursor is fully
         // owned by HUDHostingView's push/pop on AppKit's cursor stack
@@ -768,216 +736,32 @@ struct RecordingHUDView: View {
         return false
     }
 
-    @ViewBuilder
-    private func blobLayer(time: TimeInterval, level: Float, levels: [CGFloat],
-                           palette: BlobPalette) -> some View {
-        let lvl = CGFloat(level)
-        BlobShape(time: time, level: lvl, levels: levels)
-            .fill(
-                RadialGradient(
-                    colors: palette.fillStops,
-                    center: UnitPoint(x: 0.38, y: 0.32),
-                    startRadius: 6,
-                    endRadius: 60
-                )
-            )
-            .overlay(
-                BlobShape(time: time, level: lvl, levels: levels)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.32),
-                                Color.white.opacity(0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            .frame(width: 43, height: 43)
-        // Soft brand-coloured glow — three-layer bloom (wide faint halo
-        // → mid → tight core). Toned down ~50 % from the previous
-        // values per user feedback — the prior multi-layer glow read
-        // as too heavy on light themes and bled past the surrounding
-        // cards inside the Library window. Still breathes with audio
-        // level so the blob doesn't go visually flat.
-        .shadow(color: palette.glowOuter.opacity(0.12),
-                radius: 26 + 10 * lvl, x: 0, y: 6)
-        .shadow(color: palette.glowOuter.opacity(0.22),
-                radius: 16 + 8 * lvl, x: 0, y: 4)
-        .shadow(color: palette.glowOuter.opacity(0.28),
-                radius: 8 + 4 * lvl, x: 0, y: 2)
-        .shadow(color: palette.glowInner.opacity(0.18),
-                radius: 3, x: 0, y: 1)
-    }
-
 }
 
-/// Two named palettes the view snaps between based on detected
-/// speech activity. The flip is hysteresis-gated and animated over
-/// ~80 ms; no value interpolation, no crossfade.
-private struct BlobPalette {
+/// Two palettes the equalizer snaps between on detected speech activity:
+/// green at rest, crimson while voiced. `fillStops.first` is the bar
+/// colour, `glowOuter` the soft glow behind the bars.
+private struct MeterPalette {
     let fillStops: [Color]
-    /// Soft brand-coloured glow the blob has always carried (the
-    /// multi-layer bloom in `blobLayer`). Kept separate from the
-    /// frosted-lens fill so the ambient glow reads as the blob's own
-    /// light, not a hard drop shadow.
     let glowOuter: Color
-    let glowInner: Color
 
     /// Idle / silent — brand green.
-    static let silentGreen = BlobPalette(
+    static let silentGreen = MeterPalette(
         fillStops: [
             Color(red: 0.18, green: 0.66, blue: 0.40),    // bright leaf
             Color(red: 0.06, green: 0.49, blue: 0.27),    // brand #0e7c44
             Color(red: 0.03, green: 0.30, blue: 0.16)     // deep forest
         ],
-        glowOuter: Color(red: 0.10, green: 0.60, blue: 0.34),
-        glowInner: Color(red: 0.04, green: 0.34, blue: 0.18)
+        glowOuter: Color(red: 0.10, green: 0.60, blue: 0.34)
     )
 
     /// Active speech — bright crimson.
-    static let activeRed = BlobPalette(
+    static let activeRed = MeterPalette(
         fillStops: [
             Color(red: 0.95, green: 0.30, blue: 0.36),
             Color(red: 0.78, green: 0.16, blue: 0.24),
             Color(red: 0.52, green: 0.08, blue: 0.14)
         ],
-        glowOuter: Color(red: 0.85, green: 0.20, blue: 0.28),
-        glowInner: Color(red: 0.55, green: 0.10, blue: 0.18)
+        glowOuter: Color(red: 0.85, green: 0.20, blue: 0.28)
     )
-}
-
-// MARK: - Shape
-
-/// Voice-reactive blob. The BODY never moves, never rotates, never
-/// breathes — in silence it's a perfectly still circle (that stillness is
-/// the "not capturing sound" signal). On sound, thin TENTACLES lunge out
-/// of the rim like a symbiote: sharp outward attack, slow inward return.
-///
-/// Each level-history sample is a sound impulse pinned to a FIXED rim
-/// angle for the whole life of that sound (the angle is hashed from the
-/// sample's absolute onset-time bucket, which is frame-stable, so a
-/// tentacle stays put and retracts in place — it does NOT sweep around,
-/// which was the old "spinning" bug). Different sounds hash to scattered
-/// angles; if a fresh, louder sound lands on a spot that's still
-/// retracting, `max()` re-extends it. Thin lobes (small σ) + many points
-/// make each protrusion read as a pointed tentacle, not a broad swell.
-private struct BlobShape: Shape {
-    var time: TimeInterval
-    /// Instantaneous level — kept only so `animatableData` interpolates
-    /// smoothly between 30 Hz publishes; the silhouette is driven by the
-    /// history buffer below.
-    var level: CGFloat
-    /// Rolling level history, newest first, at ~12 Hz (`RecordingLevelMeter.history`).
-    var levels: [CGFloat]
-
-    // Tuning.
-    private static let pointCount = 36          // smooth rim
-    private static let historyHz: Double = 12   // matches RecordingLevelMeter
-    private static let bucketSec: Double = 0.55 // (unused while reach == 0)
-    private static let attackSec: Double = 0.3
-    private static let releaseTau: Double = 1.1
-    private static let lobeSigma: Double = 0.5
-    // Deformation DISABLED (reach 0): the blob is a pure circle that only
-    // pulses in SIZE (see `pulseScale`). Per Костя — drop the tentacle/
-    // wobble entirely for now, the size kick to the beat is the whole show.
-    private static let reach: CGFloat = 0.0
-
-    /// Deterministic scatter: integer onset-bucket → a fixed angle in
-    /// 0…2π. Consecutive buckets land far apart (no monotonic sweep), and
-    /// the SAME bucket always maps to the SAME angle so a tentacle is
-    /// anchored for its whole life.
-    private static func angleFor(bucket: Int) -> Double {
-        let x = sin(Double(bucket) * 127.1 + 311.7) * 43758.5453
-        return (x - floor(x)) * 2 * .pi
-    }
-
-    /// Per-tentacle envelope: a smooth grow-out over `attackSec`
-    /// (smoothstep, so it eases rather than pops) then a slow exponential
-    /// retract. `age` is seconds since the beat's onset.
-    private static func envelope(age: Double) -> Double {
-        if age <= 0 { return 0 }
-        if age < attackSec {
-            let p = age / attackSec
-            return p * p * (3 - 2 * p)          // smoothstep 0→1
-        }
-        return exp(-(age - attackSec) / releaseTau)
-    }
-
-    func path(in rect: CGRect) -> Path {
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let baseRadius = min(rect.width, rect.height) / 2 * 0.78
-        let n = Self.pointCount
-
-        // Group the level history into ~0.2 s beats: one tentacle per
-        // beat (its loudest sample), NOT one per 12 Hz sample. That alone
-        // cuts the spawn rate ~3× so a few expressive limbs appear instead
-        // of a rapid swarm. Each beat is pinned to a frame-stable onset
-        // bucket → fixed angle, smooth attack + slow release. Silence
-        // produces no beats → a perfectly still circle.
-        var beatPeak: [Int: Double] = [:]
-        for (j, lv) in levels.enumerated() {
-            let v = Double(lv)
-            if v < 0.11 { continue }   // only notable peaks deform — keeps the wobble RARE
-            let onset = time - Double(j) / Self.historyHz
-            let bucket = Int((onset / Self.bucketSec).rounded())
-            let lifted = pow(v, 0.8)
-            if let cur = beatPeak[bucket] { if lifted > cur { beatPeak[bucket] = lifted } }
-            else { beatPeak[bucket] = lifted }
-        }
-
-        struct Strike { let angle: Double; let strength: Double }
-        var strikes: [Strike] = []
-        strikes.reserveCapacity(beatPeak.count)
-        for (bucket, peak) in beatPeak {
-            let onsetTime = Double(bucket) * Self.bucketSec
-            let strength = peak * Self.envelope(age: time - onsetTime)
-            if strength < 0.02 { continue }
-            strikes.append(Strike(angle: Self.angleFor(bucket: bucket), strength: strength))
-        }
-
-        var points: [CGPoint] = []
-        points.reserveCapacity(n)
-        let twoSigmaSq = 2 * Self.lobeSigma * Self.lobeSigma
-
-        for i in 0..<n {
-            let drawAngle = (Double(i) / Double(n)) * 2 * .pi - .pi / 2
-            let pointAngle = Double(i) / Double(n) * 2 * .pi
-
-            // Edge displacement = the strongest tentacle overlapping this
-            // point (max, not sum — clean separate spikes, no uniform balloon).
-            var stretch: Double = 0
-            for s in strikes {
-                var d = abs((pointAngle - s.angle).truncatingRemainder(dividingBy: 2 * .pi))
-                if d > .pi { d = 2 * .pi - d }
-                let falloff = exp(-(d * d) / twoSigmaSq)
-                let contrib = s.strength * falloff
-                if contrib > stretch { stretch = contrib }
-            }
-
-            let r = baseRadius * (1.0 + CGFloat(stretch) * Self.reach)
-            points.append(CGPoint(x: center.x + CGFloat(cos(drawAngle)) * r,
-                                  y: center.y + CGFloat(sin(drawAngle)) * r))
-        }
-
-        var path = Path()
-        path.move(to: midpoint(points.last!, points.first!))
-        for i in 0..<n {
-            let next = points[(i + 1) % n]
-            path.addQuadCurve(to: midpoint(points[i], next), control: points[i])
-        }
-        path.closeSubpath()
-        return path
-    }
-
-    private func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
-        CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
-    }
-
-    var animatableData: CGFloat {
-        get { level }
-        set { level = newValue }
-    }
 }

@@ -1094,17 +1094,6 @@ enum Routes {
     /// long-dead issues as "critical"). Scoping to this launch keeps the
     /// report — and its summary — about what's actually happening now.
     private static let sessionMarker = "applicationDidFinishLaunching"
-    private static func currentSessionLines() -> [String] {
-        // A single session rarely exceeds a few thousand lines; 12k is a
-        // generous cap that still bounds the file read.
-        let lines = readLogTail(maxLines: 12_000)
-        if let idx = lines.lastIndex(where: { $0.contains(sessionMarker) }) {
-            return Array(lines[idx...])
-        }
-        // No marker in the tail (a marathon session rolled past 12k) —
-        // fall back to the recent slice rather than nothing.
-        return Array(lines.suffix(4000))
-    }
 
     private static func submitLogs() -> HttpResponse {
         let tail = bugEventLog()

@@ -119,14 +119,6 @@ final class RecordingLevelMeter: ObservableObject {
         }
     }
 
-    /// Called from CaptureEngine's system-audio path. We accept a raw
-    /// CMSampleBuffer here since SCStream hands us those, not
-    /// AVAudioPCMBuffer.
-    nonisolated func ingestSystem(sample: CMSampleBuffer) {
-        let peak = Self.peak(of: sample)
-        Task { @MainActor in self.applySystem(peak: peak) }
-    }
-
     /// System audio now arrives as AVAudioPCMBuffer from the Core Audio
     /// process tap (not SCStream's CMSampleBuffer). Same envelope path.
     nonisolated func ingestSystem(pcm: AVAudioPCMBuffer) {
@@ -298,24 +290,4 @@ final class RecordingLevelMeter: ObservableObject {
         return out
     }
 
-    /// Linear peak over a CMSampleBuffer's first channel. Decodes the
-    /// audio buffer list lazily; we only look at the first packet's
-    /// worth of samples since we're after a coarse level, not RMS.
-    nonisolated private static func peak(of sample: CMSampleBuffer) -> Float {
-        guard CMSampleBufferGetNumSamples(sample) > 0,
-              let formatDesc = CMSampleBufferGetFormatDescription(sample),
-              var asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)?.pointee,
-              let format = AVAudioFormat(streamDescription: &asbd) else { return 0 }
-        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(sample))
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return 0 }
-        pcm.frameLength = frames
-        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
-            sample, at: 0, frameCount: Int32(frames), into: pcm.mutableAudioBufferList)
-        guard status == noErr else { return 0 }
-        // For non-Float32 (system audio is usually Float32 already) we
-        // could copy via converter — but skipping the meter for those
-        // edge cases is fine, the HUD just stays at zero.
-        guard format.commonFormat == .pcmFormatFloat32 else { return 0 }
-        return peak(of: pcm)
-    }
 }
