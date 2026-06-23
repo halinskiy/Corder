@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.50] — 2026-06-23
+
+### Changed
+- On-device transcription is fast again. The model now runs on the Neural Engine (about 2× faster decode, and once it's prepared it loads in ~2.5s instead of ~50s). The one-time model preparation happens up-front when you download the model; on machines where it would take too long, transcription quietly falls back to the GPU path so it never hangs or waits.
+- On-device model picker is now just Whisper Turbo and Whisper Small. The smaller Base/Tiny models were dropped — they aren't accurate enough on real, noisy, multi-speaker meetings, and Small covers the lightweight case.
+
 ## [0.14.49] — 2026-06-23
 
 ### Fixed
