@@ -29,7 +29,9 @@ trust boundary is the macOS user account.
 | GET    | `/api/meetings/:id/transcript.md`       | Markdown transcript (title + speaker-grouped). |
 | GET    | `/api/meetings/:id/transcript.json`     | JSON transcript (segments + speakers). |
 | GET    | `/api/meetings/:id/audio`               | `audio.wav` (Range supported).     |
-| GET    | `/api/meetings/:id/video`               | `video.mov` when present (Range supported). |
+| GET    | `/api/meetings/:id/audio.m4a`           | Audio mix as compressed AAC `.m4a` (~10× smaller than the raw 32-bit `audio.wav`). Built on demand by `MediaExporter`, cached. |
+| GET    | `/api/meetings/:id/video`               | `video.mov` when present (Range supported). Silent screen video; used by the in-app preview player, not offered as a standalone download. |
+| GET    | `/api/meetings/:id/video-audio.mp4`     | The silent `video.mov` muxed WITH the mixed audio into one `.mp4`. Video is passthrough (no re-encode); only the audio is AAC-encoded. Built on demand by `MediaExporter`, cached. |
 | GET    | `/api/meetings/:id/bundle.zip`          | ZIP of audio + video + transcript.* |
 | POST   | `/api/meetings/:id/rename`              | Body `{title: string|null}`. Empty/`null` clears to the auto/date label. |
 | POST   | `/api/meetings/:id/retranscribe`        | Optimistically flips status to `transcribing`, clears segments, enqueues pipeline. |
@@ -91,6 +93,12 @@ automatically as soon as the transcript is ready.
   segments: SegmentDTO[];
   expected_other_speakers?: number | null;
   has_video?: boolean;
+  // 0…1 real per-chunk transcription progress while status ===
+  // "transcribing"; null otherwise. Drives the Stop-transcription
+  // progress fill. Now reported for BOTH the on-device model and cloud
+  // (Groq / whisper) transcription: WhisperTranscriber reports progress
+  // as each chunk finishes, fed through TranscriptionProgressStore.
+  transcribe_progress?: number | null;
 }
 
 SpeakerDTO  { id, label, custom_name, color_hex }
@@ -102,7 +110,7 @@ SegmentDTO  { id, speaker_id, start_ms, end_ms, text, text_boost }
 | Method | Path                       | Body                                  |
 | ------ | -------------------------- | ------------------------------------- |
 | GET    | `/api/recording/state`     | `{active: bool, meeting_id?, started_at_ms?, stopping?}` |
-| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the global hotkey and the in-page inline blob. |
+| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the global hotkey and the menu-bar popover (the in-window inline recording indicator was removed). |
 | POST   | `/api/recording/stop`      | Triggers `RecordingController.stopRecording()`. |
 
 The frontend polls `/api/recording/state` once per second to drive the
@@ -140,11 +148,16 @@ Settings {
   auto_summary?: boolean;
   auto_chapters?: boolean;
   // Opt-in, default OFF (absent ≡ off): telemetry, launch_at_login, and
-  // stats_enabled. stats_enabled shows the Dashboard statistics card; its
-  // Advanced → Statistics toggle is paid-tier only in the UI.
+  // stats_enabled. stats_enabled shows the Dashboard statistics card.
+  // (The Statistics settings block was removed from the Settings UI.)
   telemetry?: boolean;
   launch_at_login?: boolean;
   stats_enabled?: boolean;
+  // Silent pre-roll: start capturing the instant a call is detected so
+  // accepting the record offer keeps audio/video from the very start.
+  // Default ON; the buffer is silent and discarded the moment the user
+  // declines the offer.
+  preroll?: boolean;
   meeting_whitelist?: string[]; // bundle ids: always offer to record
   meeting_blacklist?: string[]; // bundle ids: never offer
   detected_mic_apps?: string[]; // read-only: recent mic owners (UI picker)
@@ -162,10 +175,14 @@ auto-detect picker; `recent` = seen on the mic lately).
 `GET /api/app-icon/:bundle` → 64 px PNG icon for that bundle.
 ```
 
-Gemini is the only provider — there is no provider toggle. The key is
-write-only over this endpoint and is stored at
-`~/.config/corder/gemini_key` (mode 0600); GET only reports whether one
-is set.
+Non-admin users have no ASR provider picker: they transcribe through
+Groq Whisper (cloud) or the on-device WhisperKit model only. A
+`transcription_provider` of `gemini` or `whisper` (OpenAI whisper-1) is
+ADMIN-ONLY; a non-admin POST that pins one is coerced back to the
+tier-driven default (Groq for paid, on-device for free). The model
+picker is hidden for non-admins in the Settings UI. Transcription keys
+are not read from disk and never echoed; every cloud call goes through
+the Cloudflare Worker with the user's Supabase JWT.
 
 ## Sparkle / Updater
 

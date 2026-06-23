@@ -219,6 +219,8 @@ interface Strings {
   settings_theme_label_to_dark?: string;
   settings_theme_label_to_light?: string;
   settings_theme_change?: string;
+  settings_theme_enable_dark?: string;
+  settings_theme_enable_dark_desc?: string;
   settings_model_label?: string;
   settings_model_desc?: string;
   settings_theme_desc_light?: string;
@@ -656,6 +658,8 @@ const ru: Strings = {
   btn_theme_to_light: "Светлая тема",
   settings_theme_label_to_dark: "Сменить тему на тёмную",
   settings_theme_change: "Сменить тему",
+  settings_theme_enable_dark: "Включить тёмную тему",
+  settings_theme_enable_dark_desc: "Тёмное оформление интерфейса.",
   settings_model_label: "Модель транскрипции",
   settings_model_desc: "Какой моделью расшифровывается следующая запись.",
   settings_theme_label_to_light: "Сменить тему на светлую",
@@ -836,7 +840,7 @@ const ru: Strings = {
   settings_stats_title: "Статистика",
   settings_stats_desc: "Показывать счётчики записей на дашборде.",
   settings_preroll_title: "Ловить начало звонков",
-  settings_preroll_desc: "Тихо буферизировать задетекченный звонок с самого начала, чтобы при согласии запись сохранила начало. Если откажешься, буфер удаляется.",
+  settings_preroll_desc: "Сохранять начало задетекченного звонка.",
   transcribe_failed_short: "Транскрипция не удалась.",
   summary_failed_short: "Саммари не получилось.",
   chapters_failed_short: "Главы не получились.",
@@ -1030,6 +1034,8 @@ const en: Strings = {
   btn_theme_to_light: "Light theme",
   settings_theme_label_to_dark: "Switch to dark theme",
   settings_theme_change: "Change theme",
+  settings_theme_enable_dark: "Enable dark theme",
+  settings_theme_enable_dark_desc: "Dark interface.",
   settings_model_label: "Transcription model",
   settings_model_desc: "Which model the next recording is transcribed with.",
   settings_theme_label_to_light: "Switch to light theme",
@@ -1211,7 +1217,7 @@ const en: Strings = {
   settings_stats_title: "Statistics",
   settings_stats_desc: "Show recording counters on the dashboard.",
   settings_preroll_title: "Catch the start of calls",
-  settings_preroll_desc: "Quietly buffer a detected call from its start, so accepting the record offer keeps the beginning. Discarded if you decline.",
+  settings_preroll_desc: "Keep the beginning of a detected call.",
   transcribe_failed_short: "Transcription failed.",
   summary_failed_short: "Summary didn't work.",
   chapters_failed_short: "Chapters didn't work.",
@@ -1389,6 +1395,8 @@ const uk: Strings = {
   btn_theme_to_light: "Світла тема",
   settings_theme_label_to_dark: "Перемкнути на темну",
   settings_theme_change: "Змінити тему",
+  settings_theme_enable_dark: "Увімкнути темну тему",
+  settings_theme_enable_dark_desc: "Темне оформлення інтерфейсу.",
   settings_model_label: "Модель транскрипції",
   settings_model_desc: "Якою моделлю розшифровується наступний запис.",
   settings_theme_label_to_light: "Перемкнути на світлу",
@@ -1550,7 +1558,7 @@ const uk: Strings = {
   settings_stats_title: "Статистика",
   settings_stats_desc: "Показувати лічильники записів на дашборді.",
   settings_preroll_title: "Ловити початок дзвінків",
-  settings_preroll_desc: "Тихо буферизувати виявлений дзвінок із самого початку, щоб при згоді запис зберіг початок. Якщо відмовишся, буфер видаляється.",
+  settings_preroll_desc: "Зберігати початок виявленого дзвінка.",
   transcribe_failed_short: "Транскрипція не вдалася.",
   summary_failed_short: "Саммарі не вийшло.",
   chapters_failed_short: "Глави не вийшли.",

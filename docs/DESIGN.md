@@ -137,6 +137,18 @@ because it's a circle, not a pill.
 - Banner expand/collapse: max-height + opacity, 240ms.
 - No scroll-driven anything. No parallax. No marquees.
 
+### Recording indicator
+
+The floating recording HUD (a native NSPanel pill, all Spaces) shows a
+real-time frequency-spectrum equalizer, not the old "blob". Each bar is
+a genuine FFT frequency band (low to high) driven by
+`RecordingLevelMeter.spectrum`, so lows / mids / highs react
+independently and the shape tracks actual sound. Bars sit at a short
+resting height (never collapse to dots) and animate toward each new band
+level. The in-window recording indicator (the embedded blob in the
+Library window bottom-right) was removed; recording is started and
+stopped from the menu-bar popover and the global hotkey.
+
 ## Shadows
 
 Light theme only:
@@ -217,9 +229,12 @@ stock OS alert.
 - Actions — `.clarify-btn` / `.clarify-btn.danger` (inline-flex with
   gap, icon+label centred).
 
-Used by **ArchiveView** and **DownloadMenu**. The Donate modal keeps
-its own `.donate-card` shell because its content is a 3-up amount
-grid with very different geometry. Don't introduce a third modal
+Used by **ArchiveView** and **DownloadMenu**. The download chooser
+offers two products: "Video + audio" (the silent screen video muxed with
+the audio, served from `/video-audio.mp4`) and "Audio" (compressed AAC,
+served from `/audio.m4a`). The old silent video-only download is gone.
+The Donate modal keeps its own `.donate-card` shell because its content
+is a 3-up amount grid with very different geometry. Don't introduce a third modal
 style — extend `.modal-pop` instead.
 
 ### Update & Pricing modal (`.update-overlay` / `.update-card`)

@@ -15,7 +15,8 @@ communicate via shared state in `AppContext`:
 
 1. **Capture loop** — `CaptureEngine` driven by ScreenCaptureKit
    callbacks (system audio) + AVAudioEngine input tap (microphone).
-2. **HUD pill** — `RecordingHUDPanel` (NSPanel, all Spaces, level meter).
+2. **HUD pill** — `RecordingHUDPanel` (NSPanel, all Spaces). Renders a
+   real-time frequency-spectrum equalizer fed by `RecordingLevelMeter`.
 3. **HTTP server** — Swifter, serves the React frontend + JSON API on
    `http://127.0.0.1:<random-port>/`.
 4. **UI** — SwiftUI popover (status-bar) + AppKit `NSWindow` hosting a
@@ -42,7 +43,8 @@ communicate via shared state in `AppContext`:
 ┌──────── TranscriptionPipeline ─────────┐       │
 │ Cache check (audio MD5)                │       │
 │   hit  → reuse gemini_raw_turns        │       │
-│   miss + dual tracks:                  │       │
+│   miss + dual tracks (real call):      │       │
+│     EchoSuppressor on mic.wav first     │       │
 │     async let micPart  (mode=.single)  │       │
 │     async let sysPart  (mode=.diarize) │       │
 │   miss + mix only:                     │       │
@@ -61,6 +63,7 @@ communicate via shared state in `AppContext`:
 ┌──────── HTTP server ───────────────────┐
 │ Swifter on 127.0.0.1:<random>          │
 │ /api/meetings, /:id, /:id/audio        │
+│ /:id/audio.m4a, /:id/video-audio.mp4   │
 │ /api/archive, /:id/{archive,restore}   │
 │ /api/recording/state (polled by UI 1Hz)│
 └───────────────│────────────────────────┘
@@ -92,8 +95,12 @@ App/                Entry point, app delegate, recording state machine
 │                           on stop when auto-transcribe is OFF (the
 │                           normal `transcribe()` path never runs)
 ├ RecordingLevelMeter.swift ObservableObject fed by capture taps;
-│                           sqrt-scaled peak, 30 Hz publish, 12 Hz
-│                           rolling-history shift; drives HUD waveform
+│                           sqrt-scaled peak + a real FFT frequency
+│                           spectrum (`spectrum`, 11 log-spaced bands)
+│                           with per-band AGC and SEPARATE mic / system
+│                           envelopes published as a per-band max (so the
+│                           high-rate system tap can't wash out the mic);
+│                           30 Hz publish; drives the HUD equalizer
 ├ HotkeyManager.swift       Carbon `RegisterEventHotKey` wrapper (no
 │                           Accessibility prompt). Default ⌘⇧F →
 │                           toggles record. Conflicts with OS-bound
@@ -117,9 +124,10 @@ Update/
                             (push state, route primary/dismiss actions).
 
 Capture/
-├ CaptureEngine.swift       SCStream wiring (.screen video +
-│                           .audio → system_sck.wav as the BT
-│                           backup), AVAudioEngine.installTap on
+├ CaptureEngine.swift       SCStream wiring (.screen video at HALF
+│                           the backing resolution + 10 fps, HEVC
+│                           ~1.0 Mbps + .audio → system_sck.wav as
+│                           the BT backup), AVAudioEngine.installTap on
 │                           default input for mic, Core-Audio
 │                           process tap for system.wav (primary).
 │                           `tearingDown` flag latched at stop so a
@@ -150,6 +158,16 @@ Transcription/
 │                              speech-only timeline → original frame
 ├ Diarizer.swift            Channel-gate (mic_RMS vs system_RMS) for
 │                           the legacy single-stream Gemini path only
+├ EchoSuppressor.swift      Offline speaker-bleed echo suppression.
+│                           When the user records on speakers (no
+│                           headphones) the far-end voice bleeds into
+│                           mic.wav; this removes it before ASR using
+│                           system.wav as the clean reference (FFT
+│                           cross-correlation bulk-delay align, then
+│                           per-bin coupling + spectral over-subtraction,
+│                           frequency-domain / gain-based so it can't
+│                           diverge). Self-gating: skips when the
+│                           correlation is low (headphones / BT)
 └ AudioMixer.swift          16 kHz mono mix; peak-normalised, not /N
 
 Boost/
@@ -179,6 +197,12 @@ Server/
 ├ LocalServer.swift         Swifter wrapper; binds to 127.0.0.1 on a
 │                           random port; reachable only locally
 ├ Routes.swift              All HTTP routes (see API.md)
+├ MediaExporter.swift       On-demand download products: audio.wav →
+│                           compressed AAC `.m4a` (~10× smaller than the
+│                           32-bit WAV), and the silent screen video.mov
+│                           muxed WITH the audio into one `.mp4` (video
+│                           passthrough, no re-encode; only the audio is
+│                           AAC-encoded). Cached in a temp exports dir
 ├ DTOs.swift                Wire types, snake_case for JSON
 ├ TranscriptFormatter.swift Clipboard text builder (paragraph mode)
 └ RangeRequest.swift        HTTP Range header parser
@@ -188,10 +212,15 @@ UI/
 ├ PopoverContentView.swift  SwiftUI popover (idle/recording/stopping)
 ├ LibraryWindow.swift       NSWindow + WKWebView + JS bridge
 │                           (drag, copy, openExternal)
-└ RecordingHUDPanel.swift   Floating NSPanel pill; pulse dot +
-                            7-bar EQ waveform + timer + Stop;
-                            .canJoinAllSpaces + .stationary +
-                            .nonactivatingPanel
+└ RecordingHUDPanel.swift   Floating NSPanel pill; real-time
+                            frequency-spectrum equalizer (bars driven by
+                            `RecordingLevelMeter.spectrum`, not the old
+                            blob) + timer + Stop; .canJoinAllSpaces +
+                            .stationary + .nonactivatingPanel. The
+                            in-window recording indicator (the embedded
+                            blob in the Library window bottom-right) was
+                            removed; recording is started/stopped from the
+                            menu-bar popover and the global hotkey.
 
 Shared/
 └ Paths.swift               AppPaths.* singletons
@@ -217,17 +246,26 @@ Stop pressed → TranscriptionPipeline.enqueue:
      Used for playback + as the legacy single-stream fallback.
 
   2. Cache lookup:
-       key = "dual:{md5(mic.wav)}:{md5(system.wav)}"   if both exist
-       key = "mix:{md5(mix.wav)}"                      otherwise
+       key = "dual:v11:{md5(mic.wav)}:{md5(system.wav)}"  if both exist
+       key = "mix:{md5(mix.wav)}"                          otherwise
+     (The dual-track key was bumped to v11 when mic.wav started passing
+     through EchoSuppressor before ASR: the cleaned mic changes the raw
+     text, so the old cache must miss once. A provider tag is also
+     prefixed so Groq / Whisper / Gemini raw turns never replay each
+     other.)
      If meetings.audio_hash matches and gemini_raw_turns is non-null,
      re-use the raw turns and skip Gemini entirely.
 
   3. Cache miss path:
-       a. Both tracks present (the normal case):
-            async let micPart =
-              GeminiTranscriber.transcribe(audio: mic.wav,    mode: .single)
-            async let sysPart =
-              GeminiTranscriber.transcribe(audio: system.wav, mode: .diarize)
+       a. Both tracks present, real call (the normal case):
+            // Speaker-bleed suppression. On speakers the far-end voice
+            // bleeds into mic.wav; EchoSuppressor removes it (system.wav
+            // as the clean reference) before ASR. Self-gating: returns
+            // nil on a headphone/BT recording, so we fall back to the raw
+            // mic and this is a no-op there.
+            micURL = EchoSuppressor.suppress(mic, system) ?? mic.wav
+            async let micPart = transcribe(audio: micURL,   mode: .single)
+            async let sysPart = transcribe(audio: system.wav, mode: .diarize)
             (userTurns, otherTurns) = try await (micPart, sysPart)
 
        b. Only mix.wav (post-archive of an old row without cache):
@@ -469,9 +507,33 @@ audio clock in sync; we just never persist the pixels.
   app.
 - **No auto-launch.** User runs the app manually (or via Sparkle update
   flow). LaunchAgents would require explicit consent UX we haven't built.
-- **No OpenAI / Whisper API.** Gemini Flash is the one model we ship.
-  Local Whisper was retired (lower quality on Russian / English mixed
-  audio + 1.5 GB of CoreML bloat).
+- **No user-facing provider picker for ASR.** Non-admin users transcribe
+  ONLY through Groq Whisper (cloud) or the on-device WhisperKit model;
+  there is no toggle to pick a different cloud model. Gemini and OpenAI
+  whisper-1 are admin-only, kept for benchmarking. See the provider-lock
+  note below.
+
+## Transcription provider lock
+
+Non-admin users can transcribe through exactly two providers: Groq
+Whisper (cloud) and the on-device WhisperKit model. Gemini and OpenAI
+whisper-1 are ADMIN-ONLY (for the dev to benchmark). The paid-tier
+default is Groq, not Gemini. `AppSettings.isAdmin` is mirrored from the
+Supabase JWT `app_metadata.role == "admin"` by `SupabaseTierSync`.
+
+Enforced at four independent layers, so a normal user can never have
+Gemini suddenly transcribe:
+
+1. **Client resolver.** `AppSettings.transcriptionProvider` clamps a
+   non-admin to `groq` (paid) or `whisperLocal` (free); any other
+   resolution collapses to those.
+2. **Pipeline fallbacks.** Every Gemini fallback path in
+   `TranscriptionPipeline` is gated on `AppSettings.isAdmin`.
+3. **Settings handler.** `POST /api/settings` refuses a `gemini` /
+   `whisper` provider override from a non-admin (coerces it back to the
+   tier default).
+4. **Worker.** The Cloudflare Worker (`corder-api`) returns 403 for
+   `/transcribe/gemini` and `/transcribe/whisper` from a non-admin.
 
 ## Security model
 

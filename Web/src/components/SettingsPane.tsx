@@ -96,9 +96,6 @@ export function SettingsPane({
   // Every toggle defaults ON until the real value loads (matches the
   // backend default, so no flicker to "off" then back).
   const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
-  // Paid tier gates the Statistics toggle (free users don't get the
-  // Dashboard stats block at all, so they never see the switch).
-  const paid = s?.tier === "pro" || s?.tier === "max";
 
   // General vs Advanced split: the "every-day" settings (notifications,
   // mic, language, hotkey, app lists, telemetry, danger zone) live in
@@ -267,33 +264,18 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Silent pre-roll — start capturing the instant a call is
-            detected, so accepting the record offer keeps audio/video from
-            the start. Off by default (it records before you consent, then
-            discards on decline). Available to all tiers. */}
+        {/* Silent pre-roll — buffer a detected call from its start so
+            accepting the record offer keeps the beginning. ON by default
+            for everyone now (the buffer is discarded if you decline). */}
         <SoloCard>
           <Toggle
             label={t.settings_preroll_title ?? "Catch the start of calls"}
-            desc={t.settings_preroll_desc ?? "Quietly buffer a detected call from its start, so accepting the record offer keeps the beginning. Discarded if you decline."}
-            checked={(s?.preroll as boolean | undefined) ?? false}
+            desc={t.settings_preroll_desc ?? "Keep the beginning of a detected call."}
+            checked={(s?.preroll as boolean | undefined) ?? true}
             disabled={!loaded}
             onChange={(v) => patch({ preroll: v })}
           />
         </SoloCard>
-
-        {/* Statistics block toggle — paid only. Off by default for
-            everyone; when on, the Dashboard shows the counters card. */}
-        {paid && (
-          <SoloCard>
-            <Toggle
-              label={t.settings_stats_title ?? "Statistics"}
-              desc={t.settings_stats_desc ?? "Show recording counters on the dashboard."}
-              checked={(s?.stats_enabled as boolean | undefined) ?? false}
-              disabled={!loaded}
-              onChange={(v) => patch({ stats_enabled: v })}
-            />
-          </SoloCard>
-        )}
 
         <SoloCard>
           <TranscriptionLanguageRow
@@ -905,34 +887,21 @@ function TierTestRow({
 /// stash a ref on it so the option-click handler can grab a real
 /// rect even though the option lives in a portal).
 function ThemeToggleRow({ t }: { t: T }) {
-  const { mode, isDark, setMode } = useTheme();
-  const triggerRef = React.useRef<HTMLDivElement | null>(null);
-  // Plain static label per request — "Change theme" / "Сменить тему",
-  // not the old direction-specific "Switch to dark/light theme".
-  const label = t.settings_theme_change ?? "Change theme";
-  const desc = isDark
-    ? (t.settings_theme_desc_dark ?? "Currently dark.")
-    : (t.settings_theme_desc_light ?? "Currently light.");
-  const options: SettingsSelectOption<"light" | "dark">[] = [
-    { value: "light",  label: t.settings_theme_opt_light  ?? "Light" },
-    { value: "dark",   label: t.settings_theme_opt_dark   ?? "Dark" },
-  ];
+  const { isDark, setMode } = useTheme();
+  const rowRef = React.useRef<HTMLDivElement | null>(null);
+  // A plain switch like "System notifications": ON = dark, OFF = light.
+  // The view-transition radial wipe still fires; origin is the row centre.
   return (
-    <div className="hk-block mic-block" aria-label={label} ref={triggerRef}>
-      <div className="settings-row-label">{label}</div>
-      <div className="settings-row-desc">{desc}</div>
-      <SettingsSelect<"light" | "dark">
-        value={mode}
-        options={options}
-        onChange={(next) => {
-          // Origin = the trigger pill's centre — close enough to
-          // "from where you clicked" without wiring an event through
-          // the SettingsSelect portal.
-          const r = triggerRef.current?.getBoundingClientRect();
+    <div ref={rowRef}>
+      <Toggle
+        label={t.settings_theme_enable_dark ?? "Enable dark theme"}
+        desc={t.settings_theme_enable_dark_desc ?? "Dark interface."}
+        checked={isDark}
+        onChange={(v) => {
+          const r = rowRef.current?.getBoundingClientRect();
           const origin = r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined;
-          setMode(next, origin);
+          setMode(v ? "dark" : "light", origin);
         }}
-        ariaLabel={label}
       />
     </div>
   );

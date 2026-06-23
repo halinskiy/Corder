@@ -629,47 +629,12 @@ final class LibraryWindow: NSWindowController {
         win.contentView?.addSubview(dragView)
         handler.headerDragView = dragView
 
-        // Same SwiftUI blob the floating HUD uses, embedded directly in
-        // the bottom-right of the Library window. Reused — not a copy.
-        // Click toggles recording (start when idle, stop when recording);
-        // the click target is state-aware, the visuals (hover spotlight,
-        // morph, palette swap on audio activity) all come from the
-        // unmodified RecordingHUDView.
-        let blob = HUDHostingView(rootView:
-            RecordingHUDView(onTap: {
-                Task { @MainActor in
-                    switch AppContext.shared.recordingState {
-                    case .idle:
-                        MeetingDetector.shared.userStartedRecordingManually()
-                        await RecordingController.shared.startRecording(source: .fullDisplay)
-                    case .recording:
-                        await RecordingController.shared.stopRecording()
-                    // The HUD isn't shown during a silent pre-roll, so this
-                    // tap shouldn't reach here; no-op defensively.
-                    case .stopping, .preroll:
-                        return
-                    }
-                }
-            })
-        )
-        let blobSize: CGFloat = 110
-        let blobMargin: CGFloat = 8
-        blob.frame = NSRect(
-            x: win.contentView!.bounds.width - blobSize - blobMargin,
-            y: blobMargin,
-            width: blobSize, height: blobSize
-        )
-        // Anchor to bottom-right: distance to left grows when resized
-        // (.minXMargin flexible), distance to top grows too (.maxYMargin).
-        blob.autoresizingMask = [.minXMargin, .maxYMargin]
-        win.contentView?.addSubview(blob)
-
-        // Let the web video lightbox hide this native blob while it's
-        // open (the blob is stacked above the WKWebView and would
-        // otherwise punch through the dimmed fullscreen overlay).
-        handler.onBlobVisible = { [weak blob] visible in
-            blob?.isHidden = !visible
-        }
+        // No in-window recording indicator. Per Костя — the level indicator
+        // lives ONLY in the floating HUD (when Corder is minimised / not in
+        // front); inside the window there is no blob and no replacement.
+        // Recording is started/stopped from the menu-bar popover and the
+        // global hotkey. `onBlobVisible` stays nil (the web lightbox's call
+        // becomes a harmless no-op).
     }
 
     required init?(coder: NSCoder) { fatalError() }

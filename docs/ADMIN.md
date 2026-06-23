@@ -52,6 +52,17 @@ Worker refuses to revoke the **caller's own** role (self-lockout guard).
 In the admin UI it surfaces as a fourth "Admin" value in the per-row Plan
 dropdown, gated behind an inline confirm.
 
+The admin role does more than gate this panel: it is the **transcription
+provider lock**. Non-admin users can transcribe ONLY through Groq Whisper
+(cloud) plus the on-device WhisperKit model. Gemini and OpenAI whisper-1
+are admin-only, kept so the operator can benchmark providers. The app
+mirrors `app_metadata.role == "admin"` into `AppSettings.isAdmin` via
+`SupabaseTierSync`; the desktop client unlocks the model picker and the
+Gemini / whisper-1 routes only for an admin token, and the Worker
+returns 403 on `/transcribe/gemini` and `/transcribe/whisper` for a
+non-admin. So promoting a user to admin also lets them pick those
+providers, not just see the panel.
+
 ### News
 
 | Method | Path                | Body                                    | Returns                              |
@@ -92,6 +103,17 @@ Backed by the `bug_reports` table (migration `20260606_bug_reports.sql`).
 Every 🐞 Send-report from the app still emails + files a GitHub issue, but
 now ALSO stores the report here and — in the background — asks Gemini Flash
 for a short triage summary (`title` / `summary` / `severity`).
+
+The `log_tail` the app ships is now scoped to the last ~3 launch
+sessions (not just the current one), because a user usually reopens the
+app before reporting, so the meeting that misbehaved is one or two
+sessions back. It also keeps the full transcription / capture pipeline
+flow lines (provider chosen, dual-track mode, per-track turn counts,
+capture device / Bluetooth route), not only error lines, so a quality
+bug that throws no error (for example far-end voice bleeding into the
+mic on speakers) is still explainable from the log. The report button in
+the app is always available now, rather than being hidden when no
+error-regex line matched.
 
 | Method | Path                        | Body | Returns                              |
 |--------|-----------------------------|------|--------------------------------------|
