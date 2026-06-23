@@ -216,18 +216,10 @@ interface Strings {
   /// to the legacy `btn_theme_title`.
   btn_theme_to_dark?: string;
   btn_theme_to_light?: string;
-  settings_theme_label_to_dark?: string;
-  settings_theme_label_to_light?: string;
-  settings_theme_change?: string;
   settings_theme_enable_dark?: string;
   settings_theme_enable_dark_desc?: string;
   settings_model_label?: string;
   settings_model_desc?: string;
-  settings_theme_desc_light?: string;
-  settings_theme_desc_dark?: string;
-  settings_theme_opt_system?: string;
-  settings_theme_opt_light?: string;
-  settings_theme_opt_dark?: string;
   btn_dismiss?: string;
   btn_collapse?: string;
   news_eyebrow?: string;
@@ -656,18 +648,10 @@ const ru: Strings = {
   btn_theme_title: "Переключить светлую/тёмную тему",
   btn_theme_to_dark: "Тёмная тема",
   btn_theme_to_light: "Светлая тема",
-  settings_theme_label_to_dark: "Сменить тему на тёмную",
-  settings_theme_change: "Сменить тему",
   settings_theme_enable_dark: "Включить тёмную тему",
   settings_theme_enable_dark_desc: "Тёмное оформление интерфейса.",
   settings_model_label: "Модель транскрипции",
   settings_model_desc: "Какой моделью расшифровывается следующая запись.",
-  settings_theme_label_to_light: "Сменить тему на светлую",
-  settings_theme_desc_light: "Сейчас светлая.",
-  settings_theme_desc_dark: "Сейчас тёмная.",
-  settings_theme_opt_system: "Как в системе",
-  settings_theme_opt_light: "Светлая",
-  settings_theme_opt_dark: "Тёмная",
   btn_dismiss: "Скрыть",
   news_eyebrow: "Новое",
   settings_tier_upgrade_label: "Upgrade",
@@ -1032,18 +1016,10 @@ const en: Strings = {
   btn_theme_title: "Toggle light/dark theme",
   btn_theme_to_dark: "Dark theme",
   btn_theme_to_light: "Light theme",
-  settings_theme_label_to_dark: "Switch to dark theme",
-  settings_theme_change: "Change theme",
   settings_theme_enable_dark: "Enable dark theme",
   settings_theme_enable_dark_desc: "Dark interface.",
   settings_model_label: "Transcription model",
   settings_model_desc: "Which model the next recording is transcribed with.",
-  settings_theme_label_to_light: "Switch to light theme",
-  settings_theme_desc_light: "Currently light.",
-  settings_theme_desc_dark: "Currently dark.",
-  settings_theme_opt_system: "Follow system",
-  settings_theme_opt_light: "Light",
-  settings_theme_opt_dark: "Dark",
   btn_dismiss: "Dismiss",
   news_eyebrow: "New",
   settings_tier_upgrade_label: "Upgrade",
@@ -1393,15 +1369,10 @@ const uk: Strings = {
   btn_theme_title: "Перемкнути світлу/темну тему",
   btn_theme_to_dark: "Темна тема",
   btn_theme_to_light: "Світла тема",
-  settings_theme_label_to_dark: "Перемкнути на темну",
-  settings_theme_change: "Змінити тему",
   settings_theme_enable_dark: "Увімкнути темну тему",
   settings_theme_enable_dark_desc: "Темне оформлення інтерфейсу.",
   settings_model_label: "Модель транскрипції",
   settings_model_desc: "Якою моделлю розшифровується наступний запис.",
-  settings_theme_label_to_light: "Перемкнути на світлу",
-  settings_theme_desc_light: "Зараз світла.",
-  settings_theme_desc_dark: "Зараз темна.",
   theme_light: "Світла",
   theme_dark: "Темна",
 
