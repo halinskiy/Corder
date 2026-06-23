@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.51] — 2026-06-24
+
+### Fixed
+- Fixed a crash that could take down the app while transcribing very short recordings (an echo-suppression edge case on the default two-track path).
+- The Upgrade prompt for Summary and Chapters now actually appears for plans that don't include them, instead of a generic "didn't work" error.
+- On-device transcription on a slower Mac no longer hangs while the model is still being prepared in the background; it falls back to the fast path and recovers automatically.
+- "Catch the start of calls" no longer leaves audio capture running across sleep or fast user-switching (no more stuck microphone indicator).
+- A meeting that keeps failing to transcribe no longer retries forever.
+
 ## [0.14.50] — 2026-06-23
 
 ### Changed
