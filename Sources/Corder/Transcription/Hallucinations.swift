@@ -73,7 +73,19 @@ enum Hallucinations {
         let normalised = String(String.UnicodeScalarView(stripped))
             .replacingOccurrences(of: "  ", with: " ")
             .trimmingCharacters(in: .whitespaces)
-        for pat in patterns where normalised.contains(pat) { return true }
+        guard !normalised.isEmpty else { return false }
+        for pat in patterns where normalised.contains(pat) {
+            // Exact match → definitely a hallucination.
+            if normalised == pat { return true }
+            // Substring match: only drop the turn if the pattern DOMINATES
+            // the segment (≥60% of its length). A short pattern ("субтитри",
+            // "enjoy this video") appearing inside a long real sentence must
+            // NOT nuke that whole turn — and the launch-time purge actually
+            // DELETEs matches, so a false positive permanently loses real
+            // speech. Genuine all-outro segments still clear the bar; an
+            // appended outro is handled display-side by `cleanSegmentText`.
+            if Double(pat.count) >= Double(normalised.count) * 0.6 { return true }
+        }
         return false
     }
 }

@@ -25,6 +25,10 @@ struct RangeRequest: Equatable {
 
         guard let start = Int64(lhs) else { return nil }
         if rhs.isEmpty {
+            // Open-ended `start-`: reject start past EOF, else end < start
+            // gives a negative content-length (the explicit-end branch below
+            // already guards this; the open-ended one didn't).
+            guard start <= last else { return nil }
             return RangeRequest(start: start, end: last)
         }
         guard let endParsed = Int64(rhs) else { return nil }

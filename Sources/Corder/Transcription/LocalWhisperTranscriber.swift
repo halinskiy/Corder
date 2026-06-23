@@ -478,6 +478,19 @@ enum LocalWhisperTranscriber {
         setProgress(variant, 0.99)
         defer { setProgress(variant, nil) }
 
+        // On a RAM-constrained Mac (≤8 GB) skip the ANE leak-and-fallback
+        // entirely. A busted ANE budget leaves an uncancellable compile
+        // running while we ALSO load the GPU model — two model loads in
+        // memory at once, which can swap-storm an 8 GB machine (worst with a
+        // manual turbo pick). Load GPU directly: reliable, single load, no
+        // leak. The ANE speed-up isn't worth the OOM risk on these Macs.
+        let ramGB = ProcessInfo.processInfo.physicalMemory / 1_073_741_824
+        if ramGB <= 8 {
+            FileLogger.log("LocalWhisper: \(ramGB) GB RAM — loading GPU directly (skip ANE leak-and-fallback)")
+            try await loadGPU(variant)
+            return
+        }
+
         // 1. Neural Engine.
         FileLogger.log("LocalWhisper: loading WhisperKit (ANE) from \(modelFolderURL(variant).path), budget \(Int(aneBudget))s")
         do {

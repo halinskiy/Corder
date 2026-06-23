@@ -925,10 +925,16 @@ enum Routes {
             transcription_provider: {
                 // `"auto"` when no explicit override is stored, so the
                 // tier-driven default is in effect; otherwise echo the
-                // stored override verbatim (only well-formed values
-                // pass the setter, so this is safe).
+                // stored override — but CLAMP it through the same admin rule
+                // as the other three surfaces (runtime read, POST write,
+                // Worker). A stale `gemini`/`whisper` value (demoted admin /
+                // manual `defaults write`) must not surface to a non-admin,
+                // so all four surfaces tell the same story.
                 if let raw = UserDefaults.standard.string(forKey: "Corder.set.transcriptionProvider"),
-                   TranscriptionProvider(rawValue: raw) != nil {
+                   let prov = TranscriptionProvider(rawValue: raw) {
+                    if !AppSettings.isAdmin, prov == .gemini || prov == .whisper {
+                        return "auto"
+                    }
                     return raw
                 }
                 return "auto"
