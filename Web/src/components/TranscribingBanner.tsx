@@ -297,8 +297,13 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
             (downloadingModel ? "trans-stop-btn--downloading" : "danger")
           }
           style={downloadingModel ? ({ ["--wl-progress" as string]: `${dlPct}%` } as React.CSSProperties) : undefined}
-          onClick={onStop}
-          disabled={stopping}
+          // While the model is downloading the button is a progress
+          // INDICATOR, not a Stop control — clicking it must do nothing
+          // (a click during the download was cancelling the whole run and
+          // failing the meeting). It re-enables as the real Stop button
+          // once the model lands and transcription proper begins.
+          onClick={downloadingModel ? undefined : onStop}
+          disabled={stopping || downloadingModel}
           aria-busy={stopping}
           aria-label={downloadingModel ? dlLabel : undefined}
         >

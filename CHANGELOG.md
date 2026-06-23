@@ -19,7 +19,8 @@ behaviour, not internal refactors.
 ## [0.14.48] — 2026-06-23
 
 ### Fixed
-- A corrupt or incompletely-downloaded on-device model could wedge the model load forever, leaving a transcription stuck on "transcribing" through every relaunch. The model load now times out, the bad model is deleted, and the next attempt re-downloads a clean copy (showing the "Downloading model" progress).
+- On-device (free) transcription could get stuck on "transcribing" forever. The model's tokenizer is hosted separately from the model files and was being fetched at load time with no timeout — a stalled fetch wedged the whole load (the model was already on disk, so no progress showed). The tokenizer is now staged up-front under the "Downloading model" progress with a hard timeout, so the load can no longer hang on the network.
+- The "Downloading model" button no longer cancels the download when clicked — it stays inert while the model fetches and only re-arms as "Stop" once transcription actually starts.
 
 ## [0.14.47] — 2026-06-23
 
