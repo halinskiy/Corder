@@ -362,6 +362,40 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
     weak var window: NSWindow?
     init(window: NSWindow?) { self.window = window }
 
+    /// Bounded auto-reload budget so a renderer that keeps dying (or a
+    /// server that never comes up) doesn't spin in an endless reload loop.
+    /// Reset on every successful load.
+    private var reloadAttempts = 0
+    private let maxReloads = 3
+
+    /// The WKWebView content process crashed (OOM, GPU reset, sandbox kill).
+    /// Without this the Library window is left permanently BLANK until the
+    /// user quits + relaunches. Reload to respawn the renderer.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard reloadAttempts < maxReloads else {
+            FileLogger.log("LibraryWindow: WKWebView content process kept terminating (\(reloadAttempts)x) — giving up auto-reload")
+            return
+        }
+        reloadAttempts += 1
+        FileLogger.log("LibraryWindow: WKWebView content process terminated — reloading (attempt \(reloadAttempts))")
+        webView.reload()
+    }
+
+    /// Provisional navigation failed — typically the embedded server hadn't
+    /// finished binding when the window first loaded. Bounded retry so a
+    /// transient startup race doesn't leave a blank Library.
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard reloadAttempts < maxReloads else { return }
+        reloadAttempts += 1
+        FileLogger.log("LibraryWindow: provisional navigation failed (\(error.localizedDescription)) — retrying (attempt \(reloadAttempts))")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { webView.reload() }
+    }
+
+    /// A load succeeded — refresh the reload budget for any FUTURE crash.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        reloadAttempts = 0
+    }
+
     private func isFileEndpoint(_ url: URL?) -> Bool {
         guard let p = url?.path else { return false }
         return p.range(

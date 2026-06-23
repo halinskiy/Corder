@@ -416,8 +416,17 @@ final class CaptureEngine: NSObject {
             self.micFile = micFile
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
                 guard let self = self else { return }
-                self.micFramesWritten &+= Int64(buffer.frameLength)
-                try? self.micFile?.write(from: buffer)
+                // Log write failures and count frames only AFTER a successful
+                // write — the system/SCK paths log too, and incrementing
+                // before the write (with the error swallowed by `try?`) gave a
+                // falsely-healthy `micFramesWritten` when the mic.wav write was
+                // actually failing.
+                do {
+                    try self.micFile?.write(from: buffer)
+                    self.micFramesWritten &+= Int64(buffer.frameLength)
+                } catch {
+                    FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
+                }
                 // Push raw peak to the level meter — the floating HUD
                 // panel observes it to draw the live mic bar.
                 RecordingLevelMeter.shared.ingestMic(buffer: buffer)

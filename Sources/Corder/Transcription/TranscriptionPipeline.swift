@@ -88,7 +88,8 @@ final class TranscriptionPipeline {
                     // Full ensureModelReady (not downloadOnly): it ALSO
                     // fetches + caches the tokenizer sidecar, which the
                     // offline fallback needs — once the network is down we
-                    // can't fetch it. base is small, so warming it is cheap.
+                    // can't fetch it. Small (the offline fallback now that
+                    // base/tiny were dropped) is light, so warming it is cheap.
                     try await LocalWhisperTranscriber.ensureModelReady(net)
                     FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) ready (model + tokenizer cached)")
                 } catch {
@@ -308,7 +309,14 @@ final class TranscriptionPipeline {
             // regresses a good non-BT capture).
             let tapSystemURL = dir.appendingPathComponent("system.wav")
             let sckSystemURL = dir.appendingPathComponent("system_sck.wav")
-            let systemURL: URL = {
+            // Run the track chooser OFF the main actor: `voicedEnergy` does a
+            // full-file decode of both system tracks, and transcribe() is
+            // @MainActor, so on a long meeting this would stall the popover /
+            // HUD. The decision logic is unchanged — only the heavy decode
+            // moves off-main (mirrors the auto-transcribe-OFF chooser in
+            // RecordingController). Returns just the chosen URL (Sendable).
+            let btAtStart = meeting.outputBluetoothAtStart ?? false
+            let systemURL: URL = await Task.detached {
                 let tapExists = FileManager.default.fileExists(atPath: tapSystemURL.path)
                 let sckExists = FileManager.default.fileExists(atPath: sckSystemURL.path)
                 guard sckExists else { return tapSystemURL }
@@ -319,7 +327,6 @@ final class TranscriptionPipeline {
                 guard let tap = VoiceActivityDetector.voicedEnergy(audioURL: tapSystemURL),
                       let sck = VoiceActivityDetector.voicedEnergy(audioURL: sckSystemURL)
                 else { return tapSystemURL }
-                let btAtStart = meeting.outputBluetoothAtStart ?? false
                 let sckHasSpeech = sck.voicedMs >= 1500
                 if btAtStart && sckHasSpeech {
                     FileLogger.log("transcribe(): BT output at record start → system_sck.wav (tap voiced=\(tap.voicedMs)ms rms=\(tap.meanRMS) | sck voiced=\(sck.voicedMs)ms rms=\(sck.meanRMS))")
@@ -330,7 +337,7 @@ final class TranscriptionPipeline {
                     return sckSystemURL
                 }
                 return tapSystemURL
-            }()
+            }.value
             let mixURL = dir.appendingPathComponent("audio.wav")
 
             let micExists = FileManager.default.fileExists(atPath: micURL.path)
@@ -376,7 +383,8 @@ final class TranscriptionPipeline {
             if !systemExists {
                 systemSilent = true
             } else {
-                let vad = VoiceActivityDetector.detect(audioURL: systemURL)
+                // Off-main — `detect` is another full-file decode (see chooser).
+                let vad = await Task.detached { VoiceActivityDetector.detect(audioURL: systemURL) }.value
                 systemSilent = (vad?.isEmpty == true)
             }
             // In-person = there's a mic but no usable remote track. This
@@ -416,9 +424,12 @@ final class TranscriptionPipeline {
                 case .whisperLocal:
                     // Local Whisper keeps its own cache namespace so a
                     // flip between cloud and local never replays the
-                    // other model's raw text. v1 = first ship of the
-                    // local provider (WhisperKit large-v3-turbo).
-                    return "whisper-local:v1:"
+                    // other model's raw text. The VARIANT is part of the
+                    // namespace too — Turbo and Small produce different raw
+                    // turns, and without this a switch between them would
+                    // replay the other model's transcript (a cache hit on
+                    // the wrong model). v1 = first ship of the local provider.
+                    return "whisper-local:v1:\(AppSettings.whisperLocalVariant.rawValue):"
                 }
             }()
             let cacheKey: String
@@ -760,8 +771,12 @@ final class TranscriptionPipeline {
                     // each speaker's turns only where THEIR OWN track is the
                     // louder one. Computed once per track (100ms RMS), so
                     // it's cheap; a clean headphone recording is a near no-op.
-                    if let micRMS = Self.frameRMS(micURL),
-                       let sysRMS = Self.frameRMS(systemURL) {
+                    // Off-main — frameRMS is a full-file decode per track.
+                    let rms = await Task.detached { () -> ([Float], [Float])? in
+                        guard let m = Self.frameRMS(micURL), let s = Self.frameRMS(systemURL) else { return nil }
+                        return (m, s)
+                    }.value
+                    if let (micRMS, sysRMS) = rms {
                         let uBefore = userTurns.count
                         let oBefore = otherTurns.count
                         userTurns = Self.gateTurnsByDominance(userTurns, own: micRMS, rival: sysRMS)
@@ -1290,7 +1305,7 @@ final class TranscriptionPipeline {
     /// [i*100ms, (i+1)*100ms)). Sample rate is normalised out, so the two
     /// dual-track files share one comparable time grid regardless of their
     /// individual rates. nil on read error.
-    static func frameRMS(_ url: URL, hopMs: Int = 100) -> [Float]? {
+    nonisolated static func frameRMS(_ url: URL, hopMs: Int = 100) -> [Float]? {
         guard let file = try? AVAudioFile(forReading: url) else { return nil }
         let format = file.processingFormat
         let sr = format.sampleRate

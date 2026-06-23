@@ -338,9 +338,14 @@ struct MeetingRepository {
     @discardableResult
     func purgeOrphanSpeakers() throws -> Int {
         try dbq.write { db in
+            // Terminal meetings only: status = 'ready', OR archived (soft
+            // archive sets `archived_at`, NOT a 'archived' status — the old
+            // `status IN ('ready','archived')` had a dead arm since no row
+            // ever has status 'archived'). archived_at IS NOT NULL covers
+            // archived rows whatever their status.
             try db.execute(sql: """
                 DELETE FROM speakers
-                WHERE meeting_id IN (SELECT id FROM meetings WHERE status IN ('ready', 'archived'))
+                WHERE meeting_id IN (SELECT id FROM meetings WHERE status = 'ready' OR archived_at IS NOT NULL)
                   AND NOT EXISTS (
                     SELECT 1 FROM segments WHERE segments.speaker_id = speakers.id
                   )
