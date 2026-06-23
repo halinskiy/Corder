@@ -2520,6 +2520,18 @@ body.resizing { cursor: col-resize; user-select: none; }
    approaches but never reaches the right edge — completion is signalled
    by the banner disappearing, never by the bar hitting 100%. */
 .trans-stop-btn { position: relative; overflow: hidden; }
+/* While the on-device model is still downloading, the Stop button is
+   temporarily replaced (SAME size) by a model-download progress button —
+   white surface, accent fill, dual label — reusing the `.wl-download-*`
+   spans from the Settings download pill. Reverts to the red Stop button
+   once the model lands. */
+.trans-stop-btn--downloading {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  cursor: default;
+}
+.trans-stop-btn--downloading:hover { border-color: var(--accent); }
 /* Left-anchored fill driven by REAL transcription progress (the local ASR
    reports window-by-window via /api/meetings/:id → transcribe_progress).
    width is set inline. Long linear ease so it glides between the 2s polls

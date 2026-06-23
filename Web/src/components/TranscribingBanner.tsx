@@ -137,7 +137,8 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   // transcription progress. This is what tells a first-run free user
   // "it's fetching a 1.5 GB model" instead of looking frozen.
   const downloadingModel = modelDownloadProgress != null;
-  const fillFraction = downloadingModel ? (modelDownloadProgress ?? 0) : (progress ?? 0);
+  const dlPct = Math.round(Math.max(0, Math.min(1, modelDownloadProgress ?? 0)) * 100);
+  const dlLabel = `${t.whisper_prefetch_label ?? "Downloading model"} · ${dlPct}%`;
   const headline = downloadingModel
     ? (t.trans_downloading_model ?? "Downloading model…")
     : t.trans_label;
@@ -212,7 +213,11 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
     }
   };
 
-  const upsell = resolveUpsell(settings, usage);
+  // Upsells are hidden for now: no paid plans are offered yet and the
+  // transcription flow is still being polished. Re-enable by assigning
+  // `resolveUpsell(settings, usage)` here once the pricing flow is ready.
+  const upsell: UpsellKind = null;
+  void resolveUpsell(settings, usage);
 
   const onUpsell = async () => {
     if (upsell === "best") {
@@ -287,29 +292,45 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
       </div>
       <div className="clarify-actions clarify-actions-stack">
         <button
-          className="clarify-btn danger trans-stop-btn"
+          className={
+            "clarify-btn trans-stop-btn " +
+            (downloadingModel ? "trans-stop-btn--downloading" : "danger")
+          }
+          style={downloadingModel ? ({ ["--wl-progress" as string]: `${dlPct}%` } as React.CSSProperties) : undefined}
           onClick={onStop}
           disabled={stopping}
           aria-busy={stopping}
+          aria-label={downloadingModel ? dlLabel : undefined}
         >
-          {/* Real progress fill behind the label. Driven by the backend
-              per-window signal (`transcribe_progress`), monotonic on the
-              server so it never animates backwards. Caps at 0.99 there
-              until the pipeline actually finishes (this banner then
-              unmounts), so the bar never "completes" while work is still
-              running. */}
-          <span
-            className="trans-stop-fill"
-            style={{ width: `${Math.round(Math.max(0, Math.min(1, fillFraction)) * 100)}%` }}
-            aria-hidden
-          />
-          <span className="trans-stop-label">
-            {stopping ? (
-              <Loader2 size={18} className="trans-inline-spinner trans-stop-spinner" aria-hidden />
-            ) : (
-              t.trans_stop
-            )}
-          </span>
+          {downloadingModel ? (
+            // SAME button (identical size) temporarily showing the model
+            // download instead of Stop. Reuses the green-fill + dual-label
+            // mechanism from the Settings download pill (`wl-download-*`),
+            // so a normal user — who has no model picker — still sees what
+            // is happening. Reverts to "Stop transcription" once the model
+            // lands and real transcription starts.
+            <>
+              <span className="wl-download-btn-fill" aria-hidden />
+              <span className="wl-download-btn-label">{dlLabel}</span>
+              <span className="wl-download-btn-label-fill" aria-hidden>{dlLabel}</span>
+            </>
+          ) : (
+            <>
+              {/* Real transcription progress fill, monotonic, caps at 0.99. */}
+              <span
+                className="trans-stop-fill"
+                style={{ width: `${Math.round(Math.max(0, Math.min(1, progress ?? 0)) * 100)}%` }}
+                aria-hidden
+              />
+              <span className="trans-stop-label">
+                {stopping ? (
+                  <Loader2 size={18} className="trans-inline-spinner trans-stop-spinner" aria-hidden />
+                ) : (
+                  t.trans_stop
+                )}
+              </span>
+            </>
+          )}
         </button>
       </div>
       {upsellCopy && upsell && !isSnoozed(upsell, upsellDismissedAt) && (
