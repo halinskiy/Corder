@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.45] — 2026-06-23
+
+### Added
+- On a fresh install the first transcription shows a clear "Downloading model" state with progress while the on-device model fetches (~1.5 GB), then switches to the normal transcription progress. Previously this looked like a frozen spinner for minutes.
+
+### Fixed
+- Meetings failed to sync to the cloud while in the silent pre-roll state (a database constraint rejected the row); the pre-roll status now syncs correctly.
+
 ## [0.14.44] — 2026-06-23
 
 ### Changed
