@@ -344,28 +344,51 @@ final class CaptureEngine: NSObject {
         // Corder's own UI chimes; harmless because SCK only "wins" on
         // BT-SCO calls where Corder isn't making noise anyway.
         config.excludesCurrentProcessAudio = false
-        let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
-        try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
-        do {
-            try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
-            self.sckSystemURL = sckSystemURL
-            self.sckAudioFile = nil
-            self.sckFramesWritten = 0
-            self.loggedFirstSCKBuffer = false
-            FileLogger.log("CaptureEngine.start: SCStream configured (screen + secondary system audio → system_sck.wav)")
-        } catch {
-            // Non-fatal: the process tap is still the primary path. We
-            // just lose the Bluetooth-output safety net for this run.
+        // Whether to run the SCStream session AT ALL. MEASURED: a running
+        // SCStream (full-display capture + audio) costs ~600 mW — and in
+        // audio-only mode capturing the screen was the single biggest source
+        // of the "recording heats the Mac" load (audio-only drew ~the same
+        // power as video). We need SCStream only for: (a) video frames, or
+        // (b) the SCK system-audio backup on a BLUETOOTH output route (where
+        // the Core Audio process tap can capture silence). On a non-BT
+        // audio-only recording the process tap captures system audio
+        // reliably, so we skip SCStream entirely and save the power.
+        let needSCStream = AppSettings.captureVideo || outputBluetoothAtStart
+        if needSCStream {
+            let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
+            // Subscribe to SCREEN frames only when actually recording video —
+            // in BT audio-only we keep the stream for SCK audio but never
+            // touch the screen.
+            if AppSettings.captureVideo {
+                try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
+            }
+            do {
+                try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
+                self.sckSystemURL = sckSystemURL
+                self.sckAudioFile = nil
+                self.sckFramesWritten = 0
+                self.loggedFirstSCKBuffer = false
+                FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart) → system_sck.wav)")
+            } catch {
+                // Non-fatal: the process tap is still the primary path. We
+                // just lose the Bluetooth-output safety net for this run.
+                self.sckSystemURL = nil
+                FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
+            }
+            do {
+                try await activeStream.startCapture()
+                FileLogger.log("CaptureEngine.start: SCStream.startCapture OK")
+            } catch {
+                FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing — audio tap + mic still record; no video.")
+            }
+            self.stream = activeStream
+        } else {
+            // Audio-only on a non-Bluetooth route: no SCStream at all. The
+            // process tap (system.wav) is the system-audio source here.
+            self.stream = nil
             self.sckSystemURL = nil
-            FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
+            FileLogger.log("CaptureEngine.start: audio-only + non-BT — skipping SCStream entirely (process tap handles system audio), ~600 mW saved")
         }
-        do {
-            try await activeStream.startCapture()
-            FileLogger.log("CaptureEngine.start: SCStream.startCapture OK (screen)")
-        } catch {
-            FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing — audio tap + mic still record; no video.")
-        }
-        self.stream = activeStream
 
         // 5. Microphone via AVAudioEngine.installTap on the default input.
         //    This is the only path now (no more SCStream.microphone) — see
@@ -397,53 +420,81 @@ final class CaptureEngine: NSObject {
         // no-headphones echo is handled in the playback mix instead (duck
         // the mic while the far end is talking), which never touches the
         // capture path or the audio route.
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) ch")
-        // Mic init can throw (AVAudioFile open with a zero/invalid input
-        // format, or engine.start when another app holds the input device —
-        // Discord/Telegram). By here the SCStream is ALREADY live, so a bare
-        // throw would leave it capturing forever with nothing to stop it (the
-        // privacy indicator stuck on, the device leaked). Tear the partial
-        // capture down before rethrowing so the recording fails cleanly.
-        do {
-            let micFile = try AVAudioFile(
-                forWriting: micURL,
-                settings: inputFormat.settings,
-                commonFormat: .pcmFormatFloat32,
-                interleaved: false
-            )
-            self.micFile = micFile
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
-                guard let self = self else { return }
-                // Log write failures and count frames only AFTER a successful
-                // write — the system/SCK paths log too, and incrementing
-                // before the write (with the error swallowed by `try?`) gave a
-                // falsely-healthy `micFramesWritten` when the mic.wav write was
-                // actually failing.
-                do {
-                    try self.micFile?.write(from: buffer)
-                    self.micFramesWritten &+= Int64(buffer.frameLength)
-                } catch {
-                    FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
-                }
-                // Push raw peak to the level meter — the floating HUD
-                // panel observes it to draw the live mic bar.
-                RecordingLevelMeter.shared.ingestMic(buffer: buffer)
+        // Mic init can throw -10868 (AUGraph input-chain init) when the input
+        // device isn't bound yet: it was JUST changed (user un/replugs
+        // headphones at record time) or coreaudiod is mid-restart, so
+        // `inputNode.outputFormat` momentarily reports a 0 Hz / invalid
+        // format. A single attempt hard-failed the whole recording with a
+        // scary popup. Retry a few times with a short settle delay + an
+        // engine reset — the device almost always binds within a second.
+        var micStarted = false
+        var lastMicError: Error?
+        for attempt in 1...4 {
+            let fmt = inputNode.outputFormat(forBus: 0)
+            // 0 Hz / 0 ch = device not bound yet. Don't even try to open a
+            // file with a bogus format (that's what throws -10868) — wait.
+            guard fmt.sampleRate > 0, fmt.channelCount > 0 else {
+                lastMicError = NSError(domain: "Corder.mic", code: -10868,
+                    userInfo: [NSLocalizedDescriptionKey: "input device not ready (format \(fmt.sampleRate) Hz)"])
+                FileLogger.log("CaptureEngine.start: mic input not ready on attempt \(attempt) (format \(fmt.sampleRate) Hz) — settling + retry")
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                continue
             }
-            engine.prepare()
-            try engine.start()
-            self.audioEngine = engine
-        } catch {
-            FileLogger.log("CaptureEngine.start: mic init failed (\(error)) — tearing down the already-armed SCStream to avoid a leaked live capture")
-            try? activeStream.removeStreamOutput(self, type: .screen)
-            try? activeStream.removeStreamOutput(self, type: .audio)
-            try? await activeStream.stopCapture()
+            do {
+                let micFile = try AVAudioFile(
+                    forWriting: micURL,
+                    settings: fmt.settings,
+                    commonFormat: .pcmFormatFloat32,
+                    interleaved: false
+                )
+                self.micFile = micFile
+                inputNode.removeTap(onBus: 0)   // clear any tap a failed attempt left
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
+                    guard let self = self else { return }
+                    // Log write failures and count frames only AFTER a successful
+                    // write — incrementing before the write (with the error
+                    // swallowed by `try?`) gave a falsely-healthy counter.
+                    do {
+                        try self.micFile?.write(from: buffer)
+                        self.micFramesWritten &+= Int64(buffer.frameLength)
+                    } catch {
+                        FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
+                    }
+                    // Push raw peak to the level meter — the floating HUD pill.
+                    RecordingLevelMeter.shared.ingestMic(buffer: buffer)
+                }
+                engine.prepare()
+                try engine.start()
+                self.audioEngine = engine
+                micStarted = true
+                FileLogger.log("CaptureEngine.start: mic via AVAudioEngine; format \(fmt.sampleRate) Hz, \(fmt.channelCount) ch\(attempt > 1 ? " (started on retry \(attempt))" : "")")
+                break
+            } catch {
+                lastMicError = error
+                FileLogger.log("CaptureEngine.start: mic init attempt \(attempt) failed (\(error)) — reset + retry")
+                inputNode.removeTap(onBus: 0)
+                if engine.isRunning { engine.stop() }
+                engine.reset()
+                self.micFile = nil
+                try? await Task.sleep(nanoseconds: 450_000_000)
+            }
+        }
+        if !micStarted {
+            // All retries exhausted. By here the SCStream is ALREADY live, so a
+            // bare throw would leak it (privacy indicator stuck on). Tear the
+            // partial capture down before rethrowing so it fails cleanly.
+            FileLogger.log("CaptureEngine.start: mic init failed after retries — tearing down any already-armed SCStream to avoid a leaked live capture")
+            if let s = self.stream {
+                try? s.removeStreamOutput(self, type: .screen)
+                try? s.removeStreamOutput(self, type: .audio)
+                try? await s.stopCapture()
+            }
             self.stream = nil
             self.sckSystemURL = nil
             inputNode.removeTap(onBus: 0)
             if engine.isRunning { engine.stop() }
             self.micFile = nil
-            throw error
+            throw lastMicError ?? CaptureError.noDisplay
         }
 
         // 6. system.wav via the Core Audio process tap. Opened lazily

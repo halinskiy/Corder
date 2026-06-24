@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.56] — 2026-06-25
+
+### Changed
+- Recording without screen video now uses much less power. The app was capturing the whole screen even when video was off (just to throw the frames away), which was the real reason recording heated the Mac — far more than the video encoder. Audio-only recording now skips that entirely on most setups.
+
+### Fixed
+- Unplugging or switching headphones right as a recording starts no longer fails the recording with a coreaudio error — it now retries and recovers.
+
 ## [0.14.55] — 2026-06-25
 
 ### Changed
