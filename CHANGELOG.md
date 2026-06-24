@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.55] — 2026-06-25
+
+### Changed
+- Screen recording now puts far less load on your Mac. The heat came from the screen compositor doing a color conversion on every captured frame, not from the encoder — recording now captures in the display's native format and encodes with H.264, cutting the recording-time compositor load by roughly two thirds (on par with other recorders). Screen video is also capped at 1080p so a 4K/5K display doesn't blow up the frame size.
+
 ## [0.14.54] — 2026-06-24
 
 ### Fixed

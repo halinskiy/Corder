@@ -224,27 +224,26 @@ final class CaptureEngine: NSObject {
         // "Stream failed to start audio" on devices where the actual output is
         // mono (Bluetooth headsets, some external DACs, AirPods in HFP mode).
         let config = SCStreamConfiguration()
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
-        // Screen video is captured at HALF the backing resolution. A
-        // meeting screen-share reads perfectly fine at this, and it cuts
-        // the encoder's per-frame pixel count to ~1/4 — the single biggest
-        // lever on the "screen recording loads the CPU/memory" complaint.
-        // SCStream does the downscale in its own capture pipeline (cheap,
-        // GPU), so the encoder never sees the full-res frame. Audio capture
-        // is entirely unaffected. Round to even dimensions — YUV 4:2:0
-        // requires it.
-        let videoScale: CGFloat = 0.5
-        let vw = Int(CGFloat(captureWidth) * scale * videoScale)
-        let vh = Int(CGFloat(captureHeight) * scale * videoScale)
-        config.width = vw - (vw % 2)
-        config.height = vh - (vh % 2)
-        // YUV (4:2:0) is the H.264 encoder's native input format; using BGRA
-        // forces SCStream → encoder to do an RGB↔YUV pass internally, and on
-        // some macOS builds the converter throws -16122 partway through and
-        // the writer flips to .failed. Feeding YUV directly is faster and
-        // avoids the conversion path entirely.
-        config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-        config.queueDepth = 6
+        // Output size: the display's point resolution, capped at 1080p height
+        // so a 4K/5K panel doesn't make the encoder chew huge frames. Aspect-
+        // matched + even dimensions (H.264 requirement). Tracer-style "fixed
+        // 1080p cap", NOT backing-resolution-scaled.
+        let srcAspect = captureHeight > 0
+            ? CGFloat(captureWidth) / CGFloat(captureHeight) : 16.0 / 9.0
+        let outH = min(1080, captureHeight)
+        let outW = Int((CGFloat(outH) * srcAspect).rounded())
+        config.width = outW - (outW % 2)
+        config.height = outH - (outH % 2)
+        // BGRA = the display framebuffer's NATIVE format. Requesting YUV here
+        // forced ScreenCaptureKit/WindowServer to run an RGB→YUV color
+        // conversion on EVERY captured frame — measured as the dominant cost
+        // (WindowServer pegged ~88% during recording, the encoder itself was
+        // cheap). Delivering BGRA straight through skips that conversion; the
+        // hardware H.264 encoder takes BGRA and does its own conversion in
+        // silicon for ~free. This is the single biggest lever on the
+        // "recording heats the Mac" complaint (and matches Tracer/Loom).
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.queueDepth = 5
         // 10 fps is plenty for meeting recordings — cursor and window
         // motion read fine at that rate, and it's a third fewer frames for
         // the encoder than 15 fps (less CPU, smaller file) with no
@@ -283,20 +282,20 @@ final class CaptureEngine: NSObject {
             try? FileManager.default.removeItem(at: videoURL)
             let writer = try AVAssetWriter(url: videoURL, fileType: .mov)
             let videoSettings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.hevc,
+                // H.264 (not HEVC): the Apple-Silicon H.264 hardware encoder
+                // is more power-efficient than HEVC, and it takes BGRA input
+                // natively. Matches what Tracer/Loom use.
+                AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: config.width,
                 AVVideoHeightKey: config.height,
                 AVVideoCompressionPropertiesKey: [
-                    // Average ~1.0 Mbps. Half-resolution + 10 fps screen
-                    // content is mostly static, so the encoder dips well
-                    // below this most of the time.
-                    AVVideoAverageBitRateKey: 1_000_000,
+                    // ~2.5 Mbps for 1080p10 H.264 screen content (mostly
+                    // static, dips well below most of the time).
+                    AVVideoAverageBitRateKey: 2_500_000,
                     AVVideoExpectedSourceFrameRateKey: 10,
-                    // I-frame every 4s at 10fps. Lets the user scrub the
-                    // recorded video in the Library without long waits to
-                    // the next keyframe.
+                    // I-frame every 4s at 10fps → fast scrubbing in the Library.
                     AVVideoMaxKeyFrameIntervalKey: 40,
-                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel as String
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
                 ]
             ]
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
@@ -309,7 +308,7 @@ final class CaptureEngine: NSObject {
                 self.videoInput = input
                 self.videoSessionStarted = false
                 self.videoFramesAppended = 0
-                FileLogger.log("CaptureEngine.start: AVAssetWriter armed (HEVC, \(config.width)x\(config.height), 10fps, 1.0 Mbps)")
+                FileLogger.log("CaptureEngine.start: AVAssetWriter armed (H.264, \(config.width)x\(config.height), 10fps, 2.5 Mbps, BGRA)")
             } else {
                 FileLogger.log("CaptureEngine.start: AVAssetWriter.startWriting failed: \(writer.error?.localizedDescription ?? "?"). Continuing without video.")
             }
