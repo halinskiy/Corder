@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.53] — 2026-06-24
+
+### Fixed
+- Re-generating a transcript from cache no longer counts toward your monthly usage or moves an older meeting into the current month.
+- On Intel Macs, hitting the monthly cloud limit now shows an upgrade message instead of quietly continuing.
+- The update dialog's buttons are now translated.
+
 ## [0.14.52] — 2026-06-24
 
 ### Changed

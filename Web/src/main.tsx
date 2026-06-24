@@ -666,7 +666,7 @@ function App() {
       {/* Sparkle update modal — rendered into the same WebView so a
           `position: fixed; inset: 0` overlay covers the whole Library,
           not a fragment-sized child window. */}
-      <UpdateModalHost />
+      <UpdateModalHost lang={lang} />
     </div>
   );
 }
