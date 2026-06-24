@@ -20,7 +20,13 @@ enum Hallucinations {
         "продолжение в следующем видео",
         "продолжение в следующем выпуске",
         "спасибо за просмотр",
-        "спасибо за внимание",
+        // NOTE: "спасибо за внимание" / "have a great day" / "have a
+        // wonderful day" / "дякую за увагу" were REMOVED — they are the
+        // standard way people genuinely CLOSE a meeting or presentation,
+        // not just YouTube-outro noise, and the launch purge hard-DELETEs
+        // matches (irreversible). The distinctive multi-word phrases below
+        // ("thank you for watching", "i hope you will enjoy", …) still
+        // catch the real hallucinations Whisper emits over silence.
         // Russian YouTube-outro farewells Whisper emits over near-silence
         // (seen in benchmark: "До скорых встреч, пока, до."). Distinctive
         // multi-word phrases so genuine "до встречи завтра" speech is safe.
@@ -43,8 +49,6 @@ enum Hallucinations {
         "hope you enjoy this video",
         "enjoy watching this video",
         "enjoy this video",
-        "have a wonderful day",
-        "have a great day",
         "see you in the next video",
         "see you in the next one",
         "see you next time",
@@ -62,7 +66,6 @@ enum Hallucinations {
         "редактор субтитров",
         "субтитри",
         "дякую за перегляд",
-        "дякую за увагу",
     ]
 
     static func isHallucination(_ text: String) -> Bool {
@@ -87,5 +90,24 @@ enum Hallucinations {
             if Double(pat.count) >= Double(normalised.count) * 0.6 { return true }
         }
         return false
+    }
+
+    /// Stricter, EXACT-only variant for the destructive launch-time purge.
+    /// Returns true only when the WHOLE segment is a known artefact, never
+    /// on the 60%-domination substring rule. `purgeKnownHallucinations`
+    /// hard-DELETEs matches from already-stored transcripts (irreversible),
+    /// so a real sentence that merely CONTAINS a pattern ("Спасибо за
+    /// просмотр презентации") must survive there even though the live
+    /// insert-time filter (`isHallucination`) still skips it.
+    static func isExactHallucination(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let stripped = lower.unicodeScalars.filter {
+            CharacterSet.alphanumerics.contains($0) || $0 == " "
+        }
+        let normalised = String(String.UnicodeScalarView(stripped))
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        guard !normalised.isEmpty else { return false }
+        return patterns.contains(normalised)
     }
 }

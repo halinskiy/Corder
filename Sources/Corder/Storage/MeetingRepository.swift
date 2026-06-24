@@ -495,6 +495,29 @@ struct MeetingRepository {
         }
     }
 
+    /// Targeted UPDATE of exactly the columns a transcribe FINISH sets
+    /// (status, and optionally transcribed_at). A full `updateMeeting`
+    /// here would carry the stale snapshot read at the START of the run and
+    /// silently revert pin / title / expected_other_speakers edits the user
+    /// made via other routes WHILE the (often minutes-long) transcribe ran.
+    /// `transcribedAt == nil` leaves the timestamp untouched (a cache-hit
+    /// re-map keeps its original usage month). Mirrors `setTranscribeStart`.
+    func setTranscribeFinished(meetingId: String,
+                               status: MeetingStatus,
+                               transcribedAt: Int64?) throws {
+        try dbq.write { db in
+            if let ts = transcribedAt {
+                try db.execute(
+                    sql: "UPDATE meetings SET status = ?, transcribed_at = ? WHERE id = ?",
+                    arguments: [status.rawValue, ts, meetingId])
+            } else {
+                try db.execute(
+                    sql: "UPDATE meetings SET status = ? WHERE id = ?",
+                    arguments: [status.rawValue, meetingId])
+            }
+        }
+    }
+
     /// Bump the consecutive-attempt counter at the start of a transcribe.
     func incrementTranscribeAttempts(meetingId: String) throws {
         try dbq.write { db in

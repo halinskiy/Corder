@@ -824,11 +824,10 @@ final class TranscriptionPipeline {
             if !hasAnyContent {
                 FileLogger.log("transcribe(): no speech detected — auto-archiving \(meetingId)")
                 let now = Int64(Date().timeIntervalSince1970 * 1000)
-                var silent = meeting
-                silent.status = .ready
-                silent.transcribedAt = now
-                silent.archivedAt = now
-                try? repo.updateMeeting(silent)
+                // Targeted writes (NOT full updateMeeting) so a pin/rename the
+                // user did during the run survives the auto-archive.
+                try? repo.setTranscribeFinished(meetingId: meetingId, status: .ready, transcribedAt: now)
+                try? repo.setArchived(meetingId: meetingId, archivedAt: now)
                 // Best-effort: drop the local audio dir too — there's
                 // nothing of value in it. Dropbox archive is skipped
                 // by virtue of returning before the upload branch.
@@ -1205,15 +1204,16 @@ final class TranscriptionPipeline {
             ))
         }
 
-        var m = meeting
-        m.status = .ready
-        // Only refresh transcribedAt on a REAL run. A cache-hit re-map (no
-        // cloud work) must keep the original timestamp, else an old meeting
-        // is pulled into the current usage month and re-credited as if it
-        // were freshly transcribed (the server Worker is the real cap wall,
-        // but this keeps the client usage display honest).
-        if stampNow { m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000) }
-        try repo.updateMeeting(m)
+        // Targeted write (NOT full updateMeeting): a transcribe can run for
+        // minutes during which the user may pin / rename / set expected
+        // speakers on the .transcribing row via other routes; a full-struct
+        // write from the stale `meeting` snapshot would revert those edits.
+        // Only refresh transcribedAt on a REAL run — a cache-hit re-map keeps
+        // the original timestamp so an old meeting isn't pulled into the
+        // current usage month and re-credited as if freshly transcribed.
+        try repo.setTranscribeFinished(
+            meetingId: meetingId, status: .ready,
+            transcribedAt: stampNow ? Int64(Date().timeIntervalSince1970 * 1000) : nil)
         FileLogger.log("mapTurns: stored \(turns.count) turns for \(meetingId), userLabel=\(userLabel ?? "nil")")
         return userLabel
     }
@@ -1540,10 +1540,12 @@ final class TranscriptionPipeline {
             ))
         }
 
-        var m = meeting
-        m.status = .ready
-        if stampNow { m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000) }  // cache-hit re-map keeps original month
-        try repo.updateMeeting(m)
+        // Targeted write (NOT full updateMeeting) so concurrent pin / title /
+        // expected-speaker edits made during the run aren't reverted from the
+        // stale snapshot; cache-hit re-map keeps the original month.
+        try repo.setTranscribeFinished(
+            meetingId: meetingId, status: .ready,
+            transcribedAt: stampNow ? Int64(Date().timeIntervalSince1970 * 1000) : nil)
         FileLogger.log("mapDual: stored \(items.count) items (user=\(userTurns.count), other=\(otherTurns.count)) for \(meetingId)")
     }
 
@@ -1656,10 +1658,12 @@ final class TranscriptionPipeline {
             stored += 1
         }
 
-        var m = meeting
-        m.status = .ready
-        if stampNow { m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000) }  // cache-hit re-map keeps original month
-        try repo.updateMeeting(m)
+        // Targeted write (NOT full updateMeeting) so concurrent pin / title /
+        // expected-speaker edits made during the run aren't reverted from the
+        // stale snapshot; cache-hit re-map keeps the original month.
+        try repo.setTranscribeFinished(
+            meetingId: meetingId, status: .ready,
+            transcribedAt: stampNow ? Int64(Date().timeIntervalSince1970 * 1000) : nil)
         FileLogger.log("mapInPerson: stored \(stored) segs, kept \(keptLabels.count) speakers (expectedOther=\(expected.map(String.init) ?? "nil"), distinct=\(distinctLabels.count)) for \(meetingId)")
     }
 
@@ -2198,9 +2202,13 @@ final class TranscriptionPipeline {
     static func purgeKnownHallucinations(repo: MeetingRepository) {
         do {
             let segs = try repo.allSegments()
+            // EXACT-only here (not isHallucination's 60% substring rule):
+            // this is a permanent DELETE of already-stored transcript lines,
+            // so only nuke a segment that is ENTIRELY a known artefact. A
+            // real sentence that merely contains a pattern must survive.
             let badIds = segs.compactMap { s -> Int64? in
                 guard let id = s.id else { return nil }
-                return Hallucinations.isHallucination(s.text) ? id : nil
+                return Hallucinations.isExactHallucination(s.text) ? id : nil
             }
             if !badIds.isEmpty {
                 try repo.deleteSegments(ids: badIds)
