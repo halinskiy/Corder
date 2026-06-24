@@ -1,6 +1,7 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import { StarsCanvas } from "./StarsCanvas";
+import { Lang, pickStrings } from "../i18n";
 
 /// Full-screen update modal rendered inside the Library WKWebView.
 /// State is pushed in by the Swift side via `window.corderUpdateState(...)`
@@ -93,7 +94,8 @@ function cleanNotes(raw: string, version: string): string {
     .trim();
 }
 
-export function UpdateModalHost() {
+export function UpdateModalHost({ lang }: { lang: Lang }) {
+  const t = pickStrings(lang);
   const [state, setState] = React.useState<UpdateModalState>(HIDDEN);
   const [notesOpen, setNotesOpen] = React.useState(false);
   // `leaving` is the brief window between Swift saying "hide" and the
@@ -192,7 +194,7 @@ export function UpdateModalHost() {
     state.phase === "installing";
   const busy = working && !state.primaryEnabled;
   const determinate = busy && state.showsProgress && state.progress > 0;
-  const buttonLabel = isInstallPhase ? "Install" : state.primaryLabel;
+  const buttonLabel = isInstallPhase ? (t.update_install ?? "Install") : state.primaryLabel;
   const fillPct = determinate ? Math.max(4, state.progress * 100) : 0;
 
   if (!state.visible && !leaving) return null;
@@ -270,7 +272,7 @@ export function UpdateModalHost() {
             className="update-secondary"
             onClick={onDismiss}
           >
-            Later
+            {t.update_later ?? "Later"}
           </button>
         </div>
 

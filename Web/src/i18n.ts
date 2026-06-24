@@ -460,6 +460,10 @@ interface Strings {
 
   update_available_label: string;
   update_available_title: string;
+  // Optional (update modal buttons) — fall back to English in locales
+  // that haven't translated them yet.
+  update_install?: string;
+  update_later?: string;
 
   archive_open_title: string;
   /// Tooltip shown on the disabled Archive toolbar button when the
@@ -819,6 +823,8 @@ const ru: Strings = {
   error_label: "Ошибка",
   loading: "Загрузка…",
 
+  update_install: "Установить",
+  update_later: "Позже",
   update_available_label: "Доступен апдейт",
   pricing_title: "Улучшить Corder",
   pricing_upgrade: "Апгрейд",
@@ -1189,6 +1195,8 @@ const en: Strings = {
   error_label: "Error",
   loading: "Loading…",
 
+  update_install: "Install",
+  update_later: "Later",
   update_available_label: "Update available",
   pricing_title: "Upgrade Corder",
   pricing_upgrade: "Upgrade",
@@ -1526,6 +1534,8 @@ const uk: Strings = {
   error_label: "Помилка",
   loading: "Завантаження…",
 
+  update_install: "Встановити",
+  update_later: "Пізніше",
   update_available_label: "Доступне оновлення",
   pricing_title: "Покращити Corder",
   pricing_upgrade: "Апгрейд",

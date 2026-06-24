@@ -257,9 +257,22 @@ final class TranscriptionPipeline {
                 let bucket = (try? repo.usageSecondsByClass(sinceMs: sinceMs)) ?? [:]
                 let simAdv = Int64(UserDefaults.standard.integer(forKey: "Corder.set.simAdvancedUsedSeconds"))
                 let usedAdv = (bucket["advanced"] ?? 0) + simAdv
-                if usedAdv >= Int64(limit), LocalWhisperTranscriber.isAvailable() {
-                    FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s) — falling back to whisperLocal for this run")
-                    effective = .whisperLocal
+                if usedAdv >= Int64(limit) {
+                    if LocalWhisperTranscriber.isAvailable() {
+                        FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s) — falling back to whisperLocal for this run")
+                        effective = .whisperLocal
+                    } else {
+                        // Intel: no on-device fallback. Do NOT silently keep
+                        // going on cloud — the SERVER cap is fail-open on a D1
+                        // read error (returns 0 used), so an over-cap Intel
+                        // user during a metering outage could leak unlimited
+                        // paid cloud. Refuse the run with a cap message.
+                        FileLogger.log("transcribe(): advanced cap reached on Intel (\(usedAdv)s/\(limit)s, no on-device fallback) — refusing cloud for this run")
+                        TranscriptionErrors.record(meetingId: meetingId,
+                                                   message: "Monthly cloud limit reached. Upgrade your plan or wait for next month.")
+                        try? repo.setStatus(meetingId: meetingId, status: .failed)
+                        return
+                    }
                 }
             }
         }
@@ -825,10 +838,14 @@ final class TranscriptionPipeline {
 
             // 3. Map turns → speakers + segments.
             let chosenUserLabel: String?
+            // stampNow=false on a cache hit: don't refresh transcribedAt /
+            // re-credit usage for a run that did no cloud work (see the
+            // mappers). A fresh run (haveRaw=false) stamps as normal.
             if usingDualTrack {
                 try mapDualTrackTurns(meetingId: meetingId, meeting: meeting,
                                       userTurns: userTurns, otherTurns: otherTurns,
                                       inPerson: inPerson,
+                                      stampNow: !haveRaw,
                                       repo: repo)
                 chosenUserLabel = nil    // not relevant in dual-track
             } else {
@@ -836,6 +853,7 @@ final class TranscriptionPipeline {
                     meetingId: meetingId, meeting: meeting,
                     turns: legacyTurns, micURL: micURL, systemURL: systemURL,
                     forcedUserLabel: cachedUserLabel,
+                    stampNow: !haveRaw,
                     repo: repo
                 )
             }
@@ -1107,6 +1125,7 @@ final class TranscriptionPipeline {
                                     turns: [GeminiTranscriber.Turn],
                                     micURL: URL, systemURL: URL,
                                     forcedUserLabel: String? = nil,
+                                    stampNow: Bool = true,
                                     repo: MeetingRepository) throws -> String? {
         // Wipe any previous speakers/segments we might have written for
         // this meeting before. clearTranscript was called once at the
@@ -1188,7 +1207,12 @@ final class TranscriptionPipeline {
 
         var m = meeting
         m.status = .ready
-        m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        // Only refresh transcribedAt on a REAL run. A cache-hit re-map (no
+        // cloud work) must keep the original timestamp, else an old meeting
+        // is pulled into the current usage month and re-credited as if it
+        // were freshly transcribed (the server Worker is the real cap wall,
+        // but this keeps the client usage display honest).
+        if stampNow { m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000) }
         try repo.updateMeeting(m)
         FileLogger.log("mapTurns: stored \(turns.count) turns for \(meetingId), userLabel=\(userLabel ?? "nil")")
         return userLabel
@@ -1397,6 +1421,7 @@ final class TranscriptionPipeline {
                                    userTurns rawUserTurns: [GeminiTranscriber.Turn],
                                    otherTurns: [GeminiTranscriber.Turn],
                                    inPerson: Bool = false,
+                                   stampNow: Bool = true,
                                    repo: MeetingRepository) throws {
         try? repo.clearTranscript(meetingId: meetingId)
 
@@ -1413,7 +1438,7 @@ final class TranscriptionPipeline {
         //    collapse to 1 unless the user explicitly said "Just me".
         if inPerson {
             try mapInPersonTurns(meetingId: meetingId, meeting: meeting,
-                                 turns: otherTurns, repo: repo)
+                                 turns: otherTurns, stampNow: stampNow, repo: repo)
             return
         }
 
@@ -1517,7 +1542,7 @@ final class TranscriptionPipeline {
 
         var m = meeting
         m.status = .ready
-        m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        if stampNow { m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000) }  // cache-hit re-map keeps original month
         try repo.updateMeeting(m)
         FileLogger.log("mapDual: stored \(items.count) items (user=\(userTurns.count), other=\(otherTurns.count)) for \(meetingId)")
     }
@@ -1546,6 +1571,7 @@ final class TranscriptionPipeline {
     ///     where picking "2"/"3" showed 1/2.
     private func mapInPersonTurns(meetingId: String, meeting: Meeting,
                                   turns: [GeminiTranscriber.Turn],
+                                  stampNow: Bool = true,
                                   repo: MeetingRepository) throws {
         try? repo.clearTranscript(meetingId: meetingId)
 
@@ -1632,7 +1658,7 @@ final class TranscriptionPipeline {
 
         var m = meeting
         m.status = .ready
-        m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        if stampNow { m.transcribedAt = Int64(Date().timeIntervalSince1970 * 1000) }  // cache-hit re-map keeps original month
         try repo.updateMeeting(m)
         FileLogger.log("mapInPerson: stored \(stored) segs, kept \(keptLabels.count) speakers (expectedOther=\(expected.map(String.init) ?? "nil"), distinct=\(distinctLabels.count)) for \(meetingId)")
     }
