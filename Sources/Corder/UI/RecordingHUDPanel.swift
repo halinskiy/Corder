@@ -60,6 +60,22 @@ final class RecordingHUDPanel {
             FileLogger.log("RecordingHUDPanel.ensureVisible: already visible — skip")
             return
         }
+        // Reuse a panel that was only ordered OUT (not torn down). The
+        // common case: `setLibrarySuppressed(true)` does `window?.orderOut`
+        // but keeps `window`, so its `isVisible` is false. Without this
+        // reuse, every suppress→unsuppress toggle (each Space switch,
+        // ⌘H, minimize, app-switch, Library close while recording) would
+        // build a BRAND-NEW panel and overwrite `window`, orphaning the
+        // previous NSPanel + SwiftUI TimelineView tree. The orphans are
+        // never torn down and keep re-rendering off-screen — an unbounded
+        // memory + power leak that grows with how much the user moves
+        // around during a call. Just bring the existing panel back.
+        if let existing = window {
+            presentation.dismissing = false
+            existing.orderFrontRegardless()
+            FileLogger.log("RecordingHUDPanel.ensureVisible: re-showed existing panel (no rebuild)")
+            return
+        }
         // Host the SwiftUI view inside HUDHostingView so the pointing-hand
         // cursor sticks even though `isMovableByWindowBackground` would
         // otherwise have AppKit's drag handler reset it. addCursorRect

@@ -57,24 +57,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // again automatically. The audio files (mic.wav / system.wav) are
         // preserved through transcription, so resume is cheap. User sees
         // the spinner banner come back, not a red "failed" card.
-        if let stuck = try? AppContext.shared.repo.stuckTranscribingMeetingIds(), !stuck.isEmpty {
-            for id in stuck {
-                FileLogger.log("AppDelegate: auto-resuming transcription for \(id) (was stuck on prior launch)")
-                TranscriptionErrors.clear(meetingId: id)
-                TranscriptionPipeline.shared.enqueue(meetingId: id)
+        // Recover stuck + failed-retriable meetings SEQUENTIALLY (await each
+        // before starting the next). `enqueue` runs each meeting as its own
+        // concurrent Task, so firing several at launch used to run two model
+        // loads at once — for a whisperLocal user with >=2 recovered rows that
+        // races Core ML / Metal (the documented concurrent-GPU-load SIGABRT).
+        // Recovery is rare and runs in the background, so one-at-a-time costs
+        // nothing the user feels and is safe for every provider.
+        Task { @MainActor in
+            if let stuck = try? AppContext.shared.repo.stuckTranscribingMeetingIds() {
+                for id in stuck {
+                    FileLogger.log("AppDelegate: auto-resuming transcription for \(id) (was stuck on prior launch)")
+                    TranscriptionErrors.clear(meetingId: id)
+                    await TranscriptionPipeline.shared.enqueue(meetingId: id).value
+                }
             }
-        }
-        // Also auto-retry meetings that hard-FAILED on a prior run, as long
-        // as they're still under the retry budget (3 attempts). With the
-        // per-chunk resume cache this is cheap — a transient failure
-        // (network drop, killed app) recovers on its own instead of
-        // leaving a red "failed" card the user must re-transcribe by hand.
-        // A genuinely-broken row stops after 3 tries (no re-bill loop).
-        if let retriable = try? AppContext.shared.repo.failedRetriableMeetingIds(maxAttempts: 3), !retriable.isEmpty {
-            for id in retriable {
-                FileLogger.log("AppDelegate: auto-retrying failed transcription for \(id) (under retry budget)")
-                TranscriptionErrors.clear(meetingId: id)
-                TranscriptionPipeline.shared.enqueue(meetingId: id)
+            // Also auto-retry meetings that hard-FAILED on a prior run, as long
+            // as they're still under the retry budget (3 attempts). With the
+            // per-chunk resume cache this is cheap — a transient failure
+            // (network drop, killed app) recovers on its own instead of
+            // leaving a red "failed" card the user must re-transcribe by hand.
+            // A genuinely-broken row stops after 3 tries (no re-bill loop).
+            if let retriable = try? AppContext.shared.repo.failedRetriableMeetingIds(maxAttempts: 3) {
+                for id in retriable {
+                    FileLogger.log("AppDelegate: auto-retrying failed transcription for \(id) (under retry budget)")
+                    TranscriptionErrors.clear(meetingId: id)
+                    await TranscriptionPipeline.shared.enqueue(meetingId: id).value
+                }
             }
         }
         // One-time cleanup of "ghost" speakers (rows with zero segments) —

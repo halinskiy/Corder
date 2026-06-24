@@ -16,6 +16,20 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.58] — 2026-06-25
+
+### Fixed
+- The floating recording pill no longer slowly leaks memory and power
+  when you move between Spaces or apps during a long recording.
+- A genuine meeting sign-off ("Спасибо за внимание", "Have a great day")
+  is no longer mistaken for a subtitle artefact and dropped from the
+  transcript.
+- Pinning or renaming a meeting while it is still transcribing no longer
+  gets undone when transcription finishes.
+- Fixed a rare crash when several interrupted recordings resume at once
+  after a restart (on-device transcription).
+- Hardened the built-in local server against cross-site requests.
+
 ## [0.14.57] — 2026-06-25
 
 ### Changed

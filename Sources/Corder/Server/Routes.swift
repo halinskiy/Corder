@@ -7,6 +7,34 @@ import UserNotifications
 
 enum Routes {
     static func register(server: HttpServer, repo: MeetingRepository) {
+        // CSRF guard for the loopback API. The server binds 127.0.0.1 only,
+        // but a malicious web page the user is browsing can still fire
+        // "simple" cross-origin POSTs at http://127.0.0.1:<port>/api/... (the
+        // OS-assigned port is guessable by probing) to trigger
+        // start/stop/archive without ever reading the response. Such a
+        // cross-origin request always carries a foreign `Origin` header; the
+        // WKWebView app's own requests carry a loopback Origin (or none), and
+        // native / MCP clients send no Origin at all. So: reject any
+        // state-changing request whose Origin is present AND not loopback.
+        // GET/HEAD pass through (the mcp-token GET is already SOP-protected by
+        // sending no CORS headers, so a cross-origin page can't read it).
+        server.middleware.append { req in
+            let method = req.method.uppercased()
+            guard method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"
+            else { return nil }
+            guard let origin = req.headers["origin"], !origin.isEmpty else { return nil }
+            let o = origin.lowercased()
+            // An Origin is scheme+host[+:port] with NO path, so a loopback
+            // origin is EXACTLY one of these bases or that base followed by
+            // ":<port>". A bare `hasPrefix("http://127.0.0.1")` would also
+            // match an attacker-registrable `http://127.0.0.1.evil.com`, so
+            // require the next char to be a port separator or end-of-string.
+            let loopbackBases = ["http://127.0.0.1", "http://localhost", "http://[::1]"]
+            let loopback = loopbackBases.contains { o == $0 || o.hasPrefix($0 + ":") }
+            if loopback { return nil }
+            FileLogger.log("Routes: rejected cross-origin \(method) \(req.path) (Origin=\(origin))")
+            return .raw(403, "Forbidden", nil, nil)
+        }
         server.get["/"] = { _ in serveIndex() }
         server.get["/index.html"] = { _ in serveIndex() }
         server.get["/assets/:path"] = { req in serveAsset(path: req.params[":path"] ?? "") }
