@@ -16,6 +16,23 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.57] — 2026-06-25
+
+### Changed
+- Corder is now English-only. The interface-language switcher has been
+  removed. Transcription still understands every language and stays in
+  the original; only the app's own UI is fixed to English.
+- New "Drag to install" installer window, with the soft Corder blobs.
+- The floating recording pill runs at a lower frame rate, so it costs
+  less while you record and while it sits idle.
+
+### Fixed
+- Calls with three or more people no longer collapse everyone but you
+  into a single "other" voice. Corder now estimates the real number of
+  speakers instead of assuming one.
+- The "Transcription error. Send a report." notice stays put until you
+  send the report or close it, instead of vanishing on a timer.
+
 ## [0.14.56] — 2026-06-25
 
 ### Changed

@@ -119,7 +119,6 @@ interface Props {
   /// way it does for Archive.
   onSettingsOpenChange?: (open: boolean) => void;
   lang: Lang;
-  onLangChange: (next: Lang) => void;
   /// Cumulative pointer dx while dragging the transcript/right-panel
   /// divider (negative dx = handle moved left = right panel widens).
   onResizeSplit: (dx: number) => void;
@@ -130,7 +129,7 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onLangChange, onResizeSplit, onResetSplit, onPlayingChange, onSettingsOpenChange, t }: Props) {
+export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onResizeSplit, onResetSplit, onPlayingChange, onSettingsOpenChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
@@ -649,10 +648,10 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
             />
           </div>
           <div style={{ display: rightTab === "settings-general" ? "contents" : "none" }}>
-            <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="general" />
+            <SettingsPane t={t} section="general" />
           </div>
           <div style={{ display: rightTab === "settings-advanced" ? "contents" : "none" }}>
-            <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="advanced" />
+            <SettingsPane t={t} section="advanced" />
           </div>
           {/* IntegrationsPane mount disabled while the tab is
               hidden (see the comment in the tab strip above). */}

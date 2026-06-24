@@ -6,7 +6,7 @@ import {
   deleteAccount, setTestTier,
   type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
-import { LANGS, type Lang, type T } from "../i18n";
+import { type T } from "../i18n";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
 import { useTheme } from "../theme";
@@ -21,18 +21,9 @@ import { useTheme } from "../theme";
 /// IS optional.
 export function SettingsPane({
   t,
-  lang,
-  onLangChange,
   section = "general",
 }: {
   t: T;
-  /// Current UI language. Surfaced here so the Language block can
-  /// render its own SettingsSelect inline — same affordance as
-  /// Microphone / Transcription model. Parent owns the persisted
-  /// state (lifted into App-level so MainHeader / ProfileMenu /
-  /// Settings stay in sync).
-  lang: Lang;
-  onLangChange: (next: Lang) => void;
   /// Which slice of Settings to render. The parent surface owns the
   /// tab strip (General / Advanced) so it can sit alongside the
   /// Recording back-chip in MeetingView / Dashboard headers, instead
@@ -108,11 +99,6 @@ export function SettingsPane({
   return (
     <div className="settings-pane">
       <div style={{ display: section === "general" ? "contents" : "none" }}>
-        {/* Language sits at the very top of General per request. */}
-        <SoloCard>
-          <LanguageBlock lang={lang} onChange={onLangChange} t={t} />
-        </SoloCard>
-
         <SoloCard>
           <ThemeToggleRow t={t} />
         </SoloCard>
@@ -483,43 +469,6 @@ function TranscriptionLanguageRow({
         disabled={disabled}
         onChange={onChange}
         ariaLabel={title}
-      />
-    </div>
-  );
-}
-
-/// ASR provider override picker. Visually identical to `MicDevicePicker`
-/// (`.hk-block`/`.mic-block` shell, label + description + full-width
-/// native `<select>`). Three concrete providers plus an `auto` entry
-/// that clears the override and lets the server pick by tier. The
-/// Free tier sees the cloud options listed but disabled (Pro+ suffix)
-/// so the upgrade path is discoverable — clicking one shows a toast
-/// instead of switching. Apple Silicon is detected server-side; on
-/// Intel a small warning line surfaces because WhisperKit's Core ML
-function LanguageBlock({
-  lang, onChange, t,
-}: {
-  lang: Lang;
-  onChange: (next: Lang) => void;
-  t: T;
-}) {
-  const options: SettingsSelectOption<Lang>[] = LANGS.map((l) => ({
-    value: l.code,
-    label: l.native,
-    meta: l.name !== l.native ? l.name : undefined,
-    leading: <span className={`fi fi-${l.cc} settings-flag`} aria-hidden />,
-  }));
-  return (
-    <div className="hk-block mic-block" aria-label={t.profile_language ?? "Language"}>
-      <div className="settings-row-label">{t.profile_language ?? "Language"}</div>
-      <div className="settings-row-desc">
-        {t.settings_language_desc ?? "Pick the interface language."}
-      </div>
-      <SettingsSelect<Lang>
-        value={lang}
-        options={options}
-        onChange={onChange}
-        ariaLabel={t.profile_language ?? "Language"}
       />
     </div>
   );
