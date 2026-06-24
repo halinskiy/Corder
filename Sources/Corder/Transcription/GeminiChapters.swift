@@ -33,10 +33,10 @@ enum GeminiChapters {
         if jwt.isEmpty && key.isEmpty { return nil }
         let base = await GeminiTranscriber.endpointBaseForProxy()
 
-        // Cap the prompt — Gemini Flash Lite gives stable chapter
-        // judgements from ~200 lines, and stuffing a 2-hour
-        // transcript would blow the input window without improving
-        // the output.
+        // Cap the prompt at 2000 lines — covers a long meeting while staying
+        // well inside Flash-Lite's input window (a couple-hour transcript is
+        // ~tens of k tokens, far from the limit). The cap is a safety bound,
+        // not a quality knob.
         let trimmed = Array(timedLines.prefix(2000))
         var lines = ""
         for (idx, line) in trimmed.enumerated() {
@@ -144,12 +144,16 @@ enum GeminiChapters {
             else { return nil }
             return Chapter(startMs: max(0, startMs), title: title)
         }
-        // Drop anything past the last real line and force a 00:00 first
-        // chapter — the prompt asks for it, but a stray model can drift.
+        // Force the first chapter to start at 00:00 — the prompt asks for it,
+        // but the earliest transcript line is almost never at 0 ms (VAD
+        // projection + pre-roll push it in by hundreds of ms), so we must NOT
+        // insert a synthetic chapter (that duplicated the real first chapter's
+        // title on nearly every meeting). Snap the earliest chapter to 0 in
+        // place instead.
         guard !chapters.isEmpty else { return nil }
         var fixed = chapters.sorted { $0.startMs < $1.startMs }
-        if fixed.first?.startMs != 0 {
-            fixed.insert(Chapter(startMs: 0, title: fixed.first?.title ?? "Start"), at: 0)
+        if let first = fixed.first, first.startMs != 0 {
+            fixed[0] = Chapter(startMs: 0, title: first.title)
         }
         return fixed
     }

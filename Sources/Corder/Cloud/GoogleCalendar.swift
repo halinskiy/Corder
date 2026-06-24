@@ -90,18 +90,40 @@ enum GoogleCalendar {
     /// Called by `authCallback` after a successful `session(from:)` WHEN a
     /// calendar connect was pending. Harvests the provider token and caches
     /// the upcoming events. No-op for ordinary sign-ins.
-    static func finishConnectIfPending() async {
+    /// `priorAccessToken`/`priorRefreshToken` are the Corder session that was
+    /// live BEFORE `authCallback` ran `session(from:)`. On an account
+    /// mismatch we restore them so a calendar connect can never leave the app
+    /// signed in as a different Google account (the documented invariant).
+    static func finishConnectIfPending(priorAccessToken: String? = nil,
+                                       priorRefreshToken: String? = nil) async {
         guard pendingConnect else { return }
         pendingConnect = false
         let expectedEmail = pendingConnectEmail
         pendingConnectEmail = nil
-        // Account guard: if the callback resolved to a DIFFERENT Google
-        // account than the one signed into Corder, do NOT pull that
-        // account's calendar (it would mismatch the Corder identity).
+        // Identity guard: `session(from:)` in authCallback ALREADY swapped the
+        // live session to whatever account the browser resolved to. If that's
+        // a DIFFERENT account than the one we connected as (or ANY account
+        // when none was signed in), the swap must be ROLLED BACK — otherwise a
+        // calendar connect silently changes the Corder identity (wrong
+        // account-id sandbox, wrong JWT/tier). Only logging + returning (the
+        // old behaviour) left the wrong identity in place.
         let nowEmail = SupabaseClientHolder.shared.auth.currentUser?.email
-        if let expectedEmail, let nowEmail, !expectedEmail.isEmpty,
-           expectedEmail.lowercased() != nowEmail.lowercased() {
-            FileLogger.log("GoogleCalendar: connect account mismatch (was \(expectedEmail), now \(nowEmail)) — not caching")
+        let identityChanged: Bool = {
+            guard let expectedEmail, !expectedEmail.isEmpty else { return true } // no prior identity → never bind an arbitrary account via connect
+            guard let nowEmail else { return false }
+            return expectedEmail.lowercased() != nowEmail.lowercased()
+        }()
+        if identityChanged {
+            FileLogger.log("GoogleCalendar: connect resolved to a different account (was \(expectedEmail ?? "none"), now \(nowEmail ?? "none")) — reverting session, not caching")
+            do {
+                if let at = priorAccessToken, let rt = priorRefreshToken {
+                    _ = try await SupabaseClientHolder.shared.auth.setSession(accessToken: at, refreshToken: rt)
+                } else {
+                    try await SupabaseClientHolder.shared.auth.signOut()
+                }
+            } catch {
+                FileLogger.log("GoogleCalendar: failed to revert session after connect mismatch — \(error)")
+            }
             return
         }
         let session = SupabaseClientHolder.shared.auth.currentSession

@@ -10,7 +10,6 @@ enum GeminiTitler {
     // flash-lite: a 3–7 word headline doesn't need full Flash; lite is
     // ~3–5× cheaper on text with no meaningful quality loss here.
     private static let model = "gemini-2.5-flash-lite"
-    private static let endpoint = "https://generativelanguage.googleapis.com/v1beta"
 
     static func generate(transcript: String) async -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,11 +92,20 @@ enum GeminiTitler {
         // (the "Го" / "Э" garbage). Returning nil makes the UI fall back
         // to the date label instead of showing a nonsense title.
         let words = cleaned.split(whereSeparator: { $0 == " " || $0 == "\n" })
+        // CJK (Chinese / Japanese) write without inter-word spaces, so a
+        // perfectly valid title is one "word" — the space-based word count
+        // would reject EVERY Chinese/Japanese title and fall back to the date
+        // label. Detect Han / Hiragana / Katakana and relax the word-count +
+        // char-floor rules for those scripts (Korean uses spaces, unaffected).
+        let hasCJK = cleaned.unicodeScalars.contains { s in
+            (0x4E00...0x9FFF).contains(s.value) ||   // CJK Unified Ideographs
+            (0x3400...0x4DBF).contains(s.value) ||   // CJK Ext A
+            (0x3040...0x30FF).contains(s.value)      // Hiragana + Katakana
+        }
         guard !cleaned.isEmpty,
               cleaned.count <= 80,
               cleaned.uppercased() != "NONE",
-              words.count >= 2,
-              cleaned.count >= 6
+              hasCJK ? cleaned.count >= 2 : (words.count >= 2 && cleaned.count >= 6)
         else { return nil }
         return cleaned
     }
