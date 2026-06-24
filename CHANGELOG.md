@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.54] — 2026-06-24
+
+### Fixed
+- Chapters no longer show a duplicate first entry at 0:00 with the same title.
+- Chinese and Japanese meeting titles are no longer dropped (the auto-title now accepts space-less scripts).
+- Connecting Google Calendar can no longer change which account you're signed in to — if the browser lands on a different account, the original sign-in is restored.
+- Hardened a few internal edges (segment edits are meeting-scoped, a token endpoint can't hang a worker, no duplicate sign-in taps).
+
 ## [0.14.53] — 2026-06-24
 
 ### Fixed
