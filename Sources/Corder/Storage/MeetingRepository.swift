@@ -372,10 +372,12 @@ struct MeetingRepository {
     /// original ASR text isn't kept — a re-transcribe regenerates it
     /// from scratch). `words_json` per-word timings are dropped so the
     /// in-segment karaoke highlight doesn't point at stale word offsets.
-    func setSegmentText(segmentId: Int64, text: String) throws {
+    /// Meeting-scoped (like `reassignSegment`) so a stale/forged segment id
+    /// can't edit text on a row belonging to a different meeting.
+    func setSegmentText(meetingId: String, segmentId: Int64, text: String) throws {
         try dbq.write { db in
-            try db.execute(sql: "UPDATE segments SET text = ?, words_json = NULL WHERE id = ?",
-                           arguments: [text, segmentId])
+            try db.execute(sql: "UPDATE segments SET text = ?, words_json = NULL WHERE id = ? AND meeting_id = ?",
+                           arguments: [text, segmentId, meetingId])
         }
     }
 

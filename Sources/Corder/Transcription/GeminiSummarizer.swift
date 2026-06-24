@@ -17,7 +17,6 @@ enum GeminiSummarizer {
     // flash-lite: a short plain-prose recap doesn't need full Flash;
     // ~3–5× cheaper on text with no meaningful quality loss here.
     private static let model = "gemini-2.5-flash-lite"
-    private static let endpoint = "https://generativelanguage.googleapis.com/v1beta"
 
     static func generate(transcript: String) async throws -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)

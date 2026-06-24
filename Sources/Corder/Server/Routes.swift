@@ -227,7 +227,11 @@ enum Routes {
                 FileLogger.log("mcpToken: no active session — \(error)")
             }
         }
-        semaphore.wait()
+        // Bound the wait like every other semaphore-bridged handler here
+        // (notification-status, setTestTier, submitLogs): the @MainActor hop +
+        // a slow token refresh could otherwise pin this Swifter worker thread.
+        // A timeout leaves `token` nil → the 401 path below, which is correct.
+        _ = semaphore.wait(timeout: .now() + 8)
         guard let token = token else {
             return .raw(401, "Unauthorized", ["Content-Type": "application/json"]) {
                 try $0.write(Array(#"{"error":"not signed in"}"#.utf8))
@@ -257,12 +261,19 @@ enum Routes {
         if let url = comps.url {
             Task { @MainActor in
                 do {
+                    // Capture the live session BEFORE the swap: a calendar
+                    // connect that lands on a different Google account must be
+                    // rolled back (finishConnectIfPending restores this), so a
+                    // connect can never change the Corder identity.
+                    let prior = SupabaseClientHolder.shared.auth.currentSession
                     try await SupabaseClientHolder.shared.auth.session(from: url)
                     FileLogger.log("authCallback: Supabase session established")
                     // If this callback was an incremental calendar connect
                     // (not a plain sign-in), harvest the calendar-scoped
                     // provider token + cache events. No-op otherwise.
-                    await GoogleCalendar.finishConnectIfPending()
+                    await GoogleCalendar.finishConnectIfPending(
+                        priorAccessToken: prior?.accessToken,
+                        priorRefreshToken: prior?.refreshToken)
                     NotificationCenter.default.post(
                         name: .corderSupabaseSignedIn, object: nil)
                 } catch {
@@ -1727,6 +1738,8 @@ enum Routes {
     }
 
     private static func editSegmentText(req: HttpRequest, repo: MeetingRepository) -> HttpResponse {
+        let mid = req.params[":id"] ?? ""
+        guard !mid.isEmpty else { return .badRequest(.text("missing meeting id")) }
         guard let segId = Int64(req.params[":segid"] ?? "") else {
             return .badRequest(.text("missing segment id"))
         }
@@ -1734,7 +1747,9 @@ enum Routes {
             let parsed = try JSONDecoder().decode(DTO.SegmentTextRequest.self, from: Data(req.body))
             let trimmed = parsed.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return .badRequest(.text("empty text")) }
-            try repo.setSegmentText(segmentId: segId, text: trimmed)
+            // Meeting-scope the UPDATE (like reassignSegment / mergeSpeaker) so
+            // a stale/forged segment id can't edit a row in another meeting.
+            try repo.setSegmentText(meetingId: mid, segmentId: segId, text: trimmed)
             return .ok(.text("ok"))
         } catch {
             return .badRequest(.text("\(error)"))

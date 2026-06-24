@@ -122,27 +122,14 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
                 if let email = result?.email, !email.isEmpty {
                     AppPaths.migrateLegacyIfNeeded(forEmail: email)
                 }
+                // Finishing sign-in relaunches the app (the new process
+                // boots into the right account folder + pulls from cloud).
+                // There is intentionally NO post-close toast / Library-open
+                // here: CorderRelaunch.now() terminates this process, so any
+                // code after it is unreachable. The relaunched app opens the
+                // Library itself on launch.
                 self?.close()
                 CorderRelaunch.now()
-                return
-                // Land the user in the main app: open the Library
-                // window and fire a welcome toast. We do this on the
-                // next runloop tick so the wizard's close animation
-                // doesn't fight the new key window's z-order.
-                DispatchQueue.main.async {
-                    LibraryWindow.shared.show(
-                        serverURL: AppContext.shared.server.baseURL)
-                    if let result {
-                        // Short, no em-dash. First sign-in this
-                        // install ever saw gets a bare "Welcome";
-                        // every later sign-in is "Welcome back".
-                        // `wasFirstSignIn` was captured BEFORE the
-                        // sign-in handler flipped the sticky flag.
-                        let title = result.wasFirstSignIn ? "Welcome" : "Welcome back"
-                        LibraryWindow.shared.postToast(
-                            title: title, body: "", kind: "success")
-                    }
-                }
             },
             state: wizardState
         )
@@ -1383,6 +1370,10 @@ private struct SignInInteractive: View {
     @State private var passwordHovered: Bool = false
     @State private var confirmHovered: Bool = false
     @State private var googleHovered: Bool = false
+    /// True while a Google OAuth round-trip is in flight (up to 60s). Gates
+    /// the Google button + re-entry so a user can't open a SECOND browser
+    /// OAuth (two `session(from:)` racing → wrong account / double relaunch).
+    @State private var oauthInFlight: Bool = false
 
     private enum Field { case email, password, confirm }
 
@@ -1568,6 +1559,7 @@ private struct SignInInteractive: View {
             .frame(maxWidth: .infinity)
             .frame(height: 48)
             .frame(maxWidth: 320)
+            .opacity(oauthInFlight ? 0.6 : 1)
             .background(Capsule().fill(fill))
             .overlay(Capsule().stroke(stroke, lineWidth: 1))
             .clipShape(Capsule())
@@ -1575,6 +1567,7 @@ private struct SignInInteractive: View {
             .animation(.easeOut(duration: 0.12), value: googleHovered)
         }
         .buttonStyle(.plain)
+        .disabled(oauthInFlight)
         .onHover { h in
             googleHovered = h
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -1702,8 +1695,14 @@ private struct SignInInteractive: View {
             inlineError = "Please agree to the Terms and Privacy Policy first."
             return
         }
+        // Re-entrancy guard: ignore taps while an OAuth round-trip is already
+        // in flight, so the user can't open a second browser sign-in (two
+        // `session(from:)` racing → wrong account / double relaunch).
+        guard !oauthInFlight else { return }
+        oauthInFlight = true
         FileLogger.log("WelcomeWindow: Google sign-in button tapped")
         Task { @MainActor in
+            defer { oauthInFlight = false }
             do {
                 // Loopback redirect to the in-app server's
                 // `/auth/callback` route. Why not `corder://`:
