@@ -1,10 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-// Country-flag SVG sprites (`.fi.fi-gb`, `.fi.fi-ua`, …). Used by the
-// LangPicker — emoji flags render poorly on Windows / some Linux
-// distros, so we ship real SVGs and pay ~10 kB gzipped CSS for it.
-import "flag-icons/css/flag-icons.min.css";
-import { listMeetings, listArchive, MeetingSummary, ArchivedMeeting, RecordingState, getRecordingState, getSettings, setSettings, archiveMeeting, restoreMeeting, startRecordingNow, stopRecordingNow, submitLogs } from "./api";
+import { listMeetings, listArchive, MeetingSummary, ArchivedMeeting, RecordingState, getRecordingState, getSettings, archiveMeeting, restoreMeeting, startRecordingNow, stopRecordingNow, submitLogs } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
 import { ArchiveSidebar } from "./components/ArchiveSidebar";
@@ -12,7 +8,7 @@ import { Dashboard } from "./components/Dashboard";
 import { UpdateModalHost } from "./components/UpdateModal";
 import { MainHeader } from "./components/MainHeader";
 import { ResizeHandle } from "./components/ResizeHandle";
-import { Lang, T, pickStrings, LANGS } from "./i18n";
+import { Lang, T, pickStrings } from "./i18n";
 import { initTheme } from "./theme";
 
 const SIDEBAR_DEFAULT = 240, SIDEBAR_MIN = 200, SIDEBAR_MAX = 480;
@@ -177,7 +173,10 @@ function App() {
     }).corderSetBlobVisible;
     try { bridge?.(visible); } catch {}
   }, [activeId, recState.active]);
-  const [lang, setLangState] = React.useState<Lang>("en");
+  // English-only build. `lang` stays a typed constant so `pickStrings`
+  // and the date/number helpers in `format.ts` keep a single source of
+  // truth and a locale can be reintroduced without reshaping callers.
+  const lang: Lang = "en";
   const t: T = pickStrings(lang);
 
   // The native window posts this on show/close. While the Library
@@ -315,9 +314,12 @@ function App() {
     if (toastTimer.current) { window.clearTimeout(toastTimer.current); toastTimer.current = null; }
     if (toastLeaveTimer.current) { window.clearTimeout(toastLeaveTimer.current); toastLeaveTimer.current = null; }
     const isError = kind === "error";
-    // Errors linger longer (you need time to read them) and, unless the
-    // caller set its own action, carry a "Send a report" button — same
-    // affordance + backend as the header bug-report button. (Костя.)
+    // Errors carry a "Send a report" button (same affordance/backend as the
+    // header bug-report button) and — unless the caller asked for a finite
+    // duration — they DON'T auto-dismiss: an error you need to read and act
+    // on shouldn't vanish on a timer. It stays until the user clicks "Send a
+    // report" (which closes it) or the × close button. (Костя.)
+    const persist = isError && opts?.durationMs == null;
     const ms = opts?.durationMs ?? (isError ? 8000 : 2200);
     const action = opts?.action ?? (isError ? { label: "Send a report", onClick: sendReportFromToast } : undefined);
     setToastLeaving(false);
@@ -325,12 +327,14 @@ function App() {
       msg,
       kind,
       action,
-      expiresAt: opts?.countdown ? Date.now() + ms : undefined,
+      expiresAt: (opts?.countdown && !persist) ? Date.now() + ms : undefined,
     });
-    toastTimer.current = window.setTimeout(() => {
-      // Auto-close: trigger the slide-out, parent unmounts on exit.
-      dismissToast();
-    }, ms);
+    if (!persist) {
+      toastTimer.current = window.setTimeout(() => {
+        // Auto-close: trigger the slide-out, parent unmounts on exit.
+        dismissToast();
+      }, ms);
+    }
   }, [dismissToast, sendReportFromToast]);
   React.useEffect(() => { showToastRef.current = showToast; }, [showToast]);
 
@@ -349,27 +353,12 @@ function App() {
     (async () => {
       try {
         const s = await getSettings();
-        // Accept ANY supported locale on boot, not just ru/en — a user who
-        // picked German/French/etc. was being reset to English on reload.
-        if (s.language && LANGS.some((l) => l.code === s.language)) {
-          setLangState(s.language as Lang);
-        }
         if (s.record_hotkey_label) setHotkeyLabel(s.record_hotkey_label);
         const v = s.tier ?? (s.is_pro ? "pro" : "free");
         if (v === "free" || v === "pro" || v === "max") setTier(v);
       } catch {}
     })();
   }, []);
-
-  const handleLangChange = React.useCallback(async (next: Lang) => {
-    setLangState(next);
-    try {
-      await setSettings({ language: next });
-    } catch {
-      setLangState(lang);
-      showToast(pickStrings(next).toast_settings_failed, "error");
-    }
-  }, [lang, showToast]);
 
   // Batched soft-archive: every meeting archived within a 5-second window
   // collects into ONE pending batch with ONE shared timer + ONE toast.
@@ -599,7 +588,6 @@ function App() {
                     hotkeyLabel={hotkeyLabel}
                     t={t}
                     lang={lang}
-                    onLangChange={handleLangChange}
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     openSettingsNonce={openSettingsNonce}
@@ -649,7 +637,6 @@ function App() {
                     settingsSection={settingsSection}
                     onSettingsSectionChange={setSettingsSection}
                     lang={lang}
-                    onLangChange={handleLangChange}
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     onPlayingChange={(playing) => setPlayingId(playing && activeId ? activeId : null)}

@@ -15,10 +15,11 @@
 #
 # DMG layout:
 #   - Window 540×400
-#   - Corder.app icon at (130, 200), hidden file extension
-#   - /Applications symlink at (410, 200)
-#   - Centred background image with brand-coloured arrow between
-#     the two icons + helper headline above.
+#   - Corder.app icon at (145, 172), hidden file extension
+#   - /Applications symlink at (395, 172)
+#   - White background with two soft brand-green blobs flanking the
+#     icon row, a "Drag to install" headline above, and a dashed arrow
+#     between the two icons.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -58,10 +59,9 @@ trap 'rm -rf "$STAGING"' EXIT
 ditto "$APP" "$STAGING/Corder.app"
 /usr/bin/SetFile -a E "$STAGING/Corder.app" 2>/dev/null || true
 
-# 3. Build the DMG. Window is COMPACT (700×360) so the icon row,
-#    label, and arrow all sit visually centred — no big empty band
-#    at top OR bottom. Geometry must match the constants in
-#    `make-dmg-background.swift`.
+# 3. Build the DMG. Window is 540×400 with the icon row at y=172 so the
+#    headline sits above it and the Finder captions have room below.
+#    Geometry must match the constants in `make-dmg-background.swift`.
 create-dmg \
     --volname "Corder $VERSION" \
     --volicon "$APP/Contents/Resources/AppIcon.icns" \
@@ -69,9 +69,9 @@ create-dmg \
     --window-pos 200 120 \
     --window-size 540 400 \
     --icon-size 100 \
-    --icon "Corder.app" 145 130 \
+    --icon "Corder.app" 145 172 \
     --hide-extension "Corder.app" \
-    --app-drop-link 395 130 \
+    --app-drop-link 395 172 \
     --no-internet-enable \
     --hdiutil-quiet \
     "$DMG" \

@@ -55,12 +55,6 @@ interface Props {
   hotkeyLabel: string;
   t: T;
   lang: Lang;
-  /// Forwarded into SettingsPane so the inline Language picker can
-  /// flip the app-wide locale (lifted into App-level state). Kept on
-  /// Dashboard's props rather than re-reading from a global because
-  /// every other surface (MeetingView, MainHeader) takes the same
-  /// handle for the same purpose — single source of truth.
-  onLangChange: (next: Lang) => void;
   /// Hooks into the same `--right-w` setter as MeetingView so dragging
   /// the divider on the Dashboard moves the same right-pane width.
   onResizeSplit: (dx: number) => void;
@@ -90,7 +84,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyLabel, t, lang, onLangChange, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, onToast }: Props) {
+export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyLabel, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, onToast }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -115,7 +109,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
     const sec = Math.round(totalMs / 1000);
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
-    if (h > 0) return lang === "ru" ? `${h}ч ${m}м` : `${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
     return formatDuration(totalMs, lang);
   })();
 
@@ -345,10 +339,10 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
             left sidebar). Both settings sections stay mounted, display
             toggled, so toggle state survives a tab flip. */}
         <div style={{ display: rightSection === "settings-general" ? "contents" : "none" }}>
-          <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="general" />
+          <SettingsPane t={t} section="general" />
         </div>
         <div style={{ display: rightSection === "settings-advanced" ? "contents" : "none" }}>
-          <SettingsPane t={t} lang={lang} onLangChange={onLangChange} section="advanced" />
+          <SettingsPane t={t} section="advanced" />
         </div>
       </div>
     </div>

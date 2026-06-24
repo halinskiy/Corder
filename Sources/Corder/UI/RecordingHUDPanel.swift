@@ -528,8 +528,8 @@ struct RecordingHUDView: View {
     /// reactive energy down from this point instead of snapping; `nil`
     /// means "no relax in flight" (either recording, or fully settled).
     @State private var stopAt: TimeInterval? = nil
-    /// Holds the 30 Hz tick through the relax settle so the 30→20 Hz
-    /// idle downgrade can't hitch mid-transition.
+    /// Holds the active (20 Hz) tick through the relax settle so the
+    /// 20→12 Hz idle downgrade can't hitch mid-transition.
     @State private var relaxing = false
     var body: some View {
         // Real audio levels from the level meter — used everywhere
@@ -590,10 +590,14 @@ struct RecordingHUDView: View {
         // re-render reads the final value and clobbers the interpolation):
         // on stop the audio-reactive energy eases 1→0 over `relax`
         // seconds so the silhouette settles gently into the calm idle
-        // circle. Stay at 30 Hz until it has settled so the 30→20 Hz
-        // schedule change can't hitch mid-transition.
+        // circle. Stay at the active rate until it has settled so the
+        // 20→12 Hz schedule change can't hitch mid-transition.
+        // 20 fps while recording (was 30): the equalizer scroll still reads
+        // smooth at 20, and a continuous SwiftUI/Core-Animation re-render of
+        // the floating pill is pure power drawn for the WHOLE recording —
+        // every frame shaved helps the always-on load. Idle drops to 12.
         let relax: TimeInterval = 0.5
-        let fps: Double = (isRecording || relaxing) ? 30 : 20
+        let fps: Double = (isRecording || relaxing) ? 20 : 12
         Group {
             TimelineView(.animation(minimumInterval: 1.0 / fps,
                                     paused: !visible)) { timeline in
@@ -675,8 +679,8 @@ struct RecordingHUDView: View {
         // Inline-blob relax (see the TimelineView energy envelope above).
         // `.stopping` keeps `isRecording` true, so the edge into the
         // settle fires exactly once — on the real transition to `.idle`.
-        // The delayed clear releases the 30 Hz hold and pins energy to a
-        // hard 0 once the ease has fully landed.
+        // The delayed clear releases the active-rate hold and pins energy
+        // to a hard 0 once the ease has fully landed.
         .onChange(of: ctx.recordingState) { _, state in
             if state != .idle {
                 stopAt = nil

@@ -235,9 +235,13 @@ final class MeetingDetector {
         offeredFor.insert(match.bundle)
         pendingInviteFor = match.bundle
         FileLogger.log("MeetingDetector: offering record for \(match.name)")
-        // expectedOtherSpeakers=1 for auto-detected calls so Gemini's
-        // diarization doesn't fan a single interlocutor out into 4-5 phantom
-        // speakers. The clarify banner still covers the rare group-call case.
+        // expectedOtherSpeakers = nil (auto-estimate) for auto-detected calls.
+        // It used to be hardcoded to 1 to stop the OLD Gemini single-mic
+        // diarization fanning one interlocutor into 4-5 phantom speakers — but
+        // diarization is now FluidAudio VBx on the SYSTEM (far-end) track, and
+        // forcing exactly 1 remote speaker COLLAPSES every 3+-person call into
+        // a single "other" (the user's main complaint). nil lets VBx estimate
+        // the real remote count; the clarify banner still lets the user pin it.
         let appName = match.name
         Task { @MainActor in
             // Opt-in silent pre-roll: start capturing BEFORE showing the
@@ -245,7 +249,7 @@ final class MeetingDetector {
             // keeps audio/video from the very start of the call. No-op /
             // returns nil when disabled or permissions aren't already granted.
             if AppSettings.prerollEnabled {
-                await RecordingController.shared.startPreroll(source: .fullDisplay, expectedOtherSpeakers: 1)
+                await RecordingController.shared.startPreroll(source: .fullDisplay, expectedOtherSpeakers: nil)
             }
             MenuBarController.shared?.showInviteOffer(
                 appName: appName,
@@ -256,9 +260,14 @@ final class MeetingDetector {
                         // start); otherwise record fresh from now.
                         let committed = await RecordingController.shared.commitPreroll()
                         if !committed {
+                            // Same auto-estimate rationale as the pre-roll path
+                            // above: nil lets FluidAudio VBx count the real
+                            // remote speakers instead of collapsing a 3+-person
+                            // call into one "other". Forcing 1 here would have
+                            // re-introduced the bug whenever pre-roll was off.
                             await RecordingController.shared.startRecording(
                                 source: .fullDisplay,
-                                expectedOtherSpeakers: 1
+                                expectedOtherSpeakers: nil
                             )
                         }
                     }

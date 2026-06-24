@@ -27,7 +27,7 @@ interface Props {
   lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, downloadOpen, onDownloadChange, t, lang = "ru" }: Props) {
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, downloadOpen, onDownloadChange, t, lang = "en" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   return (
