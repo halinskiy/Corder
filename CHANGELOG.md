@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.60] — 2026-06-25
+
+### Fixed
+- Transcripts no longer show phantom sign-offs like "Спасибо за внимание"
+  or "Have a great day" that the speech model invents over silent
+  stretches when nobody said them (0.14.58 had briefly let them through).
+  A real sentence that genuinely contains one is still kept.
+
 ## [0.14.59] — 2026-06-25
 
 ### Fixed
