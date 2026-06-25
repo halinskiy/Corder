@@ -51,7 +51,29 @@ if [[ ! -x "$SPARKLE_BIN/sign_update" ]]; then
 fi
 SIG="$( "$SPARKLE_BIN/sign_update" "$ZIP" )"
 
-# 5. Generate / update appcast.xml.
+# 5. Write release-notes HTML next to every archive so the appcast gets a
+#    <description> for each item. generate_appcast embeds a notes file only
+#    when it shares the archive's base name (Corder-<v>.html beside
+#    Corder-<v>.zip); without it the in-app modal shows "No release notes
+#    attached to this update". We (re)generate notes for EVERY archive
+#    present so backfills + new releases alike are always populated — this is
+#    the single source that keeps the appcast notes from ever being empty.
+for zip in "$RELEASES_DIR"/Corder-*.zip; do
+  [[ -e "$zip" ]] || continue
+  base="$(basename "$zip" .zip)"          # e.g. Corder-0.14.61
+  ver="${base#Corder-}"                   # e.g. 0.14.61
+  if python3 "$ROOT/Scripts/changelog-to-notes.py" "$ver" "$ROOT/CHANGELOG.md" \
+        > "$RELEASES_DIR/$base.html" 2>/dev/null; then
+    echo "  notes: $base.html"
+  else
+    # No CHANGELOG entry for this version — don't leave an empty file that
+    # would embed a blank <description>.
+    rm -f "$RELEASES_DIR/$base.html"
+    echo "  notes: (none for $ver — skipped)"
+  fi
+done
+
+# 6. Generate / update appcast.xml.
 APPCAST="$RELEASES_DIR/appcast.xml"
 # Repo MUST be the one whose gh-pages serves SUFeedURL (corder-updates),
 # so the appcast and the binaries it points at live together.
