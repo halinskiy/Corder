@@ -175,12 +175,12 @@ enum Routes {
         }
         server.get["/api/update-status"] = { _ in updateStatus() }
         server.post["/api/update-check"] = { _ in updateCheck() }
-        // Re-opens the Welcome wizard at the sign-in step. Used by
-        // the profile popover when the user is signed-out and taps
-        // "Sign in" — there's no in-window auth surface, the wizard
-        // is the only auth flow we have.
+        // Opens the in-app sign-in MODAL (SignInModalHost in the Library
+        // WebView), driven by AuthController. Used by the profile popover's
+        // "Sign in" when signed-out. Replaces the old separate native sign-in
+        // window — no jarring extra window, consistent with the update modal.
         server.post["/api/open-welcome"] = { _ in
-            Task { @MainActor in WelcomeWindowController.shared.presentManually() }
+            Task { @MainActor in AuthController.shared.present() }
             return .ok(.text("ok"))
         }
         // Deep-link into System Settings → Notifications → Corder.

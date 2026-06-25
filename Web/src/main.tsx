@@ -6,6 +6,7 @@ import { MeetingView } from "./components/MeetingView";
 import { ArchiveSidebar } from "./components/ArchiveSidebar";
 import { Dashboard } from "./components/Dashboard";
 import { UpdateModalHost } from "./components/UpdateModal";
+import { SignInModalHost } from "./components/SignInModal";
 import { MainHeader } from "./components/MainHeader";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { Lang, T, pickStrings } from "./i18n";
@@ -654,6 +655,10 @@ function App() {
           `position: fixed; inset: 0` overlay covers the whole Library,
           not a fragment-sized child window. */}
       <UpdateModalHost lang={lang} />
+      {/* In-app sign-in modal — same card/tilt as the update modal (no
+          stars), driven by the native auth bridge. Replaces the old
+          separate native sign-in window. */}
+      <SignInModalHost lang={lang} />
     </div>
   );
 }

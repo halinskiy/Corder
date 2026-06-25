@@ -265,6 +265,12 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async {
                 UpdateBridge.shared.handle(action: action)
             }
+        case "authAction":
+            // The React sign-in modal posts a JSON action string here
+            // (submit / google / checkEmail / dismiss). AuthController does
+            // the real Supabase auth + pushes state back via corderAuthState.
+            guard let json = message.body as? String else { return }
+            Task { @MainActor in AuthController.shared.handle(json) }
         default:
             break
         }
@@ -507,6 +513,7 @@ final class LibraryWindow: NSWindowController {
         cfg.userContentController.add(handler, name: "blobVisible")
         cfg.userContentController.add(handler, name: "headerHits")
         cfg.userContentController.add(handler, name: "updateAction")
+        cfg.userContentController.add(handler, name: "authAction")
         let bridgeJS = """
         (function() {
           // Header drag/hover hit-test: report the bounding rects of

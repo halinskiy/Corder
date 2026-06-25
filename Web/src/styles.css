@@ -4986,6 +4986,68 @@ body.resizing { cursor: col-resize; user-select: none; }
   position: relative;
   z-index: 1;
 }
+
+/* ---- In-app sign-in modal: shares .update-card (tilt + sheen, white
+   card) but no StarsCanvas. Guest treatment is intentional — neutral
+   white card + dark ink CTA, no brand-green (green/blue are for
+   signed-in / admin). ---- */
+.auth-card { width: 400px; gap: 16px; }
+.auth-form { display: flex; flex-direction: column; gap: 10px; }
+.auth-input {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 22px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.auth-input::placeholder { color: color-mix(in srgb, var(--fg) 42%, transparent); }
+.auth-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.auth-input:disabled { opacity: 0.6; }
+.auth-error { font-size: 12px; color: #d23b30; padding-left: 4px; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 2px 0; }
+.auth-or span { flex: 1; height: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); }
+.auth-or em { font-style: normal; font-size: 11px; color: color-mix(in srgb, var(--fg) 50%, transparent); }
+.auth-google {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: 22px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 15px; font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.auth-google:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 5%, var(--bg)); }
+.auth-google:disabled { opacity: 0.6; cursor: default; }
+.auth-terms {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 12px; color: color-mix(in srgb, var(--fg) 65%, transparent);
+  cursor: pointer; line-height: 1.4;
+}
+.auth-terms input { margin-top: 1px; accent-color: var(--accent); }
+.auth-terms a { color: var(--accent); cursor: pointer; }
+.auth-terms a:hover { text-decoration: underline; }
+.auth-primary { background: var(--fg); border-color: var(--fg); color: #fff; }
+.auth-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fg) 86%, #fff);
+  border-color: color-mix(in srgb, var(--fg) 86%, #fff);
+}
+/* Neutral (not muted-green) disabled state — keep the guest modal free of
+   brand colour until the form is valid. */
+.auth-primary:disabled {
+  background: color-mix(in srgb, var(--fg) 20%, transparent);
+  border-color: transparent;
+  color: #fff;
+  opacity: 1;
+}
 @keyframes update-card-in {
   from {
     opacity: 0;
