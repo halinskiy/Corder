@@ -459,14 +459,50 @@ struct RecordingHUDView: View {
     private static let barBaseH: CGFloat = 5    // resting height — short bars, never dots
     private static let barMaxExtra: CGFloat = 30
 
-    /// Per-bar HEIGHTS for the REAL spectrum equalizer. Each bar is a
+    /// Per-frame smoother for the equalizer bars. The spectrum DATA arrives
+    /// at the mic-buffer rate (~10 Hz when only the user is speaking —
+    /// 4096 frames / 44.1 kHz ≈ 93 ms), far below the 20 fps render. Binding
+    /// the bar heights straight to that data (with a per-bar `.easeOut` that
+    /// RESTARTS on every ~100 ms step) read as the micro-jerks the user saw.
+    /// Instead we lerp the DISPLAYED heights toward the latest target every
+    /// rendered frame, so motion is smooth regardless of the data rate. A
+    /// reference type so mutating it inside the TimelineView body doesn't
+    /// invalidate the view (nothing observes it).
+    private final class BarSmoother {
+        var heights: [CGFloat] = []
+        var lastT: TimeInterval = 0
+    }
+    @State private var barSmoother = BarSmoother()
+
+    /// Displayed bar heights: the per-frame lerp of `barTargets` toward the
+    /// live spectrum. `tau` is the smoothing time constant — small enough
+    /// that syllables still pop, large enough to bridge the ~93 ms data
+    /// steps into continuous motion.
+    private func barHeights(t: TimeInterval, isRecording: Bool, relax: TimeInterval) -> [CGFloat] {
+        let target = barTargets(t: t, isRecording: isRecording, relax: relax)
+        let tau = 0.055
+        let dt = barSmoother.lastT == 0 ? (1.0 / 20.0)
+                                        : max(0, min(0.1, t - barSmoother.lastT))
+        barSmoother.lastT = t
+        if barSmoother.heights.count != target.count {
+            barSmoother.heights = target          // first frame / count change: snap
+            return target
+        }
+        let k = CGFloat(1 - exp(-dt / tau))
+        for i in 0..<target.count {
+            barSmoother.heights[i] += (target[i] - barSmoother.heights[i]) * k
+        }
+        return barSmoother.heights
+    }
+
+    /// Per-bar TARGET heights for the REAL spectrum equalizer. Each bar is a
     /// genuine FFT frequency band from `RecordingLevelMeter.spectrum`
     /// (low → high), so lows / mids / highs react independently to the
     /// actual sound — not one level faked across bars. Folds in the stop
     /// ease-out so it settles flat instead of snapping. Welcome mode
     /// synthesises a moving spectrum from the clock. Kept out of the
-    /// ViewBuilder for type-check.
-    private func barHeights(t: TimeInterval, isRecording: Bool, relax: TimeInterval) -> [CGFloat] {
+    /// ViewBuilder for type-check. `barHeights` smooths these per frame.
+    private func barTargets(t: TimeInterval, isRecording: Bool, relax: TimeInterval) -> [CGFloat] {
         let energy: CGFloat
         if isRecording {
             energy = 1
@@ -496,10 +532,10 @@ struct RecordingHUDView: View {
     }
 
     /// The live equalizer: a centred row of vertical bars from `heights`.
-    /// Each bar animates toward its new height, so the ~10 Hz spectrum
-    /// updates (mic buffers are ~93 ms) glide instead of jumping — that's
-    /// what was reading as "дёргается". Per-bar `.animation(value:)` only
-    /// re-fires when THAT bar's height changes.
+    /// `heights` is ALREADY per-frame-smoothed by `barHeights` (a time-
+    /// constant lerp toward the live spectrum), so the bars need NO SwiftUI
+    /// `.animation(value:)` here — adding one on top restarts a 0.11 s ease
+    /// on every ~93 ms data step, which is exactly the micro-jerk we removed.
     private func barsLayer(heights: [CGFloat], palette: MeterPalette) -> some View {
         let color = palette.fillStops.first ?? Color.white
         return HStack(alignment: .center, spacing: 3.5) {
@@ -507,7 +543,6 @@ struct RecordingHUDView: View {
                 Capsule()
                     .fill(color)
                     .frame(width: 4, height: heights[i])
-                    .animation(.easeOut(duration: 0.11), value: heights[i])
             }
         }
         .frame(height: Self.barBaseH + Self.barMaxExtra)   // fixed → stable vertical centring
@@ -565,7 +600,8 @@ struct RecordingHUDView: View {
 
         // Frame-rate is state-driven so the blob doesn't burn CPU
         // when nothing meaningful is changing on screen:
-        //   • Recording:     30 Hz — fast enough to track voice ticks.
+        //   • Recording:     20 Hz — the bars are per-frame-lerped, so 20
+        //                    reads smooth; matches the meter publish gate.
         //   • Idle, hovered: 20 Hz — gentle "I'm awake" breathe.
         //   • Idle, resting:  5 Hz — minimum tick rate that still
         //     reads as "alive" (subtle drift + shape wobble) without
