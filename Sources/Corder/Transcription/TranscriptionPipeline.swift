@@ -1386,22 +1386,39 @@ final class TranscriptionPipeline {
         }
         let rOwn = ref(own), rRival = ref(rival)
         let floor: Float = 0.004
+        // A turn whose own track is SILENT across its whole span (max RMS
+        // below this) carries no real speech — it's a Whisper silence-
+        // hallucination or pure far-end bleed, and must be DROPPED, not kept
+        // as a phantom point. Sits above the dominance `floor` (0.004) so
+        // genuinely quiet-but-real speech (which has peaks well above it) is
+        // preserved. This is what stopped "Но это от моего микрофона" from
+        // being invented onto a silent mic while a video played (measured
+        // mic RMS ≈ 0.001 there vs system ≈ 0.025).
+        let speechFloor: Float = 0.006
         func dominant(_ i: Int) -> Bool {
             let o = i < own.count ? own[i] : 0
             let r = i < rival.count ? rival[i] : 0
             return o >= floor && (o / rOwn) > (r / rRival)
         }
-        var gated = 0
-        let out = turns.map { t -> GeminiTranscriber.Turn in
+        var gated = 0, dropped = 0
+        let out = turns.compactMap { t -> GeminiTranscriber.Turn? in
             let f0 = Int(t.startMs) / hopMs
             let f1 = max(f0, Int(t.endMs) / hopMs)
             var first = -1, last = -1
+            var maxOwn: Float = 0
             var i = f0
             while i <= f1 {
+                let o = i < own.count ? own[i] : 0
+                if o > maxOwn { maxOwn = o }
                 if dominant(i) { if first < 0 { first = i }; last = i }
                 i += 1
             }
             guard first >= 0 else {
+                // No own-dominant frame. If the own track is also silent over
+                // the whole span, there's no real speech to attribute → drop
+                // the turn (hallucination/bleed). Otherwise it's quiet real
+                // speech beaten by a louder rival → keep the text as a point.
+                if maxOwn < speechFloor { dropped += 1; return nil }
                 gated += 1
                 return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
                                               startMs: t.startMs, endMs: t.startMs, text: t.text)
@@ -1413,10 +1430,10 @@ final class TranscriptionPipeline {
             return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
                                           startMs: cs, endMs: ce, text: t.text)
         }
-        if gated > 0 {
+        if gated > 0 || dropped > 0 {
             let before = turns.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
             let after = out.reduce(Int64(0)) { $0 + max(0, $1.endMs - $1.startMs) } / 1000
-            FileLogger.log("dominanceGate: clipped \(gated)/\(turns.count) turns, coverage \(before)s → \(after)s")
+            FileLogger.log("dominanceGate: clipped \(gated)/\(turns.count) turns, dropped \(dropped) silent-track hallucinations, coverage \(before)s → \(after)s")
         }
         return out
     }

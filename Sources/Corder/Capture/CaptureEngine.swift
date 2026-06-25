@@ -492,7 +492,14 @@ final class CaptureEngine: NSObject {
                 )
                 self.micFile = micFile
                 inputNode.removeTap(onBus: 0)   // clear any tap a failed attempt left
-                inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, when in
+                // bufferSize 1024 (not 4096): the input runs at 16 kHz, so
+                // 4096 frames = 256 ms = only ~4 level-meter updates/sec — the
+                // floating-HUD equalizer looked stepped no matter how the bars
+                // were smoothed. 1024 = 64 ms ≈ 15.6 Hz, ~4x the spectrum frame
+                // rate, which the HUD's per-frame lerp turns into continuous
+                // motion. mic.wav is unaffected (same bytes, just written in
+                // smaller chunks); the cost is a few more cheap tap callbacks.
+                inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, when in
                     guard let self = self else { return }
                     // First buffer: left-pad mic.wav to the capture-start clock
                     // so all audio tracks share frame 0. Mic normally arms ~at

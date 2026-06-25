@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import Accelerate
 import Combine
+import os
 
 /// Observable singleton fed by CaptureEngine on every audio buffer it
 /// receives. Drives the floating recording HUD (RecordingHUDPanel).
@@ -110,9 +111,33 @@ final class RecordingLevelMeter: ObservableObject {
         lastSpeechAt = nil
     }
 
+    // Rate gates that bound how often the FFT + MainActor hop run, on the
+    // AUDIO thread, INDEPENDENT of how fast the taps fire. The input sample
+    // rate varies (16 kHz or 44.1 kHz) and the buffer size is small for a
+    // responsive equalizer, so the tap can fire 40-90 Hz — doing a full FFT
+    // and spawning a @MainActor Task every time was a real recording-load
+    // spike. We process at ~25 Hz (mic) / 30 Hz (system), which is already
+    // above what the 20 fps HUD (with its per-frame lerp) can show, so the
+    // animation is unaffected while the load drops back down. File writes are
+    // NOT gated here — they happen per buffer in CaptureEngine.
+    private let micGate = OSAllocatedUnfairLock(initialState: CFTimeInterval(0))
+    private let sysGate = OSAllocatedUnfairLock(initialState: CFTimeInterval(0))
+    private static let micIngestInterval: CFTimeInterval = 1.0 / 25.0
+    private static let sysIngestInterval: CFTimeInterval = 1.0 / 30.0
+
+    private nonisolated func passGate(_ gate: OSAllocatedUnfairLock<CFTimeInterval>,
+                                      _ interval: CFTimeInterval) -> Bool {
+        let now = CACurrentMediaTime()
+        return gate.withLock { last in
+            if now - last >= interval { last = now; return true }
+            return false
+        }
+    }
+
     /// Called from CaptureEngine's mic tap. Always invoked on the audio
     /// thread — we hop to the main actor to mutate `@Published` state.
     nonisolated func ingestMic(buffer: AVAudioPCMBuffer) {
+        guard passGate(micGate, Self.micIngestInterval) else { return }
         let peak = Self.peak(of: buffer)
         let spec = Self.spectrum(of: buffer)
         Task { @MainActor in
@@ -124,6 +149,7 @@ final class RecordingLevelMeter: ObservableObject {
     /// System audio now arrives as AVAudioPCMBuffer from the Core Audio
     /// process tap (not SCStream's CMSampleBuffer). Same envelope path.
     nonisolated func ingestSystem(pcm: AVAudioPCMBuffer) {
+        guard passGate(sysGate, Self.sysIngestInterval) else { return }
         let peak = Self.peak(of: pcm)
         let spec = Self.spectrum(of: pcm)
         Task { @MainActor in
@@ -177,11 +203,17 @@ final class RecordingLevelMeter: ObservableObject {
         // by the source rate so a fast source doesn't decay faster in real
         // time than a slow one — otherwise the bars still favour whichever
         // source ticks more often.
-        let release: Float = source == .system ? 0.04 : 0.22
+        // Mic release lowered 0.22 → 0.12: the mic now fires ~15.6 Hz (1024
+        // frames) instead of ~10 Hz, and a gentler release holds the bars
+        // fuller between syllables so the equalizer reads as alive, not
+        // flickering down to flat. Mic AGC floor lowered 0.03 → 0.02 so a
+        // quiet / partly-muted mic still drives the bars up to a visible
+        // level (the user couldn't tell it was working otherwise).
+        let release: Float = source == .system ? 0.04 : 0.12
         for b in 0..<bands {
             if source == .mic {
                 micRef[b] = max(amps[b], micRef[b] * 0.985)
-                let disp: Float = silent ? 0 : min(1, amps[b] / max(micRef[b], 0.03))
+                let disp: Float = silent ? 0 : min(1, amps[b] / max(micRef[b], 0.02))
                 micEnv[b] += (disp - micEnv[b]) * (disp > micEnv[b] ? 0.6 : release)
             } else {
                 sysRef[b] = max(amps[b], sysRef[b] * 0.985)
