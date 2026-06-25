@@ -145,16 +145,8 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
           <div className="update-title">{isSignUp ? "Sign up" : "Sign in"}</div>
           <div className="update-status">
             {isSignUp
-              ? "Create an account to unlock more with a subscription. Already have one? "
-              : "Signing in unlocks more with a subscription. You can also "}
-            <button
-              type="button"
-              className="auth-switch"
-              disabled={state.busy}
-              onClick={() => setMode(isSignUp ? "signin" : "signup")}
-            >
-              {isSignUp ? "Sign in" : "Sign up"}
-            </button>
+              ? "Create an account to unlock more with a subscription."
+              : "Signing in unlocks more with a subscription."}
           </div>
         </div>
 
@@ -232,6 +224,18 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
           </button>
           <button type="button" className="update-secondary" onClick={dismiss}>
             {"Later"}
+          </button>
+        </div>
+
+        <div className="auth-switch-row">
+          {isSignUp ? "Already have one? " : "You can also "}
+          <button
+            type="button"
+            className="auth-switch"
+            disabled={state.busy}
+            onClick={() => setMode(isSignUp ? "signin" : "signup")}
+          >
+            {isSignUp ? "Sign in" : "Sign up"}
           </button>
         </div>
       </div>
