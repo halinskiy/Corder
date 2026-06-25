@@ -5032,9 +5032,20 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-size: 12px; color: color-mix(in srgb, var(--fg) 65%, transparent);
   cursor: pointer; line-height: 1.4;
 }
-.auth-terms input { margin-top: 1px; accent-color: var(--accent); }
+.auth-terms input {
+  width: 18px; height: 18px; margin-top: 1px;
+  flex-shrink: 0; accent-color: var(--accent); cursor: pointer;
+}
 .auth-terms a { color: var(--accent); cursor: pointer; }
 .auth-terms a:hover { text-decoration: underline; }
+/* Sign in ↔ Sign up toggle link in the subtitle: brand-green, underlined,
+   pointer cursor. Reads as a real link inside the running text. */
+.auth-switch {
+  background: none; border: none; padding: 0; font: inherit;
+  color: var(--accent); text-decoration: underline; cursor: pointer;
+}
+.auth-switch:hover:not(:disabled) { color: var(--accent-pressed); }
+.auth-switch:disabled { opacity: 0.6; cursor: default; }
 .auth-primary { background: var(--fg); border-color: var(--fg); color: #fff; }
 .auth-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--fg) 86%, #fff);

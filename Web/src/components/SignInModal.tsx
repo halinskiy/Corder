@@ -17,22 +17,23 @@ import { Lang } from "../i18n";
 
 export interface AuthModalState {
   visible: boolean;
-  /// "signin" → email exists, ask for password; "signup" → new email, show
-  /// Confirm; "unknown" → not yet classified (first open / before blur).
-  mode: "signin" | "signup" | "unknown";
-  /// True while a native auth round-trip (sign-in / sign-up / Google /
-  /// check-email) is in flight — disables the form + shows a spinner.
+  /// True while a native auth round-trip (sign-in / sign-up / Google) is in
+  /// flight — disables the form + shows a spinner.
   busy: boolean;
   /// Inline error beneath the form (wrong password, network, etc.).
   error?: string | null;
 }
 
-const HIDDEN: AuthModalState = { visible: false, mode: "unknown", busy: false, error: null };
+const HIDDEN: AuthModalState = { visible: false, busy: false, error: null };
+
+/// Sign-in vs sign-up is now chosen EXPLICITLY by the user (the "Sign up" /
+/// "Sign in" link in the subtitle), never auto-flipped from an unknown
+/// email. So `mode` is purely local UI state, not pushed by native.
+type AuthMode = "signin" | "signup";
 
 type AuthAction =
-  | { type: "submit"; email: string; password: string; mode: string; agreed: boolean }
+  | { type: "submit"; email: string; password: string; mode: AuthMode; agreed: boolean }
   | { type: "google"; agreed: boolean }
-  | { type: "checkEmail"; email: string }
   | { type: "dismiss" };
 
 declare global {
@@ -57,6 +58,7 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
   const [agreed, setAgreed] = React.useState(false);
+  const [mode, setMode] = React.useState<AuthMode>("signin");
   const cardRef = React.useRef<HTMLDivElement | null>(null);
   const leaveTimer = React.useRef<number | null>(null);
 
@@ -74,7 +76,7 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
         leaveTimer.current = window.setTimeout(() => {
           setLeaving(false);
           setState(HIDDEN);
-          setEmail(""); setPassword(""); setConfirm(""); setAgreed(false);
+          setEmail(""); setPassword(""); setConfirm(""); setAgreed(false); setMode("signin");
           leaveTimer.current = null;
         }, 220);
       }
@@ -113,16 +115,14 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
 
   if (!state.visible && !leaving) return null;
 
-  const isSignUp = state.mode === "signup";
-  const ctaLabel = state.mode === "signup" ? ("Sign up with email")
-                                           : ("Sign in with email");
+  const isSignUp = mode === "signup";
+  const ctaLabel = isSignUp ? "Sign up with email" : "Sign in with email";
   const canSubmit = email.trim().length > 0 && password.length > 0 && agreed && !state.busy
     && (!isSignUp || confirm.length > 0);
 
   const submit = () => {
-    if (!agreed) { /* native raises the consent error via state.error if it wants */ }
     if (state.busy) return;
-    postAuth({ type: "submit", email: email.trim(), password, mode: state.mode, agreed });
+    postAuth({ type: "submit", email: email.trim(), password, mode, agreed });
   };
   const dismiss = () => postAuth({ type: "dismiss" });
 
@@ -142,9 +142,19 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
         <div className="update-card-sheen" aria-hidden />
 
         <div className="update-head">
-          <div className="update-title">{"Sign in"}</div>
+          <div className="update-title">{isSignUp ? "Sign up" : "Sign in"}</div>
           <div className="update-status">
-            {"Sign in to save your recordings and unlock Pro features."}
+            {isSignUp
+              ? "Create an account to unlock more with a subscription. Already have one? "
+              : "Signing in unlocks more with a subscription. You can also "}
+            <button
+              type="button"
+              className="auth-switch"
+              disabled={state.busy}
+              onClick={() => setMode(isSignUp ? "signin" : "signup")}
+            >
+              {isSignUp ? "Sign in" : "Sign up"}
+            </button>
           </div>
         </div>
 
@@ -158,7 +168,6 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
             value={email}
             disabled={state.busy}
             onChange={(e) => setEmail(e.target.value)}
-            onBlur={() => { if (email.trim()) postAuth({ type: "checkEmail", email: email.trim() }); }}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
           />
           <input
