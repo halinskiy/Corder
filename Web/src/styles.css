@@ -5097,6 +5097,14 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .auth-switch:hover:not(:disabled) { color: var(--accent-pressed); }
 .auth-switch:disabled { opacity: 0.6; cursor: default; }
+/* "You can also Sign up" / "Already have one? Sign in" — moved below the
+   Later button (out of the header). Centered, muted, quiet. */
+.auth-switch-row {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--fg) 60%, transparent);
+}
 .auth-primary { background: var(--fg); border-color: var(--fg); color: #fff; }
 .auth-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--fg) 86%, #fff);

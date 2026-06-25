@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.67] — 2026-06-26
+
+### Changed
+- In the sign-in card, the link that switches between Sign in and Sign up
+  now sits below the buttons instead of in the header, for a cleaner top.
+
 ## [0.14.66] — 2026-06-25
 
 ### Added
