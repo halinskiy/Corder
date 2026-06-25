@@ -25,13 +25,23 @@ import AppKit
 let W: CGFloat = 540
 let H: CGFloat = 400
 
-// Icon centres (create-dmg `--icon X Y` uses TOP-DOWN Y, same as here).
-// Lowered to ~window-centre so the icon row + arrow + caption sit centred
-// vertically instead of crowding the top half. MUST match make-dmg.sh
+// Icon centres (create-dmg `--icon X Y` uses TOP-DOWN Y measured from the
+// top of the icon VIEW, same origin as here). MUST match make-dmg.sh
 // `--icon`/`--app-drop-link` Y.
+//
+// macOS 26 (Tahoe) Finder FORCES a unified toolbar (search pill + "+") plus a
+// bottom status bar onto the DMG window even though create-dmg's template does
+// `set toolbar visible to false` — the call is a no-op now. That chrome eats
+// ~95pt, so the visible content area of a 400pt window is only ~305pt tall.
+// Finder top-anchors both the background image AND the icons at the content
+// origin, so a row at the old y=195 rendered at ~63% down ("где-то снизу").
+// Centre the whole caption+arrow+icon+label unit in the REAL ~305pt content
+// area: the unit's visual centre sits a touch below the icon row (the "Drag
+// to install" caption adds height above), so icon-centre y≈140 lands the unit
+// at the content midpoint.
 let LEFT_ICON_CX_TOP:  CGFloat = 145
 let RIGHT_ICON_CX_TOP: CGFloat = 395
-let ICON_CY_TOP:       CGFloat = 195
+let ICON_CY_TOP:       CGFloat = 140
 
 // Dashed arrow on the icon-centre row, between the two icons.
 let ARROW_Y_TOP:   CGFloat = ICON_CY_TOP
@@ -113,9 +123,9 @@ func render(scale: CGFloat) -> NSBitmapImageRep {
     //    pushed WELL off-canvas so only a soft arc shows; low alpha so they
     //    read as a faint wash, not a focal point. Brand greens (light-mode
     //    + dark-mode accent) for a subtle two-tone.
-    drawSoftCircle(cg, centerTop: CGPoint(x: -70, y: 200), radius: 235,
+    drawSoftCircle(cg, centerTop: CGPoint(x: -70, y: ICON_CY_TOP + 5), radius: 235,
                    color: rgba(0x1f, 0x9d, 0x59, 0.22))
-    drawSoftCircle(cg, centerTop: CGPoint(x: 610, y: 200), radius: 225,
+    drawSoftCircle(cg, centerTop: CGPoint(x: 610, y: ICON_CY_TOP + 5), radius: 225,
                    color: rgba(0x0e, 0x7c, 0x44, 0.20))
 
     // ── Caption "Drag to install": small, crisp, centred over the arrow,

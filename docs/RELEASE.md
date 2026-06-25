@@ -50,8 +50,18 @@ Move entries from `[Unreleased]` to a new dated section. Format:
 ### Changed / Fixed / Removed (only sections that have entries).
 ```
 
-This text is read verbatim by Sparkle's appcast generator and shown to
-users in the "What's new" panel. Make it human.
+This text becomes the "What's New" panel users see in the in-app updater.
+Make it human.
+
+It does NOT reach the appcast on its own: `generate_appcast` embeds a
+`<description>` only when a notes file (`Corder-<v>.html`) sits next to the
+archive. `Scripts/release.sh` (and the manual flow below) runs
+`Scripts/changelog-to-notes.py <v> CHANGELOG.md > releases/Corder-<v>.html`
+for every archive in `releases/` BEFORE `generate_appcast`, so the notes are
+generated straight from this changelog. Skip that step and the modal shows
+"No release notes attached to this update" (the long-standing empty-notes
+bug, fixed for good in 0.14.62). When cutting by hand, always regenerate the
+notes files first.
 
 ### 2. Bump Info.plist
 

@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.62] — 2026-06-25
+
+### Fixed
+- Installer layout: the app icon, arrow and "Drag to install" caption are
+  now centred in the window. On macOS 26 the Finder window keeps a toolbar
+  that shrinks the visible area, which had pushed the content low; the
+  layout now accounts for it.
+- Update notes: the in-app updater shows the "What's New" text again.
+  Release notes are generated straight from this changelog for every build,
+  so an update is never published with an empty notes panel.
+
 ## [0.14.61] — 2026-06-25
 
 ### Changed
