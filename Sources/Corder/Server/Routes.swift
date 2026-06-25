@@ -502,6 +502,7 @@ enum Routes {
             AppSettings.setUserName(nil)
             AppSettings.setUserEmail(nil)
             AppSettings.setUserTier(.free)
+            AppSettings.setIsAdmin(false)
             AppSettings.setOnboardingCompleted(false)
             AppSettings.setOnboardingStep(0)
             AppSettings.setHasSignedInBefore(false)
@@ -527,9 +528,10 @@ enum Routes {
             AppSettings.setUserName(nil)
             AppSettings.setUserEmail(nil)
             AppSettings.setUserTier(.free)
+            AppSettings.setIsAdmin(false)
             AppSettings.setOnboardingCompleted(false)
             AppSettings.setOnboardingStep(0)
-            FileLogger.log("AccountAPI: signed out, wizard will re-open on next launch")
+            FileLogger.log("AccountAPI: signed out — cleared identity + admin/tier; relaunching into guest Library")
             // Gate the rest of Corder behind sign-in: close the
             // Library window so the signed-in surface isn't visible
             // behind the wizard, then re-present the wizard so the

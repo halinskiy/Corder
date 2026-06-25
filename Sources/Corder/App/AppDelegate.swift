@@ -226,7 +226,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             let session = try? await SupabaseClientHolder.shared.auth.session
             guard session != nil,
-                  let user = SupabaseClientHolder.shared.auth.currentUser else { return }
+                  let user = SupabaseClientHolder.shared.auth.currentUser else {
+                // Signed-out (guest): clear any stale admin/tier left over from
+                // a previous signed-in session, so the profile avatar + theme
+                // reflect "guest" (not the last user's role). Without this a
+                // sticky is_admin=true showed the blue admin avatar to a
+                // signed-out / non-admin user.
+                AppSettings.setIsAdmin(false)
+                AppSettings.setUserTier(.free)
+                return
+            }
             if let email = user.email, !email.isEmpty { AppSettings.setUserEmail(email) }
             let meta = user.userMetadata
             let name = (meta["full_name"]?.stringValue ?? meta["name"]?.stringValue) as String?
