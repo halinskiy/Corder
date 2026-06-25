@@ -20,13 +20,14 @@ enum Hallucinations {
         "продолжение в следующем видео",
         "продолжение в следующем выпуске",
         "спасибо за просмотр",
-        // NOTE: "спасибо за внимание" / "have a great day" / "have a
-        // wonderful day" / "дякую за увагу" were REMOVED — they are the
-        // standard way people genuinely CLOSE a meeting or presentation,
-        // not just YouTube-outro noise, and the launch purge hard-DELETEs
-        // matches (irreversible). The distinctive multi-word phrases below
-        // ("thank you for watching", "i hope you will enjoy", …) still
-        // catch the real hallucinations Whisper emits over silence.
+        // "спасибо за внимание" — in PRACTICE this is overwhelmingly a
+        // Whisper hallucination over silence (Kostya: it "часто появлялось"
+        // when nobody said it), not a real closer, so it stays filtered.
+        // The destructive launch purge uses isExactHallucination (whole-
+        // segment only), so a real sentence merely CONTAINING it ("спасибо
+        // за внимание, коллеги, до встречи") is never deleted; the live
+        // filter still drops a standalone hallucinated occurrence.
+        "спасибо за внимание",
         // Russian YouTube-outro farewells Whisper emits over near-silence
         // (seen in benchmark: "До скорых встреч, пока, до."). Distinctive
         // multi-word phrases so genuine "до встречи завтра" speech is safe.
@@ -49,6 +50,11 @@ enum Hallucinations {
         "hope you enjoy this video",
         "enjoy watching this video",
         "enjoy this video",
+        // Common Whisper silence-hallucinations (Kostya: appeared without
+        // anyone saying them). Kept filtered; the launch purge is exact-only
+        // so a real "have a great day, talk soon" sentence isn't deleted.
+        "have a wonderful day",
+        "have a great day",
         "see you in the next video",
         "see you in the next one",
         "see you next time",
@@ -66,6 +72,7 @@ enum Hallucinations {
         "редактор субтитров",
         "субтитри",
         "дякую за перегляд",
+        "дякую за увагу",
     ]
 
     static func isHallucination(_ text: String) -> Bool {
