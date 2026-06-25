@@ -54,7 +54,7 @@ final class CaptureEngine: NSObject {
     /// total loss). This flag disambiguates "not opened yet" from
     /// "closed after stop": once set, late buffers are dropped, never
     /// reopened.
-    private var tearingDown = false
+    nonisolated(unsafe) private var tearingDown = false
     private(set) var startedAt: Date?
     private(set) var meetingId: String?
 
@@ -71,7 +71,7 @@ final class CaptureEngine: NSObject {
     /// voice. Latching one clock and padding each writer to it keeps frame 0
     /// meaning the same instant in every file. Video already gets this for
     /// free via `startSession(atSourceTime: firstPTS)`.
-    private var captureStartHostTime: UInt64 = 0
+    nonisolated(unsafe) private var captureStartHostTime: UInt64 = 0
     /// mach ticks → seconds, computed once from `mach_timebase_info`.
     private let ticksToSeconds: Double = {
         var info = mach_timebase_info_data_t()
@@ -80,14 +80,26 @@ final class CaptureEngine: NSObject {
     }()
     /// First-buffer pad guards (each writer pads exactly once).
     private var paddedMic = false
-    private var paddedSystem = false
-    private var paddedSCK = false
+    nonisolated(unsafe) private var paddedSystem = false
+    nonisolated(unsafe) private var paddedSCK = false
     private(set) var videoURL: URL?
     private(set) var micURL: URL?
-    private(set) var systemURL: URL?
+    nonisolated(unsafe) private(set) var systemURL: URL?
 
     private var stream: SCStream?
     private let outputQueue = DispatchQueue(label: "com.3mpq.corder.scstream", qos: .userInitiated)
+    /// Dedicated serial queue for ALL media file I/O — video `append` and
+    /// the synchronous `AVAudioFile.write` for system/SCK audio. Previously
+    /// every video frame and system-audio buffer hopped to the MainActor and
+    /// did its disk write there, so 31-86 audio buffers/sec (+ video) of
+    /// synchronous I/O serialised on the main run loop WHILE it drove the
+    /// animated HUD — the "everything lags from the start" load that
+    /// Maksym-nocorny root-caused (issue #1, item 1). Writing here keeps the
+    /// MainActor free; `stop()` drains this queue (`writeQueue.sync`) before
+    /// closing files, and the sources are all stopped first, so no write
+    /// races teardown. The multi-second leading-silence pad also lands here
+    /// now instead of stalling the main thread at record start.
+    private let writeQueue = DispatchQueue(label: "com.3mpq.corder.mediawrite", qos: .userInitiated)
 
     // Microphone via AVAudioEngine — runs on its own thread
     private var audioEngine: AVAudioEngine?
@@ -101,10 +113,10 @@ final class CaptureEngine: NSObject {
     // tuned for meeting recordings (mostly static UI, occasional cursor /
     // window motion). The first `.screen` sample's PTS becomes the
     // session start; subsequent samples are appended directly.
-    private var videoWriter: AVAssetWriter?
-    private var videoInput: AVAssetWriterInput?
-    private var videoSessionStarted = false
-    private var videoFramesAppended: Int64 = 0
+    nonisolated(unsafe) private var videoWriter: AVAssetWriter?
+    nonisolated(unsafe) private var videoInput: AVAssetWriterInput?
+    nonisolated(unsafe) private var videoSessionStarted = false
+    nonisolated(unsafe) private var videoFramesAppended: Int64 = 0
 
     // System audio now comes from a Core Audio process tap (see
     // SystemAudioTap) instead of SCStream's `.audio` output. SCStream
@@ -112,14 +124,14 @@ final class CaptureEngine: NSObject {
     // through Voice-Processing I/O, which bypasses the system mix it
     // taps. The tap's buffers are mirrored into a standalone .wav so
     // transcription doesn't depend on AVAssetWriter finalising the .mov.
-    private let systemTap = SystemAudioTap()
-    private var systemAudioFile: AVAudioFile?
-    private var systemAudioFormat: AVAudioFormat?
+    nonisolated(unsafe) private let systemTap = SystemAudioTap()
+    nonisolated(unsafe) private var systemAudioFile: AVAudioFile?
+    nonisolated(unsafe) private var systemAudioFormat: AVAudioFormat?
     // Diagnostic counter for the system-audio tap. If this stays at 0
     // across a recording, the process tap delivered no frames (TCC
     // denied, or genuinely nothing playing).
-    private var systemFramesWritten: Int64 = 0
-    private var loggedFirstSystemBuffer = false
+    nonisolated(unsafe) private var systemFramesWritten: Int64 = 0
+    nonisolated(unsafe) private var loggedFirstSystemBuffer = false
     /// Snapshot of whether the default OUTPUT was Bluetooth when this
     /// recording started. The process tap captures silence on a BT
     /// route, so if system.wav ends up silent AND this is true, the
@@ -142,10 +154,10 @@ final class CaptureEngine: NSObject {
     // RecordingLevelMeter from this path — the BT-warning heuristic in
     // RecordingController keys off sessionMaxSystem reflecting the TAP
     // only; mixing SCK levels in would mask the very failure we warn on.
-    private var sckSystemURL: URL?
-    private var sckAudioFile: AVAudioFile?
-    private var sckFramesWritten: Int64 = 0
-    private var loggedFirstSCKBuffer = false
+    nonisolated(unsafe) private var sckSystemURL: URL?
+    nonisolated(unsafe) private var sckAudioFile: AVAudioFile?
+    nonisolated(unsafe) private var sckFramesWritten: Int64 = 0
+    nonisolated(unsafe) private var loggedFirstSCKBuffer = false
 
     func start(meetingId: String, source: CaptureSource) async throws {
         FileLogger.log("CaptureEngine.start: meetingId=\(meetingId) source=\(source)")
@@ -405,18 +417,30 @@ final class CaptureEngine: NSObject {
             if AppSettings.captureVideo {
                 try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
             }
-            do {
-                try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
-                self.sckSystemURL = sckSystemURL
-                self.sckAudioFile = nil
-                self.sckFramesWritten = 0
-                self.loggedFirstSCKBuffer = false
-                FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart) → system_sck.wav)")
-            } catch {
-                // Non-fatal: the process tap is still the primary path. We
-                // just lose the Bluetooth-output safety net for this run.
+            // SCK (system_sck.wav) is ONLY a Bluetooth-output fallback for the
+            // process tap, and is empirically pure silence on every non-BT
+            // recording — yet each buffer still allocated an AVAudioPCMBuffer,
+            // ran CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer and
+            // wrote to disk. So register the `.audio` output ONLY on a BT
+            // route. On a video+non-BT recording we now keep just the `.screen`
+            // output and drop the third tap entirely (issue #1, item 2).
+            if outputBluetoothAtStart {
+                do {
+                    try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
+                    self.sckSystemURL = sckSystemURL
+                    self.sckAudioFile = nil
+                    self.sckFramesWritten = 0
+                    self.loggedFirstSCKBuffer = false
+                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart) → system_sck.wav)")
+                } catch {
+                    // Non-fatal: the process tap is still the primary path. We
+                    // just lose the Bluetooth-output safety net for this run.
+                    self.sckSystemURL = nil
+                    FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
+                }
+            } else {
                 self.sckSystemURL = nil
-                FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
+                FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), non-BT → no SCK tap, process tap only)")
             }
             do {
                 try await activeStream.startCapture()
@@ -580,7 +604,7 @@ final class CaptureEngine: NSObject {
             // `hostTime` is the buffer's mach host time, threaded through so
             // the writer can left-pad system.wav to the capture-start clock.
             RecordingLevelMeter.shared.ingestSystem(pcm: pcm)
-            Task { @MainActor [weak self] in
+            self?.writeQueue.async { [weak self] in
                 self?.writeSystemAudioPCM(pcm, hostTime: hostTime)
             }
         }
@@ -669,6 +693,12 @@ final class CaptureEngine: NSObject {
         audioEngine?.reset()
         audioEngine = nil
         micFile = nil
+
+        // All buffer sources are now stopped (SCStream, process tap, mic), so
+        // no NEW write is dispatched. Drain any writes still queued on the
+        // serial write queue before we close the files below — this is what
+        // makes closing them safe now that the writers run off the MainActor.
+        writeQueue.sync { }
         FileLogger.log("CaptureEngine.stop: mic frames captured = \(micFramesWritten)")
         FileLogger.log("CaptureEngine.stop: system frames captured = \(systemFramesWritten) (BT/SCO scenario shows 0 here)")
 
@@ -733,14 +763,14 @@ extension CaptureEngine: SCStreamOutput {
                status != .complete {
                 return
             }
-            Task { @MainActor [weak self] in
+            writeQueue.async { [weak self] in
                 self?.writeVideo(sampleBuffer)
             }
         case .audio:
             // Secondary system-audio backup (see sckSystemURL doc). The
             // CMSampleBuffer is CF-retained by the closure capture, so
-            // it stays valid across the main-actor hop.
-            Task { @MainActor [weak self] in
+            // it stays valid across the hop to the write queue.
+            writeQueue.async { [weak self] in
                 self?.writeSCKAudio(sampleBuffer)
             }
         default:
@@ -748,8 +778,7 @@ extension CaptureEngine: SCStreamOutput {
         }
     }
 
-    @MainActor
-    private func writeVideo(_ buffer: CMSampleBuffer) {
+    nonisolated private func writeVideo(_ buffer: CMSampleBuffer) {
         guard let writer = videoWriter, let input = videoInput else { return }
         guard writer.status == .writing else {
             if writer.status == .failed {
@@ -778,7 +807,7 @@ extension CaptureEngine: SCStreamOutput {
     /// first buffer's mach host time. Clamps to 0 for a writer that armed
     /// before the latch (or an invalid clock), and caps at 1 h as a sanity
     /// guard against a bogus timestamp blowing the file up.
-    private func leadingPadFrames(firstBufferHostTime ht: UInt64, sampleRate: Double) -> AVAudioFrameCount {
+    nonisolated private func leadingPadFrames(firstBufferHostTime ht: UInt64, sampleRate: Double) -> AVAudioFrameCount {
         guard captureStartHostTime > 0, ht > captureStartHostTime, sampleRate > 0 else { return 0 }
         let seconds = Double(ht - captureStartHostTime) * ticksToSeconds
         let frames = (seconds * sampleRate).rounded()
@@ -789,7 +818,7 @@ extension CaptureEngine: SCStreamOutput {
     /// Write `frames` of zeroed samples to `file`, chunked so a multi-second
     /// pad doesn't allocate one giant buffer. Zeroes via the raw buffer list
     /// so it works for interleaved and non-interleaved, float or int.
-    private func writeSilence(_ frames: AVAudioFrameCount, to file: AVAudioFile, format: AVAudioFormat) {
+    nonisolated private func writeSilence(_ frames: AVAudioFrameCount, to file: AVAudioFile, format: AVAudioFormat) {
         guard frames > 0 else { return }
         let chunkCap: AVAudioFrameCount = 16_000
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunkCap) else { return }
@@ -814,8 +843,7 @@ extension CaptureEngine: SCStreamOutput {
     /// ordered. `hostTime` is the first sample's mach host time, sampled in
     /// the IOProc (the only place it's available) and used once to left-pad
     /// system.wav so its frame 0 lines up with the mic.
-    @MainActor
-    private func writeSystemAudioPCM(_ pcm: AVAudioPCMBuffer, hostTime: UInt64) {
+    nonisolated private func writeSystemAudioPCM(_ pcm: AVAudioPCMBuffer, hostTime: UInt64) {
         guard let url = systemURL, let format = systemTap.format else { return }
         if systemAudioFile == nil {
             // nil + tearing down = file was already closed by stop().
@@ -860,8 +888,7 @@ extension CaptureEngine: SCStreamOutput {
     /// format from the sample buffer (SCStream picks 48 k stereo float)
     /// and copies via a retained block buffer. Intentionally does NOT
     /// touch RecordingLevelMeter — see the sckSystemURL doc comment.
-    @MainActor
-    private func writeSCKAudio(_ sampleBuffer: CMSampleBuffer) {
+    nonisolated private func writeSCKAudio(_ sampleBuffer: CMSampleBuffer) {
         guard let url = sckSystemURL else { return }
         guard let fmtDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(fmtDesc),
