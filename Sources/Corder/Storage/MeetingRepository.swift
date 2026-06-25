@@ -160,6 +160,18 @@ struct MeetingRepository {
         }
     }
 
+    /// Count of meetings the account currently HOLDS — library + archive,
+    /// excluding only transient pre-roll rows. A hard delete frees a slot;
+    /// archiving does not. Used for the guest session cap (max 5 for a
+    /// signed-out user).
+    func heldMeetingCount() throws -> Int {
+        try dbq.read { db in
+            try Meeting
+                .filter(Column("status") != MeetingStatus.preroll.rawValue)
+                .fetchCount(db)
+        }
+    }
+
     func setArchived(meetingId: String, archivedAt: Int64?) throws {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET archived_at = ? WHERE id = ?",

@@ -2297,6 +2297,39 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   pointer-events: none;
 }
+/* Guest session quota badge ("N left"), sits left of the report button.
+   Quiet pill in the toolbar's resting language: hairline border, muted
+   text, no fill. Turns accent-green when one slot or fewer remain, the
+   nudge to sign in. Clicking opens the sign-in modal. */
+.guest-quota {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+.guest-quota:hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
+.guest-quota.is-low {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.guest-quota.is-low:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+  color: var(--accent-pressed);
+}
 /* Active state — accent-green fill, white glyph, 2-px accent ring
    painted as an OUTSIDE outline via box-shadow. The ring is the same
    colour as the fill so it reads as "the button just got bigger" — a
@@ -4069,6 +4102,24 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
+/* Capture button + Clear sit in one row; the capture button keeps the
+   full-width feel, Clear is a compact hairline reset to "Not set". */
+.hk-row { display: flex; gap: 8px; margin-top: 12px; align-items: stretch; }
+.hk-row .hk-capbtn { margin-top: 0; flex: 1; min-width: 0; }
+.hk-clear {
+  flex-shrink: 0;
+  padding: 0 14px;
+  border-radius: var(--radius-button, 8px);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+.hk-clear:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
+.hk-clear:disabled { opacity: 0.45; pointer-events: none; }
 .hk-warn {
   margin-top: 8px;
   font-size: 12px;

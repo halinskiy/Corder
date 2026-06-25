@@ -95,6 +95,27 @@ export async function hasBugEvents(): Promise<boolean> {
   } catch { return false; }
 }
 
+export interface AccountUsage {
+  /// True for a signed-out user — the only one the session cap applies to.
+  is_guest: boolean;
+  /// Sessions the guest currently holds (library + archive).
+  sessions_used: number;
+  /// Remaining slots before Start switches to "sign in".
+  sessions_left: number;
+  /// The cap (5 today).
+  limit: number;
+}
+
+/// Guest session quota for the header "N left" counter. Returns null on any
+/// failure so the counter simply doesn't render (never blocks the header).
+export async function getAccountUsage(): Promise<AccountUsage | null> {
+  try {
+    const r = await fetch("/api/account/usage", { cache: "no-store" });
+    if (!r.ok) return null;
+    return (await r.json()) as AccountUsage;
+  } catch { return null; }
+}
+
 export async function submitLogs(): Promise<void> {
   const r = await fetch("/api/submit-logs", { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

@@ -34,6 +34,16 @@ final class RecordingController {
             FileLogger.log("startRecording: ignored — state is not idle")
             return
         }
+        // Guest session cap. A signed-out user may HOLD at most
+        // `guestSessionLimit` sessions at once; at the cap, Start always
+        // offers sign-in instead of recording. This funnels every entry
+        // point — menu-bar Start, the in-app button, AND the hotkey — through
+        // one gate (they all land here). Deleting a session frees a slot.
+        if Self.guestAtSessionCap() {
+            FileLogger.log("startRecording: guest at \(Self.guestSessionLimit)-session cap — offering sign-in instead of recording")
+            AuthController.shared.present()
+            return
+        }
         // Permissions are requested ON DEMAND, only for what THIS recording
         // actually needs — there is no up-front permission gate anymore. An
         // audio-only recording runs entirely off the Core Audio process tap +
@@ -127,6 +137,10 @@ final class RecordingController {
     @discardableResult
     func startPreroll(source: CaptureSource, expectedOtherSpeakers: Int? = nil) async -> String? {
         guard AppContext.shared.recordingState == .idle else { return nil }
+        // Guest at the session cap: don't even silently pre-roll. The
+        // detector then falls back to the visible offer, and accepting it
+        // routes through `startRecording`, which surfaces the sign-in prompt.
+        if Self.guestAtSessionCap() { return nil }
         // Silent → require permissions ALREADY granted (we can't prompt
         // without UI). Screen Recording for SCStream; mic must not be denied.
         guard case .granted = await PermissionsChecker.checkScreenRecording() else { return nil }
@@ -398,6 +412,24 @@ final class RecordingController {
                     body: L.notif("notif_ready_body"))
             }
         }
+    }
+
+    /// Max sessions a signed-out (guest) user may hold at once. Beyond this,
+    /// Start offers sign-in instead of recording. Signed-in users are
+    /// unlimited. Shared with the `/api/account/usage` route + the header
+    /// "N left" counter.
+    static let guestSessionLimit = 5
+
+    /// Sessions the guest currently holds (library + archive, minus pre-roll).
+    /// 0 for signed-in users (the cap doesn't apply, so we don't query).
+    static func guestSessionsHeld() -> Int {
+        guard !AppSettings.isSignedIn else { return 0 }
+        return (try? AppContext.shared.repo.heldMeetingCount()) ?? 0
+    }
+
+    /// True when a signed-out user is at/over the session cap.
+    static func guestAtSessionCap() -> Bool {
+        !AppSettings.isSignedIn && guestSessionsHeld() >= guestSessionLimit
     }
 
     /// Free space on the volume holding the recordings dir, in bytes.

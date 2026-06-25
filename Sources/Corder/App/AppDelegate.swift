@@ -187,9 +187,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 break
             }
         }
-        HotkeyManager.shared.register(
-            keyCode: UInt32(AppSettings.recordHotkeyKeyCode),
-            modifiers: UInt32(AppSettings.recordHotkeyModifiers))
+        // Only bind a global hotkey if the user has actually assigned one.
+        // The default is now UNASSIGNED, so a fresh install ships with no
+        // record shortcut (no accidental trigger, no silent conflict).
+        if AppSettings.recordHotkeyAssigned {
+            HotkeyManager.shared.register(
+                keyCode: UInt32(AppSettings.recordHotkeyKeyCode),
+                modifiers: UInt32(AppSettings.recordHotkeyModifiers))
+        }
 
         // Surface SOMETHING visible on launch. The "signed in?"
         // decision used to read the local `onboardingCompleted`
