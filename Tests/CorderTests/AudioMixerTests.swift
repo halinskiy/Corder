@@ -74,4 +74,48 @@ final class AudioMixerTests: XCTestCase {
         XCTAssertEqual(Int(mixed.frameLength), 1_000)
         XCTAssertEqual(peak(mixed), 0.4, accuracy: 0.001)
     }
+
+    // A buffer that is silent everywhere except [start, start+len), which
+    // holds `value`. Models "audio that happened at a specific offset".
+    private func tone(_ value: Float, at start: Int, len: Int, total: Int) -> AVAudioPCMBuffer {
+        let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(total))!
+        buf.frameLength = AVAudioFrameCount(total)
+        guard let dst = buf.floatChannelData?[0] else { return buf }
+        for i in 0..<total { dst[i] = (i >= start && i < start + len) ? value : 0 }
+        return buf
+    }
+
+    private func peak(_ buf: AVAudioPCMBuffer, in range: Range<Int>) -> Float {
+        guard let dst = buf.floatChannelData?[0] else { return 0 }
+        var p: Float = 0
+        for i in range where i < Int(buf.frameLength) {
+            let a = dst[i] < 0 ? -dst[i] : dst[i]
+            if a > p { p = a }
+        }
+        return p
+    }
+
+    // The sync-bug regression guard. The far end (system.wav) can start
+    // LATE — the process tap takes seconds to come up on a Bluetooth route.
+    // CaptureEngine now left-pads system.wav with leading silence so its
+    // frame 0 lines up with the mic's. This test encodes the contract the
+    // mixer depends on: a system track whose real audio sits at a later
+    // offset must mix THERE, not get dragged onto the user's frame-0 voice.
+    func test_mix_leftPaddedSystem_landsAtItsOffset_notOnUserVoice() {
+        // User speaks at the very start (frames 0..99). Mic silent after.
+        let mic = tone(0.5, at: 0, len: 100, total: 1_000)
+        // Far end actually played from frame 500 (e.g. the user opened a
+        // video 500 samples in). A correctly left-padded system.wav carries
+        // 500 frames of silence, THEN the audio.
+        let systemPadded = tone(0.4, at: 500, len: 100, total: 1_000)
+
+        let mixed = AudioMixer.mix(buffers: [mic, systemPadded], format: format)
+
+        // User voice at the start is untouched (no far-end bleed onto it).
+        XCTAssertEqual(peak(mixed, in: 0..<100), 0.5, accuracy: 0.001)
+        // Far end lands at its true offset.
+        XCTAssertEqual(peak(mixed, in: 500..<600), 0.4, accuracy: 0.001)
+        // The gap between them stays silent.
+        XCTAssertEqual(peak(mixed, in: 100..<500), 0.0, accuracy: 0.001)
+    }
 }

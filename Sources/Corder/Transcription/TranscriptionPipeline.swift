@@ -489,7 +489,11 @@ final class TranscriptionPipeline {
                 // v11: mic.wav now passes through EchoSuppressor (far-end
                 // bleed removed) before ASR when on speakers — the raw mic
                 // text changes, so the key must bust the v10 cache once.
-                cacheKey = "\(providerTag)dual:v11:\(ex):\(mh):\(sh)"
+                // v12: a late-starting system.wav is now left-padded with
+                // leading silence at capture time so mic/system share frame 0
+                // (fixes the far-end overlaying the user's voice). The system
+                // bytes change, so bust once more.
+                cacheKey = "\(providerTag)dual:v12:\(ex):\(mh):\(sh)"
             } else {
                 if !FileManager.default.fileExists(atPath: mixURL.path),
                    let remote = meeting.dropboxAudioPath {

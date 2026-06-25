@@ -23,8 +23,12 @@ final class SystemAudioTap {
 
     /// Delivered on the IOProc's dispatch queue. The buffer's format is
     /// `format` (see below); the callee copies what it needs and must
-    /// not retain the buffer past the call.
-    var onAudio: ((AVAudioPCMBuffer) -> Void)?
+    /// not retain the buffer past the call. The second argument is the
+    /// buffer's mach host time (`AudioTimeStamp.mHostTime`), sampled in the
+    /// IOProc — the ONLY place it's available, since the PCM buffer carries
+    /// no timestamp and the main-actor hop adds skew. The writer uses it to
+    /// left-pad system.wav to the recording's start clock.
+    var onAudio: ((AVAudioPCMBuffer, UInt64) -> Void)?
 
     /// Format of the tapped stream, valid only after a successful
     /// `start()`. Used by the caller to open the destination WAV.
@@ -203,8 +207,14 @@ final class SystemAudioTap {
         var procID: AudioDeviceIOProcID?
         let procStatus = AudioDeviceCreateIOProcIDWithBlock(
             &procID, aggregateID, ioQueue
-        ) { [weak self] _, inInputData, _, _, _ in
+        ) { [weak self] inNow, inInputData, inInputTime, _, _ in
             guard let self = self, let onAudio = self.onAudio else { return }
+            // mHostTime of THIS buffer's input (mach host clock). Fall back to
+            // `inNow` if the input timestamp's host time is missing. Reported
+            // up so CaptureEngine can diff it against the recording-start clock
+            // — done per buffer (cheap), the writer only uses the first one.
+            var hostTime = inInputTime.pointee.mHostTime
+            if hostTime == 0 { hostTime = inNow.pointee.mHostTime }
             let abl = inInputData.pointee
             guard abl.mNumberBuffers > 0 else { return }
             let firstBuf = withUnsafePointer(to: inInputData.pointee.mBuffers) { $0.pointee }
@@ -231,7 +241,7 @@ final class SystemAudioTap {
             self.gotFirstBuffer = true
             self.stateLock.unlock()
             if firstTime { FileLogger.log("SystemAudioTap: first IOProc buffer (\(frameCount) frames) — tap healthy.") }
-            onAudio(pcm)
+            onAudio(pcm, hostTime)
         }
         guard procStatus == noErr, let proc = procID else {
             throw TapError.createIOProc(procStatus)

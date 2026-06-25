@@ -57,6 +57,31 @@ final class CaptureEngine: NSObject {
     private var tearingDown = false
     private(set) var startedAt: Date?
     private(set) var meetingId: String?
+
+    /// Mach host-clock tick latched at the instant `start()` begins, the
+    /// common t=0 that every audio writer left-pads up to. The mic tap
+    /// (`AVAudioTime.hostTime`), the process tap (`AudioTimeStamp.mHostTime`)
+    /// and the SCStream audio (`CMSampleBuffer` PTS) all report this SAME
+    /// mach host clock, so their first-buffer timestamps are directly
+    /// comparable. Without this, a writer that comes up LATE (the process
+    /// tap can take 17 s while the BT watchdog rebuilds it) produces a file
+    /// whose frame 0 is a LATER real instant than the others' — and every
+    /// consumer that overlays the tracks from frame 0 (`AudioMixer`, the
+    /// per-track timing) then shifts the far end earlier, onto the user's
+    /// voice. Latching one clock and padding each writer to it keeps frame 0
+    /// meaning the same instant in every file. Video already gets this for
+    /// free via `startSession(atSourceTime: firstPTS)`.
+    private var captureStartHostTime: UInt64 = 0
+    /// mach ticks → seconds, computed once from `mach_timebase_info`.
+    private let ticksToSeconds: Double = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return Double(info.numer) / Double(info.denom) / 1_000_000_000.0
+    }()
+    /// First-buffer pad guards (each writer pads exactly once).
+    private var paddedMic = false
+    private var paddedSystem = false
+    private var paddedSCK = false
     private(set) var videoURL: URL?
     private(set) var micURL: URL?
     private(set) var systemURL: URL?
@@ -176,6 +201,17 @@ final class CaptureEngine: NSObject {
             FileLogger.log("CaptureEngine.start: rejected — already recording")
             throw CaptureError.alreadyRecording
         }
+
+        // Latch t=0 for ALL audio writers HERE — after the (possibly slow,
+        // first-run) mic-permission prompt has resolved but before any writer
+        // is armed. Every writer's first-buffer host time is then >= this, so
+        // each left-pads to one shared origin. Latched ONCE per recording and
+        // never reset on a tap rebuild, so the watchdog's up-to-17 s of
+        // rebuilds still pad system.wav against the true start.
+        captureStartHostTime = mach_absolute_time()
+        paddedMic = false
+        paddedSystem = false
+        paddedSCK = false
 
         let dir = AppPaths.recordingDir(for: meetingId)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -456,8 +492,23 @@ final class CaptureEngine: NSObject {
                 )
                 self.micFile = micFile
                 inputNode.removeTap(onBus: 0)   // clear any tap a failed attempt left
-                inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, when in
                     guard let self = self else { return }
+                    // First buffer: left-pad mic.wav to the capture-start clock
+                    // so all audio tracks share frame 0. Mic normally arms ~at
+                    // start so this is small, but we MEASURE it (it's the
+                    // reference the other tracks align to) rather than assume 0.
+                    if !self.paddedMic, let micFile = self.micFile {
+                        self.paddedMic = true
+                        let pad = when.isHostTimeValid
+                            ? self.leadingPadFrames(firstBufferHostTime: when.hostTime,
+                                                    sampleRate: buffer.format.sampleRate)
+                            : 0
+                        if pad > 0 {
+                            self.writeSilence(pad, to: micFile, format: buffer.format)
+                            FileLogger.log("CaptureEngine: mic.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/buffer.format.sampleRate))s) to align with capture start")
+                        }
+                    }
                     // Log write failures and count frames only AFTER a successful
                     // write — incrementing before the write (with the error
                     // swallowed by `try?`) gave a falsely-healthy counter.
@@ -514,14 +565,16 @@ final class CaptureEngine: NSObject {
         self.systemAudioFormat = nil
         self.systemFramesWritten = 0
         self.loggedFirstSystemBuffer = false
-        systemTap.onAudio = { [weak self] pcm in
+        systemTap.onAudio = { [weak self] pcm, hostTime in
             // IOProc queue. Feed the level meter here (it hops to main
             // internally + is cheap), then hand the buffer to the
             // main-actor writer — same pattern the old SCStream audio
             // path used. AVAudioFile.write off a serial source is fine.
+            // `hostTime` is the buffer's mach host time, threaded through so
+            // the writer can left-pad system.wav to the capture-start clock.
             RecordingLevelMeter.shared.ingestSystem(pcm: pcm)
             Task { @MainActor [weak self] in
-                self?.writeSystemAudioPCM(pcm)
+                self?.writeSystemAudioPCM(pcm, hostTime: hostTime)
             }
         }
         // ALWAYS start the Core-Audio process tap — including on Bluetooth.
@@ -713,12 +766,49 @@ extension CaptureEngine: SCStreamOutput {
         }
     }
 
+    /// Frames of leading silence a writer needs so its first real sample
+    /// lands at its true offset from `captureStartHostTime`. `ht` is the
+    /// first buffer's mach host time. Clamps to 0 for a writer that armed
+    /// before the latch (or an invalid clock), and caps at 1 h as a sanity
+    /// guard against a bogus timestamp blowing the file up.
+    private func leadingPadFrames(firstBufferHostTime ht: UInt64, sampleRate: Double) -> AVAudioFrameCount {
+        guard captureStartHostTime > 0, ht > captureStartHostTime, sampleRate > 0 else { return 0 }
+        let seconds = Double(ht - captureStartHostTime) * ticksToSeconds
+        let frames = (seconds * sampleRate).rounded()
+        guard frames > 0, frames < sampleRate * 3600 else { return 0 }
+        return AVAudioFrameCount(frames)
+    }
+
+    /// Write `frames` of zeroed samples to `file`, chunked so a multi-second
+    /// pad doesn't allocate one giant buffer. Zeroes via the raw buffer list
+    /// so it works for interleaved and non-interleaved, float or int.
+    private func writeSilence(_ frames: AVAudioFrameCount, to file: AVAudioFile, format: AVAudioFormat) {
+        guard frames > 0 else { return }
+        let chunkCap: AVAudioFrameCount = 16_000
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunkCap) else { return }
+        var remaining = frames
+        while remaining > 0 {
+            let n = min(chunkCap, remaining)
+            buf.frameLength = n
+            for b in UnsafeMutableAudioBufferListPointer(buf.mutableAudioBufferList) {
+                if let d = b.mData { memset(d, 0, Int(b.mDataByteSize)) }
+            }
+            do { try file.write(from: buf) } catch {
+                FileLogger.log("CaptureEngine: leading-silence write failed — \(error)")
+                return
+            }
+            remaining -= n
+        }
+    }
+
     /// Tap-buffer sink, hopped to the main actor (mirrors the old
     /// SCStream `.audio` → writeSystemAudio path). The tap's IOProc is a
     /// single serial queue, so even with the hop the buffers stay
-    /// ordered.
+    /// ordered. `hostTime` is the first sample's mach host time, sampled in
+    /// the IOProc (the only place it's available) and used once to left-pad
+    /// system.wav so its frame 0 lines up with the mic.
     @MainActor
-    private func writeSystemAudioPCM(_ pcm: AVAudioPCMBuffer) {
+    private func writeSystemAudioPCM(_ pcm: AVAudioPCMBuffer, hostTime: UInt64) {
         guard let url = systemURL, let format = systemTap.format else { return }
         if systemAudioFile == nil {
             // nil + tearing down = file was already closed by stop().
@@ -738,6 +828,14 @@ extension CaptureEngine: SCStreamOutput {
             }
         }
         guard let file = systemAudioFile else { return }
+        if !paddedSystem {
+            paddedSystem = true
+            let pad = leadingPadFrames(firstBufferHostTime: hostTime, sampleRate: format.sampleRate)
+            if pad > 0 {
+                writeSilence(pad, to: file, format: format)
+                FileLogger.log("CaptureEngine: system.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/format.sampleRate))s) to align with capture start")
+            }
+        }
         if !loggedFirstSystemBuffer {
             loggedFirstSystemBuffer = true
             FileLogger.log("CaptureEngine: first system audio buffer arrived (frames=\(pcm.frameLength))")
@@ -807,6 +905,21 @@ extension CaptureEngine: SCStreamOutput {
             }
         }
         guard let file = sckAudioFile else { return }
+        if !paddedSCK {
+            paddedSCK = true
+            // SCStream PTS and `captureStartHostTime` are both the mach host
+            // clock (in seconds vs ticks); diff them to left-pad SCK so a
+            // BT-win recording (chooser picks SCK) is aligned too.
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+            let startSec = Double(captureStartHostTime) * ticksToSeconds
+            if pts.isFinite, startSec > 0, pts > startSec {
+                let pad = AVAudioFrameCount(((pts - startSec) * format.sampleRate).rounded())
+                if pad > 0, pad < AVAudioFrameCount(format.sampleRate * 3600) {
+                    writeSilence(pad, to: file, format: format)
+                    FileLogger.log("CaptureEngine: system_sck.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/format.sampleRate))s) to align with capture start")
+                }
+            }
+        }
         if !loggedFirstSCKBuffer {
             loggedFirstSCKBuffer = true
             FileLogger.log("CaptureEngine: first SCStream-audio buffer arrived (frames=\(numSamples))")

@@ -59,14 +59,16 @@ final class RecordingLevelMeter: ObservableObject {
         return w
     }()
 
-    /// Frames since last UI publish — we only push at ~30 Hz to keep
-    /// SwiftUI redraws cheap. CaptureEngine taps fire every ~93 ms at
-    /// 4096 frames / 44.1 kHz, which is already close to that, but the
-    /// guard protects future tap-size changes.
+    /// Frames since last UI publish. Gated at the HUD's render rate (20 Hz)
+    /// so we never publish a spectrum the HUD can't draw — publishing at 30
+    /// against a 20 fps consumer made a 3:2 beat where every third update was
+    /// dropped unevenly. (The mic tap fires at only ~10 Hz — 4096 frames /
+    /// 44.1 kHz — so the visual smoothness comes from the HUD's per-frame
+    /// lerp, not this gate; the gate just bounds redraw cost.)
     private var lastPublishMic: CFTimeInterval = 0
     private var lastPublishSys: CFTimeInterval = 0
     private var lastHistoryPush: CFTimeInterval = 0
-    private static let publishHz: CFTimeInterval = 1.0 / 30.0
+    private static let publishHz: CFTimeInterval = 1.0 / 20.0
     private static let historyPushHz: CFTimeInterval = 1.0 / 12.0  // 12 fps shift
 
     /// Loudest raw peak seen this recording session (pre-throttle, so the

@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.63] — 2026-06-25
+
+### Fixed
+- Far-end (other speaker) audio could appear shifted earlier in a
+  recording and overlap your own voice. It happened when the system-audio
+  tap started late, for example while a Bluetooth route was switching, so
+  the two tracks no longer lined up. Audio tracks are now time-aligned at
+  capture, which fixes both playback and the transcript timing.
+- The recording equalizer in the floating pill animates smoothly now
+  instead of filling in tiny steps.
+
 ## [0.14.62] — 2026-06-25
 
 ### Fixed
