@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.64] — 2026-06-25
+
+### Fixed
+- Long recordings no longer make the whole Mac lag or run hot. The disk
+  writes that happen during capture were moved off the main thread, and a
+  redundant system-audio tap is now dropped when you are not on Bluetooth,
+  so the machine stays responsive through a long session.
+- The floating recording equalizer animates smoothly and fills up
+  properly now, even from a quiet microphone.
+- Transcripts no longer invent a line attributed to you over a stretch
+  where your microphone was actually silent.
+
 ## [0.14.63] — 2026-06-25
 
 ### Fixed
