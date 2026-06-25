@@ -145,7 +145,10 @@ a genuine FFT frequency band (low to high) driven by
 `RecordingLevelMeter.spectrum`, so lows / mids / highs react
 independently and the shape tracks actual sound. Bars sit at a short
 resting height (never collapse to dots) and animate toward each new band
-level. The in-window recording indicator (the embedded blob in the
+level. The panel re-renders at 20 fps while recording and drops to 12 fps
+idle (it is always-on across every Space, so the lower frame rate cuts
+continuous render power; 20 still reads buttery for the equalizer scroll).
+The in-window recording indicator (the embedded blob in the
 Library window bottom-right) was removed; recording is started and
 stopped from the menu-bar popover and the global hotkey.
 
@@ -173,6 +176,17 @@ centred pause bars in `--fg`. Render at 28 (nav), 48 (footer), 128
 clip on Tahoe.
 
 The wordmark is "Corder" in IBM Plex Serif 400.
+
+### DMG installer
+
+The distribution disk image (rendered by `Scripts/make-dmg-background.swift`
++ `Scripts/make-dmg.sh`) carries the brand into the install moment, not a
+default Finder window. White canvas, a "Drag to install" headline near the
+top, and the app-icon → Applications-alias row centred at y=172. Two soft,
+organic brand-green "blob" shapes flank the icons (Gaussian-blurred so their
+edges feather into the white, a low-alpha wash rather than hard fills). The
+window is 540×400. Keep the same calm-over-loud rule here: the blobs are the
+only colour, no gradients beyond the blur falloff.
 
 ### Buttons
 
@@ -274,7 +288,11 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 - **Success / info** — white fill, hairline border, ink text. No
   shadow. No countdown. Auto-dismiss 2.2 s.
 - **Error** — `#c4423a` fill, white text. Used for delete + undo:
-  optional Undo button + live "5s · 4s · 3s" countdown.
+  optional Undo button + live "5s · 4s · 3s" countdown. An error toast
+  raised with no explicit duration (e.g. "Send a report" failures) is
+  PERSISTENT instead: it stays until the user clicks "Send a report"
+  (which closes it) or the × close, so a failure can't scroll past
+  unseen. Only the timed delete/undo variant counts down.
 
 ### Sidebar
 
@@ -324,12 +342,15 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 
 - Components live under `Web/src/components/`, single file per
   component, named exports.
-- All copy goes through `Web/src/i18n.ts`. 20 locales listed in the
-  `LANGS` constant (picker order: **en → uk → ru → global popularity**).
-  Three locales are fully translated (`en`, `ru`, `uk`); the rest
-  resolve to English at runtime via `pickStrings(lang)`. Never inline
-  a string in JSX; when adding a key, populate at least the three
-  full locales and let `pickStrings` handle the rest until they ship.
+- All copy goes through `Web/src/i18n.ts`. The interface is
+  **English-only** as of 0.14.57: `Lang = "en"`, `LANGS = [en]`,
+  `STRINGS = { en }`, and `pickStrings()` always returns `en`. The old
+  20-locale tables and the UI **LangPicker** (Globe popover with SVG
+  flags) were removed. Never inline a string in JSX; add the key to the
+  `en` table. NOTE: this is the *interface* language only. Transcription
+  stays fully multilingual via the separate spoken-audio language picker
+  (`TRANSCRIPTION_LANGS` in `SettingsPane`, Auto-detect default), which
+  is unrelated to i18n and unchanged.
 - API layer: `Web/src/api.ts`. One typed wrapper per endpoint.
 - Format helpers: `Web/src/format.ts` (durations, dates, buckets).
 - Global styles: `Web/src/styles.css`. Tokens at the top, components
@@ -342,20 +363,17 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 react           ^18.3.0      UI runtime
 react-dom       ^18.3.0
 lucide-react    ^1.14.0      icon set (use sparingly)
-flag-icons      ^7.x         CSS sprite of SVG country flags used by
-                             the LangPicker; emoji flags render poorly
-                             on Windows / Linux WebViews, so we
-                             ship SVGs instead. CSS sprite is the only
-                             part bundled (~94 KB gzipped CSS — the
-                             one big concession to our bundle budget).
 vite            ^5.4.0       dev server / bundler
 typescript      ^5.5.0       strict
 ```
 
+The `flag-icons` SVG-flag sprite (and its CSS import) was dropped with
+the LangPicker in 0.14.57; the interface is English-only now, so there
+are no country flags in the UI.
+
 No state library, no router, no CSS-in-JS. Every additional dependency
-must justify its existence — the JS bundle is ~58 KB gzipped today,
-and that's the budget (the flag-icons CSS sprite is tracked
-separately).
+must justify its existence (the JS bundle is ~58 KB gzipped today, and
+that's the budget).
 
 ## What good looks like
 

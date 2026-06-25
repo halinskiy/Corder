@@ -32,9 +32,10 @@ communicate via shared state in `AppContext`:
          │                                       │
          ▼                                       │
 ┌──────── CaptureEngine ─────────────────┐       │
-│ SCStream:                              │       │
-│   .screen     →  (no writer; gotcha)   │       │
-│   .audio      →  system.wav            │       │
+│ SCStream (SKIPPED in audio-only mode): │       │
+│   .screen  →  video.mov (H.264/BGRA)   │       │
+│   .audio   →  system_sck.wav (BT bkp)  │       │
+│ Core-Audio tap → system.wav (primary)  │       │
 │ AVAudioEngine:                         │       │
 │   default input →  mic.wav             │       │
 │ Both → RecordingLevelMeter (HUD)       │       │
@@ -82,7 +83,11 @@ App/                Entry point, app delegate, recording state machine
 ├ CorderApp.swift           NSApplication boot
 ├ AppDelegate.swift         lifecycle, menu, server start, prewarm,
 │                           purgeExpiredArchive() on launch (>7 d),
-│                           duplicate-instance kill, hotkey wiring
+│                           duplicate-instance kill, hotkey wiring.
+│                           Launch recovery (stuck + failed-retriable
+│                           meetings) enqueues SEQUENTIALLY (awaits each)
+│                          , two whisperLocal model loads racing Core
+│                           ML/Metal was a documented SIGABRT.
 ├ AppContext.swift          shared state (singleton); AppSettings
 │                           UserDefaults-backed enum (sync, thread-safe);
 │                           BoostMode / AppLanguage / AppVocabulary;
@@ -124,12 +129,21 @@ Update/
                             (push state, route primary/dismiss actions).
 
 Capture/
-├ CaptureEngine.swift       SCStream wiring (.screen video at HALF
-│                           the backing resolution + 10 fps, HEVC
-│                           ~1.0 Mbps + .audio → system_sck.wav as
-│                           the BT backup), AVAudioEngine.installTap on
-│                           default input for mic, Core-Audio
-│                           process tap for system.wav (primary).
+├ CaptureEngine.swift       SCStream wiring (.screen video, H.264 on
+│                           32BGRA input ~2.5 Mbps capped at 1080p +
+│                           .audio → system_sck.wav as the BT backup),
+│                           AVAudioEngine.installTap on default input
+│                           for mic (4-attempt init retry around the
+│                           -10868 audio-device-change failure),
+│                           Core-Audio process tap for system.wav
+│                           (primary). In audio-only mode (video off,
+│                           non-BT) SCStream is SKIPPED entirely (it
+│                           used to capture the whole screen even with
+│                           video off, the real recording-heat source).
+│                           AVAssetWriter.movieFragmentInterval = 5s so
+│                           a crash/power-loss mid-recording leaves a
+│                           PLAYABLE partial video.mov (the moov atom
+│                           otherwise only lands on finishWriting).
 │                           `tearingDown` flag latched at stop so a
 │                           late tap/SCK buffer can't reopen-truncate
 │                           the just-finished WAV.
@@ -180,7 +194,14 @@ Cloud/
 │                           refreshTier() on app-active + pollAfterUpgrade
 └ GoogleCalendar.swift      Opt-in calendar.readonly OAuth (separate from
                             sign-in, account-pinned), Calendar API fetch,
-                            account-scoped cache, Worker token refresh
+                            account-scoped cache, Worker token refresh.
+                            The pending-connect expiry timer is 900s (15
+                            min): a slow Google consent flow (chooser +
+                            2FA + unverified-app warning) routinely
+                            exceeds 5 min, and the old 300s timer
+                            disarmed the identity-mismatch rollback in
+                            finishConnectIfPending before the genuine
+                            callback landed.
 
 Storage/
 ├ Database.swift            DatabaseQueue factory + migrations.run
@@ -191,12 +212,28 @@ Storage/
                             filtered by archived_at == NULL,
                             listArchived(), setArchived(),
                             archivedOlderThan(),
-                            setRawTurnsCache(...) targeted UPDATE
+                            setRawTurnsCache(...) targeted UPDATE,
+                            setTranscribeFinished(...) targeted UPDATE
+                            of status + transcribed_at only (so pin/
+                            title/expected_other_speakers edits made
+                            WHILE a row is .transcribing aren't reverted
+                            by a full save from a stale snapshot)
 
 Server/
 ├ LocalServer.swift         Swifter wrapper; binds to 127.0.0.1 on a
 │                           random port; reachable only locally
-├ Routes.swift              All HTTP routes (see API.md)
+├ Routes.swift              All HTTP routes (see API.md). A
+│                           server.middleware CSRF guard rejects
+│                           state-changing (POST/PUT/PATCH/DELETE)
+│                           requests whose Origin is present AND not
+│                           loopback (127.0.0.1 / localhost / [::1],
+│                           next char ':' or end so 127.0.0.1.evil.com
+│                           is NOT matched); GET/HEAD, no-Origin
+│                           (native/MCP) and loopback-Origin (WKWebView)
+│                           pass. serveAsset / serveRoot standardize the
+│                           resolved URL and require containment under
+│                           the assets/web root (hasPrefix base+"/") to
+│                           block path traversal.
 ├ MediaExporter.swift       On-demand download products: audio.wav →
 │                           compressed AAC `.m4a` (~10× smaller than the
 │                           32-bit WAV), and the silent screen video.mov
@@ -288,11 +325,22 @@ Stop pressed → TranscriptionPipeline.enqueue:
 
   5. Hallucination filter drops YouTube-subtitle artefacts.
      The Gemini prompt has an anti-hallucination clause that mostly
-     prevents these from appearing in the first place.
+     prevents these from appearing in the first place. The live
+     insert-time filter uses isHallucination (60% substring); the
+     launch-time purge of stored segments uses isExactHallucination
+     (whole-segment exact match only), so a real sentence merely
+     containing a known pattern is never hard-deleted. Everyday meeting
+     sign-offs ("спасибо за внимание", "have a great day", "дякую за
+     увагу", ...) were removed from the pattern list, they are not
+     YouTube outros.
 
   6. setRawTurnsCache(meetingId, gemini_raw_turns, audio_hash)
      (targeted UPDATE — does NOT touch status).
-     Then INSERT/UPDATE meetings/segments/speakers; status flips to .ready.
+     Then INSERT/UPDATE segments/speakers; the mappers finalize the row
+     via setTranscribeFinished (targeted UPDATE of status → .ready +
+     transcribed_at only), NOT a full updateMeeting() from a stale
+     snapshot, so pin/title/expected_other_speakers edits the user made
+     while the row was .transcribing survive.
 
 Optional, fire-and-forget after step 6:
   7. BoostService.boostSegments → segments.text_boost
@@ -431,6 +479,14 @@ path:
 Cost: ~2× Gemini File API calls on the first transcription. Cached
 afterward via `gemini_raw_turns`, so re-runs are free.
 
+**3+ speakers auto-estimate.** Auto-detected calls now start with
+`expectedOtherSpeakers = nil` in BOTH `MeetingDetector` paths (was
+hardcoded `1`, which collapsed every 3+-person call into a single
+"other"). `nil` lets FluidAudio's VBx clustering AUTO-estimate the
+count. The clarify banner (`withSpeakers exactly:N`) remains the exact
+manual override. The `clusteringThreshold` was measured (offline default
+0.6) and is effectively inert across 0.6-0.85, so it is not a tunable.
+
 ### Legacy single-stream (fallback for `mix.wav`-only rows)
 
 ```
@@ -455,17 +511,22 @@ v7 added `audio_hash`.
 
 ## Gotchas / video
 
-`AVAssetWriter` with SCStream-sourced frames is broken on the macOS builds
-we tested. Every output configuration tried —
-`.mov`/`.mp4` × `BGRA`/`YUV` × `AAC`/`PCM`/no-audio — flips writer status
-to `.failed` with `kAudioCodecAudioFormatErr (-16122)` within ~1 s of the
-first appended buffer. Even with the audio input deleted entirely from the
-writer, the failure persists, suggesting an internal mux pipeline problem.
+Video IS recorded now (this section used to claim the opposite). The
+old `kAudioCodecAudioFormatErr (-16122)` failures came from feeding
+`AVAssetWriter` BGRA→YUV-converted samples with an audio input attached;
+the working path is **H.264 on 32BGRA input** (the Apple-Silicon H.264
+hardware encoder takes BGRA and converts internally), capped at 1080p,
+~2.5 Mbps, no audio track on the writer (audio lives in the WAVs). It is
+gated by the **Screen video recording** setting; when off (and not on a
+BT route) the SCStream is SKIPPED entirely, since registering `.screen`
+just to keep the audio clock pacing was the real always-on recording-heat
+source. The frontend renders `<audio>` when `has_video=false`.
 
-We chose **no video file** rather than a brittle 0-byte one. The frontend
-exposes audio-only playback (`<audio>` element with custom controls). The
-`.screen` SCStream output is left registered so frame-pacing keeps the
-audio clock in sync; we just never persist the pixels.
+**Crash-safe partial video.** `AVAssetWriter.movieFragmentInterval = 5s`
+flushes a fragment moov every 5 seconds, so a crash or power-loss
+mid-recording leaves a PLAYABLE partial `video.mov` instead of a 0-byte
+file (the top-level moov atom otherwise only lands on `finishWriting`).
+Technique borrowed from NoCorny Tracer.
 
 ## Concurrency model
 

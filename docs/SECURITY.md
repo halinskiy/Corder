@@ -46,9 +46,33 @@ providers; the Worker returns 403 for those paths from a non-admin
 token. So a normal user's audio can only ever reach Groq, and only on a
 paid tier.
 
-Auto-title / auto-summary / auto-chapters on the paid path use Gemini
-2.5 Flash through the same Worker proxy
-(`/transcribe/gemini-proxy/*`), again with the server-side key.
+Auto-title / auto-summary / auto-chapters use Gemini 2.5 Flash through
+the same Worker proxy (`/transcribe/gemini-proxy/*`), again with the
+server-side key. These text-only notes flows are **free for all tiers
+by product decision** (the text-only paywall is intentionally NOT
+enforced); only audio/video transcription is gated.
+
+**Server-side enforcement of the HARD PROVIDER LOCK.** The provider lock
+(non-admins → Groq or on-device only; Gemini and OpenAI whisper-1 are
+admin-only) is enforced on the Worker, not just the client. Two holes
+were closed:
+
+- `gemini-proxy` now treats a non-text `generateContent` part as
+  admin-only transcription (`generateContentNeedsPaid`): a request part
+  carrying `inline_data` / `inlineData` (base64 audio) OR `fileData` /
+  `fileUri` (an uploaded file reference) counts as paid. The earlier
+  fileData-only check missed inlined base64 audio, letting a non-admin
+  inline a small audio chunk and get free, unmetered Gemini
+  transcription. The `generateContent` MODEL is also pinned to the cheap
+  Flash models the app actually uses (`gemini-2.5-flash` +
+  `gemini-2.5-flash-lite`); previously a free user could request any
+  model, including `gemini-2.5-pro`, with arbitrary prompts. Plus a 2 MB
+  body cap.
+- `whisper-cleanup` (the gpt-4o-mini punctuation polish) now pins
+  `model=gpt-4o-mini`, caps `max_tokens` (16384), and strips `tools`. It
+  was previously an unmetered, un-admin-gated passthrough to OpenAI
+  chat/completions with a client-controlled model + body, so any paid
+  user could run unlimited gpt-4o on the maintainer's key.
 
 The app **never** reads an OpenAI or Gemini key from disk and never
 ships one inside the binary. There is no `~/.config/corder/openai_key`
@@ -64,7 +88,13 @@ clicks "Connect calendar" never grants it. The connect runs an
 incremental OAuth requesting only `calendar.readonly`, pinned to the
 signed-in account via `login_hint`; a callback that resolved to a
 different Google account is rejected so connecting a calendar can't swap
-the Corder identity. The Google access token (1 h) and refresh token are
+the Corder identity. The pending-connect window is 900 s (15 min, raised
+from 300 s): a slow Google consent (account chooser + 2FA + the
+unverified-app warning) routinely exceeds 5 min, and the old 300 s timer
+disarmed the identity-mismatch rollback in `finishConnectIfPending`
+before the genuine callback landed, silently swapping the Corder
+identity to whatever account the browser had resolved to. The Google
+access token (1 h) and refresh token are
 stored only in the account-scoped `calendar_cache.json` on the user's
 disk, never committed and never shipped. Token renewal goes through the
 Worker (`/calendar/refresh`): the app sends the refresh token + its
@@ -186,6 +216,26 @@ full transcript list. We rely on macOS process isolation; if a
 malicious app already runs as your user it has plenty of other ways
 to read `~/Library/Application Support/Corder/`.
 
+**CSRF guard (cross-site POST).** Even though the port is loopback-only,
+a web page open in any browser can still issue "simple" cross-origin
+POSTs to `http://127.0.0.1:<port>/api/...` (e.g. start, stop, archive).
+A `server.middleware` rejects any state-changing request (POST / PUT /
+PATCH / DELETE) whose `Origin` header is present AND not loopback.
+GET / HEAD, requests with no `Origin` (native / MCP clients), and
+loopback-Origin requests (the WKWebView Library window) pass. Loopback
+is matched exactly: `http://127.0.0.1` / `http://localhost` / `http://[::1]`
+followed by `:` or end-of-string, so an attacker-registrable
+`http://127.0.0.1.evil.com` is NOT treated as loopback.
+
+**Path traversal (fixed).** `serveAsset` and `serveRoot` now
+`standardizedFileURL` the resolved target and require it to stay
+contained under the web / assets root (`target.path.hasPrefix(base.path + "/")`).
+Before this, the raw `:path` segment plus Swifter's split-then-percent-decode
+let a request like `GET /assets/..%2f..%2fetc%2fpasswd` (or, worse,
+`~/.config/corder/dropbox.json` with the Dropbox `app_secret` +
+refresh token) read ANY file readable by the user. Verified: a
+traversal path now returns 404, a legitimate asset returns 200.
+
 ## Update channel
 
 Sparkle 2 with EdDSA-signed appcast at
@@ -217,6 +267,18 @@ to the Worker `/telemetry` endpoint:
 No transcripts, no audio, no raw email. The Worker persists the
 envelope into a Cloudflare D1 database (`corder-telemetry`) for the
 maintainer's continuous health view.
+
+## Bug reports (`/submit-logs`)
+
+The "Send a report" / `submitLogs()` path POSTs the diagnostic log to
+the Worker `/submit-logs` endpoint, which emails the maintainer (Resend)
+and files a GitHub issue (`GITHUB_TOKEN`). This endpoint is
+**unauthenticated** by design (a user hitting a crash may not have a
+valid session), so it is hardened against abuse: a per-IP rate limit
+(8 / hour, tracked in the usage D1 table under a synthetic key),
+field-length caps on the submitted payload, and GitHub-label
+sanitization of the client-controlled `app_version` (so a crafted
+version string can't inject arbitrary labels into the issue tracker).
 
 ## Provenance proof
 
