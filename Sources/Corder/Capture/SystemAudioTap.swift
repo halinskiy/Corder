@@ -32,7 +32,17 @@ final class SystemAudioTap {
 
     /// Format of the tapped stream, valid only after a successful
     /// `start()`. Used by the caller to open the destination WAV.
-    private(set) var format: AVAudioFormat?
+    ///
+    /// Read from CaptureEngine's serial write queue while the self-heal
+    /// watchdog may re-assign it from `watchdogQueue` on a tap rebuild —
+    /// that's a cross-thread access to a reference, so go through `stateLock`
+    /// to keep the ARC retain/release of the optional safe (the value is
+    /// identical across rebuilds, but the reference op must not race).
+    var format: AVAudioFormat? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return _format
+    }
+    private var _format: AVAudioFormat?
 
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
@@ -176,7 +186,7 @@ final class SystemAudioTap {
         guard let avFormat = AVAudioFormat(streamDescription: &asbd) else {
             throw TapError.tapFormat(-1)
         }
-        self.format = avFormat
+        stateLock.lock(); _format = avFormat; stateLock.unlock()
 
         // 4. Private aggregate device wrapping the tap. Private => not
         //    persisted, not shown to the user, torn down with us.
