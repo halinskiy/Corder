@@ -239,166 +239,6 @@ final class CaptureEngine: NSObject {
         try? FileManager.default.removeItem(at: systemURL)
         try? FileManager.default.removeItem(at: sckSystemURL)
 
-        // 1. Build the SCContentFilter for the chosen source.
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first else { throw CaptureError.noDisplay }
-
-        let ourApp = content.applications.first { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
-        let filter: SCContentFilter
-        let captureWidth: Int
-        let captureHeight: Int
-
-        switch source {
-        case .fullDisplay:
-            if let ourApp = ourApp {
-                filter = SCContentFilter(display: display, excludingApplications: [ourApp], exceptingWindows: [])
-            } else {
-                filter = SCContentFilter(display: display, excludingWindows: [])
-            }
-            captureWidth = display.width
-            captureHeight = display.height
-        case .window(let id, _, _, let w, let h):
-            guard let win = content.windows.first(where: { $0.windowID == id }) else {
-                throw CaptureError.noDisplay
-            }
-            filter = SCContentFilter(desktopIndependentWindow: win)
-            captureWidth = w
-            captureHeight = h
-        }
-
-        // 2. Configuration: source size + system audio.
-        // We deliberately leave sampleRate / channelCount at defaults — pinning
-        // them to 48k stereo causes SCStream.startCapture to fail with
-        // "Stream failed to start audio" on devices where the actual output is
-        // mono (Bluetooth headsets, some external DACs, AirPods in HFP mode).
-        let config = SCStreamConfiguration()
-        // Output size: the display's point resolution, capped at 1080p height
-        // so a 4K/5K panel doesn't make the encoder chew huge frames. Aspect-
-        // matched + even dimensions (H.264 requirement). Tracer-style "fixed
-        // 1080p cap", NOT backing-resolution-scaled.
-        let srcAspect = captureHeight > 0
-            ? CGFloat(captureWidth) / CGFloat(captureHeight) : 16.0 / 9.0
-        let outH = min(1080, captureHeight)
-        let outW = Int((CGFloat(outH) * srcAspect).rounded())
-        config.width = outW - (outW % 2)
-        config.height = outH - (outH % 2)
-        // BGRA = the display framebuffer's NATIVE format. Requesting YUV here
-        // forced ScreenCaptureKit/WindowServer to run an RGB→YUV color
-        // conversion on EVERY captured frame — measured as the dominant cost
-        // (WindowServer pegged ~88% during recording, the encoder itself was
-        // cheap). Delivering BGRA straight through skips that conversion; the
-        // hardware H.264 encoder takes BGRA and does its own conversion in
-        // silicon for ~free. This is the single biggest lever on the
-        // "recording heats the Mac" complaint (and matches Tracer/Loom).
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.queueDepth = 5
-        // 10 fps is plenty for meeting recordings — cursor and window
-        // motion read fine at that rate, and it's a third fewer frames for
-        // the encoder than 15 fps (less CPU, smaller file) with no
-        // perceptible loss on mostly-static screen content.
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 10)
-        config.capturesAudio = true
-        config.excludesCurrentProcessAudio = true
-        // We deliberately do NOT use SCStream's `.microphone` output even on
-        // macOS 15+. It looks attractive — a single shared tap — but in
-        // practice the system silently delivers zero frames whenever
-        // another app (Meet, Zoom, Discord, Telegram) holds the mic via
-        // WebRTC, or when the user is on Bluetooth headphones. Granola,
-        // Loom, Krisp and the rest all go through `AVAudioEngine.installTap`
-        // on the default input device for exactly this reason: it goes
-        // through CoreAudio HAL where mic streams are shared, not exclusive.
-
-        // 3. AVAssetWriter for video.mov. HEVC at ~1.5 Mbps + 15 fps,
-        //    feeding the YUV samples SCStream already delivers — no
-        //    BGRA→YUV converter pass, which is the path that historically
-        //    flipped the writer to .failed with -16122 partway through.
-        //    Session start is deferred to the first sample we receive
-        //    (sample PTS, not zero) so SCStream's arbitrary clock origin
-        //    doesn't blow up the writer. Failures here are non-fatal —
-        //    audio capture continues, the frontend renders <audio> when
-        //    the .mov is missing.
-        // User can turn screen-video recording off (audio-only). Skipping
-        // the writer is exactly the existing "init failed" path the rest
-        // of the engine already tolerates: videoWriter stays nil,
-        // writeVideo no-ops, the frontend renders <audio> via has_video.
-        // The `.screen` SCStream output is still registered below (it
-        // keeps the audio-clock pacing intact regardless).
-        if !AppSettings.captureVideo {
-            FileLogger.log("CaptureEngine.start: screen-video disabled in Settings — audio only")
-        } else {
-        do {
-            try? FileManager.default.removeItem(at: videoURL)
-            let writer = try AVAssetWriter(url: videoURL, fileType: .mov)
-            let videoSettings: [String: Any] = [
-                // H.264 (not HEVC): the Apple-Silicon H.264 hardware encoder
-                // is more power-efficient than HEVC, and it takes BGRA input
-                // natively. Matches what Tracer/Loom use.
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: config.width,
-                AVVideoHeightKey: config.height,
-                AVVideoCompressionPropertiesKey: [
-                    // ~2.5 Mbps for 1080p10 H.264 screen content (mostly
-                    // static, dips well below most of the time).
-                    AVVideoAverageBitRateKey: 2_500_000,
-                    AVVideoExpectedSourceFrameRateKey: 10,
-                    // I-frame every 4s at 10fps → fast scrubbing in the Library.
-                    AVVideoMaxKeyFrameIntervalKey: 40,
-                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-                ]
-            ]
-            let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            input.expectsMediaDataInRealTime = true
-            if writer.canAdd(input) {
-                writer.add(input)
-            }
-            // Fragmented MOV: flush a movie fragment every ~5s so a crash or
-            // power loss mid-recording leaves a PLAYABLE partial file. Without
-            // this the moov atom is written only by finishWriting(), so an
-            // interrupted recording yields an unplayable video.mov even though
-            // the frames are on disk. (Technique from NoCorny Tracer's
-            // recording-pipeline hardening; must be set before startWriting.)
-            writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
-            if writer.startWriting() {
-                self.videoWriter = writer
-                self.videoInput = input
-                self.videoSessionStarted = false
-                self.videoFramesAppended = 0
-                FileLogger.log("CaptureEngine.start: AVAssetWriter armed (H.264, \(config.width)x\(config.height), 10fps, 2.5 Mbps, BGRA)")
-            } else {
-                FileLogger.log("CaptureEngine.start: AVAssetWriter.startWriting failed: \(writer.error?.localizedDescription ?? "?"). Continuing without video.")
-            }
-        } catch {
-            FileLogger.log("CaptureEngine.start: AVAssetWriter init failed: \(error). Continuing without video.")
-        }
-        }   // end if AppSettings.captureVideo
-
-        // 4. SCStream for SCREEN (video) + a SECONDARY system-audio
-        //    track. The Core Audio process tap below is still the
-        //    primary system-audio source (it captures VPIO/WebRTC call
-        //    audio the SCStream mix misses). But the tap is silent when
-        //    the output route is Bluetooth — exactly when many users
-        //    record (AirPods). SCStream's audio tap captures the mix in
-        //    that case, so we keep `capturesAudio = true` and mirror its
-        //    `.audio` output into a SEPARATE system_sck.wav. The tap
-        //    path is untouched; TranscriptionPipeline prefers the tap
-        //    and only falls back to system_sck.wav when the tap track is
-        //    provably silent. Net: no regression, BT recordings saved.
-        config.capturesAudio = true
-        // The 2026-05-20 diagnostic agent matrix-proved that
-        // `excludesCurrentProcessAudio = true` + an active Core-Audio
-        // process tap deterministically zeros every PCM sample SCStream
-        // delivers (rms 0.00 across 6+ recordings, regardless of BT
-        // route). Apple docs say the property defaults to false, but
-        // empirically the deployed builds behaved like true — pinning
-        // it false explicitly restores the SCK audio path (m4 rms 0.072
-        // vs m5 0.000 in the isolated CLI matrix at /tmp/sck-test).
-        // The TranscriptionPipeline's voiced-energy chooser keeps SCK
-        // out of the way on non-BT runs (tap still wins on energy), so
-        // SCK now finally pulls its weight as the BT-output fallback
-        // it was always meant to be. Side-effect: SCK will capture
-        // Corder's own UI chimes; harmless because SCK only "wins" on
-        // BT-SCO calls where Corder isn't making noise anyway.
-        config.excludesCurrentProcessAudio = false
         // Whether to run the SCStream session AT ALL. MEASURED: a running
         // SCStream (full-display capture + audio) costs ~600 mW — and in
         // audio-only mode capturing the screen was the single biggest source
@@ -408,50 +248,236 @@ final class CaptureEngine: NSObject {
         // the Core Audio process tap can capture silence). On a non-BT
         // audio-only recording the process tap captures system audio
         // reliably, so we skip SCStream entirely and save the power.
+        //
+        // This same flag also gates SCREEN-RECORDING PERMISSION. SCShareableContent
+        // and SCStream both require the Screen Recording TCC grant, but the Core
+        // Audio process tap + the AVAudioEngine mic do NOT. So an audio-only,
+        // non-Bluetooth recording runs with NO Screen Recording permission at all
+        // — a brand-new user can record audio the instant they open Corder, and
+        // we only ever prompt for Screen Recording when video is actually on
+        // (RecordingController enforces the grant up-front in that case). If the
+        // SCShareableContent call here still throws (permission revoked, or a
+        // race), we DON'T fail the recording — we degrade to audio-only, where
+        // the process tap still captures the far end.
         let needSCStream = AppSettings.captureVideo || outputBluetoothAtStart
         if needSCStream {
-            let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
-            // Subscribe to SCREEN frames only when actually recording video —
-            // in BT audio-only we keep the stream for SCK audio but never
-            // touch the screen.
-            if AppSettings.captureVideo {
-                try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
-            }
-            // SCK (system_sck.wav) is ONLY a Bluetooth-output fallback for the
-            // process tap, and is empirically pure silence on every non-BT
-            // recording — yet each buffer still allocated an AVAudioPCMBuffer,
-            // ran CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer and
-            // wrote to disk. So register the `.audio` output ONLY on a BT
-            // route. On a video+non-BT recording we now keep just the `.screen`
-            // output and drop the third tap entirely (issue #1, item 2).
-            if outputBluetoothAtStart {
-                do {
-                    try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
-                    self.sckSystemURL = sckSystemURL
-                    self.sckAudioFile = nil
-                    self.sckFramesWritten = 0
-                    self.loggedFirstSCKBuffer = false
-                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart) → system_sck.wav)")
-                } catch {
-                    // Non-fatal: the process tap is still the primary path. We
-                    // just lose the Bluetooth-output safety net for this run.
-                    self.sckSystemURL = nil
-                    FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
-                }
-            } else {
-                self.sckSystemURL = nil
-                FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), non-BT → no SCK tap, process tap only)")
-            }
             do {
-                try await activeStream.startCapture()
-                FileLogger.log("CaptureEngine.start: SCStream.startCapture OK")
+                // 1. Build the SCContentFilter for the chosen source.
+                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                guard let display = content.displays.first else { throw CaptureError.noDisplay }
+
+                let ourApp = content.applications.first { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+                let filter: SCContentFilter
+                let captureWidth: Int
+                let captureHeight: Int
+
+                switch source {
+                case .fullDisplay:
+                    if let ourApp = ourApp {
+                        filter = SCContentFilter(display: display, excludingApplications: [ourApp], exceptingWindows: [])
+                    } else {
+                        filter = SCContentFilter(display: display, excludingWindows: [])
+                    }
+                    captureWidth = display.width
+                    captureHeight = display.height
+                case .window(let id, _, _, let w, let h):
+                    guard let win = content.windows.first(where: { $0.windowID == id }) else {
+                        throw CaptureError.noDisplay
+                    }
+                    filter = SCContentFilter(desktopIndependentWindow: win)
+                    captureWidth = w
+                    captureHeight = h
+                }
+
+                // 2. Configuration: source size + system audio.
+                // We deliberately leave sampleRate / channelCount at defaults — pinning
+                // them to 48k stereo causes SCStream.startCapture to fail with
+                // "Stream failed to start audio" on devices where the actual output is
+                // mono (Bluetooth headsets, some external DACs, AirPods in HFP mode).
+                let config = SCStreamConfiguration()
+                // Output size: the display's point resolution, capped at 1080p height
+                // so a 4K/5K panel doesn't make the encoder chew huge frames. Aspect-
+                // matched + even dimensions (H.264 requirement). Tracer-style "fixed
+                // 1080p cap", NOT backing-resolution-scaled.
+                let srcAspect = captureHeight > 0
+                    ? CGFloat(captureWidth) / CGFloat(captureHeight) : 16.0 / 9.0
+                let outH = min(1080, captureHeight)
+                let outW = Int((CGFloat(outH) * srcAspect).rounded())
+                config.width = outW - (outW % 2)
+                config.height = outH - (outH % 2)
+                // BGRA = the display framebuffer's NATIVE format. Requesting YUV here
+                // forced ScreenCaptureKit/WindowServer to run an RGB→YUV color
+                // conversion on EVERY captured frame — measured as the dominant cost
+                // (WindowServer pegged ~88% during recording, the encoder itself was
+                // cheap). Delivering BGRA straight through skips that conversion; the
+                // hardware H.264 encoder takes BGRA and does its own conversion in
+                // silicon for ~free. This is the single biggest lever on the
+                // "recording heats the Mac" complaint (and matches Tracer/Loom).
+                config.pixelFormat = kCVPixelFormatType_32BGRA
+                config.queueDepth = 5
+                // 10 fps is plenty for meeting recordings — cursor and window
+                // motion read fine at that rate, and it's a third fewer frames for
+                // the encoder than 15 fps (less CPU, smaller file) with no
+                // perceptible loss on mostly-static screen content.
+                config.minimumFrameInterval = CMTime(value: 1, timescale: 10)
+                config.capturesAudio = true
+                // We deliberately do NOT use SCStream's `.microphone` output even on
+                // macOS 15+. It looks attractive — a single shared tap — but in
+                // practice the system silently delivers zero frames whenever
+                // another app (Meet, Zoom, Discord, Telegram) holds the mic via
+                // WebRTC, or when the user is on Bluetooth headphones. Granola,
+                // Loom, Krisp and the rest all go through `AVAudioEngine.installTap`
+                // on the default input device for exactly this reason: it goes
+                // through CoreAudio HAL where mic streams are shared, not exclusive.
+
+                // 3. AVAssetWriter for video.mov. HEVC at ~1.5 Mbps + 15 fps,
+                //    feeding the YUV samples SCStream already delivers — no
+                //    BGRA→YUV converter pass, which is the path that historically
+                //    flipped the writer to .failed with -16122 partway through.
+                //    Session start is deferred to the first sample we receive
+                //    (sample PTS, not zero) so SCStream's arbitrary clock origin
+                //    doesn't blow up the writer. Failures here are non-fatal —
+                //    audio capture continues, the frontend renders <audio> when
+                //    the .mov is missing.
+                // User can turn screen-video recording off (audio-only). Skipping
+                // the writer is exactly the existing "init failed" path the rest
+                // of the engine already tolerates: videoWriter stays nil,
+                // writeVideo no-ops, the frontend renders <audio> via has_video.
+                // The `.screen` SCStream output is still registered below (it
+                // keeps the audio-clock pacing intact regardless).
+                if !AppSettings.captureVideo {
+                    FileLogger.log("CaptureEngine.start: screen-video disabled in Settings — audio only")
+                } else {
+                    do {
+                        try? FileManager.default.removeItem(at: videoURL)
+                        let writer = try AVAssetWriter(url: videoURL, fileType: .mov)
+                        let videoSettings: [String: Any] = [
+                            // H.264 (not HEVC): the Apple-Silicon H.264 hardware encoder
+                            // is more power-efficient than HEVC, and it takes BGRA input
+                            // natively. Matches what Tracer/Loom use.
+                            AVVideoCodecKey: AVVideoCodecType.h264,
+                            AVVideoWidthKey: config.width,
+                            AVVideoHeightKey: config.height,
+                            AVVideoCompressionPropertiesKey: [
+                                // ~2.5 Mbps for 1080p10 H.264 screen content (mostly
+                                // static, dips well below most of the time).
+                                AVVideoAverageBitRateKey: 2_500_000,
+                                AVVideoExpectedSourceFrameRateKey: 10,
+                                // I-frame every 4s at 10fps → fast scrubbing in the Library.
+                                AVVideoMaxKeyFrameIntervalKey: 40,
+                                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                            ]
+                        ]
+                        let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+                        input.expectsMediaDataInRealTime = true
+                        if writer.canAdd(input) {
+                            writer.add(input)
+                        }
+                        // Fragmented MOV: flush a movie fragment every ~5s so a crash or
+                        // power loss mid-recording leaves a PLAYABLE partial file. Without
+                        // this the moov atom is written only by finishWriting(), so an
+                        // interrupted recording yields an unplayable video.mov even though
+                        // the frames are on disk. (Technique from NoCorny Tracer's
+                        // recording-pipeline hardening; must be set before startWriting.)
+                        writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
+                        if writer.startWriting() {
+                            self.videoWriter = writer
+                            self.videoInput = input
+                            self.videoSessionStarted = false
+                            self.videoFramesAppended = 0
+                            FileLogger.log("CaptureEngine.start: AVAssetWriter armed (H.264, \(config.width)x\(config.height), 10fps, 2.5 Mbps, BGRA)")
+                        } else {
+                            FileLogger.log("CaptureEngine.start: AVAssetWriter.startWriting failed: \(writer.error?.localizedDescription ?? "?"). Continuing without video.")
+                        }
+                    } catch {
+                        FileLogger.log("CaptureEngine.start: AVAssetWriter init failed: \(error). Continuing without video.")
+                    }
+                }   // end if AppSettings.captureVideo
+
+                // 4. SCStream for SCREEN (video) + a SECONDARY system-audio
+                //    track. The Core Audio process tap below is still the
+                //    primary system-audio source (it captures VPIO/WebRTC call
+                //    audio the SCStream mix misses). But the tap is silent when
+                //    the output route is Bluetooth — exactly when many users
+                //    record (AirPods). SCStream's audio tap captures the mix in
+                //    that case, so we keep `capturesAudio = true` and mirror its
+                //    `.audio` output into a SEPARATE system_sck.wav. The tap
+                //    path is untouched; TranscriptionPipeline prefers the tap
+                //    and only falls back to system_sck.wav when the tap track is
+                //    provably silent. Net: no regression, BT recordings saved.
+                config.capturesAudio = true
+                // The 2026-05-20 diagnostic agent matrix-proved that
+                // `excludesCurrentProcessAudio = true` + an active Core-Audio
+                // process tap deterministically zeros every PCM sample SCStream
+                // delivers (rms 0.00 across 6+ recordings, regardless of BT
+                // route). Apple docs say the property defaults to false, but
+                // empirically the deployed builds behaved like true — pinning
+                // it false explicitly restores the SCK audio path (m4 rms 0.072
+                // vs m5 0.000 in the isolated CLI matrix at /tmp/sck-test).
+                // The TranscriptionPipeline's voiced-energy chooser keeps SCK
+                // out of the way on non-BT runs (tap still wins on energy), so
+                // SCK now finally pulls its weight as the BT-output fallback
+                // it was always meant to be. Side-effect: SCK will capture
+                // Corder's own UI chimes; harmless because SCK only "wins" on
+                // BT-SCO calls where Corder isn't making noise anyway.
+                config.excludesCurrentProcessAudio = false
+                let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
+                // Subscribe to SCREEN frames only when actually recording video —
+                // in BT audio-only we keep the stream for SCK audio but never
+                // touch the screen.
+                if AppSettings.captureVideo {
+                    try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
+                }
+                // SCK (system_sck.wav) is ONLY a Bluetooth-output fallback for the
+                // process tap, and is empirically pure silence on every non-BT
+                // recording — yet each buffer still allocated an AVAudioPCMBuffer,
+                // ran CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer and
+                // wrote to disk. So register the `.audio` output ONLY on a BT
+                // route. On a video+non-BT recording we now keep just the `.screen`
+                // output and drop the third tap entirely (issue #1, item 2).
+                if outputBluetoothAtStart {
+                    do {
+                        try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
+                        self.sckSystemURL = sckSystemURL
+                        self.sckAudioFile = nil
+                        self.sckFramesWritten = 0
+                        self.loggedFirstSCKBuffer = false
+                        FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart) → system_sck.wav)")
+                    } catch {
+                        // Non-fatal: the process tap is still the primary path. We
+                        // just lose the Bluetooth-output safety net for this run.
+                        self.sckSystemURL = nil
+                        FileLogger.log("CaptureEngine.start: SCStream .audio output registration failed: \(error). Continuing with process tap only.")
+                    }
+                } else {
+                    self.sckSystemURL = nil
+                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), non-BT → no SCK tap, process tap only)")
+                }
+                do {
+                    try await activeStream.startCapture()
+                    FileLogger.log("CaptureEngine.start: SCStream.startCapture OK")
+                } catch {
+                    FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing — audio tap + mic still record; no video.")
+                }
+                self.stream = activeStream
             } catch {
-                FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing — audio tap + mic still record; no video.")
+                // SCShareableContent / filter / .screen output threw — almost
+                // always "Screen Recording not granted yet". DON'T fail the whole
+                // recording: degrade to audio-only (process tap + mic). We lose
+                // video + the (empirically-silent) SCK backup, but the far end
+                // still comes from the process tap. RecordingController gates
+                // video-on behind an explicit Screen Recording grant, so this
+                // path is the safety net for a revoked grant / race.
+                FileLogger.log("CaptureEngine.start: SCStream unavailable (\(error)) — Screen Recording likely not granted; recording audio-only via process tap")
+                self.stream = nil
+                self.sckSystemURL = nil
+                self.videoWriter = nil
+                self.videoInput = nil
             }
-            self.stream = activeStream
         } else {
             // Audio-only on a non-Bluetooth route: no SCStream at all. The
-            // process tap (system.wav) is the system-audio source here.
+            // process tap (system.wav) is the system-audio source here, and it
+            // needs NO Screen Recording permission.
             self.stream = nil
             self.sckSystemURL = nil
             FileLogger.log("CaptureEngine.start: audio-only + non-BT — skipping SCStream entirely (process tap handles system audio), ~600 mW saved")

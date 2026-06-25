@@ -16,6 +16,28 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.65] — 2026-06-25
+
+### Changed
+- Corder now opens straight to your library. There is no upfront wall of
+  permission requests and no forced sign-in. You can browse, play back, and
+  use the app fully while signed out, with nothing granted yet.
+- Permissions are asked only when you actually start a recording, and only
+  the ones that recording needs. Audio recordings need no Screen Recording
+  permission at all, so you can hit Start and capture audio the moment you
+  open Corder.
+- If you turn on screen video, Corder asks for Screen Recording with a clear
+  prompt that opens the right Settings pane and reminds you to reopen Corder
+  so the change takes effect. You can also choose "Record audio only" to
+  start right away without it.
+- Sign in now lives in a card inside the Corder window (the same look as the
+  update card) instead of a separate window. Signing in stays optional, and
+  you can switch between Sign in and Sign up with one tap.
+
+### Fixed
+- The sign-in window no longer appears stretched, and the profile avatar
+  reflects your status (it stays neutral while you are signed out).
+
 ## [0.14.64] — 2026-06-25
 
 ### Fixed

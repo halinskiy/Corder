@@ -5028,12 +5028,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .auth-google:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 5%, var(--bg)); }
 .auth-google:disabled { opacity: 0.6; cursor: default; }
 .auth-terms {
-  display: flex; align-items: flex-start; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 12px; color: color-mix(in srgb, var(--fg) 65%, transparent);
   cursor: pointer; line-height: 1.4;
 }
 .auth-terms input {
-  width: 18px; height: 18px; margin-top: 1px;
+  width: 18px; height: 18px;
   flex-shrink: 0; accent-color: var(--accent); cursor: pointer;
 }
 .auth-terms a { color: var(--accent); cursor: pointer; }
