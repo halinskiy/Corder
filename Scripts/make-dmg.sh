@@ -69,9 +69,9 @@ create-dmg \
     --window-pos 200 120 \
     --window-size 540 400 \
     --icon-size 100 \
-    --icon "Corder.app" 145 172 \
+    --icon "Corder.app" 145 195 \
     --hide-extension "Corder.app" \
-    --app-drop-link 395 172 \
+    --app-drop-link 395 195 \
     --no-internet-enable \
     --hdiutil-quiet \
     "$DMG" \

@@ -58,7 +58,7 @@ declare global {
   }
 }
 
-function postAction(action: "primary" | "dismiss") {
+function postAction(action: "primary" | "dismiss" | "ready") {
   try { window.webkit?.messageHandlers?.updateAction?.postMessage(action); }
   catch { /* dev shell has no native bridge */ }
 }
@@ -131,6 +131,11 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
         }, 220);
       }
     };
+    // Tell Swift the modal host is mounted so it can REPLAY any update
+    // state it pushed while the WebView was closed/loading (e.g. a
+    // background check found the update before the Library was opened).
+    // Without this the modal never appears and the pill click looks dead.
+    postAction("ready");
     return () => { delete window.corderUpdateState; };
   }, []);
 
