@@ -214,7 +214,11 @@ There is no authentication on the local API. Any process running as
 your user can curl `http://127.0.0.1:<port>/api/meetings` and get the
 full transcript list. We rely on macOS process isolation; if a
 malicious app already runs as your user it has plenty of other ways
-to read `~/Library/Application Support/Corder/`.
+to read `~/Library/Application Support/Corder/`. (The newer
+`GET /api/account/usage` endpoint, which feeds the header guest
+"N left" session counter, is the opposite end of the spectrum: it
+returns only non-sensitive counts (`is_guest`, `sessions_used`,
+`sessions_left`, `limit`), no transcript, email, or identity.)
 
 **CSRF guard (cross-site POST).** Even though the port is loopback-only,
 a web page open in any browser can still issue "simple" cross-origin

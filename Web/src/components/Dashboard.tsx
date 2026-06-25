@@ -6,7 +6,6 @@ import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
-import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
 import { UpcomingPane } from "./UpcomingPane";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
@@ -73,8 +72,7 @@ interface Props {
   /// Legacy no-op kept for prop-shape compat. Replaced by deriving
   /// the flag from `settingsSection !== null` upstream.
   onSettingsOpenChange?: (open: boolean) => void;
-  /// Passed through to WhisperPrefetchPill so a Free user clicking
-  /// the locked Whisper-Cloud option gets a one-line nudge toast.
+  /// Surfaces one-line nudge/error toasts from the Dashboard surface.
   onToast?: (msg: string, kind?: "success" | "error") => void;
 }
 
@@ -84,7 +82,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyLabel, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, onToast }: Props) {
+export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyLabel, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -302,7 +300,6 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
                       : (isRecording ? t.rec_stop : t.dashboard_start)}
                   </span>
                 </button>
-                <WhisperPrefetchPill t={t} onToast={onToast} />
               </div>
               {hotkeyLabel && hotkeyLabel !== "Not set" && (
                 <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>

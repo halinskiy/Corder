@@ -92,9 +92,9 @@ automatically as soon as the transcript is ready.
   speaker_names?: string;      // " · " join of names of who spoke
   pinned?: boolean;
   // False = user hasn't opened this meeting in `.ready` state yet.
-  // Drives the gold "unseen" title in the sidebar and Dashboard
-  // Recent. Stamped to true the first time the user fetches the
-  // detail endpoint on a ready row.
+  // Drives the gold "unseen" title in the sidebar and the Welcome
+  // (home) Recent list. Stamped to true the first time the user
+  // fetches the detail endpoint on a ready row.
   viewed?: boolean;
 }
 ```
@@ -130,13 +130,39 @@ SegmentDTO  { id, speaker_id, start_ms, end_ms, text, text_boost }
 | Method | Path                       | Body                                  |
 | ------ | -------------------------- | ------------------------------------- |
 | GET    | `/api/recording/state`     | `{active: bool, meeting_id?, started_at_ms?, stopping?}` |
-| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the global hotkey and the menu-bar popover (the in-window inline recording indicator was removed). |
+| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the global hotkey and the menu-bar popover (the in-window inline recording indicator was removed). A signed-out user at the 5-session cap (`guestAtSessionCap()`) gets the in-app sign-in modal instead of a recording. |
 | POST   | `/api/recording/stop`      | Triggers `RecordingController.stopRecording()`. |
 
 The frontend polls `/api/recording/state` once per second to drive the
 live RecordingBanner card. The state is read through the lock-protected
 `RecordingStateSnapshot` mirror — Swifter handlers don't need to hop
 to `MainActor`.
+
+## Account / auth
+
+| Method | Path                     | Returns / Body                       |
+| ------ | ------------------------ | ------------------------------------ |
+| POST   | `/api/open-welcome`      | Opens the in-app sign-in MODAL via `AuthController.shared.present()` (SignInModal in the Library WebView). Sign-in is optional; the old native WelcomeWindow is dead code. |
+| GET    | `/api/account/usage`     | Guest session quota for the header "N left" counter (see below). |
+| POST   | `/api/account/signout`   | Invalidates the Supabase session + clears the local token, then relaunches. |
+| POST   | `/api/account/delete`    | Wipes cloud + local account state and relaunches. NOTE: the "Delete account" UI block was removed from Settings, so this route is no longer reachable from the app UI. |
+| GET    | `/api/account/mcp-token` | Mints a short-lived token for the local MCP server. |
+
+`GET /api/account/usage` returns the guest 5-session cap state:
+
+```ts
+AccountUsage {
+  is_guest: boolean;       // true only for a signed-out user (the cap's only audience)
+  sessions_used: number;   // held meetings (library + archive, minus preroll)
+  sessions_left: number;   // max(0, limit - used)
+  limit: number;           // RecordingController.guestSessionLimit (5)
+}
+```
+
+`GuestSessionCounter` (in `MainHeader`) polls this and renders the
+"N left" badge only while `is_guest`. Signed-in users short-circuit
+to `sessions_used = 0` with no DB query. At the cap, every Start path
+(menu bar, in-app, hotkey) offers sign-in instead of recording.
 
 ## Settings
 
@@ -170,7 +196,7 @@ Settings {
   auto_summary?: boolean;
   auto_chapters?: boolean;
   // Opt-in, default OFF (absent ≡ off): telemetry, launch_at_login, and
-  // stats_enabled. stats_enabled shows the Dashboard statistics card.
+  // stats_enabled. stats_enabled shows the Welcome (home) statistics card.
   // (The Statistics settings block was removed from the Settings UI.)
   telemetry?: boolean;
   launch_at_login?: boolean;
@@ -184,10 +210,13 @@ Settings {
   meeting_blacklist?: string[]; // bundle ids: never offer
   detected_mic_apps?: string[]; // read-only: recent mic owners (UI picker)
   // Global record hotkey. Write Carbon key code + Carbon mod mask
-  // (cmd 256 | shift 512 | option 2048 | ctrl 4096). Default ⌘⇧F.
+  // (cmd 256 | shift 512 | option 2048 | ctrl 4096). UNASSIGNED by
+  // default (code -1, mods 0); the Settings "Clear" button unbinds.
+  // A binding only counts as assigned with a STRONG modifier
+  // (cmd/opt/ctrl, NOT shift-only) per `isStrongHotkeyMods`.
   record_hotkey_code?: number;
   record_hotkey_mods?: number;
-  record_hotkey_label?: string;       // read-only e.g. "⇧⌘F"
+  record_hotkey_label?: string;       // read-only e.g. "⌃⌥⇧⌘F"; "Not set" when unassigned
   record_hotkey_conflict?: string|null; // read-only: clashing macOS system shortcut
   record_hotkey_ok?: boolean;         // read-only: OS accepted the binding
 }

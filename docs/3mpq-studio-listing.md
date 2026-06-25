@@ -38,22 +38,23 @@ into the repo root.
   tagline: 'Local meeting recorder & transcriber for macOS',
   description:
     "macOS status-bar app that records system audio and your microphone " +
-    "onto separate tracks, transcribes them in parallel via Gemini 2.5 " +
-    "Flash with a dual-track speaker model, and stores everything in a " +
-    "local Library window. Floating recording HUD over every Space, " +
-    "optional segment-by-segment polish, optional Dropbox archive. " +
-    "No bot in the call. No signups.",
+    "onto separate tracks, transcribes them in parallel with a dual-track " +
+    "speaker model (Whisper in the cloud, or fully on-device on Apple " +
+    "Silicon), and stores everything in a local Library window. Floating " +
+    "recording HUD over every Space, optional segment-by-segment polish, " +
+    "optional Dropbox archive. No bot in the call. Records straight away, " +
+    "no sign-up required.",
   platform: 'macOS',
   stack: [
     'Swift', 'SwiftUI', 'WKWebView',
     'ScreenCaptureKit', 'AVAudioEngine',
-    'Gemini 2.5', 'GRDB', 'Sparkle',
+    'Whisper', 'WhisperKit', 'GRDB', 'Sparkle',
   ],
   features: [
     {
       title: 'Dual-track transcription',
       description:
-        "Mic and system audio go to Gemini as two parallel calls — mic " +
+        "Mic and system audio are transcribed as two parallel passes, mic " +
         "forced to a single speaker, system asked to diarise the remote " +
         "side. Solves the 'your words got merged with your friend's " +
         "during a silent gap' class of bug that single-stream tools have.",
@@ -69,9 +70,9 @@ into the repo root.
     {
       title: 'Smart re-transcribe',
       description:
-        "Raw Gemini turns are cached by audio MD5. Re-mapping speakers " +
-        "(clarify banner, pinned count) and re-transcribing after a " +
-        "Dropbox archive both reuse the cache — zero extra API calls.",
+        "Raw transcription turns are cached by audio MD5. Re-mapping " +
+        "speakers (clarify banner, pinned count) and re-transcribing after " +
+        "a Dropbox archive both reuse the cache, zero extra API calls.",
     },
     {
       title: '7-day archive bin',

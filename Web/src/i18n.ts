@@ -397,7 +397,7 @@ interface Strings {
 
 const en: Strings = {
   breadcrumb_records: "Recordings",
-  breadcrumb_dashboard: "Dashboard",
+  breadcrumb_dashboard: "Welcome",
 
   sidebar_search: "Search recordings…",
   sidebar_empty: "No recordings yet. Click Start in the menu bar.",
@@ -584,7 +584,7 @@ const en: Strings = {
   profile_title: "Profile",
   profile_name: "Kostiantyn Halynskyi",
   profile_sub: "id #012103",
-  profile_dashboard: "Dashboard",
+  profile_dashboard: "Welcome",
   profile_account: "Settings",
   profile_language: "Language",
   profile_help: "Get help",
