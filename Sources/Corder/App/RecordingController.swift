@@ -34,24 +34,29 @@ final class RecordingController {
             FileLogger.log("startRecording: ignored — state is not idle")
             return
         }
-        // Permissions
-        switch await PermissionsChecker.checkScreenRecording() {
-        case .granted: break
-        case .denied:
-            present(error: "Нет разрешения Screen Recording. Открой System Settings → Privacy → Screen Recording.")
-            PermissionsChecker.openScreenRecordingSettings()
-            return
-        case .notDetermined:
-            present(error: "Нужно разрешение Screen Recording. Подтверди в System Settings и попробуй снова.")
-            PermissionsChecker.openScreenRecordingSettings()
-            return
+        // Permissions are requested ON DEMAND, only for what THIS recording
+        // actually needs — there is no up-front permission gate anymore. An
+        // audio-only recording runs entirely off the Core Audio process tap +
+        // the mic, NEITHER of which needs Screen Recording, so we only ask for
+        // Screen Recording when the user has screen video turned ON. (Video
+        // defaults OFF, so a brand-new user records audio the instant they hit
+        // Start.) The CaptureEngine also degrades to audio-only if the grant is
+        // somehow missing at capture time, so this prompt is the friendly
+        // heads-up, not the only line of defence.
+        if AppSettings.captureVideo {
+            switch await PermissionsChecker.checkScreenRecording() {
+            case .granted: break
+            case .denied, .notDetermined:
+                presentScreenRecordingNeeded(source: source, expectedOtherSpeakers: expectedOtherSpeakers)
+                return
+            }
         }
         // Microphone permission: only block on explicit .denied. For .notDetermined
         // we let AVAudioEngine.start() in CaptureEngine trigger the real TCC prompt —
         // that path reliably registers the app in System Settings → Microphone,
         // whereas AVCaptureDevice.requestAccess can silently fail to surface a prompt.
         if PermissionsChecker.checkMicrophone() == .denied {
-            present(error: "Нет доступа к микрофону. Открой System Settings → Privacy → Microphone и включи Corder.")
+            present(error: "Corder needs the microphone to record you. Open System Settings → Privacy & Security → Microphone and turn Corder on.")
             PermissionsChecker.openMicrophoneSettings()
             return
         }
@@ -415,6 +420,46 @@ final class RecordingController {
         alert.informativeText = error
         alert.alertStyle = .warning
         alert.runModal()
+    }
+
+    /// Screen Recording is needed ONLY for screen-video recordings (audio runs
+    /// off the process tap + mic without it). macOS hands a freshly-granted
+    /// Screen Recording permission to the app only on its NEXT launch, so this
+    /// prompt is RESTART-AWARE: it opens System Settings and offers to quit
+    /// Corder so the user can reopen it with the grant live. The escape hatch
+    /// is "Record audio only" — it captures this one session without video,
+    /// no extra permission, no restart.
+    private func presentScreenRecordingNeeded(source: CaptureSource, expectedOtherSpeakers: Int?) {
+        PermissionsChecker.openScreenRecordingSettings()
+        let alert = NSAlert()
+        alert.messageText = "Allow Screen Recording to capture video"
+        alert.informativeText = """
+        Corder records your screen, so macOS needs Screen Recording permission. \
+        Turn Corder on under System Settings → Privacy & Security → Screen Recording, \
+        then quit and reopen Corder so the change takes effect.
+
+        Prefer not to? You can record audio only — that needs no extra permission \
+        and no restart.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Quit Corder")        // .alertFirstButtonReturn
+        alert.addButton(withTitle: "Record audio only")  // .alertSecondButtonReturn
+        alert.addButton(withTitle: "Cancel")             // .alertThirdButtonReturn
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            CorderRelaunch.now()
+        case .alertSecondButtonReturn:
+            // One-tap fallback: drop screen video and start right now. The
+            // CaptureEngine reads `captureVideo` at start, so we persist the
+            // flag; the user can re-enable screen video in Settings later.
+            AppSettings.setCaptureVideo(false)
+            FileLogger.log("RecordingController: user chose audio-only over Screen Recording — starting audio capture")
+            Task { @MainActor in
+                await self.startRecording(source: source, expectedOtherSpeakers: expectedOtherSpeakers)
+            }
+        default:
+            break
+        }
     }
 }
 
