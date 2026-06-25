@@ -202,63 +202,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Session restore is async (SDK reads disk + may refresh
         // the access token); we do the check inside a Task so the
         // launch path doesn't block.
-        // Permission watchdog: live TCC check on every launch so a
-        // reset (the user clicked Corder off in System Settings →
-        // Privacy & Security, or someone ran `tccutil reset`) re-opens
-        // the Welcome wizard on its `.permissions` step regardless of
-        // the local `onboardingCompleted` flag. The wizard re-evaluates
-        // mic + screen status when `present()` is called, so we just
-        // clear the sticky flags first (otherwise the wizard would
-        // skip to sign-in because `screenGrantedSticky == true`).
-        let liveMicOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        let liveScreenOK = CGPreflightScreenCaptureAccess()
-        if !liveMicOK || !liveScreenOK {
-            FileLogger.log("AppDelegate: TCC reset detected (mic=\(liveMicOK) screen=\(liveScreenOK)) — reopening welcome on permissions step")
-            if !liveMicOK    { AppSettings.setMicGrantedSticky(false) }
-            if !liveScreenOK { AppSettings.setScreenGrantedSticky(false) }
-            LibraryWindow.shared.dismiss()
-            WelcomeWindowController.shared.presentManually()
+        // No upfront gate. Permissions are requested ON-DEMAND when the user
+        // actually records, and sign-in is OPTIONAL — the app opens straight
+        // into the Library and is fully usable signed-out with nothing
+        // granted. We refresh the permission sticky-flags from the live TCC
+        // state (so the record-time flow knows what to (re)request) but never
+        // reopen a blocking wizard. `onboardingCompleted` is set true
+        // unconditionally so every legacy "is the app set up?" guard
+        // (hotkey / popover Start / MeetingDetector) passes — the wizard is
+        // now only ever opened on demand for sign-in (Profile → Sign in).
+        if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
+            AppSettings.setMicGrantedSticky(false)
         }
+        if !CGPreflightScreenCaptureAccess() {
+            AppSettings.setScreenGrantedSticky(false)
+        }
+        AppSettings.setOnboardingCompleted(true)
+        LibraryWindow.shared.show(serverURL: AppContext.shared.server.baseURL)
 
+        // Resolve any existing Supabase session in the BACKGROUND purely to
+        // mirror the signed-in identity + backfill cloud meetings. Never
+        // blocks the Library and never gates: signed-out is a fine state.
         Task { @MainActor in
             let session = try? await SupabaseClientHolder.shared.auth.session
-            if session == nil {
-                LibraryWindow.shared.dismiss()
-                WelcomeWindowController.shared.presentManually()
-            } else {
-                // Mirror the resolved identity into local UserDefaults
-                // so the profile popover etc. don't need to await
-                // Supabase on every read.
-                if let user = SupabaseClientHolder.shared.auth.currentUser {
-                    if let email = user.email, !email.isEmpty {
-                        AppSettings.setUserEmail(email)
-                    }
-                    let meta = user.userMetadata
-                    let name = (meta["full_name"]?.stringValue
-                                ?? meta["name"]?.stringValue) as String?
-                    if let name, !name.isEmpty {
-                        AppSettings.setUserName(name)
-                    }
-                    // Pull subscription tier from the server-side
-                    // `app_metadata.tier` (the *admin* API can write
-                    // it, the user cannot — so this is the canonical
-                    // source of truth for paid plans). Falls back to
-                    // whatever's already in UserDefaults if missing
-                    // so we never DOWNgrade silently on a transient
-                    // network blip.
-                    SupabaseTierSync.applyFromCurrentSession()
-                    AppSettings.setOnboardingCompleted(true)
-                    AppSettings.setHasSignedInBefore(true)
-                }
-                LibraryWindow.shared.show(serverURL: AppContext.shared.server.baseURL)
-                // Backfill pre-Supabase meetings into the cloud the
-                // first time we launch under a signed-in user. No-op
-                // after the sticky flag is set. Runs in the
-                // background so it never blocks the Library window
-                // becoming interactive.
-                Task.detached {
-                    await SupabaseSync.backfillIfNeeded(repo: AppContext.shared.repo)
-                }
+            guard session != nil,
+                  let user = SupabaseClientHolder.shared.auth.currentUser else { return }
+            if let email = user.email, !email.isEmpty { AppSettings.setUserEmail(email) }
+            let meta = user.userMetadata
+            let name = (meta["full_name"]?.stringValue ?? meta["name"]?.stringValue) as String?
+            if let name, !name.isEmpty { AppSettings.setUserName(name) }
+            SupabaseTierSync.applyFromCurrentSession()
+            AppSettings.setHasSignedInBefore(true)
+            Task.detached {
+                await SupabaseSync.backfillIfNeeded(repo: AppContext.shared.repo)
             }
         }
     }
