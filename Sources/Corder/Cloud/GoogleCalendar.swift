@@ -71,9 +71,21 @@ enum GoogleCalendar {
             pendingConnectEmail = signedInEmail
             // Expire the pending flag if the user abandons the browser flow,
             // so a much-later ordinary sign-in callback can't be mistaken
-            // for this calendar connect.
+            // for this calendar connect. The window must be LONGER than a real
+            // Google consent flow (account chooser + sign-in + 2FA + the
+            // unverified-app warning click-through routinely exceed 5 min) —
+            // otherwise the timer disarms the identity-mismatch rollback in
+            // finishConnectIfPending BEFORE the genuine callback lands, and a
+            // connect that resolved to a different account silently swaps the
+            // Corder identity. 15 min covers realistic slow consent; the only
+            // residual is a callback later than that, which falls back to
+            // being treated as an ordinary sign-in. (Ideal future fix: bind a
+            // random nonce into the redirect and verify it in authCallback so
+            // the connect callback is identified regardless of timing — held
+            // off here to avoid Supabase redirect-allowlist churn on a feature
+            // still behind Google's unverified-consent screen.)
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 300_000_000_000)
+                try? await Task.sleep(nanoseconds: 900_000_000_000)
                 if pendingConnect {
                     pendingConnect = false
                     pendingConnectEmail = nil

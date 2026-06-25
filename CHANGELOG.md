@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.59] — 2026-06-25
+
+### Fixed
+- If Corder or your Mac crashes or loses power mid-recording, the saved
+  video is now playable up to the last few seconds instead of ending up
+  as an unopenable file.
+- Hardened the built-in local server so it can't be tricked into reading
+  files outside the app.
+- Connecting Google Calendar is now safe even when Google sign-in takes a
+  long time: a slow consent flow can no longer attach a different account.
+
 ## [0.14.58] — 2026-06-25
 
 ### Fixed
