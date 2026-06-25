@@ -30,6 +30,8 @@ behaviour, not internal refactors.
   has no hotkey to trigger by accident or clash with another app. Set your own
   in Settings, and a Clear button removes it whenever you want.
 
+## [0.14.65] — 2026-06-25
+
 ### Changed
 - Corder now opens straight to your library. There is no upfront wall of
   permission requests and no forced sign-in. You can browse, play back, and
