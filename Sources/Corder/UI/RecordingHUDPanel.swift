@@ -480,7 +480,7 @@ struct RecordingHUDView: View {
     /// steps into continuous motion.
     private func barHeights(t: TimeInterval, isRecording: Bool, relax: TimeInterval) -> [CGFloat] {
         let target = barTargets(t: t, isRecording: isRecording, relax: relax)
-        let tau = 0.055
+        let tau = 0.07
         let dt = barSmoother.lastT == 0 ? (1.0 / 20.0)
                                         : max(0, min(0.1, t - barSmoother.lastT))
         barSmoother.lastT = t
@@ -526,7 +526,14 @@ struct RecordingHUDView: View {
             spec = meter.spectrum.map { CGFloat($0) }
         }
         return (0..<n).map { i in
-            let v = i < spec.count ? min(1, spec[i] * energy) : 0
+            let raw = i < spec.count ? Double(spec[i]) : 0
+            // Perceptual fill: a gamma < 1 pulls mid-level bands UP toward
+            // full (0.3→0.47, 0.5→0.66, 0.7→0.81) so normal speech visibly
+            // fills the equalizer instead of barely lifting off the floor,
+            // and a small gain saturates real peaks. Silence (raw 0) stays
+            // flat — the noise gate already zeroed it upstream.
+            let filled = raw > 0 ? min(1.0, pow(raw, 0.62) * 1.18) : 0
+            let v = min(1, CGFloat(filled) * energy)
             return Self.barBaseH + v * Self.barMaxExtra
         }
     }
