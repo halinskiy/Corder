@@ -90,7 +90,7 @@ Corder/
 │   ├── src/                       App code
 │   │   ├── components/            One file per UI component
 │   │   ├── api.ts                 typed fetch wrappers
-│   │   ├── i18n.ts                ru / en string tables
+│   │   ├── i18n.ts                en-only string table (interface)
 │   │   ├── format.ts              date / duration helpers
 │   │   ├── styles.css             global styles + tokens
 │   │   └── main.tsx               App shell
@@ -131,9 +131,20 @@ Corder/
 
 ### Add a UI string
 
+The interface ships English-only as of 0.14.57 (the Globe UI-language
+picker was removed; `Lang = "en"`, `LANGS = [en]`, `STRINGS = { en }`,
+`pickStrings()` always returns `en`). The one-member `Lang` type is kept
+on purpose so re-adding a locale stays a localized change.
+
 1. Add the key to the `Strings` interface in `Web/src/i18n.ts`.
-2. Add Russian and English values. Don't ship a partial translation.
+2. Add the value to the `en` table (the only table). No other locales
+   exist, so there's no partial-translation concern.
 3. Use as `t.foo` in the component. Never inline a string.
+
+Note: this is the *interface* language only. TRANSCRIPTION stays fully
+multilingual, the separate spoken-audio language picker
+(`TRANSCRIPTION_LANGS` in `SettingsPane.tsx`, "Auto-detect" default) is
+KEPT and unrelated to `i18n.ts`.
 
 ### Add a colour or font weight
 

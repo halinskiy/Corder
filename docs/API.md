@@ -2,8 +2,19 @@
 
 The Swift backend runs a Swifter HTTP server on `127.0.0.1:<random-port>`
 that serves the React frontend bundle and a JSON API. Every endpoint
-below is reachable only from localhost, with no authentication — the
+below is reachable only from localhost, with no authentication; the
 trust boundary is the macOS user account.
+
+> **CSRF Origin guard.** A `server.middleware` rejects any
+> state-changing request (POST / PUT / PATCH / DELETE) whose `Origin`
+> header is present AND is not loopback, with a `403 Forbidden`. Loopback
+> means exactly `http://127.0.0.1`, `http://localhost`, or `http://[::1]`,
+> optionally followed by `:` + port (the next char must be `:` or
+> end-of-string, so `http://127.0.0.1.evil.com` is NOT treated as
+> loopback). GET / HEAD, requests with no `Origin` (native / MCP
+> clients), and loopback-Origin requests (the WKWebView app's own
+> traffic) all pass. This closes cross-site POSTs from a browser tab to
+> `start` / `stop` / `archive` / etc. while the local port is up.
 
 > All bodies are JSON unless otherwise noted. Field names are
 > `snake_case` on the wire. DTO definitions live in
@@ -17,6 +28,15 @@ trust boundary is the macOS user account.
 | GET    | `/`                 | Serves `index.html` from the bundled web.   |
 | GET    | `/index.html`       | Same.                                       |
 | GET    | `/assets/:path`     | Bundled web assets (JS / CSS).              |
+| GET    | `/avatar.jpg` · `/icon.svg` · `/favicon.ico` | Bundled web-root files. |
+
+`serveAsset` and `serveRoot` are path-traversal-safe: the resolved
+target URL is `standardizedFileURL`'d and must stay contained under the
+assets / web root (`target.path.hasPrefix(base.path + "/")`), else
+`404`. Before this guard, a `:path` segment like
+`..%2f..%2fetc%2fpasswd` (Swifter splits then percent-decodes) could
+read any user-readable file, including `~/.config/corder/dropbox.json`
+with the Dropbox `app_secret` + refresh token.
 
 ## Meetings
 
@@ -127,11 +147,13 @@ to `MainActor`.
 
 ```ts
 Settings {
-  // ISO 639-1 code. The backend stores any string; the frontend
-  // LangPicker currently lists 20 locales (en, uk, ru, de, fr, es,
-  // pt, it, pl, cs, tr, nl, sv, id, vi, ja, ko, zh, hi, ar).
-  // Locales without a full translation table fall back to English
-  // in the UI; the server just persists whatever you send.
+  // ISO 639-1 code. The backend stores any string and still accepts
+  // one, but as of 0.14.57 the INTERFACE is English-only: the UI
+  // LangPicker was removed and i18n ships `en` only, so this field is
+  // effectively dormant on the client (native `AppLanguage` defaults to
+  // `en`). NOTE: this is the interface language, NOT transcription;
+  // spoken-audio language stays fully multilingual via the separate
+  // TRANSCRIPTION_LANGS picker in Settings (Auto-detect default).
   language?: string;
   vocabulary?: string;       // domain terms fed into the transcription prompt
   gemini_key?: string;       // write-only: POST to set; never echoed back by GET
@@ -183,6 +205,29 @@ tier-driven default (Groq for paid, on-device for free). The model
 picker is hidden for non-admins in the Settings UI. Transcription keys
 are not read from disk and never echoed; every cloud call goes through
 the Cloudflare Worker with the user's Supabase JWT.
+
+### Cloudflare Worker (`corder-api`) hardening
+
+The proxied cloud endpoints live in the Worker, not this server, but the
+client depends on their contract:
+
+- **`gemini-proxy` (`generateContent`).** A non-text part
+  (`inline_data` / `inlineData` audio, or `fileData` / `fileUri`) now
+  counts as admin-only transcription (`generateContentNeedsPaid`),
+  closing an `inlineData` bypass where a non-admin could inline base64
+  audio for free unmetered Gemini transcription. The model is pinned to
+  the Flash models the app uses (`gemini-2.5-flash` +
+  `gemini-2.5-flash-lite`); a free user can no longer request
+  `gemini-2.5-pro`. Plus a 2 MB body cap. (Summary / Chapters stay FREE
+  for all tiers by product decision; the text-only paywall is
+  intentionally NOT enforced.)
+- **`whisper-cleanup` (gpt-4o-mini punctuation polish).** Now pins
+  `model=gpt-4o-mini`, caps `max_tokens` (16384), and strips `tools`; it
+  was an unmetered, un-admin-gated passthrough to OpenAI
+  chat/completions with a client-controlled model/body.
+- **`/submit-logs` (unauthenticated).** Per-IP rate limit (8/hour, via
+  the usage D1 table with a synthetic key), field-length caps, and
+  GitHub-label sanitization on the client-controlled `app_version`.
 
 ## Sparkle / Updater
 
