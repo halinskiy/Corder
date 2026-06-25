@@ -16,6 +16,20 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.68] — 2026-06-26
+
+### Changed
+- On-device transcription uses a single model now, Whisper Turbo. The model
+  chooser is gone from the home screen, which simply shows Start recording.
+- The home screen is titled "Welcome".
+
+### Removed
+- The "Delete account" action was removed from Settings.
+
+### Fixed
+- Trimmed the dead empty space below the last card in Settings (both the
+  General and Advanced tabs).
+
 ## [0.14.67] — 2026-06-26
 
 ### Changed

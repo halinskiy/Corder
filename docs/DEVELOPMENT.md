@@ -20,13 +20,17 @@
 ```bash
 git clone https://github.com/<you>/Corder.git
 cd Corder
-scripts/bootstrap.sh        # materialises ~/.config/corder/{dropbox.json,gemini_key}
-$EDITOR ~/.config/corder/gemini_key      # paste your Gemini API key
+scripts/bootstrap.sh        # materialises ~/.config/corder/dropbox.json
 ```
 
-Without `gemini_key`, recording and playback still work fully — only
-transcription errors out (red toast). Gemini is the only provider;
-there is no offline/Whisper mode.
+`bootstrap.sh` also prints where a `gemini_key` would go, but the .app
+no longer reads any provider key from disk (since 0.13.29): every cloud
+transcription call goes through the Cloudflare Worker proxy with the
+user's Supabase JWT. You don't need a local key to record, play back, or
+transcribe. Transcription routing: paid tiers use Groq Whisper (cloud),
+the free tier uses on-device WhisperKit, and Gemini / OpenAI whisper-1
+are admin-only (see the HARD PROVIDER LOCK gotcha in `NOTES.md`). The
+app opens straight to the Library and is fully usable signed-out.
 
 ## Build & run
 
@@ -154,22 +158,30 @@ KEPT and unrelated to `i18n.ts`.
    countdown), keep it scoped to that selector with a comment.
 3. Never hardcode `#0e0e0d` — use `var(--fg)`.
 
-### Bump the WhisperKit model
+### Bump the on-device (WhisperKit) model
 
-`Sources/Corder/Transcription/TranscriptionPipeline.swift` →
-`modelName`. Defaults to `large-v3`. The model lives at
-`~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-<name>`
-and is downloaded on first use.
+`Sources/Corder/Transcription/LocalWhisperTranscriber.swift` →
+`Variant`. There is **one** variant now, `.turbo`
+(`openai_whisper-large-v3_turbo`, ~1.5 GB); Small/base/tiny were dropped
+(Small removed 2026-06-26), and `defaultVariant`, `offlineFallbackVariant`
+and `firstDownloadedVariant` all return `.turbo`. To add a size, add a
+`case` to the enum, give it `displayName` / size / tokenizer repo, and
+decide whether it should change `defaultVariant`. The Core ML package
+downloads on first use into `AppPaths.modelsDir`
+(`.../accounts/<id>/models/models/argmaxinc/whisperkit-coreml/<variant>/`).
+The cloud Groq/whisper-1 model lives in `WhisperTranscriber.swift`
+(`modelName`, `whisper-large-v3-turbo` for Groq).
 
-### Forget Dropbox / Gemini auth
+### Forget Dropbox auth
 
 ```bash
 rm ~/.config/corder/dropbox.json
-rm ~/.config/corder/gemini_key
 ```
 
-The app falls back gracefully — Dropbox archival skips if creds are
-missing, the Gemini path throws `missingAPIKey`.
+Dropbox archival skips gracefully if the creds are missing. (There's no
+`gemini_key` / `openai_key` to forget anymore: the .app stopped reading
+provider keys from disk in 0.13.29, all cloud transcription goes through
+the Cloudflare Worker with the user's Supabase JWT.)
 
 ### Reset microphone TCC permission
 
@@ -177,9 +189,11 @@ missing, the Gemini path throws `missingAPIKey`.
 tccutil reset Microphone com.3mpq.Corder
 ```
 
-Next `Start` will re-prompt. Required because LSUIElement apps need an
-active activation policy for the prompt to render — see
-`CaptureEngine.start`.
+The next recording will re-prompt. Permissions are requested on-demand
+at record time (no upfront gate): the mic prompt comes from
+`AVAudioEngine.start`, and Screen Recording is asked only when video is
+on. Required because LSUIElement apps need an active activation policy
+for the prompt to render, see `CaptureEngine.start`.
 
 ## Testing
 
@@ -208,8 +222,9 @@ that touches those modules, also run the manual smoke test:
 2. Menu-bar Start → speak ~10 s → Stop.
 3. Open Library → check transcript appeared, speakers diarised
    correctly, audio plays, scrub works, search highlights work.
-4. Right-click a meeting → Удалить → red toast with `Undo` countdown
-   appears, row disappears immediately, comes back if Undo clicked.
+4. Right-click a meeting → Archive → `Undo` toast appears, row
+   disappears immediately, comes back if Undo clicked (the UI ships
+   English-only since 0.14.57).
 5. Tail `/tmp/corder.log` for errors. Expected log lines:
    - `CaptureEngine.start: …`
    - `transcribe(): …` (provider chosen: Groq for paid, on-device
@@ -290,8 +305,8 @@ tail -200 /tmp/corder.log | grep -E "transcribe|EchoSuppressor|Groq|Whisper"
 # Wipe local SQLite (forget all meetings, audio files stay):
 rm ~/Library/Application\ Support/Corder/corder.db
 
-# Force re-download of WhisperKit model:
-rm -rf ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml
+# Force re-download of the on-device Whisper model (per-account sandbox):
+rm -rf ~/Library/Application\ Support/Corder/accounts/*/models/models/argmaxinc/whisperkit-coreml
 
 # List all running Corder processes (in case of zombies):
 pgrep -lf "Corder.app/Contents/MacOS/Corder"

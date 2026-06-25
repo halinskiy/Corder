@@ -2,30 +2,34 @@
 
 A macOS meeting recorder + transcriber for people who hate that Grain
 and Otter ship audio to a third party and bake their bot into the
-call. Corder runs as your local app, never invites a bot, and only
-talks to the one provider you opted into (Gemini).
+call. Corder runs as your local app, never invites a bot, and
+transcribes either fully on-device (Apple Silicon Whisper, $0,
+nothing leaves your Mac) or through a single cloud Whisper provider
+you opted into.
 
 > Status-bar app. macOS 14+ (Sonoma). Apple Silicon recommended.
 
 ## What it does
 
 - **Records** — single click in the menu bar, the global hotkey
-  (default ⌘⇧F, configurable in Settings), or the inline blob inside
-  the Library window. Captures system audio (Core-Audio process tap
-  + ScreenCaptureKit backup) and your microphone (via AVAudioEngine)
-  onto **separate** `.wav` tracks. The HUD pill floats over every
-  Space while you're recording, with a live waveform meter so you can
-  tell capture is actually working.
-- **Transcribes — dual-track** — `mic.wav` and `system.wav` go to
-  Google's Gemini 2.5 Flash File API as **two separate calls** in
-  parallel. The mic call is forced to a single speaker ("you"); the
-  system call is asked to diarise everyone on the remote side. Results
-  are merged by start-time. This is the fix for the "it merged my words
-  with the other person's during silence" class of bugs that you get
-  when you mix both streams and ask one model to guess.
+  (unassigned by default; bind one in Settings with a Cmd/Option/Ctrl
+  combo), or the inline blob inside the Library window. Captures system
+  audio (Core-Audio process tap + ScreenCaptureKit backup) and your
+  microphone (via AVAudioEngine) onto **separate** `.wav` tracks. The
+  HUD pill floats over every Space while you're recording, with a live
+  waveform meter so you can tell capture is actually working.
+- **Transcribes — dual-track** — `mic.wav` and `system.wav` are
+  transcribed as **two separate jobs**, the mic forced to a single
+  speaker ("you") and the system diarised for everyone on the remote
+  side, then merged by start-time. This is the fix for the "it merged
+  my words with the other person's during silence" class of bugs that
+  you get when you mix both streams and ask one model to guess. The
+  transcriber is on-device WhisperKit (Apple Silicon, $0) or Groq's
+  hosted Whisper-large-v3-turbo; the cloud audio is processed and not
+  retained for training.
 - **Caches the raw transcript** by audio MD5 — so re-mapping speakers
   (e.g. after the clarify banner pins a count) and re-transcribes
-  after a Dropbox archive don't re-bill the Gemini File API.
+  after a Dropbox archive don't re-bill the cloud transcription.
 - **Rename & pin** — right-click a session to rename or pin it (pinned
   sessions float to a group at the top, marked with a gold dot); the
   header title is click-to-edit too.
@@ -44,10 +48,10 @@ talks to the one provider you opted into (Gemini).
 
 Off-the-shelf meeting tools (Grain, Otter, Fireflies) ship audio to
 their own servers and join the call as a participant. Corder runs on
-your machine, never joins anything, talks only to Gemini for the
-transcribe call (audio is auto-deleted from Google's File API after the
-job), and lets you turn the cloud part off entirely if you want — at
-the cost of nothing transcribing at all.
+your machine, never joins anything, and can transcribe entirely
+on-device (Apple Silicon Whisper) so no audio ever leaves your Mac.
+When you opt into the cloud transcriber instead, only the audio for
+that one call is sent, to a single Whisper provider, for that one job.
 
 ## Install
 
@@ -69,10 +73,16 @@ open /Applications/Corder.app
 
 First launch:
 
-1. macOS prompts for **Screen Recording**, then **Microphone**. Allow both.
-2. Click the menu-bar icon → **Open Library**.
-3. Paste your Gemini API key into `~/.config/corder/gemini_key`. Without
-   it, recording still works fully — only transcription fails (red toast).
+1. The app opens straight to the Library, fully usable signed-out with
+   nothing granted. There is no upfront permission or sign-in wall.
+2. Hit Start (menu-bar icon, the in-window blob, or a hotkey you bind).
+   Permissions are requested **on demand**: an audio-only recording asks
+   only for **Microphone**; **Screen Recording** is requested only when
+   you turn on screen video (and, because macOS grants it on the next
+   launch, that prompt offers to quit-and-relaunch or record audio only).
+3. Transcription runs on-device on Apple Silicon at no cost. For the
+   cloud transcriber, sign in from the profile menu (optional); the app
+   no longer reads any API key from disk.
 
 ## Configuration
 
@@ -82,13 +92,16 @@ are copied by `scripts/bootstrap.sh`; fill them in by hand.
 ```
 ~/.config/corder/
 ├── dropbox.json     # { app_key, app_secret, refresh_token, remote_root }
-└── gemini_key       # one-line API key
+└── gemini_key       # one-line API key (dev/admin only; see below)
 ```
 
-Without these the app still runs — recording and playback work; only
-transcription needs the Gemini key, and Dropbox archival silently
-skips. Read [`docs/SECURITY.md`](docs/SECURITY.md) for how to obtain
-the keys safely.
+Neither file is required for normal use. On-device transcription needs
+nothing, and the cloud transcriber authenticates through a hosted
+proxy with your account session (no provider key on disk). `dropbox.json`
+is only for optional archival, it silently skips when absent. `gemini_key`
+is a legacy dev/admin escape hatch for the admin-only Gemini path, not
+the default route. Read [`docs/SECURITY.md`](docs/SECURITY.md) for how
+to obtain the keys safely.
 
 ## Documentation
 

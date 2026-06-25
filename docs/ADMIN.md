@@ -54,11 +54,14 @@ dropdown, gated behind an inline confirm.
 
 The admin role does more than gate this panel: it is the **transcription
 provider lock**. Non-admin users can transcribe ONLY through Groq Whisper
-(cloud) plus the on-device WhisperKit model. Gemini and OpenAI whisper-1
+(cloud) plus the single on-device WhisperKit model (Whisper Turbo,
+`openai_whisper-large-v3_turbo`). Gemini and OpenAI whisper-1
 are admin-only, kept so the operator can benchmark providers. The app
 mirrors `app_metadata.role == "admin"` into `AppSettings.isAdmin` via
-`SupabaseTierSync`; the desktop client unlocks the model picker and the
-Gemini / whisper-1 routes only for an admin token, and the Worker
+`SupabaseTierSync`; the only transcription-model picker lives in Settings
+and is shown ONLY for an admin token (non-admins choose no model
+anywhere, the home-screen picker is gone), and that picker is what unlocks
+the Gemini / whisper-1 routes for an admin, while the Worker
 returns 403 on `/transcribe/gemini` and `/transcribe/whisper` for a
 non-admin. So promoting a user to admin also lets them pick those
 providers, not just see the panel.

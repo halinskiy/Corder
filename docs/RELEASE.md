@@ -15,10 +15,14 @@ Semantic versioning (`MAJOR.MINOR.PATCH`). Bump:
 - **MINOR** for user-visible features, new providers, new endpoints.
 - **PATCH** for bug fixes that don't change the UI.
 
-The current version lives in two places, **both must match**:
+The version lives in two files:
 
-- `Info.plist` → `CFBundleShortVersionString` and `CFBundleVersion`.
-- `CHANGELOG.md` → top section heading.
+- `Info.plist` (repo root, copied verbatim into the bundle by
+  `build-app.sh`) → `CFBundleShortVersionString` is the marketing semver
+  (`0.14.68`); `CFBundleVersion` is a **monotonic integer build number**
+  (currently `129`), bumped by one every release and NOT the semver.
+- `CHANGELOG.md` → top section heading, which must match
+  `CFBundleShortVersionString`.
 
 ## Prerequisites (one-time)
 
@@ -65,9 +69,13 @@ notes files first.
 
 ### 2. Bump Info.plist
 
+Edit the repo-root `Info.plist` (build-app.sh copies it into the bundle).
+`CFBundleShortVersionString` gets the semver; `CFBundleVersion` gets the
+next integer build number (e.g. 129 → 130), it is NOT the semver.
+
 ```bash
-plutil -replace CFBundleShortVersionString -string "0.7.0" Resources/Info.plist
-plutil -replace CFBundleVersion -string "0.7.0" Resources/Info.plist
+plutil -replace CFBundleShortVersionString -string "0.7.0" Info.plist
+plutil -replace CFBundleVersion -string "130" Info.plist
 ```
 
 ### 3. Build a release artefact

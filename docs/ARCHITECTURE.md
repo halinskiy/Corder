@@ -107,8 +107,12 @@ App/                Entry point, app delegate, recording state machine
 │                           high-rate system tap can't wash out the mic);
 │                           30 Hz publish; drives the HUD equalizer
 ├ HotkeyManager.swift       Carbon `RegisterEventHotKey` wrapper (no
-│                           Accessibility prompt). Default ⌘⇧F →
-│                           toggles record. Conflicts with OS-bound
+│                           Accessibility prompt). UNASSIGNED by default
+│                           (recordHotkeyKeyCode/Modifiers = -1/0); a
+│                           combo registers only once the user sets one,
+│                           and `recordHotkeyAssigned` requires a STRONG
+│                           modifier (cmd/opt/ctrl, not shift) via
+│                           isStrongHotkeyMods. Conflicts with OS-bound
 │                           combos are surfaced via the settings DTO.
 ├ MeetingDetector.swift     per-process default-input owner detector
 │                           (kAudioProcessPropertyIsRunningInput);

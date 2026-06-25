@@ -197,10 +197,10 @@ enum DTO {
         /// transcription-pipeline UI; per-variant state lives in
         /// `whisper_local_models`.
         let whisper_local_model_ready: Bool?
-        /// Picked Whisper Local variant id (`openai_whisper-large-v3_turbo`
-        /// or `openai_whisper-small` — base/tiny were dropped for quality).
-        /// Echoed back unchanged; absent means the server hasn't seen one
-        /// yet and is using the default (turbo).
+        /// Picked Whisper Local variant id — only `openai_whisper-large-v3_turbo`
+        /// now (Whisper Small + base/tiny were dropped). Echoed back unchanged;
+        /// absent means the server hasn't seen one yet and is using the
+        /// default (turbo).
         let whisper_local_variant: String?
         /// JSON-encoded `{speed: ts, best: ts, unlimited: ts}` map —
         /// timestamps the user dismissed the matching upsell strip at.

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Search, Loader2 } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  deleteAccount, setTestTier,
+  setTestTier,
   type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
 import { type T } from "../i18n";
@@ -297,62 +297,7 @@ export function SettingsPane({
             t={t}
           />
         </SoloCard>
-
-        <div className="settings-divider" />
-        <SoloCard>
-          <DangerZoneRow
-            label={t.settings_delete_account_label ?? "Delete account"}
-            desc={t.settings_delete_account_desc
-              ?? "Permanently removes every recording, transcript, summary, and audio file from the cloud. This cannot be undone."}
-            cta={t.profile_delete ?? "Delete account"}
-            confirmText={t.profile_delete_confirm
-              ?? "Delete your account and all recordings? This cannot be undone."}
-            disabled={!loaded}
-          />
-        </SoloCard>
       </div>
-    </div>
-  );
-}
-
-
-/// Settings row for irreversible destructive actions (Delete
-/// account today; future "Wipe local cache", etc.). Same
-/// `.hk-block` shell as HotkeyRow so it slots into the same
-/// vertical rhythm — `settings-row-label` heading, muted
-/// `settings-row-desc` explanation, full-width red CTA pinned to
-/// the bottom of the card. Confirms with the native `confirm()`
-/// dialog before firing the irreversible call.
-function DangerZoneRow({
-  label, desc, cta, confirmText, disabled,
-}: {
-  label: string;
-  desc: string;
-  cta: string;
-  confirmText: string;
-  disabled?: boolean;
-}) {
-  const [busy, setBusy] = React.useState(false);
-  return (
-    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
-         aria-label={label}>
-      <div className="settings-row-label">{label}</div>
-      <div className="settings-row-desc">{desc}</div>
-      <button
-        type="button"
-        className="clarify-btn danger"
-        style={{ width: "100%", marginTop: 8 }}
-        disabled={disabled || busy}
-        onClick={async () => {
-          if (!window.confirm(confirmText)) return;
-          setBusy(true);
-          try { await deleteAccount(); } catch {}
-          // The Swift side relaunches the app, so no UI cleanup
-          // here — the new process boots into the Welcome wizard.
-        }}
-      >
-        {busy ? "…" : cta}
-      </button>
     </div>
   );
 }

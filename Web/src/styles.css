@@ -3483,7 +3483,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 .settings-pane {
   overflow-y: auto;
   min-height: 0;
-  padding: 22px 22px 130px;
+  /* Equal padding top + bottom (22px). The old 130px bottom pad reserved
+     room for a floating element that's gone, leaving dead scroll space
+     below the last card (General + Advanced both). */
+  padding: 22px;
   display: flex;
   flex-direction: column;
   /* 8 px between standalone setting blocks. Same gap applies to
