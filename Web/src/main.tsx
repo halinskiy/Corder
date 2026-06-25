@@ -339,9 +339,12 @@ function App() {
   }, [dismissToast, sendReportFromToast]);
   React.useEffect(() => { showToastRef.current = showToast; }, [showToast]);
 
-  // Dashboard hint shows the live shortcut label ("⌘⇧F" by default,
-  // whatever the user picked in Settings if they remapped it).
-  const [hotkeyLabel, setHotkeyLabel] = React.useState("⌘⇧F");
+  // Dashboard hint shows the live shortcut label, or nothing when the
+  // record hotkey is unassigned (the new default). Seed to "Not set" so the
+  // Dashboard's `!== "Not set"` guard suppresses the hint on first paint —
+  // otherwise a stale literal would briefly advertise a combo that isn't
+  // bound, until getSettings() resolves with the real label.
+  const [hotkeyLabel, setHotkeyLabel] = React.useState("Not set");
 
   // Current paid-tier rung — drives the Sidebar Upgrade-card
   // visibility (`max` hides it) and is forwarded to nested components

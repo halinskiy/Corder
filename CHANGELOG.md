@@ -16,7 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
-## [0.14.65] — 2026-06-25
+## [0.14.66] — 2026-06-25
+
+### Added
+- A "N left" counter in the header for signed-out users. Without an account
+  you can keep up to 5 recordings at once; the counter shows how many slots
+  remain. Press Start at the limit and Corder invites you to sign in, which
+  removes the limit. Deleting a recording frees a slot. Click the counter to
+  sign in any time.
+
+### Changed
+- The global record shortcut is now unassigned by default, so a fresh install
+  has no hotkey to trigger by accident or clash with another app. Set your own
+  in Settings, and a Clear button removes it whenever you want.
 
 ### Changed
 - Corder now opens straight to your library. There is no upfront wall of

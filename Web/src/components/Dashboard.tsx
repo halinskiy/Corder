@@ -304,7 +304,9 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
                 </button>
                 <WhisperPrefetchPill t={t} onToast={onToast} />
               </div>
-              <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
+              {hotkeyLabel && hotkeyLabel !== "Not set" && (
+                <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
+              )}
             </div>
 
             {statsEnabled && (

@@ -151,12 +151,24 @@ export function SettingsPane({
         <div className="settings-divider" />
         <SoloCard>
           <HotkeyRow
-            label={s?.record_hotkey_label ?? "⌘⇧F"}
+            label={s?.record_hotkey_label ?? "Not set"}
             conflict={s?.record_hotkey_conflict ?? null}
             ok={s?.record_hotkey_ok ?? true}
             disabled={!loaded}
             onSet={(code, mods) => {
-              patch({ record_hotkey_code: code, record_hotkey_mods: mods });
+              // Clearing (code < 0 / no strong modifier) optimistically flips
+              // the label to "Not set" so the capture button + Clear button
+              // update instantly instead of showing the old combo for a
+              // round-trip; the debounced POST + refetch reconcile the
+              // authoritative server value.
+              const cleared = code < 0 || (mods & (256 | 2048 | 4096)) === 0;
+              patch({
+                record_hotkey_code: code,
+                record_hotkey_mods: mods,
+                ...(cleared
+                  ? { record_hotkey_label: "Not set", record_hotkey_conflict: null, record_hotkey_ok: true }
+                  : {}),
+              });
               window.setTimeout(refetch, 450);
             }}
             t={t}
@@ -641,14 +653,27 @@ function HotkeyRow({
       {!conflict && !ok && (
         <div className="hk-warn">{t.settings_shortcut_unbound}</div>
       )}
-      <button
-        type="button"
-        className={"clarify-btn bigbtn-full hk-capbtn" + (capturing ? " capturing" : "")}
-        disabled={disabled}
-        onClick={() => setCapturing((v) => !v)}
-      >
-        {capturing ? t.settings_shortcut_press : label}
-      </button>
+      <div className="hk-row">
+        <button
+          type="button"
+          className={"clarify-btn bigbtn-full hk-capbtn" + (capturing ? " capturing" : "")}
+          disabled={disabled}
+          onClick={() => setCapturing((v) => !v)}
+        >
+          {capturing ? t.settings_shortcut_press : label}
+        </button>
+        {!capturing && label !== "Not set" && (
+          <button
+            type="button"
+            className="hk-clear"
+            disabled={disabled}
+            onClick={() => onSet(-1, 0)}
+            aria-label="Clear shortcut"
+          >
+            Clear
+          </button>
+        )}
+      </div>
     </div>
   );
 }

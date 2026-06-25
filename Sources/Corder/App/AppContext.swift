@@ -363,12 +363,31 @@ enum AppSettings {
 
     // Global record hotkey. Stored as a Carbon virtual key code + a
     // Carbon modifier mask (cmdKey 256 | shiftKey 512 | optionKey 2048 |
-    // controlKey 4096). Default = ⌘⇧F (kVK_ANSI_F = 3, cmd|shift = 768)
-    // — not a stock macOS system shortcut, so it's a safe default.
+    // controlKey 4096). Default is now UNASSIGNED (code -1, mods 0): a fresh
+    // install ships with NO global record hotkey, so a user who never opened
+    // Settings can't fire a recording by accidentally hitting some combo (or
+    // collide with another app's shortcut). The user opts IN by capturing a
+    // combo in Settings. Existing users who never set one also become
+    // unassigned on update — deliberate, that's the surprise we're removing.
     private static let kRecCode = "Corder.set.recHotkeyCode"
     private static let kRecMods = "Corder.set.recHotkeyMods"
-    static var recordHotkeyKeyCode: Int  { int(kRecCode, 3) }
-    static var recordHotkeyModifiers: Int { int(kRecMods, 768) }
+    static var recordHotkeyKeyCode: Int  { int(kRecCode, -1) }
+    static var recordHotkeyModifiers: Int { int(kRecMods, 0) }
+    /// A "strong" modifier mask — cmd (256) | option (2048) | control (4096),
+    /// deliberately EXCLUDING shift (512). A global hotkey needs one of these;
+    /// a shift-only or bare combo would fire while the user types. Single
+    /// source of truth so the AppDelegate register, the Routes register guard,
+    /// and the `hotkeyLabel` guard can't drift apart (the web capture UI
+    /// already enforces the same rule client-side).
+    static func isStrongHotkeyMods(_ mods: Int) -> Bool {
+        (mods & (256 | 2048 | 4096)) != 0
+    }
+    /// A real hotkey needs a key AND a strong modifier; otherwise it's
+    /// "unassigned" and we never register it (the Carbon API would happily
+    /// bind a bare key that then fires while typing).
+    static var recordHotkeyAssigned: Bool {
+        recordHotkeyKeyCode >= 0 && isStrongHotkeyMods(recordHotkeyModifiers)
+    }
     static func setRecordHotkey(code: Int, mods: Int) {
         setInt(kRecCode, code); setInt(kRecMods, mods)
     }
@@ -502,6 +521,10 @@ enum AppSettings {
             UserDefaults.standard.set(cleaned, forKey: kUserEmail)
         }
     }
+    /// True when a Supabase account is bound (recordings live in the
+    /// per-account folder). Mirrors how the frontend decides signed-in vs
+    /// guest (a non-nil `user_email`). Guests are subject to the session cap.
+    static var isSignedIn: Bool { userEmail != nil }
 
     /// Sticky "has this install seen at least one successful sign-in?"
     /// flag. Stays true across Sign Out cycles so the post-OAuth

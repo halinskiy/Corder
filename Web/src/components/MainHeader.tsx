@@ -40,7 +40,7 @@ function ArchiveFilled({ size = 16 }: { size?: number }) {
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
-import { submitLogs, hasBugEvents } from "../api";
+import { submitLogs, hasBugEvents, getAccountUsage, openWelcome } from "../api";
 import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip — breadcrumb
@@ -98,6 +98,7 @@ export function MainHeader({
       <div className="spacer" />
       <div className="toolbar">
         <UpdatePill t={t} onToast={onToast} />
+        <GuestSessionCounter />
         <SubmitLogsButton t={t} onToast={onToast} />
         {/* ThemeSwitch moved into Settings → General as a real toggle
             row; the toolbar slot was visual noise next to controls the
@@ -138,6 +139,49 @@ export function MainHeader({
         />
       </div>
     </div>
+  );
+}
+
+/// "N left" badge sitting left of the report button. Shown ONLY to a
+/// signed-out (guest) user: guests may hold up to a fixed number of
+/// recordings at once, and this is the live remaining count. At zero,
+/// pressing Start anywhere (menu bar, in-app, hotkey) offers sign-in
+/// instead of recording; deleting a recording frees a slot. Signed-in
+/// users are unlimited, so the badge renders nothing for them. Clicking
+/// it opens the in-app sign-in modal. Self-contained + polled so the
+/// header doesn't have to thread account state down from the parent.
+function GuestSessionCounter() {
+  const [left, setLeft] = React.useState<number | null>(null);
+  const [isGuest, setIsGuest] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      getAccountUsage().then((u) => {
+        if (!alive) return;
+        if (u && u.is_guest) { setIsGuest(true); setLeft(u.sessions_left); }
+        else { setIsGuest(false); setLeft(null); }
+      }).catch(() => {});
+    };
+    tick();
+    // Poll often enough that creating / deleting a recording updates the
+    // count within a couple seconds without a manual refresh.
+    const id = window.setInterval(tick, 4000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, []);
+
+  if (!isGuest || left == null) return null;
+  const low = left <= 1;
+  return (
+    <Tooltip label="Sign in to unlock more">
+      <button
+        type="button"
+        className={"guest-quota" + (low ? " is-low" : "")}
+        onClick={() => { openWelcome().catch(() => {}); }}
+        aria-label="Sign in to unlock more"
+      >
+        {left} left
+      </button>
+    </Tooltip>
   );
 }
 

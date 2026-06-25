@@ -220,6 +220,7 @@ enum Routes {
         server.post["/api/account/signout"] = { _ in accountSignOut() }
         server.post["/api/account/delete"] = { _ in accountDelete() }
         server.get["/api/account/mcp-token"] = { _ in mcpToken() }
+        server.get["/api/account/usage"] = { _ in accountUsage(repo: repo) }
         // Supabase OAuth landing. The Welcome wizard configures
         // `redirectTo` pointed at this route on the local server, so
         // Google → Supabase → 302 → this page. We pull the `code`
@@ -641,6 +642,24 @@ enum Routes {
 
     // MARK: api
 
+    /// Guest session quota for the header "N left" counter. Signed-in users
+    /// are unlimited (`is_guest=false` hides the counter); a guest may hold up
+    /// to `limit` sessions, and `sessions_left` drives the badge. Cheap enough
+    /// to poll. `repo` is the registration-captured handle (DatabaseQueue is
+    /// thread-safe), so this stays a synchronous off-main read.
+    private static func accountUsage(repo: MeetingRepository) -> HttpResponse {
+        let signedIn = AppSettings.isSignedIn
+        let limit = RecordingController.guestSessionLimit
+        let held = signedIn ? 0 : ((try? repo.heldMeetingCount()) ?? 0)
+        let left = max(0, limit - held)
+        return jsonResponse([
+            "is_guest": !signedIn,
+            "sessions_used": held,
+            "sessions_left": left,
+            "limit": limit,
+        ])
+    }
+
     private static func listMeetings(repo: MeetingRepository) -> HttpResponse {
         do {
             // Single SQL query with correlated subselects — replaces the
@@ -909,8 +928,11 @@ enum Routes {
         123:"←",124:"→",125:"↓",126:"↑",
     ]
 
-    /// Carbon mods mask + key code → "⌃⌥⇧⌘F"-style label.
+    /// Carbon mods mask + key code → "⌃⌥⇧⌘F"-style label, or "Not set" when
+    /// the hotkey is unassigned (no key / no strong modifier — the new
+    /// default). Shift-only counts as unassigned, mirroring the register guard.
     private static func hotkeyLabel(code: Int, mods: Int) -> String {
+        guard code >= 0, AppSettings.isStrongHotkeyMods(mods) else { return "Not set" }
         var s = ""
         if mods & 4096 != 0 { s += "⌃" }
         if mods & 2048 != 0 { s += "⌥" }
@@ -1419,10 +1441,17 @@ enum Routes {
                 // the previous binding (the re-register is async); the
                 // client re-fetches shortly to get the authoritative
                 // value. The conflict label is computed synchronously
-                // from the table so it's already correct here.
+                // from the table so it's already correct here. An
+                // unassigned combo (code < 0 / no modifier — e.g. the user
+                // cleared the shortcut) just UNREGISTERS, leaving no hotkey.
                 Task { @MainActor in
-                    HotkeyManager.shared.register(
-                        keyCode: UInt32(c), modifiers: UInt32(m))
+                    if c >= 0, AppSettings.isStrongHotkeyMods(m) {
+                        HotkeyManager.shared.register(
+                            keyCode: UInt32(c), modifiers: UInt32(m))
+                    } else {
+                        HotkeyManager.shared.unregister()
+                        HotkeyStatusSnapshot.update(true)
+                    }
                 }
             }
             // Mic device picker. Empty string = "system default", which
