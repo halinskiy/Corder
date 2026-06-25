@@ -96,7 +96,11 @@ func render(scale: CGFloat) -> NSBitmapImageRep {
     }
     NSGraphicsContext.current = ctx
     let cg = ctx.cgContext
-    cg.scaleBy(x: scale, y: scale)
+    // NOTE: do NOT cg.scaleBy(scale) here. The rep already has a 2x backing
+    // scale at scale=2 (rep.size 540×400 over a 1080×800 pixel buffer), so an
+    // explicit scaleBy double-scales and throws the centred arrow/caption off
+    // the @2x canvas (only the huge edge circles still bleed in). Drawing in
+    // logical 540×400 coords fills both reps correctly via the backing scale.
 
     // ── White background.
     WHITE_COLOR.setFill()
@@ -116,15 +120,24 @@ func render(scale: CGFloat) -> NSBitmapImageRep {
     let para = NSMutableParagraphStyle()
     para.alignment = .center
     let attrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: HEADLINE_SIZE, weight: .semibold),
+        // Light/regular weight: Tracer's caption is a thin face, which reads
+        // CRISPER than a semibold at this small size (semibold looked smeared).
+        .font: NSFont.systemFont(ofSize: HEADLINE_SIZE, weight: .regular),
         .foregroundColor: HEADLINE_COLOR,
         .paragraphStyle: para,
+        .kern: 0.1,
     ]
     let headline = NSAttributedString(string: HEADLINE, attributes: attrs)
-    let lineH = ceil(headline.size().height)
-    // Block bottom sits HEADLINE_GAP above the arrow row.
+    let textSize = headline.size()
+    let lineH = ceil(textSize.height)
+    // Centre the caption horizontally on the ARROW's midpoint (not just the
+    // window centre) so the text + arrow read as one centred unit, and sit
+    // it HEADLINE_GAP px above the arrow row.
+    let arrowMidX = (ARROW_X_START + ARROW_X_END) / 2
     let blockTopY = ARROW_Y_TOP - HEADLINE_GAP - lineH
-    let textRect = NSRect(x: 0, y: upY(blockTopY) - lineH, width: W, height: lineH)
+    let textRect = NSRect(x: arrowMidX - textSize.width / 2 - 8,
+                          y: upY(blockTopY) - lineH,
+                          width: ceil(textSize.width) + 16, height: lineH)
     headline.draw(in: textRect)
 
     // ── Dashed horizontal line ending just shy of the chevron tip.
