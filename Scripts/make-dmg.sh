@@ -65,7 +65,7 @@ ditto "$APP" "$STAGING/Corder.app"
 create-dmg \
     --volname "Corder $VERSION" \
     --volicon "$APP/Contents/Resources/AppIcon.icns" \
-    --background "$ROOT/Resources/dmg-background.png" \
+    --background "$ROOT/Resources/dmg-background.tiff" \
     --window-pos 200 120 \
     --window-size 540 400 \
     --icon-size 100 \
