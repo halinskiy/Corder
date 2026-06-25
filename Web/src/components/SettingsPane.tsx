@@ -263,14 +263,8 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        <SoloCard>
-          <TranscriptionLanguageRow
-            value={s?.transcription_language ?? ""}
-            disabled={!loaded}
-            onChange={(code) => patch({ transcription_language: code })}
-            t={t}
-          />
-        </SoloCard>
+        {/* Transcription-language picker removed — transcription is always
+            Auto-detect for everyone, so there's nothing to choose. */}
 
         {/* API access (MCP/REST token) removed from Settings — the
             MCP server / public API isn't a product surface we're
@@ -278,17 +272,9 @@ export function SettingsPane({
             for a future power-user reintroduction. */}
 
         <div className="settings-divider" />
-        <SoloCard>
-          <AppListEditor
-            title={t.settings_whitelist}
-            items={s?.meeting_whitelist ?? []}
-            apps={apps}
-            disabled={!loaded}
-            onChange={(next) => patch({ meeting_whitelist: next })}
-            t={t}
-          />
-        </SoloCard>
-
+        {/* "Always offer to record" (whitelist) block removed per request —
+            only the "Never offer to record" (blacklist) list remains. The
+            meeting_whitelist field stays in the backend, just not editable. */}
         <SoloCard>
           <AppListEditor
             title={t.settings_blacklist}
@@ -417,62 +403,11 @@ function MicDevicePicker({
   );
 }
 
-/// Forced transcription-language picker. Same `.hk-block` shell as
-/// MicDevicePicker. "Auto-detect" ("" value) is the default and keeps
-/// Whisper guessing per recording; pinning a language stops the
-/// Russian→Ukrainian misdetection (the two are close enough that
-/// auto-detect renders Russian speech as Ukrainian). Curated short list
-/// of the languages our users actually record in — not the full UI
-/// locale set, since this is about SPOKEN language, not interface.
-const TRANSCRIPTION_LANGS: Array<{ code: string; label: string }> = [
-  { code: "en", label: "English" },
-  { code: "ru", label: "Русский" },
-  { code: "uk", label: "Українська" },
-  { code: "de", label: "Deutsch" },
-  { code: "fr", label: "Français" },
-  { code: "es", label: "Español" },
-  { code: "pt", label: "Português" },
-  { code: "it", label: "Italiano" },
-  { code: "pl", label: "Polski" },
-  { code: "nl", label: "Nederlands" },
-  { code: "tr", label: "Türkçe" },
-];
-
-function TranscriptionLanguageRow({
-  value, disabled, onChange, t,
-}: {
-  value: string;
-  disabled?: boolean;
-  onChange: (code: string) => void;
-  t: T;
-}) {
-  const autoLabel = t.settings_transcription_language_auto ?? "Auto-detect";
-  const options: SettingsSelectOption<string>[] = [
-    { value: "", label: autoLabel },
-    ...TRANSCRIPTION_LANGS.map<SettingsSelectOption<string>>((l) => ({
-      value: l.code,
-      label: l.label,
-    })),
-  ];
-  const title = t.settings_transcription_language_title ?? "Transcription language";
-  return (
-    <div className={"hk-block mic-block" + (disabled ? " is-loading" : "")}
-         aria-label={title}>
-      <div className="settings-row-label">{title}</div>
-      <div className="settings-row-desc">
-        {t.settings_transcription_language_desc
-          ?? "Pin the spoken language so it isn't mis-detected. Auto-detect works for most calls."}
-      </div>
-      <SettingsSelect
-        value={value}
-        options={options}
-        disabled={disabled}
-        onChange={onChange}
-        ariaLabel={title}
-      />
-    </div>
-  );
-}
+// TranscriptionLanguageRow + TRANSCRIPTION_LANGS were removed — transcription
+// is always Auto-detect for everyone now, so the picker (and its curated
+// spoken-language list) is gone. The backend `transcription_language` field
+// stays "" (auto) and the WhisperTranscriber only forces a language when it's
+// non-empty, so dropping the UI keeps everyone on auto.
 
 /// One app list (whitelist or blacklist). No bundle-id typing: the
 /// user picks from installed apps via a searchable dropdown — apps
@@ -843,7 +778,7 @@ function ThemeToggleRow({ t }: { t: T }) {
   return (
     <div ref={rowRef}>
       <Toggle
-        label={t.settings_theme_enable_dark ?? "Enable dark theme"}
+        label={t.settings_theme_enable_dark ?? "Dark theme"}
         desc={t.settings_theme_enable_dark_desc ?? "Dark interface."}
         checked={isDark}
         onChange={(v) => {

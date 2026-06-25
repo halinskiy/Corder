@@ -28,27 +28,47 @@ final class UpdateBridge {
 
     private init() {}
 
+    /// The most recent state pushed by the driver. Cached so it can be
+    /// REPLAYED once the React modal host signals it's mounted ("ready").
+    /// Without this, an update found while the Library WebView is closed
+    /// (the common case: a background check finds it) pushes a modal that
+    /// is dropped, Sparkle then sits waiting on the user's reply, and when
+    /// the user later opens the Library + clicks the pill, a fresh
+    /// `checkForUpdates()` is ignored because that session is still
+    /// pending — so the pill "does nothing". Replaying the cached state on
+    /// mount surfaces the modal so the user can actually click Install.
+    private var lastState: UpdateModalState?
+
     /// Push a fresh state snapshot to the WebView. Called every time
     /// the Sparkle driver enters a new phase or progress ticks.
     /// `visible=false` removes the modal from the DOM.
     func push(_ state: UpdateModalState) {
+        lastState = state
         guard let webView = LibraryWindow.shared.webViewRef else { return }
         guard let data = try? JSONEncoder().encode(state),
               let json = String(data: data, encoding: .utf8) else { return }
         // `window.corderUpdateState` is installed by the React app on
-        // mount (see `main.tsx`). If the WebView hasn't loaded yet we
-        // just drop the call; React's first render will re-pull state
-        // via a separate `corder-update-ready` message when ready.
+        // mount (see `UpdateModalHost`). If the WebView hasn't loaded yet
+        // the call is dropped, but the React host posts "ready" once it
+        // mounts and we replay `lastState` then (see `handle`).
         let js = "window.corderUpdateState && window.corderUpdateState(\(json))"
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    /// Re-push the last known state. Used when the React modal host has
+    /// just mounted, so a state pushed before it existed isn't lost.
+    func replayLastState() {
+        FileLogger.log("UpdateBridge: replayLastState (\(lastState != nil ? "have pending state, re-pushing" : "nothing pending"))")
+        if let state = lastState { push(state) }
+    }
+
     /// Called by `LibraryWindow`'s message router when the React side
-    /// posts a button press.
+    /// posts a button press OR signals it's mounted.
     func handle(action: String) {
         switch action {
         case "primary":  onPrimary()
-        case "dismiss":  onDismiss()
+        case "dismiss":  onDismiss(); lastState = nil   // don't replay a modal the user closed
+        case "ready":    replayLastState()
         default:         break
         }
     }

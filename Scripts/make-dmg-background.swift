@@ -26,9 +26,12 @@ let W: CGFloat = 540
 let H: CGFloat = 400
 
 // Icon centres (create-dmg `--icon X Y` uses TOP-DOWN Y, same as here).
+// Lowered to ~window-centre so the icon row + arrow + caption sit centred
+// vertically instead of crowding the top half. MUST match make-dmg.sh
+// `--icon`/`--app-drop-link` Y.
 let LEFT_ICON_CX_TOP:  CGFloat = 145
 let RIGHT_ICON_CX_TOP: CGFloat = 395
-let ICON_CY_TOP:       CGFloat = 172
+let ICON_CY_TOP:       CGFloat = 195
 
 // Dashed arrow on the icon-centre row, between the two icons.
 let ARROW_Y_TOP:   CGFloat = ICON_CY_TOP
@@ -38,7 +41,7 @@ let ARROW_X_END:   CGFloat = RIGHT_ICON_CX_TOP - 55  // 340  (chevron tip)
 // Caption: small, crisp, centred over the arrow and sitting just ABOVE it.
 let HEADLINE = "Drag to install"
 let HEADLINE_SIZE:  CGFloat = 15
-let HEADLINE_GAP:   CGFloat = 22        // px above the arrow row
+let HEADLINE_GAP:   CGFloat = 13        // px above the arrow row
 
 let DASH_COLOR     = NSColor(calibratedRed: 150/255, green: 150/255, blue: 150/255, alpha: 1)
 let WHITE_COLOR    = NSColor.white

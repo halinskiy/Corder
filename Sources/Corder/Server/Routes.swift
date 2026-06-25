@@ -880,6 +880,13 @@ enum Routes {
     /// pill posts here.
     private static func updateCheck() -> HttpResponse {
         Task { @MainActor in
+            // Surface any update modal that was already resolved but whose
+            // push got dropped (e.g. found while the Library was closed) —
+            // otherwise a fresh checkForUpdates() is ignored while that
+            // Sparkle session is still pending, and the pill click looks
+            // dead. Replaying shows the Install card so the click always
+            // does something.
+            UpdateBridge.shared.replayLastState()
             UpdateController.shared.checkForUpdates(nil)
         }
         return .ok(.text("checking"))

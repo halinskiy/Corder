@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.61] — 2026-06-25
+
+### Changed
+- Settings cleanup: the dark-mode row is now just "Dark theme"; the
+  "Always offer to record" app list was removed (only "Never offer to
+  record" remains); and the transcription-language picker is gone, since
+  transcription is always Auto-detect.
+- Crisper installer: the "Drag to install" caption is now sharp on Retina
+  and the icons + arrow are centred in the window.
+
+### Fixed
+- The update pill reliably opens the update window now. An update found
+  while the Library was closed is re-surfaced when you open the Library or
+  click the pill, so the click is never a no-op.
+
 ## [0.14.60] — 2026-06-25
 
 ### Fixed
