@@ -592,7 +592,16 @@ enum Routes {
 
     private static func serveAsset(path: String) -> HttpResponse {
         guard let webRoot = webRootURL else { return .notFound }
-        let target = webRoot.appendingPathComponent("assets").appendingPathComponent(path)
+        let assets = webRoot.appendingPathComponent("assets").standardizedFileURL
+        let target = assets.appendingPathComponent(path).standardizedFileURL
+        // Path-traversal guard. `path` is the raw `:path` URL segment, and
+        // Swifter percent-decodes it AFTER splitting on '/', so
+        // `..%2f..%2f..%2fetc%2fpasswd` survives as one segment then decodes
+        // to `../../../etc/passwd`. Without this check `Data(contentsOf:)`
+        // would happily read ANY user-readable file (e.g. the Dropbox
+        // app_secret + refresh_token in ~/.config/corder/dropbox.json).
+        // standardizedFileURL resolves the `..`; require containment.
+        guard target.path.hasPrefix(assets.path + "/") else { return .notFound }
         guard let data = try? Data(contentsOf: target) else { return .notFound }
         let mime = mimeType(for: target.pathExtension)
         return .raw(200, "OK", ["Content-Type": mime]) { try $0.write(data) }
@@ -603,7 +612,12 @@ enum Routes {
     /// icon / favicon end up here, not under `assets/`.
     private static func serveRoot(name: String) -> HttpResponse {
         guard let webRoot = webRootURL else { return .notFound }
-        let target = webRoot.appendingPathComponent(name)
+        let root = webRoot.standardizedFileURL
+        let target = root.appendingPathComponent(name).standardizedFileURL
+        // Same path-traversal containment as serveAsset (these routes are
+        // fixed names today, but guard anyway so a future caller can't
+        // reintroduce the hole).
+        guard target.path.hasPrefix(root.path + "/") else { return .notFound }
         guard let data = try? Data(contentsOf: target) else { return .notFound }
         let mime = mimeType(for: target.pathExtension)
         return .raw(200, "OK", ["Content-Type": mime]) { try $0.write(data) }

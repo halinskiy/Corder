@@ -303,6 +303,13 @@ final class CaptureEngine: NSObject {
             if writer.canAdd(input) {
                 writer.add(input)
             }
+            // Fragmented MOV: flush a movie fragment every ~5s so a crash or
+            // power loss mid-recording leaves a PLAYABLE partial file. Without
+            // this the moov atom is written only by finishWriting(), so an
+            // interrupted recording yields an unplayable video.mov even though
+            // the frames are on disk. (Technique from NoCorny Tracer's
+            // recording-pipeline hardening; must be set before startWriting.)
+            writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
             if writer.startWriting() {
                 self.videoWriter = writer
                 self.videoInput = input
