@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.70] — 2026-06-26
+
+### Changed
+- The Sign in entry in the profile menu is now a green button, like Start
+  recording, sized to fit the dropdown.
+
 ## [0.14.69] — 2026-06-26
 
 ### Fixed

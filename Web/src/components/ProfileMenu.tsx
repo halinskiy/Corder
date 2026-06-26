@@ -414,11 +414,11 @@ export function ProfileMenu({
           <div className="profile-pop-sep" />
           {!userEmail && (
             <button
-              className="profile-pop-item"
+              className="profile-pop-signin"
               onClick={async () => { setOpen(false); try { await openWelcome(); } catch {} }}
               role="menuitem"
             >
-              <Home size={15} strokeWidth={2} /> {t.profile_sign_in ?? "Sign in"}
+              {t.profile_sign_in ?? "Sign in"}
             </button>
           )}
           {userEmail && (
