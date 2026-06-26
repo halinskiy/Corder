@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.69] — 2026-06-26
+
+### Fixed
+- The Home item in the profile menu now reads "Welcome", matching the home
+  screen title.
+- Tightened the line spacing of the signed-out profile menu subtitle so the
+  wrapped text reads as a snug two lines instead of a loose third line.
+
 ## [0.14.68] — 2026-06-26
 
 ### Changed
