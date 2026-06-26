@@ -142,7 +142,7 @@ to `MainActor`.
 
 | Method | Path                     | Returns / Body                       |
 | ------ | ------------------------ | ------------------------------------ |
-| POST   | `/api/open-welcome`      | Opens the in-app sign-in MODAL via `AuthController.shared.present()` (SignInModal in the Library WebView). Sign-in is optional; the old native WelcomeWindow is dead code. |
+| POST   | `/api/open-welcome`      | Opens the in-app sign-in MODAL via `AuthController.shared.present()` (SignInModal in the Library WebView). Sign-in is optional; the old native WelcomeWindow was deleted in 0.14.75 (the Library always opens, permissions are on-demand at record time). |
 | GET    | `/api/account/usage`     | Guest session quota for the header "N left" counter (see below). |
 | POST   | `/api/account/signout`   | Invalidates the Supabase session + clears the local token, then relaunches. |
 | POST   | `/api/account/delete`    | Wipes cloud + local account state and relaunches. NOTE: the "Delete account" UI block was removed from Settings, so this route is no longer reachable from the app UI. |

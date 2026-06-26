@@ -306,6 +306,10 @@ tail -200 /tmp/corder.log | grep -E "transcribe|EchoSuppressor|Groq|Whisper"
 rm ~/Library/Application\ Support/Corder/corder.db
 
 # Force re-download of the on-device Whisper model (per-account sandbox):
+# (Rarely needed: the app now AUTO-detects a corrupt/partial model — a
+#  missing/zero-length weights/weight.bin, or a load that fails on both ANE
+#  and GPU — wipes the model + its HuggingFace download cache, and re-downloads
+#  clean, retrying the meeting once instead of failing it.)
 rm -rf ~/Library/Application\ Support/Corder/accounts/*/models/models/argmaxinc/whisperkit-coreml
 
 # List all running Corder processes (in case of zombies):

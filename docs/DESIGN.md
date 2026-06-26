@@ -264,6 +264,10 @@ is the canonical "reuse, don't reinvent" case.
   buttons `.update-primary` (accent fill) / `.update-secondary`
   (outline). Secondary `is-active` = pressed (used by the pricing
   "Details" toggle, same vocabulary as the update modal's `?` toggle).
+  The backdrop uses `align-items: safe center` + `overflow-y: auto`, so a
+  card taller than the viewport (the sign-in modal on a short Library
+  window) scrolls instead of clipping its top and bottom. The Library
+  window itself pins a 920×600 minimum content size.
 - **Update modal:** button label is ALWAYS "Install" — never a frozen
   "Installing…". At rest: no progress, no spinner. After the click:
   the label is replaced by a centred Loader2 spinner, plus a
