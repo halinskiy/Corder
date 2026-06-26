@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.82] — 2026-06-26
+
+### Changed
+- The model-compile explanation now shows when you hover the Transcribing /
+  Downloading headline itself, instead of needing a separate info icon.
+
 ## [0.14.81] — 2026-06-26
 
 ### Added
