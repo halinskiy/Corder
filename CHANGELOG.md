@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.74] — 2026-06-26
+
+### Fixed
+- The transcribing timer no longer shows a wildly inflated elapsed time (for
+  example 84:15 on a 23-second clip) after an app update or a retry. It now
+  counts from the current transcription attempt, not the first-ever one, so a
+  re-queued or model-re-downloading meeting starts the timer at 00:00.
+
 ## [0.14.73] — 2026-06-26
 
 ### Removed
