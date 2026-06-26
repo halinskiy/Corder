@@ -562,6 +562,30 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 }
 .profile-pop-item:hover { background: var(--bg-hover); }
 .profile-pop-item svg { color: var(--fg-muted); flex-shrink: 0; }
+/* Sign-in is the guest popover's primary action: a compact green CTA that
+   mirrors the Dashboard "Start recording" accent button (same
+   `.clarify-btn.accent` green + hover), shrunk to the 280px dropdown — full
+   width inside the 8px popover padding, centered label, no row icon. */
+.profile-pop-signin {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px;
+  margin: 2px 0;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.profile-pop-signin:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+}
 /* Destructive variant — same red palette as `.clarify-btn.danger`
    so destructive actions read consistently across modals + menus.
    Icon picks up the same red via currentColor by overriding the
