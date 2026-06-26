@@ -426,29 +426,31 @@ export function ProfileMenu({
               <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
             </button>
           )}
-          <button className="profile-pop-item" onClick={goHelp} role="menuitem">
-            <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
-          </button>
-          <button className="profile-pop-item" onClick={checkUpdates} role="menuitem">
-            <RefreshCw size={15} strokeWidth={2} /> {t.profile_check_updates ?? "Check for updates"}
-          </button>
-          {isAdmin && (
-            // Operator-only shortcut. Doesn't ship admin UI inside the
-            // app — just opens getcorder.com/admin in the default
-            // browser, where the static admin panel handles auth itself
-            // via the same Supabase session (cookies on the public site).
-            <button
-              className="profile-pop-item"
-              onClick={() => {
-                setOpen(false);
-                const w = window as Window & { corderOpenExternal?: (u: string) => void };
-                w.corderOpenExternal?.("https://getcorder.com/admin/");
-              }}
-              role="menuitem"
-            >
-              <Shield size={15} strokeWidth={2} /> {t.profile_admin ?? "Open admin panel"}
+          <div className="profile-pop-foot">
+            <button className="profile-pop-item" onClick={goHelp} role="menuitem">
+              <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
             </button>
-          )}
+            <button className="profile-pop-item" onClick={checkUpdates} role="menuitem">
+              <RefreshCw size={15} strokeWidth={2} /> {t.profile_check_updates ?? "Check for updates"}
+            </button>
+            {isAdmin && (
+              // Operator-only shortcut. Doesn't ship admin UI inside the
+              // app — just opens getcorder.com/admin in the default
+              // browser, where the static admin panel handles auth itself
+              // via the same Supabase session (cookies on the public site).
+              <button
+                className="profile-pop-item"
+                onClick={() => {
+                  setOpen(false);
+                  const w = window as Window & { corderOpenExternal?: (u: string) => void };
+                  w.corderOpenExternal?.("https://getcorder.com/admin/");
+                }}
+                role="menuitem"
+              >
+                <Shield size={15} strokeWidth={2} /> {t.profile_admin ?? "Open admin panel"}
+              </button>
+            )}
+          </div>
 
           {/* Auxiliary group: Sign out (+ legacy danger row slot,
               currently empty — Delete account moved into Settings).

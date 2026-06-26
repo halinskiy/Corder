@@ -574,7 +574,10 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   padding: 9px 12px;
   margin: 2px 0;
   border: 1px solid var(--accent);
-  border-radius: 9px;
+  /* 11px (vs the 9px nav-item radius) so the shrunk CTA still reads as
+     softly rounded — at the smaller button height 9px looked a touch
+     sharp, this sits between the items (9) and the popover shell (12). */
+  border-radius: 11px;
   background: var(--accent);
   color: #fff;
   font-size: 13px;
@@ -585,6 +588,12 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 .profile-pop-signin:hover {
   background: color-mix(in srgb, var(--accent) 88%, #000);
   border-color: color-mix(in srgb, var(--accent) 88%, #000);
+}
+/* Support group (Get help / Check for updates / admin). +4px above it so
+   it doesn't crowd the green Sign-in CTA, and matching air below so the
+   last row isn't jammed against the popover's rounded bottom edge. */
+.profile-pop-foot {
+  padding: 4px 0;
 }
 /* Destructive variant — same red palette as `.clarify-btn.danger`
    so destructive actions read consistently across modals + menus.

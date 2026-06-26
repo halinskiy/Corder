@@ -74,6 +74,11 @@ enum LocalWhisperTranscriber {
         case missingFile(String)
         case diarizeNotSupported
         case transcribeFailed(String)
+        /// The on-disk model failed to load on BOTH encoders (a corrupt or
+        /// partially-downloaded bundle) and has just been wiped. The
+        /// `transcribe` entry catches this to re-download + retry the load once
+        /// so the meeting self-heals instead of landing in `.failed`.
+        case modelCorruptWiped(String)
 
         var errorDescription: String? {
             switch self {
@@ -87,6 +92,8 @@ enum LocalWhisperTranscriber {
                 return "Local Whisper doesn't support diarize mode — pipeline should route .diarize through Gemini."
             case .transcribeFailed(let msg):
                 return "Local Whisper failed: \(msg)"
+            case .modelCorruptWiped:
+                return "The on-device model was incomplete and has been removed; it re-downloads automatically."
             }
         }
     }
@@ -208,14 +215,24 @@ enum LocalWhisperTranscriber {
             let url = dir.appendingPathComponent(name)
             if !fm.fileExists(atPath: url.path) { return false }
         }
-        // 4. Each `.mlmodelc` package itself must contain its weights
-        // / coremldata blobs — WhisperKit creates the package shell
-        // first, then streams the bytes in. We assert the package is
-        // non-empty as a final sanity check.
+        // 4. Each `.mlmodelc` package must contain a NON-EMPTY
+        // `weights/weight.bin`. WhisperKit creates the package shell +
+        // `model.mil` first, then streams the (large) weight blob in last, so
+        // a download interrupted near the end leaves a package that LOOKS
+        // complete (model.mil present, dir non-empty) but whose weights are
+        // missing or zero-length. Core ML then fails the load with
+        // "Could not open …/weights/weight.bin" on BOTH encoders and the
+        // meeting fails. The old check only asserted the package dir was
+        // non-empty, which a half-downloaded package passes. Validating the
+        // weight blob here catches that corruption so the model re-downloads
+        // instead of attempting a doomed load (and failing the recording).
         for name in ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"] {
             let pkg = dir.appendingPathComponent(name, isDirectory: true)
             let contents = (try? fm.contentsOfDirectory(atPath: pkg.path)) ?? []
             if contents.isEmpty { return false }
+            let weight = pkg.appendingPathComponent("weights/weight.bin")
+            let size = ((try? fm.attributesOfItem(atPath: weight.path))?[.size] as? Int) ?? 0
+            if size <= 0 { return false }
         }
         return true
     }
@@ -545,9 +562,16 @@ enum LocalWhisperTranscriber {
             FileLogger.log("LocalWhisper: GPU load timed out (>180s) — failing this run, model kept")
             throw LocalWhisperError.transcribeFailed("model load timed out")
         } catch {
-            FileLogger.log("LocalWhisper: GPU init error (\(error)) — both encoders failed, deleting model for a clean re-download")
+            FileLogger.log("LocalWhisper: GPU init error (\(error)) — both encoders failed, deleting model + HF download cache for a clean re-download")
             try? FileManager.default.removeItem(at: modelFolderURL(variant))
-            throw LocalWhisperError.transcribeFailed("model init failed: \(error.localizedDescription)")
+            // Also nuke the HuggingFace download cache for this variant. It's a
+            // SIBLING of the model folder (`…/whisperkit-coreml/.cache/huggingface/
+            // download/<variant>`), so deleting the model alone leaves it behind
+            // — and if a completed-but-corrupt blob sits there, Hub's resume
+            // treats the file as done and re-serves the SAME corruption forever.
+            // Clearing it forces the next download to refetch from scratch.
+            try? FileManager.default.removeItem(at: huggingFaceDownloadCacheURL(variant))
+            throw LocalWhisperError.modelCorruptWiped("model init failed: \(error.localizedDescription)")
         }
     }
 
@@ -599,6 +623,21 @@ enum LocalWhisperTranscriber {
                 FileLogger.log("LocalWhisper: purged stale download fragment \(url.lastPathComponent)")
             }
         }
+    }
+
+    /// HuggingFace/Hub download-staging cache for a variant's Core ML repo.
+    /// Hub keeps per-file `.metadata` + partial/completed blobs here under
+    /// `…/whisperkit-coreml/.cache/huggingface/download/<variant>` (a SIBLING
+    /// of the model folder), and uses it to decide what's "already fetched".
+    /// We wipe it when a corrupt model is detected so a re-download can't
+    /// resume from the same bad bytes.
+    nonisolated private static func huggingFaceDownloadCacheURL(_ variant: Variant) -> URL {
+        modelFolderURL(variant)
+            .deletingLastPathComponent()                          // …/whisperkit-coreml
+            .appendingPathComponent(".cache", isDirectory: true)
+            .appendingPathComponent("huggingface", isDirectory: true)
+            .appendingPathComponent("download", isDirectory: true)
+            .appendingPathComponent(variant.rawValue, isDirectory: true)
     }
 
     /// HuggingFace tokenizer repo for a variant — a SEPARATE repo from
@@ -706,7 +745,17 @@ enum LocalWhisperTranscriber {
             throw LocalWhisperError.missingFile(audioURL.path)
         }
 
-        try await ensureModelReady(variant)
+        // The on-disk model can be corrupt (e.g. a weight blob that never
+        // finished downloading). `ensureModelReady` wipes such a bundle + its
+        // download cache and throws `modelCorruptWiped`; rather than fail the
+        // meeting and make the user hit Re-transcribe, re-download clean and
+        // retry the load ONCE. A second failure propagates (no infinite loop).
+        do {
+            try await ensureModelReady(variant)
+        } catch LocalWhisperError.modelCorruptWiped(let detail) {
+            FileLogger.log("LocalWhisper: corrupt model wiped (\(detail)) — re-downloading and retrying load once")
+            try await ensureModelReady(variant)
+        }
         guard let pipe = pipe else { throw LocalWhisperError.modelNotReady }
 
         let durationSec = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
