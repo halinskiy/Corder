@@ -311,6 +311,16 @@ Stop pressed → TranscriptionPipeline.enqueue:
          - splits files >9 min into chunks before upload;
          - on JSON truncation it halves the affected chunk and retries
            (recursive, depth ≤ 3, minSlice = 60 s).
+       On the on-device path the local model SELF-HEALS a corrupt/partial
+       bundle instead of failing the meeting (0.14.72):
+       LocalWhisperTranscriber.isModelDownloaded now requires a NON-EMPTY
+       weights/weight.bin in each .mlmodelc package, so a model whose weight
+       blob never finished re-downloads rather than attempting a doomed load;
+       if it loads on BOTH encoders (ANE + GPU) anyway, loadGPU wipes the
+       model folder AND its sibling HuggingFace download cache
+       (huggingFaceDownloadCacheURL) so a re-download can't resume from the
+       same corrupt bytes, and throws modelCorruptWiped; transcribe() catches
+       that and re-downloads + retries the load ONCE before giving up.
 
   4. Mapping:
        Dual-track:

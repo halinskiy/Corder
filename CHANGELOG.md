@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.75] — 2026-06-26
+
+### Removed
+- The "Allow Corder access" permission wizard is gone. A fresh install now
+  opens straight into the Library and is fully usable with nothing granted;
+  Microphone and Screen Recording are requested on demand, at the moment you
+  record (and Screen Recording only when video capture is on). Previously a
+  nothing-granted Mac was blocked behind the wizard on launch.
+
 ## [0.14.74] — 2026-06-26
 
 ### Fixed

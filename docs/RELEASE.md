@@ -19,8 +19,8 @@ The version lives in two files:
 
 - `Info.plist` (repo root, copied verbatim into the bundle by
   `build-app.sh`) → `CFBundleShortVersionString` is the marketing semver
-  (`0.14.68`); `CFBundleVersion` is a **monotonic integer build number**
-  (currently `129`), bumped by one every release and NOT the semver.
+  (`0.14.74`); `CFBundleVersion` is a **monotonic integer build number**
+  (currently `135`), bumped by one every release and NOT the semver.
 - `CHANGELOG.md` → top section heading, which must match
   `CFBundleShortVersionString`.
 

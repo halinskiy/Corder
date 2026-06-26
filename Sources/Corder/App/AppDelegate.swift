@@ -174,14 +174,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the access token); we do the check inside a Task so the
         // launch path doesn't block.
         // No upfront gate. Permissions are requested ON-DEMAND when the user
-        // actually records, and sign-in is OPTIONAL — the app opens straight
-        // into the Library and is fully usable signed-out with nothing
-        // granted. We refresh the permission sticky-flags from the live TCC
-        // state (so the record-time flow knows what to (re)request) but never
-        // reopen a blocking wizard. `onboardingCompleted` is set true
-        // unconditionally so every legacy "is the app set up?" guard
-        // (hotkey / popover Start / MeetingDetector) passes — the wizard is
-        // now only ever opened on demand for sign-in (Profile → Sign in).
+        // actually records, and sign-in is OPTIONAL (the in-app SignInModal,
+        // opened from Profile to Sign in). The app opens straight into the
+        // Library and is fully usable signed-out with nothing granted. We
+        // refresh the permission sticky-flags from the live TCC state (so the
+        // record-time flow knows what to (re)request) but never open a
+        // blocking wizard: the Welcome wizard was removed entirely.
+        // `onboardingCompleted` is kept set true unconditionally so every
+        // legacy "is the app set up?" guard (popover Start / MeetingDetector)
+        // still passes.
         if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
             AppSettings.setMicGrantedSticky(false)
         }
@@ -319,14 +320,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     fileprivate func openLibrary() {
-        // Locked until Welcome wizard finishes — redirect to the
-        // wizard so the user can't get to the Library (which would
-        // expose recording controls, transcripts, settings) while
-        // setup is incomplete.
-        guard AppSettings.onboardingCompleted else {
-            WelcomeWindowController.shared.presentManually()
-            return
-        }
+        // No gate: the Library always opens (the Welcome wizard was removed;
+        // permissions are requested on-demand at record time).
         LibraryWindow.shared.show(serverURL: AppContext.shared.server.baseURL)
     }
 

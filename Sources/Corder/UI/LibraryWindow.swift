@@ -691,22 +691,18 @@ final class LibraryWindow: NSWindowController {
     required init?(coder: NSCoder) { fatalError() }
 
     func show(serverURL: URL) {
-        // Permission gate — the Library cannot record anything until
-        // the user has granted Mic + Screen Recording, so we hand
-        // control to the Welcome wizard instead of opening a Library
-        // that pops a permission denial the first time the user tries
-        // to record. This catches the post-launch path
-        // (`applicationDidFinishLaunching` → session-restore Task →
-        // unconditional `show()`) where a TCC reset would otherwise be
-        // hidden behind the Library.
-        let liveMicOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        let liveScreenOK = CGPreflightScreenCaptureAccess()
-        if !liveMicOK || !liveScreenOK {
-            FileLogger.log("LibraryWindow.show: blocked (mic=\(liveMicOK) screen=\(liveScreenOK)) — handing off to Welcome wizard")
-            if !liveMicOK    { AppSettings.setMicGrantedSticky(false) }
-            if !liveScreenOK { AppSettings.setScreenGrantedSticky(false) }
-            WelcomeWindowController.shared.presentManually()
-            return
+        // NO permission gate: the Library always opens. Permissions are
+        // requested ON-DEMAND when the user actually records (Microphone via
+        // AVAudioEngine; Screen Recording only when video capture is on), so
+        // a fresh, nothing-granted install lands straight in the Library and
+        // is fully usable. We still refresh the sticky TCC flags here so the
+        // record-time flow knows what to (re)request, but we never block the
+        // window or hand off to a wizard (the Welcome wizard was removed).
+        if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
+            AppSettings.setMicGrantedSticky(false)
+        }
+        if !CGPreflightScreenCaptureAccess() {
+            AppSettings.setScreenGrantedSticky(false)
         }
         if webView.url == nil {
             webView.load(URLRequest(url: serverURL))
