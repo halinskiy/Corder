@@ -385,6 +385,14 @@ export async function startRecordingNow(): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+/// Ask macOS for Screen Recording (the ghost-video CTA). The native side
+/// enables screen video, registers Corder with the OS, and opens the Settings
+/// pane. No-op outside the WKWebView host (dev browser).
+export function requestScreenRecording(): void {
+  const w = window as Window & { corderRequestScreenRecording?: () => void };
+  w.corderRequestScreenRecording?.();
+}
+
 export interface Settings {
   /// All locales the LangPicker can show. Untranslated locales fall
   /// back to English at runtime (see `pickStrings` in i18n.ts) — the
@@ -398,6 +406,9 @@ export interface Settings {
   /** Functional toggles. Absent ⇒ unchanged on POST; default true. */
   notifications?: boolean;
   capture_video?: boolean;
+  /** read-only: macOS Screen Recording currently granted to Corder. Video
+   *  capture is unavailable (ghosted) until this is true. */
+  screen_recording_granted?: boolean;
   /** mic+system are one switch server-side (dual-track invariant). */
   capture_audio?: boolean;
   auto_transcribe?: boolean;

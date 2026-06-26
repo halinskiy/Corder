@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.78] — 2026-06-26
+
+### Added
+- When Screen Recording is not granted, the recording panel shows a "ghost"
+  screen-video card that pitches enabling screen video, with a button that
+  starts the macOS Screen Recording grant (and turns the setting on). Video
+  capture stays unavailable until you allow it; audio recording works without
+  it.
+
 ## [0.14.77] — 2026-06-26
 
 ### Fixed

@@ -925,6 +925,7 @@ enum Routes {
             gemini_key_set: FileManager.default.fileExists(atPath: geminiKeyPath),
             notifications: AppSettings.notificationsEnabled,
             capture_video: AppSettings.captureVideo,
+            screen_recording_granted: CGPreflightScreenCaptureAccess(),
             capture_audio: AppSettings.captureAudio,
             auto_transcribe: AppSettings.autoTranscribe,
             auto_title: AppSettings.autoTitle,

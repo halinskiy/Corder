@@ -10,7 +10,8 @@ import type { Lang, T } from "../i18n";
 import { Tooltip } from "./Tooltip";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { displaySpeakerName } from "../format";
-import { getSettings } from "../api";
+import { getSettings, requestScreenRecording } from "../api";
+import { Video } from "lucide-react";
 
 interface Props {
   detail: MeetingDetail;
@@ -30,6 +31,20 @@ interface Props {
 export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, downloadOpen, onDownloadChange, t, lang = "en" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
+  // Whether macOS Screen Recording is granted. When it isn't, video capture is
+  // unavailable, so instead of a real preview we show a "ghost video" that
+  // entices the user to grant it. `undefined` until the first fetch resolves
+  // (don't flash the ghost before we know).
+  const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
+  React.useEffect(() => {
+    let alive = true;
+    getSettings().then((s) => { if (alive) setScreenGranted(s.screen_recording_granted ?? true); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  // Show the ghost only when this meeting has NO real video AND the grant is
+  // missing — a granted user simply records video, an un-granted one gets the
+  // pitch to turn it on.
+  const showGhostVideo = !detail.has_video && screenGranted === false && !downloadOpen;
   return (
     <div className="right-panel">
       {/* Download is its own view, not an overlay: when it's open the
@@ -45,6 +60,7 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
           currentTimeSec={currentTimeSec}
         />
       )}
+      {showGhostVideo && <GhostVideo t={t} />}
       <AudioCard
         detail={detail}
         audioRef={audioRef}
@@ -56,6 +72,32 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
       {downloadOpen
         ? <DownloadView detail={detail} t={t} />
         : <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />}
+    </div>
+  );
+}
+
+/// "Ghost" screen-video preview shown when Screen Recording isn't granted.
+/// Video capture is unavailable until the user allows it, so instead of a real
+/// preview we show a placeholder frame with an enticing CTA that kicks off the
+/// macOS Screen Recording grant (and turns screen video on). Audio recording is
+/// unaffected — only the video half waits on the permission.
+function GhostVideo({ t }: { t: T }) {
+  return (
+    <div className="ghost-video">
+      <div className="ghost-video-icon" aria-hidden>
+        <Video size={24} strokeWidth={1.5} />
+      </div>
+      <div className="ghost-video-title">{t.ghost_video_title ?? "Capture your screen too"}</div>
+      <div className="ghost-video-sub">
+        {t.ghost_video_sub ?? "Allow Screen Recording to include screen video. Audio recording works without it."}
+      </div>
+      <button
+        type="button"
+        className="clarify-btn accent ghost-video-cta"
+        onClick={() => requestScreenRecording()}
+      >
+        {t.ghost_video_cta ?? "Enable screen video"}
+      </button>
     </div>
   );
 }

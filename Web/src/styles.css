@@ -3391,6 +3391,42 @@ body.resizing { cursor: col-resize; user-select: none; }
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0,0,0,0.18);
 }
+/* "Ghost" screen-video placeholder in the recording panel: shown when Screen
+   Recording isn't granted, so video capture is unavailable. A dashed, muted
+   frame that pitches turning screen video on. Same 20px horizontal margin as
+   the timeline card so it lines up under the audio controls. */
+.ghost-video {
+  margin: 14px 20px 0;
+  padding: 22px 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 7px;
+}
+.ghost-video-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--fg-muted);
+  margin-bottom: 2px;
+}
+.ghost-video-title { font-size: 14px; font-weight: 600; color: var(--fg); }
+.ghost-video-sub {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg-muted);
+  max-width: 260px;
+}
+.ghost-video-cta { margin-top: 6px; width: 100%; }
+
 .timeline-card {
   background: var(--bg);
   border: 1px solid var(--border);
