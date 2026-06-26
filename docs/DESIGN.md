@@ -150,9 +150,8 @@ idle (it is always-on across every Space, so the lower frame rate cuts
 continuous render power; 20 still reads buttery for the equalizer scroll).
 The in-window recording indicator (the embedded blob in the
 Library window bottom-right) was removed; recording is started and
-stopped from the menu-bar popover, the in-app Start button on the
-Welcome surface, and the global hotkey (which is unassigned by
-default and only fires once the user binds it in Settings).
+stopped from the menu-bar popover and the in-app Start button on the
+Welcome surface only. There is no keyboard shortcut for recording.
 
 ## Shadows
 

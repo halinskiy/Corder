@@ -11,9 +11,8 @@ you opted into.
 
 ## What it does
 
-- **Records** — single click in the menu bar, the global hotkey
-  (unassigned by default; bind one in Settings with a Cmd/Option/Ctrl
-  combo), or the inline blob inside the Library window. Captures system
+- **Records** — single click in the menu bar or the in-app Start
+  button inside the Library window. Captures system
   audio (Core-Audio process tap + ScreenCaptureKit backup) and your
   microphone (via AVAudioEngine) onto **separate** `.wav` tracks. The
   HUD pill floats over every Space while you're recording, with a live
@@ -75,7 +74,7 @@ First launch:
 
 1. The app opens straight to the Library, fully usable signed-out with
    nothing granted. There is no upfront permission or sign-in wall.
-2. Hit Start (menu-bar icon, the in-window blob, or a hotkey you bind).
+2. Hit Start (menu-bar icon or the in-app Start button in the Library).
    Permissions are requested **on demand**: an audio-only recording asks
    only for **Microphone**; **Screen Recording** is requested only when
    you turn on screen video (and, because macOS grants it on the next

@@ -130,7 +130,7 @@ SegmentDTO  { id, speaker_id, start_ms, end_ms, text, text_boost }
 | Method | Path                       | Body                                  |
 | ------ | -------------------------- | ------------------------------------- |
 | GET    | `/api/recording/state`     | `{active: bool, meeting_id?, started_at_ms?, stopping?}` |
-| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the global hotkey and the menu-bar popover (the in-window inline recording indicator was removed). A signed-out user at the 5-session cap (`guestAtSessionCap()`) gets the in-app sign-in modal instead of a recording. |
+| POST   | `/api/recording/start`     | Triggers `RecordingController.startRecording(source: .fullDisplay)`. Used by the menu-bar popover and the in-app button. A signed-out user at the 5-session cap (`guestAtSessionCap()`) gets the in-app sign-in modal instead of a recording. |
 | POST   | `/api/recording/stop`      | Triggers `RecordingController.stopRecording()`. |
 
 The frontend polls `/api/recording/state` once per second to drive the
@@ -162,7 +162,7 @@ AccountUsage {
 `GuestSessionCounter` (in `MainHeader`) polls this and renders the
 "N left" badge only while `is_guest`. Signed-in users short-circuit
 to `sessions_used = 0` with no DB query. At the cap, every Start path
-(menu bar, in-app, hotkey) offers sign-in instead of recording.
+(menu bar, in-app) offers sign-in instead of recording.
 
 ## Settings
 
@@ -209,16 +209,6 @@ Settings {
   meeting_whitelist?: string[]; // bundle ids: always offer to record
   meeting_blacklist?: string[]; // bundle ids: never offer
   detected_mic_apps?: string[]; // read-only: recent mic owners (UI picker)
-  // Global record hotkey. Write Carbon key code + Carbon mod mask
-  // (cmd 256 | shift 512 | option 2048 | ctrl 4096). UNASSIGNED by
-  // default (code -1, mods 0); the Settings "Clear" button unbinds.
-  // A binding only counts as assigned with a STRONG modifier
-  // (cmd/opt/ctrl, NOT shift-only) per `isStrongHotkeyMods`.
-  record_hotkey_code?: number;
-  record_hotkey_mods?: number;
-  record_hotkey_label?: string;       // read-only e.g. "⌃⌥⇧⌘F"; "Not set" when unassigned
-  record_hotkey_conflict?: string|null; // read-only: clashing macOS system shortcut
-  record_hotkey_ok?: boolean;         // read-only: OS accepted the binding
 }
 
 `GET /api/installed-apps` → `[{ bundle, name, recent }]` (apps for the
