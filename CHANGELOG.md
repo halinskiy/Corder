@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.83] — 2026-06-27
+
+### Changed
+- Smaller, tighter subtitle text in the ghost screen-video card, matching the
+  profile menu subtitle.
+
 ## [0.14.82] — 2026-06-26
 
 ### Changed
