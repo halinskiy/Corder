@@ -16,6 +16,28 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.76] — 2026-06-26
+
+### Fixed
+- Recording on Bluetooth no longer pops the macOS Screen Recording prompt. The
+  default audio-only recording needs only Microphone; the (silent) Bluetooth
+  screen-capture backup is skipped unless Screen Recording is already granted,
+  so a fresh user is not pushed into a permission that requires a restart.
+- On-device transcription no longer fails with a timeout during the first model
+  compile on a slow Mac. It now waits for the background compile to finish and
+  caches it (later transcripts load fast) instead of giving up and marking the
+  meeting failed.
+
+### Added
+- A "Start a new recording" button appears while the model is downloading, so
+  you can keep recording without waiting for it to finish.
+
+### Changed
+- Profile menu: the green Sign in button moved to the bottom, below a separator
+  under Get help and Check for updates, and its corners are squarer.
+- The Download button is disabled when there is nothing to export (a failed or
+  empty meeting), instead of showing a live green button.
+
 ## [0.14.75] — 2026-06-26
 
 ### Removed

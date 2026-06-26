@@ -79,6 +79,11 @@ enum LocalWhisperTranscriber {
         /// `transcribe` entry catches this to re-download + retry the load once
         /// so the meeting self-heals instead of landing in `.failed`.
         case modelCorruptWiped(String)
+        /// The model couldn't COMPILE within budget (a slow Mac's cold compile,
+        /// not corruption). The model is kept; the load is still progressing in
+        /// the background. Distinct from `modelCorruptWiped` so callers can wait
+        /// for the in-flight compile instead of treating it as corruption.
+        case modelLoadTimedOut
 
         var errorDescription: String? {
             switch self {
@@ -94,6 +99,8 @@ enum LocalWhisperTranscriber {
                 return "Local Whisper failed: \(msg)"
             case .modelCorruptWiped:
                 return "The on-device model was incomplete and has been removed; it re-downloads automatically."
+            case .modelLoadTimedOut:
+                return "The on-device model is still preparing (first-time compile). It will finish shortly."
             }
         }
     }
@@ -426,11 +433,27 @@ enum LocalWhisperTranscriber {
                     return   // the prewarm produced `pipe` within our budget
                 } catch {
                     if !allowGPUFallback {
-                        throw LocalWhisperError.transcribeFailed("model load timed out")
+                        throw LocalWhisperError.modelLoadTimedOut
                     }
-                    FileLogger.log("LocalWhisper: in-flight prewarm didn't finish in \(Int(aneBudget))s (\(error)) — loading GPU directly (safe alongside the ANE compile)")
-                    try await loadGPU(variant)
-                    return
+                    FileLogger.log("LocalWhisper: in-flight prewarm didn't finish in \(Int(aneBudget))s — trying GPU directly (safe alongside the ANE compile)")
+                    do {
+                        try await loadGPU(variant)
+                        return
+                    } catch LocalWhisperError.modelLoadTimedOut {
+                        // Slow Mac: the GPU encoder ALSO couldn't compile inside
+                        // its budget. Don't fail the meeting — ride the in-flight
+                        // prewarm ANE compile to completion. It WILL cache a
+                        // working model (measured ~16 min cold on a slow machine),
+                        // and once it lands `pipe` is set. One-time cold-compile
+                        // cost; the user can start new recordings meanwhile.
+                        FileLogger.log("LocalWhisper: GPU also timed out — waiting up to 25 min for the in-flight prewarm ANE compile to land")
+                        if pipe == nil {
+                            try? await withDeadline(1500) { try await inFlight.value }
+                        }
+                        guard pipe != nil else { throw LocalWhisperError.modelLoadTimedOut }
+                        pipeVariant = variant
+                        return
+                    }
                 }
             }
         }
@@ -523,7 +546,7 @@ enum LocalWhisperTranscriber {
             // caches when done — so the NEXT load is fast. For THIS run:
             if !allowGPUFallback {
                 FileLogger.log("LocalWhisper: ANE compile over \(Int(aneBudget))s (prewarm) — leaving it to finish + cache in background")
-                throw LocalWhisperError.transcribeFailed("model load timed out")
+                throw LocalWhisperError.modelLoadTimedOut
             }
             FileLogger.log("LocalWhisper: ANE compile over \(Int(aneBudget))s — falling back to GPU encoder for this run")
             // fall through to the GPU path
@@ -554,13 +577,13 @@ enum LocalWhisperTranscriber {
     private static func loadGPU(_ variant: Variant) async throws {
         let t0 = Date()
         do {
-            pipe = try await Self.withDeadline(180) { try await WhisperKit(makeConfig(variant, useANE: false)) }
+            pipe = try await Self.withDeadline(300) { try await WhisperKit(makeConfig(variant, useANE: false)) }
             FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU)",
                                   Date().timeIntervalSince(t0), variant.rawValue))
             pipeVariant = variant
         } catch is DeadlineError {
-            FileLogger.log("LocalWhisper: GPU load timed out (>180s) — failing this run, model kept")
-            throw LocalWhisperError.transcribeFailed("model load timed out")
+            FileLogger.log("LocalWhisper: GPU load timed out (>300s) — slow cold compile, model kept")
+            throw LocalWhisperError.modelLoadTimedOut
         } catch {
             FileLogger.log("LocalWhisper: GPU init error (\(error)) — both encoders failed, deleting model + HF download cache for a clean re-download")
             try? FileManager.default.removeItem(at: modelFolderURL(variant))

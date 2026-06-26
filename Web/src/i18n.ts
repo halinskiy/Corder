@@ -200,6 +200,7 @@ interface Strings {
   timeline_title: string;
   download_audio_title: string;
   download_format_desc?: string;
+  download_nothing?: string;
   download_title: string;
   download_body: string;
   download_video: string;
@@ -228,6 +229,7 @@ interface Strings {
   rec_stop: string;
   trans_label: string;
   trans_downloading_model?: string;
+  trans_start_new?: string;
   trans_stop: string;
   trans_cancelled: string;
   trans_upsell_speed_title?: string;
@@ -560,6 +562,7 @@ const en: Strings = {
   timeline_title: "Timeline",
   download_audio_title: "Download audio",
   download_format_desc: "Pick which file to save.",
+  download_nothing: "Nothing to export yet.",
   download_title: "Download",
   download_body: "What to save from this recording.",
   download_video: "Video + audio",
@@ -588,6 +591,7 @@ const en: Strings = {
   rec_stop: "Stop recording",
   trans_label: "Transcribing",
   trans_downloading_model: "Downloading model…",
+  trans_start_new: "Start a new recording",
   trans_stop: "Stop transcription",
   trans_cancelled: "Transcription stopped",
   trans_upsell_speed_title: "Upgrade for speed",

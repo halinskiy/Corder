@@ -412,15 +412,6 @@ export function ProfileMenu({
               need to surface it twice. Get help took its slot,
               filling out the navigation pair. */}
           <div className="profile-pop-sep" />
-          {!userEmail && (
-            <button
-              className="profile-pop-signin"
-              onClick={async () => { setOpen(false); try { await openWelcome(); } catch {} }}
-              role="menuitem"
-            >
-              {t.profile_sign_in ?? "Sign in"}
-            </button>
-          )}
           {userEmail && (
             <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
               <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
@@ -451,6 +442,21 @@ export function ProfileMenu({
               </button>
             )}
           </div>
+          {/* Guest CTA sits at the BOTTOM: a separator (with its own
+              breathing room) then the green Sign-in button as the last,
+              most prominent action. */}
+          {!userEmail && (
+            <>
+              <div className="profile-pop-sep" />
+              <button
+                className="profile-pop-signin"
+                onClick={async () => { setOpen(false); try { await openWelcome(); } catch {} }}
+                role="menuitem"
+              >
+                {t.profile_sign_in ?? "Sign in"}
+              </button>
+            </>
+          )}
 
           {/* Auxiliary group: Sign out (+ legacy danger row slot,
               currently empty — Delete account moved into Settings).

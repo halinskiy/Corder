@@ -90,6 +90,11 @@ function DownloadView({
   detail: MeetingDetail;
   t: T;
 }) {
+  // Gate each option on whether its content actually exists, so the Download
+  // CTA is never a live green button when there's nothing to save (a failed or
+  // empty meeting). `duration_ms > 0` means a real recording with audio.
+  const hasAudio = (detail.duration_ms ?? 0) > 0;
+  const hasTranscript = detail.segments.length > 0;
   type Row = { value: string; label: string; href: string; file: string; show: boolean };
   const rows: Row[] = [
     // Video is offered ONLY muxed with audio — a silent .mov download was
@@ -97,13 +102,16 @@ function DownloadView({
     // separately). Audio-only is the compressed AAC .m4a, not the
     // half-gigabyte raw .wav.
     { value: "video",      label: t.download_video,      href: videoWithAudioSrc(detail.id), file: `corder-${detail.id}.mp4`,  show: !!detail.has_video },
-    { value: "audio",      label: t.download_audio,      href: audioM4ASrc(detail.id),       file: `corder-${detail.id}.m4a`,  show: true },
-    { value: "transcript", label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: detail.segments.length > 0 },
-    { value: "markdown",   label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: detail.segments.length > 0 },
-    { value: "json",       label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: detail.segments.length > 0 },
-    { value: "bundle",     label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: true },
+    { value: "audio",      label: t.download_audio,      href: audioM4ASrc(detail.id),       file: `corder-${detail.id}.m4a`,  show: hasAudio },
+    { value: "transcript", label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: hasTranscript },
+    { value: "markdown",   label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: hasTranscript },
+    { value: "json",       label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: hasTranscript },
+    // The "everything" zip is only meaningful when there is at least one
+    // real artefact to put in it.
+    { value: "bundle",     label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: !!detail.has_video || hasAudio || hasTranscript },
   ];
   const visible = rows.filter((r) => r.show);
+  const isEmpty = visible.length === 0;
   const [picked, setPicked] = React.useState<string>(visible[0]?.value ?? "audio");
   const active = visible.find((r) => r.value === picked) ?? visible[0];
   const options: SettingsSelectOption<string>[] = visible.map((r) => ({
@@ -115,14 +123,18 @@ function DownloadView({
       <div className="hk-block mic-block download-block" aria-label={t.download_title}>
         <div className="settings-row-label">{t.download_title}</div>
         <div className="settings-row-desc">
-          {t.download_format_desc ?? "Pick which file to save."}
+          {isEmpty
+            ? (t.download_nothing ?? "Nothing to export yet.")
+            : (t.download_format_desc ?? "Pick which file to save.")}
         </div>
-        <SettingsSelect
-          value={picked}
-          options={options}
-          onChange={setPicked}
-          ariaLabel={t.download_title}
-        />
+        {!isEmpty && (
+          <SettingsSelect
+            value={picked}
+            options={options}
+            onChange={setPicked}
+            ariaLabel={t.download_title}
+          />
+        )}
         <button
           type="button"
           className="clarify-btn accent bigbtn-full download-cta"
@@ -136,7 +148,7 @@ function DownloadView({
             // opens the native Save panel.
             window.location.assign(active.href);
           }}
-          disabled={!active}
+          disabled={isEmpty || !active}
         >
           {t.download_title}
         </button>
