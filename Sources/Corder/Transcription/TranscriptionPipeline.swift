@@ -227,9 +227,15 @@ final class TranscriptionPipeline {
         try? repo.incrementTranscribeAttempts(meetingId: meetingId)
 
         meeting.status = .transcribing
-        if meeting.transcribingStartedAt == nil {
-            meeting.transcribingStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        }
+        // Stamp the attempt-start FRESH on every run, not just when nil. Each
+        // transcribe() call is one attempt; a row that failed (or whose
+        // on-device model was wiped and is now re-downloading) gets re-enqueued
+        // by launch recovery / the retry loop, and a stale timestamp made the
+        // TranscribingBanner show a huge elapsed (e.g. 84:15 for a 23s clip that
+        // had only just restarted after an app update). The explicit
+        // re-transcribe route also nils it for instant UI reset, but that path
+        // doesn't cover recovery/retry — so the single source of truth is here.
+        meeting.transcribingStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
 
         // Resolve which provider this transcribe call ACTUALLY uses.
         // If the user picked an "advanced" (cloud) model AND the

@@ -1506,12 +1506,12 @@ enum Routes {
         // empty segment list, so wiping early is no longer needed.
         if var m = try? repo.meeting(id: id) {
             m.status = .transcribing
-            // Reset the start timestamp so the TranscribingBanner
-            // counter restarts at 00:00 instead of continuing where
-            // the previous run left off (Костя's case: switched
-            // provider mid-run, expected the timer to reset). The
-            // pipeline itself only stamps when the value is nil,
-            // so we nil it out here.
+            // Reset the start timestamp so the TranscribingBanner counter
+            // restarts at 00:00 right away (instant UI feedback before the
+            // async enqueue runs). The pipeline also re-stamps it fresh on
+            // every run, so this is just for the immediate reset on an
+            // explicit re-transcribe; recovery/retry paths rely on the
+            // pipeline stamp.
             m.transcribingStartedAt = nil
             try? repo.updateMeeting(m)
         }
