@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.71] — 2026-06-26
+
+### Fixed
+- The menu-bar popover no longer shows a "Cannot record yet" gate when you
+  are signed out. You can record straight away, with no sign-in required (the
+  only limit without an account is 5 recordings held at once).
+
 ## [0.14.70] — 2026-06-26
 
 ### Changed
