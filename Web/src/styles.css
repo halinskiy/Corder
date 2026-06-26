@@ -893,6 +893,16 @@ input[type="text"]:focus, input[type="search"]:focus {
   transition: opacity 200ms ease;
 }
 .rec-dot.on { opacity: 1; }
+/* Solid red record dot for the "Start a new recording" button, mirroring the
+   menu-bar popover's Start button. `.clarify-btn` is inline-flex with gap, so
+   the dot sits next to the label automatically. */
+.rec-startnew-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--status-fail);
+  flex-shrink: 0;
+}
 .rec-text { display: flex; flex-direction: column; gap: 1px; }
 .rec-label {
   /* Same type as the sidebar's meeting-title (Today, 17:56) — quiet 13/500
@@ -3425,7 +3435,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg-muted);
   max-width: 260px;
 }
-.ghost-video-cta { margin-top: 6px; width: 100%; }
+/* `flex: none` so the button keeps its natural height: `.clarify-btn` carries
+   `flex: 1 1 72px`, and inside this column-flex card grow:1 stretched it to
+   fill the whole card (taller than the Stop button). Slightly tighter vertical
+   padding than the 13px Stop button too. */
+.ghost-video-cta { flex: none; margin-top: 6px; width: 100%; padding: 11px 16px; }
 
 .timeline-card {
   background: var(--bg);

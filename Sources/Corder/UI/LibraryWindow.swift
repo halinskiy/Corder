@@ -279,15 +279,18 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
             // applies a new Screen Recording grant on the NEXT launch.
             Task { @MainActor in
                 AppSettings.setCaptureVideo(true)
-                _ = CGRequestScreenCaptureAccess()
-                let alert = NSAlert()
-                alert.messageText = "Allow Screen Recording to capture video"
-                alert.informativeText = "Turn Corder on under System Settings → Privacy & Security → Screen Recording, then restart Corder. Audio recording works without it."
-                alert.addButton(withTitle: "Open System Settings")
-                alert.addButton(withTitle: "Later")
-                if alert.runModal() == .alertFirstButtonReturn,
-                   let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-                    NSWorkspace.shared.open(url)
+                if AppSettings.screenRecordingAsked {
+                    // Already prompted once: macOS won't show the system sheet
+                    // again, so take the user straight to the Settings pane.
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } else {
+                    // First time: the native Screen Recording prompt (which has
+                    // its own "Open System Settings" button) is enough. Don't
+                    // stack a second dialog on top of it.
+                    AppSettings.setScreenRecordingAsked(true)
+                    _ = CGRequestScreenCaptureAccess()
                 }
             }
         default:

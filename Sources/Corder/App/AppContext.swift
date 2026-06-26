@@ -208,6 +208,13 @@ enum AppSettings {
         }
     }
 
+    // Whether the macOS Screen Recording system prompt was already triggered
+    // once. The OS only shows that sheet the FIRST time; afterwards the
+    // ghost-video CTA goes straight to System Settings (no double dialog).
+    private static let kScreenRecAsked = "Corder.set.screenRecAsked"
+    static var screenRecordingAsked: Bool { UserDefaults.standard.bool(forKey: kScreenRecAsked) }
+    static func setScreenRecordingAsked(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenRecAsked) }
+
     static func setNotifications(_ v: Bool)  { setFlag(kNotifications, v) }
     static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
     static func setCaptureAudio(_ v: Bool)   { setFlag(kCaptureAudio, v) }

@@ -38,8 +38,14 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
   React.useEffect(() => {
     let alive = true;
-    getSettings().then((s) => { if (alive) setScreenGranted(s.screen_recording_granted ?? true); }).catch(() => {});
-    return () => { alive = false; };
+    const refresh = () => getSettings()
+      .then((s) => { if (alive) setScreenGranted(s.screen_recording_granted ?? true); })
+      .catch(() => {});
+    refresh();
+    // Re-check when the user returns to Corder (e.g. after granting Screen
+    // Recording in System Settings) so the ghost clears without a reload.
+    window.addEventListener("focus", refresh);
+    return () => { alive = false; window.removeEventListener("focus", refresh); };
   }, []);
   // Show the ghost only when this meeting has NO real video AND the grant is
   // missing — a granted user simply records video, an un-granted one gets the
