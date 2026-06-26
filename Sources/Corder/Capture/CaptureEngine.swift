@@ -259,7 +259,17 @@ final class CaptureEngine: NSObject {
         // SCShareableContent call here still throws (permission revoked, or a
         // race), we DON'T fail the recording — we degrade to audio-only, where
         // the process tap still captures the far end.
-        let needSCStream = AppSettings.captureVideo || outputBluetoothAtStart
+        // Video ON always needs SCStream (RecordingController prompts for
+        // Screen Recording up-front in that case). For the Bluetooth-output
+        // SCK audio BACKUP we only arm SCStream when Screen Recording is
+        // ALREADY granted — we must NOT trigger the macOS Screen Recording
+        // prompt (which can only be satisfied by a restart) just for a backup
+        // track that, empirically, is silent in ~100% of recordings: the
+        // far end is captured by the Core Audio process tap regardless. So a
+        // fresh user on Bluetooth records audio-only with only the Microphone
+        // prompt, no Screen Recording wall.
+        let needSCStream = AppSettings.captureVideo
+            || (outputBluetoothAtStart && CGPreflightScreenCaptureAccess())
         if needSCStream {
             do {
                 // 1. Build the SCContentFilter for the chosen source.

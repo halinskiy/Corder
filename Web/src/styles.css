@@ -574,10 +574,10 @@ button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
   padding: 9px 12px;
   margin: 2px 0;
   border: 1px solid var(--accent);
-  /* 11px (vs the 9px nav-item radius) so the shrunk CTA still reads as
-     softly rounded — at the smaller button height 9px looked a touch
-     sharp, this sits between the items (9) and the popover shell (12). */
-  border-radius: 11px;
+  /* Squarer than the nav items: a small 7px radius reads as "barely
+     rounded, mostly square", per the brief (more square, just slightly
+     softened corners). */
+  border-radius: 7px;
   background: var(--accent);
   color: #fff;
   font-size: 13px;

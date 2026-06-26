@@ -5,6 +5,7 @@ import {
   getSettings,
   getUsage,
   setSettings,
+  startRecordingNow,
   type Settings,
   type Usage,
 } from "../api";
@@ -337,6 +338,23 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
             </>
           )}
         </button>
+        {downloadingModel && (
+          // The model download/compile can take a while on a slow Mac. Let
+          // the user start a NEW recording without waiting for it — the
+          // current meeting keeps preparing in the background and transcribes
+          // once the model lands. Secondary (outlined) so it never competes
+          // with the primary progress button above.
+          <button
+            type="button"
+            className="clarify-btn"
+            onClick={async () => {
+              try { await startRecordingNow(); }
+              catch { onToast(t.toast_settings_failed, "error"); }
+            }}
+          >
+            {t.trans_start_new ?? "Start a new recording"}
+          </button>
+        )}
       </div>
       {upsellCopy && upsell && !isSnoozed(upsell, upsellDismissedAt) && (
         <div className="trans-upsell">
