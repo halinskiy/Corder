@@ -9,42 +9,25 @@ struct PopoverContentView: View {
     @ObservedObject var ctx: AppContext = .shared
     let onOpenLibrary: () -> Void
 
-    /// Until the user finishes the Welcome wizard AND has a live
-    /// Supabase session we treat the app as "locked": recording and
-    /// the Library are unavailable, and the popover redirects the
-    /// user to the wizard (primary) and the account site (secondary).
-    /// Reading `currentUser` is synchronous — the SDK keeps the
-    /// restored session in memory after launch — so it's cheap to
-    /// re-check on every popover open. Without this guard the
-    /// popover showed the signed-in surface for a user whose OAuth
-    /// callback never reached the app (port-rotation bug).
-    private var locked: Bool {
-        if !AppSettings.onboardingCompleted { return true }
-        if SupabaseClientHolder.shared.auth.currentUser == nil { return true }
-        return false
-    }
-
-    /// Account portal — `getcorder.com/account`. Falls back to the
-    /// landing root if the account page isn't built yet on launch
-    /// day. Update this single constant when the page goes live.
-    private static let accountURL = URL(string: "https://getcorder.com/account")!
+    // There is NO "locked" state anymore. Recording is allowed immediately,
+    // signed-out, with no upfront wizard or sign-in requirement (the only
+    // ceiling is the guest 5-session cap, enforced inside
+    // `RecordingController.startRecording`, which offers sign-in at the cap).
+    // The popover therefore always shows the idle / recording / stopping
+    // surface, never a "Cannot record yet" gate.
 
     var body: some View {
         // Outer gap + width + padding all live on `PopoverShell` so
         // both popover surfaces (this one + InviteOfferView in
         // MenuBarController) keep identical geometry on every tweak.
         VStack(alignment: .leading, spacing: PopoverShell.outerSpacing) {
-            if locked {
-                lockedSection
-            } else {
-                switch ctx.recordingState {
-                // `.preroll` shows the idle section (no indicator); a
-                // "Start recording" there promotes the pre-roll via
-                // startRecording's pre-roll branch.
-                case .idle, .preroll: idleSection
-                case .recording(_, let startedAt): recordingSection(startedAt: startedAt)
-                case .stopping:    stoppingSection
-                }
+            switch ctx.recordingState {
+            // `.preroll` shows the idle section (no indicator); a
+            // "Start recording" there promotes the pre-roll via
+            // startRecording's pre-roll branch.
+            case .idle, .preroll: idleSection
+            case .recording(_, let startedAt): recordingSection(startedAt: startedAt)
+            case .stopping:    stoppingSection
             }
 
             // Hairline separator between primary action and library/quit.
@@ -54,36 +37,16 @@ struct PopoverContentView: View {
                 .padding(.vertical, 2)
 
             VStack(spacing: 10) {
-                if locked {
-                    Button {
-                        NSWorkspace.shared.open(Self.accountURL)
-                    } label: {
-                        HStack(spacing: 10) {
-                            // External-link variant of `rectangle.stack`
-                            // from the same SF Symbols family. Explicit
-                            // size + medium weight so the glyph reads
-                            // at the same visual weight as the Library
-                            // icon below — otherwise the bordered
-                            // square SF Symbol looks smaller than the
-                            // open `rectangle.stack` silhouette.
-                            Image(systemName: "arrow.up.forward.square")
-                                .font(.system(size: 15, weight: .medium))
-                            Text(L.t("open_account", lang: ctx.language))
-                        }
+                Button {
+                    onOpenLibrary()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "rectangle.stack")
+                            .font(.system(size: 15, weight: .medium))
+                        Text(L.t("open_library", lang: ctx.language))
                     }
-                    .buttonStyle(FlatButtonStyle(role: .secondary))
-                } else {
-                    Button {
-                        onOpenLibrary()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "rectangle.stack")
-                                .font(.system(size: 15, weight: .medium))
-                            Text(L.t("open_library", lang: ctx.language))
-                        }
-                    }
-                    .buttonStyle(FlatButtonStyle(role: .secondary))
                 }
+                .buttonStyle(FlatButtonStyle(role: .secondary))
 
                 Button {
                     NSApp.terminate(nil)
@@ -121,27 +84,6 @@ struct PopoverContentView: View {
             }
             .buttonStyle(FlatButtonStyle(role: .primary))
             .keyboardShortcut("r", modifiers: [.command])
-        }
-    }
-
-    // MARK: - Locked (wizard not finished)
-
-    /// Replaces the idle section while the Welcome wizard is
-    /// incomplete. Status pill says "Cannot record yet", primary CTA
-    /// opens / re-focuses the wizard, no red recording dot.
-    @ViewBuilder
-    private var lockedSection: some View {
-        VStack(alignment: .leading, spacing: PopoverShell.sectionSpacing) {
-            LockedStatus(lang: ctx.language)
-            Button {
-                WelcomeWindowController.shared.presentManually()
-            } label: {
-                // No red dot here — this isn't a record action,
-                // it's "finish setup".
-                Text(L.t("open_corder", lang: ctx.language))
-            }
-            .buttonStyle(FlatButtonStyle(role: .primary))
-            .keyboardShortcut("o", modifiers: [.command])
         }
     }
 
@@ -185,39 +127,6 @@ struct PopoverContentView: View {
 
 }
 
-// MARK: - Locked status (Welcome wizard not finished yet)
-
-/// Identical chrome to `IdleStatus` so the popover doesn't visually
-/// jump when the wizard finishes — just a different label and a
-/// dot that stays muted (no red even at a glance, this is not a
-/// recording-ready state).
-private struct LockedStatus: View {
-    let lang: String
-    var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(Color.secondary.opacity(0.45))
-                .frame(width: 10, height: 10)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(L.t("locked_status", lang: lang))
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-                Text("00:00")
-                    .font(.system(size: 22, weight: .light))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-        )
-    }
-}
 
 // MARK: - Idle status (same shape as RecordingStatus, all grey, no animation)
 
