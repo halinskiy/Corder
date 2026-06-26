@@ -95,6 +95,10 @@ function DownloadView({
   // empty meeting). `duration_ms > 0` means a real recording with audio.
   const hasAudio = (detail.duration_ms ?? 0) > 0;
   const hasTranscript = detail.segments.length > 0;
+  // The "everything as one archive" zip only makes sense when it would bundle
+  // MORE THAN ONE artefact. With a single thing to save (e.g. only Audio), the
+  // zip is redundant with that one option, so hide it.
+  const artifactCount = [!!detail.has_video, hasAudio, hasTranscript].filter(Boolean).length;
   type Row = { value: string; label: string; href: string; file: string; show: boolean };
   const rows: Row[] = [
     // Video is offered ONLY muxed with audio — a silent .mov download was
@@ -106,9 +110,7 @@ function DownloadView({
     { value: "transcript", label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: hasTranscript },
     { value: "markdown",   label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: hasTranscript },
     { value: "json",       label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: hasTranscript },
-    // The "everything" zip is only meaningful when there is at least one
-    // real artefact to put in it.
-    { value: "bundle",     label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: !!detail.has_video || hasAudio || hasTranscript },
+    { value: "bundle",     label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: artifactCount >= 2 },
   ];
   const visible = rows.filter((r) => r.show);
   const isEmpty = visible.length === 0;

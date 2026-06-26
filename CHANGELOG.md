@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.77] — 2026-06-26
+
+### Fixed
+- Downloading audio (or video) no longer takes over the whole window with a
+  media player you can't exit. Exports always save as a file now, instead of
+  being rendered inline by the web view.
+
+### Changed
+- The "Everything as one archive" download option is hidden when there is only
+  one thing to save (a zip of a single file just duplicated that option).
+
 ## [0.14.76] — 2026-06-26
 
 ### Fixed
