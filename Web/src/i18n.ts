@@ -233,6 +233,7 @@ interface Strings {
   trans_label: string;
   trans_downloading_model?: string;
   trans_start_new?: string;
+  trans_slow_hint?: string;
   trans_stop: string;
   trans_cancelled: string;
   trans_upsell_speed_title?: string;
@@ -598,6 +599,7 @@ const en: Strings = {
   trans_label: "Transcribing",
   trans_downloading_model: "Downloading model…",
   trans_start_new: "Start a new recording",
+  trans_slow_hint: "The on-device model compiles for the Neural Engine the first time it runs. That one-time step can take a few minutes on some Macs; after it, transcripts are fast.",
   trans_stop: "Stop transcription",
   trans_cancelled: "Transcription stopped",
   trans_upsell_speed_title: "Upgrade for speed",

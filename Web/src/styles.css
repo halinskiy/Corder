@@ -2489,6 +2489,23 @@ body.resizing { cursor: col-resize; user-select: none; }
   animation: spin 0.9s linear infinite;
   flex-shrink: 0;
 }
+/* Small muted "?" affordance next to the Transcribing/Downloading headline.
+   Hover shows the multiline tooltip explaining the one-time model compile. */
+.trans-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  opacity: 0.6;
+  cursor: help;
+  flex-shrink: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.trans-info-btn:hover { opacity: 1; color: var(--fg); }
 /* Subtitle that's a monospace counter (timer in TranscribingBanner).
    Tabular numbers keep the digits from jittering each second. */
 .clarify-sub-mono {
@@ -4054,6 +4071,14 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .tooltip-pop-bottom { transform: translate(-50%, 0); }
 .tooltip-pop-top    { transform: translate(-50%, -100%); }
+/* Roomier, wrapping variant for a short explanation (not a one-word chip). */
+.tooltip-pop-multiline {
+  white-space: normal;
+  max-width: 240px;
+  padding: 9px 12px;
+  line-height: 1.45;
+  text-align: left;
+}
 @keyframes tooltip-fade {
   from { opacity: 0; transform: translate(-50%, 4px); }
   to   { opacity: 1; }

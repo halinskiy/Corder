@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.81] — 2026-06-26
+
+### Added
+- An info tooltip next to the Transcribing / Downloading headline briefly
+  explains why the first run can take a while (a one-time on-device model
+  compile for the Neural Engine; fast afterwards).
+
 ## [0.14.80] — 2026-06-26
 
 ### Changed

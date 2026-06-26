@@ -13,10 +13,13 @@ import { createPortal } from "react-dom";
 /// "instant context" feeling Kostya is after. A controlled JS
 /// tooltip with a tight delay and our design tokens does.
 export function Tooltip({
-  label, children, side = "bottom", delay = 350, disabled,
+  label, children, side = "bottom", delay = 350, disabled, multiline,
 }: {
   label: string;
   children: React.ReactElement;
+  /// Wrap the label across lines with roomier padding (for a short
+  /// explanation rather than a one-word chip). Default is single-line.
+  multiline?: boolean;
   /// Which side of the anchor to float on. "bottom" suits toolbar
   /// rows; "top" suits sidebar rows pinned to the bottom of the
   /// viewport so the tooltip doesn't clip off-screen.
@@ -118,7 +121,7 @@ export function Tooltip({
       {cloned}
       {shown && pos && createPortal(
         <div
-          className={"tooltip-pop tooltip-pop-" + side}
+          className={"tooltip-pop tooltip-pop-" + side + (multiline ? " tooltip-pop-multiline" : "")}
           role="tooltip"
           style={{ top: pos.top, left: pos.left }}
         >
