@@ -404,15 +404,31 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
 
     private func isFileEndpoint(_ url: URL?) -> Bool {
         guard let p = url?.path else { return false }
+        // The EXPORT endpoints only (audio.m4a / video-audio.mp4 / transcript.* /
+        // bundle.zip). NOT the bare playback `/audio` `/video`, which must
+        // render inline for the scrubber + video preview. The previous regex
+        // matched `/audio`/`/video` but MISSED `/audio.m4a` + `/video-audio.mp4`,
+        // so clicking Download → Audio navigated the main frame to the m4a and
+        // WKWebView rendered it full-window with no way back.
         return p.range(
-            of: #"/api/meetings/[^/]+/(audio|video|transcript\.(txt|md|json)|bundle\.zip)$"#,
+            of: #"/api/meetings/[^/]+/(audio\.m4a|video-audio\.mp4|transcript\.(txt|md|json)|bundle\.zip)$"#,
             options: .regularExpression) != nil
     }
 
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationResponse: WKNavigationResponse,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        decisionHandler(isFileEndpoint(navigationResponse.response.url) ? .download : .allow)
+        // Force a real DOWNLOAD (not an inline render) for exports. Primary
+        // signal: the server marks every export with `Content-Disposition:
+        // attachment`; the path check is a belt-and-braces fallback. Without
+        // this a media export (audio.m4a / video-audio.mp4) was RENDERED by
+        // WKWebView over the whole window, trapping the user.
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?
+            .lowercased() ?? ""
+        let forceDownload = disposition.contains("attachment")
+            || isFileEndpoint(navigationResponse.response.url)
+        decisionHandler(forceDownload ? .download : .allow)
     }
 
     func webView(_ webView: WKWebView,
