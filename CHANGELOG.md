@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.72] — 2026-06-26
+
+### Fixed
+- On-device transcription now self-heals when the local model is incomplete.
+  A corrupt or partially-downloaded model (an unreadable weights file) used to
+  fail the whole recording; now the app detects it, re-downloads the model
+  clean, and transcribes, instead of landing the meeting in "failed".
+
+### Changed
+- Profile menu polish: the green Sign in button has slightly rounder corners,
+  and the Get help / Check for updates group gets a little more breathing room
+  above and below.
+
 ## [0.14.71] — 2026-06-26
 
 ### Fixed
