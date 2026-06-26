@@ -1,5 +1,5 @@
 import React from "react";
-import { Loader2, Info } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import {
   cancelTranscription,
@@ -286,18 +286,15 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   return (
     <div className="trans-banner clarify-banner">
       <div className="clarify-text">
-        <div className="clarify-body clarify-body-with-icon">
-          <Loader2 size={16} className="trans-inline-spinner" aria-hidden />
-          <span>{headline}</span>
-          <Tooltip
-            multiline
-            label={t.trans_slow_hint ?? "The on-device model compiles for the Neural Engine the first time it runs. That one-time step can take a few minutes on some Macs; after it, transcripts are fast."}
-          >
-            <button type="button" className="trans-info-btn" aria-label="Why does this take a while?">
-              <Info size={14} strokeWidth={2} />
-            </button>
-          </Tooltip>
-        </div>
+        <Tooltip
+          multiline
+          label={t.trans_slow_hint ?? "The on-device model compiles for the Neural Engine the first time it runs. That one-time step can take a few minutes on some Macs; after it, transcripts are fast."}
+        >
+          <div className="clarify-body clarify-body-with-icon trans-headline-hint">
+            <Loader2 size={16} className="trans-inline-spinner" aria-hidden />
+            <span>{headline}</span>
+          </div>
+        </Tooltip>
         <div className="dash-sub clarify-sub-mono">{m}:{s}</div>
       </div>
       <div className="clarify-actions clarify-actions-stack">
