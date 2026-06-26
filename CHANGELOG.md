@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.80] — 2026-06-26
+
+### Changed
+- The "Catch the start of calls" toggle in Settings is admin-only now. Regular
+  users keep the default behaviour (it stays on) but no longer see the toggle.
+
 ## [0.14.79] — 2026-06-26
 
 ### Fixed

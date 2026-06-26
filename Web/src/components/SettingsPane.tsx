@@ -230,16 +230,19 @@ export function SettingsPane({
 
         {/* Silent pre-roll — buffer a detected call from its start so
             accepting the record offer keeps the beginning. ON by default
-            for everyone now (the buffer is discarded if you decline). */}
-        <SoloCard>
-          <Toggle
-            label={t.settings_preroll_title ?? "Catch the start of calls"}
-            desc={t.settings_preroll_desc ?? "Keep the beginning of a detected call."}
-            checked={(s?.preroll as boolean | undefined) ?? true}
-            disabled={!loaded}
-            onChange={(v) => patch({ preroll: v })}
-          />
-        </SoloCard>
+            for everyone (the buffer is discarded if you decline); the TOGGLE
+            is admin-only, so regular users just get the default behaviour. */}
+        {s?.is_admin === true && (
+          <SoloCard>
+            <Toggle
+              label={t.settings_preroll_title ?? "Catch the start of calls"}
+              desc={t.settings_preroll_desc ?? "Keep the beginning of a detected call."}
+              checked={(s?.preroll as boolean | undefined) ?? true}
+              disabled={!loaded}
+              onChange={(v) => patch({ preroll: v })}
+            />
+          </SoloCard>
+        )}
 
         {/* Transcription-language picker removed — transcription is always
             Auto-detect for everyone, so there's nothing to choose. */}
