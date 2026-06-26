@@ -96,6 +96,10 @@ enum DTO {
         /// live in `AppSettings` (every Bool → true).
         let notifications: Bool?
         let capture_video: Bool?
+        /// Read-only: whether macOS Screen Recording is currently granted to
+        /// Corder. Drives the "ghost video" CTA in the recording panel (video
+        /// capture is unavailable until this is true).
+        let screen_recording_granted: Bool?
         /// Mic + system are ONE switch on purpose: the dual-track
         /// pipeline assumes both WAVs exist; splitting them would drop
         /// into the legacy single-stream channel-gate path.

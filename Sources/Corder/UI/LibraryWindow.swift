@@ -271,6 +271,25 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
             // the real Supabase auth + pushes state back via corderAuthState.
             guard let json = message.body as? String else { return }
             Task { @MainActor in AuthController.shared.handle(json) }
+        case "requestScreenRecording":
+            // The recording panel's ghost-video CTA posts here. Enable screen
+            // video so it's ready once the grant lands, register Corder with the
+            // OS Screen Recording list (CGRequestScreenCaptureAccess prompts a
+            // first-timer), and point the user at the Settings pane. macOS only
+            // applies a new Screen Recording grant on the NEXT launch.
+            Task { @MainActor in
+                AppSettings.setCaptureVideo(true)
+                _ = CGRequestScreenCaptureAccess()
+                let alert = NSAlert()
+                alert.messageText = "Allow Screen Recording to capture video"
+                alert.informativeText = "Turn Corder on under System Settings → Privacy & Security → Screen Recording, then restart Corder. Audio recording works without it."
+                alert.addButton(withTitle: "Open System Settings")
+                alert.addButton(withTitle: "Later")
+                if alert.runModal() == .alertFirstButtonReturn,
+                   let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         default:
             break
         }
@@ -540,6 +559,7 @@ final class LibraryWindow: NSWindowController {
         cfg.userContentController.add(handler, name: "headerHits")
         cfg.userContentController.add(handler, name: "updateAction")
         cfg.userContentController.add(handler, name: "authAction")
+        cfg.userContentController.add(handler, name: "requestScreenRecording")
         let bridgeJS = """
         (function() {
           // Header drag/hover hit-test: report the bounding rects of
@@ -611,6 +631,16 @@ final class LibraryWindow: NSWindowController {
           window.corderOpenExternal = function(url) {
             try {
               window.webkit.messageHandlers.openExternal.postMessage(String(url));
+              return true;
+            } catch (e) { return false; }
+          };
+
+          // Ghost-video CTA: ask macOS for Screen Recording (and enable screen
+          // video). Native side enables the setting, registers Corder with the
+          // OS, and opens the Settings pane.
+          window.corderRequestScreenRecording = function() {
+            try {
+              window.webkit.messageHandlers.requestScreenRecording.postMessage(1);
               return true;
             } catch (e) { return false; }
           };

@@ -202,6 +202,9 @@ interface Strings {
   download_format_desc?: string;
   download_nothing?: string;
   download_title: string;
+  ghost_video_title?: string;
+  ghost_video_sub?: string;
+  ghost_video_cta?: string;
   download_body: string;
   download_video: string;
   download_audio: string;
@@ -564,6 +567,9 @@ const en: Strings = {
   download_format_desc: "Pick which file to save.",
   download_nothing: "Nothing to export yet.",
   download_title: "Download",
+  ghost_video_title: "Capture your screen too",
+  ghost_video_sub: "Allow Screen Recording to include screen video. Audio recording works without it.",
+  ghost_video_cta: "Enable screen video",
   download_body: "What to save from this recording.",
   download_video: "Video + audio",
   download_audio: "Audio",
