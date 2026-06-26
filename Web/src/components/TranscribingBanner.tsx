@@ -352,6 +352,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
               catch { onToast(t.toast_settings_failed, "error"); }
             }}
           >
+            <span className="rec-startnew-dot" aria-hidden />
             {t.trans_start_new ?? "Start a new recording"}
           </button>
         )}

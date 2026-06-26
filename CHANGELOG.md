@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.79] — 2026-06-26
+
+### Fixed
+- The "Enable screen video" button in the ghost-video card is no longer
+  oversized (it was stretching to fill the whole card).
+- Granting Screen Recording no longer opens System Settings twice. The first
+  time shows only the macOS prompt; afterwards the button goes straight to
+  Settings.
+- The ghost-video card now clears as soon as Screen Recording is granted and
+  you return to Corder (it re-checks on window focus) instead of lingering.
+
+### Changed
+- The "Start a new recording" button has a red record dot now, matching the
+  menu-bar Start button.
+
 ## [0.14.78] — 2026-06-26
 
 ### Added
