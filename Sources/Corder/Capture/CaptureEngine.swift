@@ -162,7 +162,7 @@ final class CaptureEngine: NSObject {
     func start(meetingId: String, source: CaptureSource) async throws {
         FileLogger.log("CaptureEngine.start: meetingId=\(meetingId) source=\(source)")
         // Reject re-entry synchronously, BEFORE any await, so two near-
-        // simultaneous starts (manual + auto-detect, double hotkey) can't
+        // simultaneous starts (manual + auto-detect) can't
         // both pass and leak a stream/tap. `defer` clears the latch on
         // every exit; once `isRecording` is true the normal guard owns it.
         guard !isRecording, !starting else {

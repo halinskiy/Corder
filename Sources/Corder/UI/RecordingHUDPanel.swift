@@ -6,7 +6,7 @@ import SwiftUI
 /// bars driven by an FFT of the captured audio (RecordingLevelMeter), flat
 /// in silence and reacting per-band to real sound. Click stops the
 /// recording. (This replaced the old "blob"; the in-window indicator is
-/// gone too, recording is started/stopped from the popover + hotkey.)
+/// gone too, recording is started/stopped from the popover + in-app button.)
 @MainActor
 final class RecordingHUDPanel {
     static let shared = RecordingHUDPanel()

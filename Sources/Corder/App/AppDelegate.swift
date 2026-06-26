@@ -157,44 +157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // pop the invite capsule asking whether to record.
         MeetingDetector.shared.start()
 
-        // Global record hotkey (default ⌘⇧F, user-customisable in
-        // Settings). Toggles like the menu-bar Start/Stop, including
-        // the manual-start handshake so MeetingDetector doesn't also
-        // pop an offer for the same session.
-        HotkeyManager.shared.onTrigger = {
-            // ⌘⇧F is the recording toggle — must respect the same
-            // onboarding gate as the popover Start button and the
-            // menu-bar Library item. If the wizard isn't finished
-            // yet, the hotkey re-focuses the wizard instead of
-            // starting a forbidden recording.
-            guard AppSettings.onboardingCompleted else {
-                Task { @MainActor in
-                    WelcomeWindowController.shared.presentManually()
-                }
-                return
-            }
-            switch AppContext.shared.recordingState {
-            case .idle:
-                MeetingDetector.shared.userStartedRecordingManually()
-                Task { await RecordingController.shared.startRecording(source: .fullDisplay) }
-            case .recording:
-                Task { await RecordingController.shared.stopRecording() }
-            case .preroll:
-                // Hotkey during a silent pre-roll = "yes, record this" →
-                // promote it (startRecording handles the pre-roll case).
-                Task { await RecordingController.shared.startRecording(source: .fullDisplay) }
-            case .stopping:
-                break
-            }
-        }
-        // Only bind a global hotkey if the user has actually assigned one.
-        // The default is now UNASSIGNED, so a fresh install ships with no
-        // record shortcut (no accidental trigger, no silent conflict).
-        if AppSettings.recordHotkeyAssigned {
-            HotkeyManager.shared.register(
-                keyCode: UInt32(AppSettings.recordHotkeyKeyCode),
-                modifiers: UInt32(AppSettings.recordHotkeyModifiers))
-        }
+        // No global record hotkey: the shortcut feature was removed entirely.
+        // Recording starts/stops from the menu-bar popover and the in-app
+        // button only. (Carbon `RegisterEventHotKey` + the Settings capture
+        // row are gone — there is intentionally no keyboard shortcut.)
 
         // Surface SOMETHING visible on launch. The "signed in?"
         // decision used to read the local `onboardingCompleted`

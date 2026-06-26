@@ -145,7 +145,7 @@ export function MainHeader({
 /// "N left" badge sitting left of the report button. Shown ONLY to a
 /// signed-out (guest) user: guests may hold up to a fixed number of
 /// recordings at once, and this is the live remaining count. At zero,
-/// pressing Start anywhere (menu bar, in-app, hotkey) offers sign-in
+/// pressing Start anywhere (menu bar or in-app) offers sign-in
 /// instead of recording; deleting a recording frees a slot. Signed-in
 /// users are unlimited, so the badge renders nothing for them. Clicking
 /// it opens the in-app sign-in modal. Self-contained + polled so the

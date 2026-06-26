@@ -16,6 +16,22 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.73] — 2026-06-26
+
+### Removed
+- The global record shortcut is gone entirely. Recording starts and stops
+  from the menu-bar popover and the in-app button only; there is no keyboard
+  shortcut anymore and the Shortcut row in Settings was removed.
+
+### Added
+- The Library window now has a minimum size (920 x 600) so it can no longer be
+  resized small enough for the sidebar, transcript, and right panel to overlap
+  into an unusable layout.
+
+### Fixed
+- The sign-in card no longer clips on a short window; if it's taller than the
+  window it scrolls instead of cutting off the bottom.
+
 ## [0.14.72] — 2026-06-26
 
 ### Fixed

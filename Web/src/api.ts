@@ -418,13 +418,6 @@ export interface Settings {
   meeting_blacklist?: string[];
   /** read-only: bundle ids recently seen owning the mic. */
   detected_mic_apps?: string[];
-  /** global record hotkey: Carbon key code + Carbon modifier mask. */
-  record_hotkey_code?: number;
-  record_hotkey_mods?: number;
-  /** read-only: label, clashing macOS system shortcut (if any), bound? */
-  record_hotkey_label?: string;
-  record_hotkey_conflict?: string | null;
-  record_hotkey_ok?: boolean;
   /** Preferred mic input device, stored as the stable Core Audio UID.
    *  Empty string / null = "use system default". */
   mic_device_uid?: string | null;
