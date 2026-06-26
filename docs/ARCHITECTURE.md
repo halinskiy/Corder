@@ -83,7 +83,7 @@ App/                Entry point, app delegate, recording state machine
 ├ CorderApp.swift           NSApplication boot
 ├ AppDelegate.swift         lifecycle, menu, server start, prewarm,
 │                           purgeExpiredArchive() on launch (>7 d),
-│                           duplicate-instance kill, hotkey wiring.
+│                           duplicate-instance kill.
 │                           Launch recovery (stuck + failed-retriable
 │                           meetings) enqueues SEQUENTIALLY (awaits each)
 │                          , two whisperLocal model loads racing Core
@@ -91,8 +91,8 @@ App/                Entry point, app delegate, recording state machine
 ├ AppContext.swift          shared state (singleton); AppSettings
 │                           UserDefaults-backed enum (sync, thread-safe);
 │                           BoostMode / AppLanguage / AppVocabulary;
-│                           TranscriptionErrors + MicAppsSnapshot +
-│                           HotkeyStatusSnapshot lock-protected mirrors
+│                           TranscriptionErrors + MicAppsSnapshot
+│                           lock-protected mirrors
 ├ RecordingController.swift @MainActor state machine (idle/recording/
 │                           stopping); shows + hides RecordingHUDPanel;
 │                           orchestrates CaptureEngine + DB; produces
@@ -106,14 +106,6 @@ App/                Entry point, app delegate, recording state machine
 │                           envelopes published as a per-band max (so the
 │                           high-rate system tap can't wash out the mic);
 │                           30 Hz publish; drives the HUD equalizer
-├ HotkeyManager.swift       Carbon `RegisterEventHotKey` wrapper (no
-│                           Accessibility prompt). UNASSIGNED by default
-│                           (recordHotkeyKeyCode/Modifiers = -1/0); a
-│                           combo registers only once the user sets one,
-│                           and `recordHotkeyAssigned` requires a STRONG
-│                           modifier (cmd/opt/ctrl, not shift) via
-│                           isStrongHotkeyMods. Conflicts with OS-bound
-│                           combos are surfaced via the settings DTO.
 ├ MeetingDetector.swift     per-process default-input owner detector
 │                           (kAudioProcessPropertyIsRunningInput);
 │                           respects whitelist/blacklist from AppSettings
@@ -252,7 +244,10 @@ UI/
 ├ MenuBarController.swift   NSStatusItem + popover wiring
 ├ PopoverContentView.swift  SwiftUI popover (idle/recording/stopping)
 ├ LibraryWindow.swift       NSWindow + WKWebView + JS bridge
-│                           (drag, copy, openExternal)
+│                           (drag, copy, openExternal); contentMinSize
+│                           920 x 600 so the three-column layout
+│                           (sidebar + transcript + right panel) can't
+│                           be crushed
 └ RecordingHUDPanel.swift   Floating NSPanel pill; real-time
                             frequency-spectrum equalizer (bars driven by
                             `RecordingLevelMeter.spectrum`, not the old
@@ -261,7 +256,7 @@ UI/
                             in-window recording indicator (the embedded
                             blob in the Library window bottom-right) was
                             removed; recording is started/stopped from the
-                            menu-bar popover and the global hotkey.
+                            menu-bar popover and the in-app button only.
 
 Shared/
 └ Paths.swift               AppPaths.* singletons
