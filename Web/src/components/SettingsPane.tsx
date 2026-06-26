@@ -76,20 +76,13 @@ export function SettingsPane({
     }, 400);
   }, []);
 
-  // Re-pull settings (hotkey: the POST response's record_hotkey_ok can
-  // be stale because the Carbon re-register is async on the main run
-  // loop — a short refetch gets the authoritative value).
-  const refetch = React.useCallback(() => {
-    getSettings().then(setS).catch(() => {});
-  }, []);
-
   const loaded = s != null;
   // Every toggle defaults ON until the real value loads (matches the
   // backend default, so no flicker to "off" then back).
   const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
 
   // General vs Advanced split: the "every-day" settings (notifications,
-  // mic, language, hotkey, app lists, telemetry, danger zone) live in
+  // mic, language, app lists, telemetry) live in
   // General. Toggles that flip core capture / pipeline behaviour
   // (video, auto-transcribe / -title / -summary / -chapters) and the
   // API-token reveal live in Advanced. The tab strip itself is owned
@@ -144,33 +137,6 @@ export function SettingsPane({
             value={s?.mic_device_uid ?? ""}
             disabled={!loaded}
             onChange={(uid) => patch({ mic_device_uid: uid })}
-            t={t}
-          />
-        </SoloCard>
-
-        <div className="settings-divider" />
-        <SoloCard>
-          <HotkeyRow
-            label={s?.record_hotkey_label ?? "Not set"}
-            conflict={s?.record_hotkey_conflict ?? null}
-            ok={s?.record_hotkey_ok ?? true}
-            disabled={!loaded}
-            onSet={(code, mods) => {
-              // Clearing (code < 0 / no strong modifier) optimistically flips
-              // the label to "Not set" so the capture button + Clear button
-              // update instantly instead of showing the old combo for a
-              // round-trip; the debounced POST + refetch reconcile the
-              // authoritative server value.
-              const cleared = code < 0 || (mods & (256 | 2048 | 4096)) === 0;
-              patch({
-                record_hotkey_code: code,
-                record_hotkey_mods: mods,
-                ...(cleared
-                  ? { record_hotkey_label: "Not set", record_hotkey_conflict: null, record_hotkey_ok: true }
-                  : {}),
-              });
-              window.setTimeout(refetch, 450);
-            }}
             t={t}
           />
         </SoloCard>
@@ -529,101 +495,6 @@ function AppListEditor({
     </div>
   );
 }
-
-// JS KeyboardEvent.code → Carbon virtual key code. Enough for global
-// hotkeys (letters, digits, F-keys, a few specials). The backend
-// formats the label and checks system-shortcut conflicts from the same
-// numbers, so this is the single mapping point.
-const JS_TO_CARBON: Record<string, number> = {
-  KeyA: 0, KeyS: 1, KeyD: 2, KeyF: 3, KeyH: 4, KeyG: 5, KeyZ: 6, KeyX: 7,
-  KeyC: 8, KeyV: 9, KeyB: 11, KeyQ: 12, KeyW: 13, KeyE: 14, KeyR: 15,
-  KeyY: 16, KeyT: 17, KeyO: 31, KeyU: 32, KeyI: 34, KeyP: 35, KeyL: 37,
-  KeyJ: 38, KeyK: 40, KeyN: 45, KeyM: 46,
-  Digit1: 18, Digit2: 19, Digit3: 20, Digit4: 21, Digit6: 22, Digit5: 23,
-  Digit9: 25, Digit7: 26, Digit8: 28, Digit0: 29,
-  F1: 122, F2: 120, F3: 99, F4: 118, F5: 96, F6: 97, F7: 98, F8: 100,
-  F9: 101, F10: 109, F11: 103, F12: 111,
-  Space: 49, Enter: 36, Tab: 48, Escape: 53,
-  ArrowLeft: 123, ArrowRight: 124, ArrowDown: 125, ArrowUp: 126,
-};
-
-/// Global record-hotkey control. Click to capture, then press the
-/// combo. Surfaces a warning when it clashes with a known macOS system
-/// shortcut, or when the OS refused the binding (something else owns
-/// it). Reuses the existing settings-row layout.
-function HotkeyRow({
-  label, conflict, ok, disabled, onSet, t,
-}: {
-  label: string;
-  conflict: string | null;
-  ok: boolean;
-  disabled?: boolean;
-  onSet: (code: number, mods: number) => void;
-  t: T;
-}) {
-  const [capturing, setCapturing] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!capturing) return;
-    const onKey = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
-      if (e.key === "Escape") { setCapturing(false); return; }
-      const code = JS_TO_CARBON[e.code];
-      if (code == null) return; // unsupported key — keep waiting
-      // Carbon mask: cmd 256 | shift 512 | option 2048 | ctrl 4096.
-      let mods = 0;
-      if (e.metaKey) mods |= 256;
-      if (e.shiftKey) mods |= 512;
-      if (e.altKey) mods |= 2048;
-      if (e.ctrlKey) mods |= 4096;
-      // A global hotkey needs a strong modifier (⌘/⌃/⌥) — ⇧-only or a
-      // bare key would fire while typing anywhere.
-      if ((mods & (256 | 4096 | 2048)) === 0) return;
-      setCapturing(false);
-      onSet(code, mods);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [capturing, onSet]);
-
-  return (
-    <div className="hk-block" aria-label={t.settings_shortcut_label}>
-      <div className="settings-row-label">{t.settings_shortcut_label}</div>
-      <div className="settings-row-desc">{t.settings_shortcut_desc}</div>
-      {conflict && (
-        <div className="hk-warn">{t.settings_shortcut_conflict(conflict)}</div>
-      )}
-      {!conflict && !ok && (
-        <div className="hk-warn">{t.settings_shortcut_unbound}</div>
-      )}
-      <div className="hk-row">
-        <button
-          type="button"
-          className={"clarify-btn bigbtn-full hk-capbtn" + (capturing ? " capturing" : "")}
-          disabled={disabled}
-          onClick={() => setCapturing((v) => !v)}
-        >
-          {capturing ? t.settings_shortcut_press : label}
-        </button>
-        {!capturing && label !== "Not set" && (
-          <button
-            type="button"
-            className="hk-clear"
-            disabled={disabled}
-            onClick={() => onSet(-1, 0)}
-            aria-label="Clear shortcut"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-
 
 /// Test-mode tier switch — Upgrade flips `app_metadata.tier=max`,
 /// Downgrade flips it back to free. Hits a Worker endpoint that

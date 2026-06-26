@@ -2740,8 +2740,8 @@ body.resizing { cursor: col-resize; user-select: none; }
    accent over outlined) as everywhere else in the app. No custom
    shrunk pill style — the design-system check rule applies here. */
 
-/* Full-width single big card button (Settings: hotkey capture, +Add).
-   Fixed height so the label swapping (combo ⇄ "Press a combo…") never
+/* Full-width single big card button (Settings: the AppListEditor +Add).
+   Fixed height so the label swapping never
    resizes it. */
 .bigbtn-full {
   display: block;
@@ -3532,9 +3532,8 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
 }
 /* Hairline section break inside `.settings-pane`. Acts as a visual
-   "from here, a different kind of setting" cue — currently used above
-   the Shortcut card to mark the boundary between plain toggles and
-   the trickier hotkey + auto-detect blocks. */
+   "from here, a different kind of setting" cue — marks the boundary
+   between plain toggles and the trickier auto-detect / picker blocks. */
 .settings-divider {
   height: 1px;
   background: var(--border);
@@ -3824,11 +3823,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-radius: 999px;
 }
 
-/* ── Record-hotkey control ───────────────────────────────────────── */
-/* Matches `.settings-row` horizontal rhythm so the label/desc align
-   with the toggle rows above and below it — the block was previously
-   `padding: 14px 0`, hugging the framed-list's left edge while every
-   other row sat 16 px in. */
+/* ── Settings block base (`.hk-block`) ───────────────────────────── */
+/* Shared vertical-stack shell (label, desc, full-width control) used by
+   the mic picker, the admin model picker, and the download / tier blocks.
+   Matches `.settings-row` horizontal rhythm so the label/desc align with
+   the toggle rows above and below it (16 px inset). The `hk-` name is
+   legacy — it once headed the record-shortcut row, which has since been
+   removed; the shell itself is generic. */
 .hk-block { padding: 14px 16px; }
 /* Microphone picker block — same shell as `.hk-block` (vertical
    stack: label, desc, full-width control) so single-control settings
@@ -3839,9 +3840,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 .mic-block .settings-row-desc { margin-bottom: 10px; }
 .mic-block.is-loading { opacity: 0.55; pointer-events: none; }
 /* Geometry, type, and outline are intentionally identical to
-   `.clarify-btn` (the `Add` / hotkey-capture full-width row button).
-   The only delta is the dropdown chevron and the symmetric horizontal
-   padding so the label stays centred even with the chevron. */
+   `.clarify-btn` (the `Add` full-width row button). The only delta is the
+   dropdown chevron and the symmetric horizontal padding so the label
+   stays centred even with the chevron. */
 .mic-block .mic-select {
   display: block;
   width: 100%;
@@ -4130,42 +4131,6 @@ body.resizing { cursor: col-resize; user-select: none; }
 .settings-select-item.is-active { background: var(--bg-hover); }
 .settings-select-item.is-locked { opacity: 0.55; }
 .settings-select-item.is-locked:hover { background: transparent; }
-/* Full-width card button at the bottom of the block; tabular digits +
-   nowrap so swapping combo ⇄ "Press a combo…" never resizes it. */
-.hk-capbtn {
-  margin-top: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.hk-capbtn.capturing {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-/* Capture button + Clear sit in one row; the capture button keeps the
-   full-width feel, Clear is a compact hairline reset to "Not set". */
-.hk-row { display: flex; gap: 8px; margin-top: 12px; align-items: stretch; }
-.hk-row .hk-capbtn { margin-top: 0; flex: 1; min-width: 0; }
-.hk-clear {
-  flex-shrink: 0;
-  padding: 0 14px;
-  border-radius: var(--radius-button, 8px);
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  color: var(--fg-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
-}
-.hk-clear:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
-.hk-clear:disabled { opacity: 0.45; pointer-events: none; }
-.hk-warn {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #c2410c;
-}
-.dark .hk-warn { color: #f59e6b; }
-
 .settings-ext-list {
   display: flex;
   flex-direction: column;
@@ -4991,8 +4956,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   inset: 0;
   z-index: 9999;
   display: flex;
-  align-items: center;
+  /* `safe center` keeps the card centred when it fits, but aligns it to the
+     top (and lets `overflow-y` scroll) when the card is taller than the
+     viewport — otherwise a tall modal (e.g. the sign-in card on a short
+     window) clips its top/bottom with no way to reach it. */
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
   background: rgba(0, 0, 0, 0.36);
   animation: update-overlay-in 180ms ease-out;
   perspective: 900px;

@@ -129,17 +129,6 @@ enum DTO {
         /// Read-only: bundle ids recently seen owning the mic, so the
         /// UI can offer a tap-to-add picker (no bundle-id typing).
         let detected_mic_apps: [String]?
-        /// Global record hotkey. Write: Carbon virtual key code + Carbon
-        /// modifier mask (cmd 256 | shift 512 | option 2048 | ctrl 4096).
-        let record_hotkey_code: Int?
-        let record_hotkey_mods: Int?
-        /// Read-only: human label (e.g. "⌘⇧F"), the name of a clashing
-        /// macOS *system* shortcut if any (nil = none known; third-party
-        /// app clashes are undetectable), and whether the OS actually
-        /// bound it.
-        let record_hotkey_label: String?
-        let record_hotkey_conflict: String?
-        let record_hotkey_ok: Bool?
         /// Preferred microphone input device. Stored as the stable
         /// Core Audio UID (not the numeric AudioDeviceID, which the
         /// OS re-issues on reboot/replug). `nil` / empty string =

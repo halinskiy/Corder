@@ -339,25 +339,17 @@ function App() {
   }, [dismissToast, sendReportFromToast]);
   React.useEffect(() => { showToastRef.current = showToast; }, [showToast]);
 
-  // Dashboard hint shows the live shortcut label, or nothing when the
-  // record hotkey is unassigned (the new default). Seed to "Not set" so the
-  // Dashboard's `!== "Not set"` guard suppresses the hint on first paint —
-  // otherwise a stale literal would briefly advertise a combo that isn't
-  // bound, until getSettings() resolves with the real label.
-  const [hotkeyLabel, setHotkeyLabel] = React.useState("Not set");
-
   // Current paid-tier rung — drives the Sidebar Upgrade-card
   // visibility (`max` hides it) and is forwarded to nested components
   // that need to react to the tier. Re-fetched alongside the language
-  // / hotkey label so a manual `defaults write Corder.set.userTier`
-  // shows up after a window reload.
+  // so a manual `defaults write Corder.set.userTier` shows up after a
+  // window reload.
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
 
   React.useEffect(() => {
     (async () => {
       try {
         const s = await getSettings();
-        if (s.record_hotkey_label) setHotkeyLabel(s.record_hotkey_label);
         const v = s.tier ?? (s.is_pro ? "pro" : "free");
         if (v === "free" || v === "pro" || v === "max") setTier(v);
       } catch {}
@@ -589,7 +581,6 @@ function App() {
                     onStop={async () => {
                       try { await stopRecordingNow(); } catch { showToast(t.toast_settings_failed, "error"); }
                     }}
-                    hotkeyLabel={hotkeyLabel}
                     t={t}
                     lang={lang}
                     onResizeSplit={(dx) => setRightW((w) => clamp(w - dx, RIGHT_MIN, RIGHT_MAX))}

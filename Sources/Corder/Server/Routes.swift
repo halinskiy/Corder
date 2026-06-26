@@ -917,50 +917,6 @@ enum Routes {
         ("~/.config/corder/gemini_key" as NSString).expandingTildeInPath
     }
 
-    private static let kbNames: [Int: String] = [
-        0:"A",1:"S",2:"D",3:"F",4:"H",5:"G",6:"Z",7:"X",8:"C",9:"V",
-        11:"B",12:"Q",13:"W",14:"E",15:"R",16:"Y",17:"T",
-        18:"1",19:"2",20:"3",21:"4",22:"6",23:"5",25:"9",26:"7",28:"8",29:"0",
-        31:"O",32:"U",34:"I",35:"P",37:"L",38:"J",40:"K",45:"N",46:"M",
-        36:"↩",48:"⇥",49:"Space",53:"Esc",
-        122:"F1",120:"F2",99:"F3",118:"F4",96:"F5",97:"F6",98:"F7",100:"F8",
-        101:"F9",109:"F10",103:"F11",111:"F12",
-        123:"←",124:"→",125:"↓",126:"↑",
-    ]
-
-    /// Carbon mods mask + key code → "⌃⌥⇧⌘F"-style label, or "Not set" when
-    /// the hotkey is unassigned (no key / no strong modifier — the new
-    /// default). Shift-only counts as unassigned, mirroring the register guard.
-    private static func hotkeyLabel(code: Int, mods: Int) -> String {
-        guard code >= 0, AppSettings.isStrongHotkeyMods(mods) else { return "Not set" }
-        var s = ""
-        if mods & 4096 != 0 { s += "⌃" }
-        if mods & 2048 != 0 { s += "⌥" }
-        if mods & 512  != 0 { s += "⇧" }
-        if mods & 256  != 0 { s += "⌘" }
-        s += kbNames[code] ?? "Key\(code)"
-        return s
-    }
-
-    /// Curated table of well-known macOS *system* shortcuts. We can't
-    /// detect a clashing third-party app (no OS API for that) — the UI
-    /// says so — but the stock ones are stable and worth warning about.
-    private static func hotkeyConflict(code: Int, mods: Int) -> String? {
-        switch (mods, code) {
-        case (256, 49):   return "Spotlight (⌘Space)"
-        case (4096, 49):  return "Input source (⌃Space)"
-        case (768, 20):   return "Screenshot (⌘⇧3)"
-        case (768, 21):   return "Screenshot (⌘⇧4)"
-        case (768, 23):   return "Screenshot (⌘⇧5)"
-        case (256, 48):   return "App switcher (⌘⇥)"
-        case (4096, 126): return "Mission Control (⌃↑)"
-        case (4096, 123): return "Move a space left (⌃←)"
-        case (4096, 124): return "Move a space right (⌃→)"
-        case (4352, 12):  return "Lock screen (⌃⌘Q)"
-        default:          return nil
-        }
-    }
-
     private static func currentSettings() -> DTO.Settings {
         DTO.Settings(
             language: AppLanguage.current,
@@ -981,15 +937,6 @@ enum Routes {
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
-            record_hotkey_code: AppSettings.recordHotkeyKeyCode,
-            record_hotkey_mods: AppSettings.recordHotkeyModifiers,
-            record_hotkey_label: hotkeyLabel(
-                code: AppSettings.recordHotkeyKeyCode,
-                mods: AppSettings.recordHotkeyModifiers),
-            record_hotkey_conflict: hotkeyConflict(
-                code: AppSettings.recordHotkeyKeyCode,
-                mods: AppSettings.recordHotkeyModifiers),
-            record_hotkey_ok: HotkeyStatusSnapshot.read(),
             mic_device_uid: AppSettings.micDeviceUID,
             audio_input_devices: AudioInputDevices.list().map {
                 DTO.AudioInputDeviceDTO(
@@ -1434,26 +1381,6 @@ enum Routes {
             if let v = parsed.preroll          { AppSettings.setPrerollEnabled(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
-            if let c = parsed.record_hotkey_code, let m = parsed.record_hotkey_mods {
-                AppSettings.setRecordHotkey(code: c, mods: m)
-                // Carbon registration must happen on the main run loop.
-                // record_hotkey_ok in this response may still reflect
-                // the previous binding (the re-register is async); the
-                // client re-fetches shortly to get the authoritative
-                // value. The conflict label is computed synchronously
-                // from the table so it's already correct here. An
-                // unassigned combo (code < 0 / no modifier — e.g. the user
-                // cleared the shortcut) just UNREGISTERS, leaving no hotkey.
-                Task { @MainActor in
-                    if c >= 0, AppSettings.isStrongHotkeyMods(m) {
-                        HotkeyManager.shared.register(
-                            keyCode: UInt32(c), modifiers: UInt32(m))
-                    } else {
-                        HotkeyManager.shared.unregister()
-                        HotkeyStatusSnapshot.update(true)
-                    }
-                }
-            }
             // Mic device picker. Empty string = "system default", which
             // we treat the same as `nil` (the setter normalises blank
             // → removeObject). The selection applies to the NEXT

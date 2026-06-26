@@ -51,7 +51,6 @@ interface Props {
   /// Called when the user hits Stop on the Dashboard card while
   /// `isRecording` is true. Same backend route as the menu-bar Stop.
   onStop: () => void;
-  hotkeyLabel: string;
   t: T;
   lang: Lang;
   /// Hooks into the same `--right-w` setter as MeetingView so dragging
@@ -82,7 +81,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyLabel, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange }: Props) {
+export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -127,7 +126,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
   const dashLeftRef = useRef<HTMLDivElement | null>(null);
   // Monotonic counter bumped on every transition into a recording
   // state — covers Start from the Dashboard button, the menu-bar
-  // popover, the global hotkey, and the auto-detect invite.
+  // popover, and the auto-detect invite.
   useEffect(() => {
     if (lastRecRef.current !== isRecording) {
       lastRecRef.current = isRecording;
@@ -301,9 +300,6 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, hotkeyL
                   </span>
                 </button>
               </div>
-              {hotkeyLabel && hotkeyLabel !== "Not set" && (
-                <div className="dash-hint">{t.dashboard_hotkey_hint(hotkeyLabel)}</div>
-              )}
             </div>
 
             {statsEnabled && (

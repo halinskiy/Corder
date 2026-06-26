@@ -482,6 +482,16 @@ final class LibraryWindow: NSWindowController {
         win.titleVisibility = .hidden
         win.titlebarAppearsTransparent = true
         win.isMovableByWindowBackground = true
+        // Floor below which the three-column layout (sidebar + transcript +
+        // right panel) stops being usable. The side columns are fixed-px and
+        // only the transcript flexes, so the width must reserve room for it
+        // even at the DEFAULT column widths: 240 sidebar + ~300 transcript +
+        // 380 right panel (+ splitters) ≈ 920. The height keeps the header,
+        // toolbar, a few transcript rows, and the right-panel audio/timeline
+        // all visible (and clears the sign-in modal, which now scrolls if it
+        // ever exceeds the viewport). Without this macOS let the window shrink
+        // to AppKit's ~64x64 floor, crushing the UI (the resize complaint).
+        win.contentMinSize = NSSize(width: 920, height: 600)
         // The web view is transparent (drawsBackground=false), so this
         // colour shows in the titlebar strip / overscroll. Light is the
         // default theme; the page posts its real --bg via the

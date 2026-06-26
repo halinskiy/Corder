@@ -127,12 +127,6 @@ interface Strings {
   /// on-device Whisper model.
   whisper_prefetch_label?: string;
   whisper_prefetch_loading?: string;
-  settings_sec_shortcut: string;
-  settings_shortcut_label: string;
-  settings_shortcut_desc: string;
-  settings_shortcut_press: string;
-  settings_shortcut_conflict: (name: string) => string;
-  settings_shortcut_unbound: string;
   settings_pro_note: string;
   settings_sec_soon: string;
   settings_ext_title: string;
@@ -347,7 +341,6 @@ interface Strings {
   dashboard_stat_time: string;
   dashboard_stat_thisweek: string;
   dashboard_start: string;
-  dashboard_hotkey_hint: (label: string) => string;
   dashboard_recent: string;
   dashboard_recent_empty: string;
   dashboard_tab_stats: string;
@@ -495,12 +488,6 @@ const en: Strings = {
   whisper_prefetch_loading: "Loading model…",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud.",
-  settings_sec_shortcut: "Shortcut",
-  settings_shortcut_label: "Start/stop recording",
-  settings_shortcut_desc: "A global shortcut to quickly start Corder.",
-  settings_shortcut_press: "Press a combo…",
-  settings_shortcut_conflict: (name) => `Conflicts with a system shortcut: ${name}. Pick another.`,
-  settings_shortcut_unbound: "Couldn't bind — another app already uses this combo. Pick another.",
   settings_pro_note: "Pro features are disabled in this build.",
   settings_sec_soon: "Coming soon",
   settings_ext_title: "Browser extension",
@@ -699,7 +686,6 @@ const en: Strings = {
   dashboard_stat_time: "Total recorded",
   dashboard_stat_thisweek: "This week",
   dashboard_start: "Start recording",
-  dashboard_hotkey_hint: (label) => `or press ${label}`,
   dashboard_recent: "Recent",
   dashboard_recent_empty: "No recordings yet.",
   dashboard_tab_stats: "Stats",
