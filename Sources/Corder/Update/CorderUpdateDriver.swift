@@ -205,20 +205,21 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Ready to install
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        FileLogger.log("UpdateDriver: showReady(toInstallAndRelaunch)")
-        bridge.onPrimary = { [weak self] in
-            FileLogger.log("UpdateDriver: onPrimary(showReady) → reply(.install)")
-            // Just reply .install; Sparkle calls showInstallingUpdate
-            // next, which is the single place we terminate. No second
-            // terminate here (see showUpdateFound for why).
-            self?.pushPhase("installing", primaryLabel: "Install", primaryEnabled: false)
-            reply(.install)
-        }
+        FileLogger.log("UpdateDriver: showReady(toInstallAndRelaunch) → auto-install (single-click flow)")
+        // Don't make the user press Install a SECOND time after the download.
+        // They already committed by pressing Install once; once the bytes are
+        // unpacked we auto-proceed straight to the installer + relaunch. We show
+        // the "Installing" state (immediately superseded by showInstallingUpdate,
+        // the single terminate point) and reply .install ourselves.
+        // SAFETY: showReady is only reached after a USER-INITIATED download — a
+        // resumed already-downloaded update comes through
+        // showUpdateFound(readyToInstall) and still needs an explicit click — so
+        // this never relaunches the app unprompted on launch.
         bridge.onDismiss = { reply(.dismiss) }
-        pushPhase("readyToInstall", primaryLabel: "Install",
-                  primaryEnabled: true,
-                  statusLine: "Ready to install. We'll relaunch Corder.",
-                  showsProgress: false, progress: 1)
+        pushPhase("installing", primaryLabel: "Install", primaryEnabled: false,
+                  statusLine: "Installing. Corder will relaunch.",
+                  showsProgress: true, progress: 1)
+        reply(.install)
     }
 
     // MARK: - Installing
