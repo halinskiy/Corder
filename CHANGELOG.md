@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.85] — 2026-06-27
+
+### Fixed
+- Recorded screen video now shows in the in-app preview. The video was
+  captured correctly, but it was written as a fragmented QuickTime file the
+  embedded player couldn't load, so the video card was hidden and it looked
+  like nothing was recorded. New recordings are written faststart so the
+  preview plays.
+
 ## [0.14.84] — 2026-06-27
 
 ### Changed
