@@ -149,11 +149,23 @@ enum LocalWhisperTranscriber {
     /// thread) only READ this; writes are funnelled through `MainActor`
     /// in `ensureModelReady`.
     nonisolated(unsafe) private static var inflightProgress: [String: Double] = [:]
+    /// Variants currently in the SILENT "preparing" phase: bytes are fully
+    /// downloaded and we're staging the tokenizer / paying the one-time ANE
+    /// Core ML compile (can take minutes on a slow Mac, no byte callbacks).
+    /// Progress is pinned at 0.99 in this phase, so without this flag the UI
+    /// shows a frozen "Downloading model · 99%" that reads as a stuck download.
+    /// The frontend reads this to swap to a "Preparing model…" / indeterminate
+    /// state instead. Guarded by the same `inflightLock`.
+    nonisolated(unsafe) private static var inflightPreparing: Set<String> = []
     nonisolated(unsafe) private static var inflightLock = NSLock()
 
     nonisolated static func currentProgress(_ variant: Variant) -> Double? {
         inflightLock.lock(); defer { inflightLock.unlock() }
         return inflightProgress[variant.rawValue]
+    }
+    nonisolated static func isPreparing(_ variant: Variant) -> Bool {
+        inflightLock.lock(); defer { inflightLock.unlock() }
+        return inflightPreparing.contains(variant.rawValue)
     }
     nonisolated static func allInflight() -> [String: Double] {
         inflightLock.lock(); defer { inflightLock.unlock() }
@@ -163,6 +175,15 @@ enum LocalWhisperTranscriber {
         inflightLock.lock()
         if let v = value { inflightProgress[variant.rawValue] = v }
         else { inflightProgress.removeValue(forKey: variant.rawValue) }
+        inflightLock.unlock()
+    }
+    /// Mark/unmark the silent post-download "preparing" (tokenizer staging +
+    /// ANE compile) phase. Paired with the 0.99 progress pin at the two call
+    /// sites below.
+    nonisolated private static func setPreparing(_ variant: Variant, _ on: Bool) {
+        inflightLock.lock()
+        if on { inflightPreparing.insert(variant.rawValue) }
+        else { inflightPreparing.remove(variant.rawValue) }
         inflightLock.unlock()
     }
 
@@ -374,7 +395,8 @@ enum LocalWhisperTranscriber {
         if !isTokenizerDownloaded(variant) {
             FileLogger.log("LocalWhisper: tokenizer missing — pre-fetching (bounded) for \(variant.rawValue)")
             setProgress(variant, 0.99)   // model bytes are there; this is the last piece
-            defer { setProgress(variant, nil) }
+            setPreparing(variant, true)  // not a download anymore — UI shows "Preparing model…"
+            defer { setProgress(variant, nil); setPreparing(variant, false) }
             do {
                 try await withDeadline(120) {
                     _ = try await ModelUtilities.loadTokenizer(
@@ -514,9 +536,13 @@ enum LocalWhisperTranscriber {
         clearStaleTokenizer(variant)
         // Keep the "preparing model" progress lit through the whole load so
         // the button shows activity instead of a frozen Stop during the
-        // compile. Cleared once a pipe is live (either path).
+        // compile. This is the SILENT ANE compile (no byte callbacks, minutes
+        // on a slow Mac) — flag it so the UI says "Preparing model…" with an
+        // indeterminate fill instead of a frozen "Downloading model · 99%".
+        // Cleared once a pipe is live (either path).
         setProgress(variant, 0.99)
-        defer { setProgress(variant, nil) }
+        setPreparing(variant, true)
+        defer { setProgress(variant, nil); setPreparing(variant, false) }
 
         // On a RAM-constrained Mac (≤8 GB) skip the ANE leak-and-fallback
         // entirely. A busted ANE budget leaves an uncancellable compile
@@ -565,7 +591,25 @@ enum LocalWhisperTranscriber {
         }
 
         // 2. GPU fallback (reliable ~50 s compile, identical transcript).
-        try await loadGPU(variant)
+        do {
+            try await loadGPU(variant)
+        } catch LocalWhisperError.modelLoadTimedOut {
+            // Slowest-class Mac: even the 900s GPU compile couldn't land in
+            // time (heavy contention with the leaked ANE compile started in
+            // step 1). Rather than fail the meeting, ride that leaked ANE
+            // compile to completion — it caches its artifact to disk
+            // (~16 min cold, measured), after which an ANE load is warm. This
+            // mirrors the download-prewarm rescue above for the case where the
+            // model was ALREADY downloaded (no prewarm task to await), which
+            // previously had no rescue and just hard-failed. One-time cold
+            // cost; the banner shows "Preparing model…" throughout.
+            FileLogger.log("LocalWhisper: GPU also timed out — riding the leaked ANE compile to completion (up to 25 min)")
+            let t0 = Date()
+            pipe = try await Self.withDeadline(1500) { try await WhisperKit(makeConfig(variant, useANE: true)) }
+            FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=ANE, post-GPU-timeout ride)",
+                                  Date().timeIntervalSince(t0), variant.rawValue))
+            pipeVariant = variant
+        }
     }
 
     /// Load the model on the GPU encoder. Sets `pipe`. Reached as the
@@ -577,12 +621,21 @@ enum LocalWhisperTranscriber {
     private static func loadGPU(_ variant: Variant) async throws {
         let t0 = Date()
         do {
-            pipe = try await Self.withDeadline(300) { try await WhisperKit(makeConfig(variant, useANE: false)) }
+            // 180s. The GPU compile is ~50s on a typical Mac, so 180s gives
+            // comfortable margin for the fast/mid path. We DON'T wait longer: on
+            // a genuinely slow Mac the GPU compile never lands (measured: it ran
+            // the FULL 900s without finishing) — it just thrashes ALONGSIDE the
+            // leaked ANE compile and DOUBLES the heat for 15 min. Failing fast
+            // here drops to the ANE ride below (the path that actually completes
+            // on slow Macs, ~15-18 min), so the slow case compiles on ONE engine
+            // instead of two. Don't bump this back up — long GPU budget = cooked
+            // laptop with nothing to show for it.
+            pipe = try await Self.withDeadline(180) { try await WhisperKit(makeConfig(variant, useANE: false)) }
             FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU)",
                                   Date().timeIntervalSince(t0), variant.rawValue))
             pipeVariant = variant
         } catch is DeadlineError {
-            FileLogger.log("LocalWhisper: GPU load timed out (>300s) — slow cold compile, model kept")
+            FileLogger.log("LocalWhisper: GPU load timed out (>180s) — slow cold compile, dropping to ANE ride")
             throw LocalWhisperError.modelLoadTimedOut
         } catch {
             FileLogger.log("LocalWhisper: GPU init error (\(error)) — both encoders failed, deleting model + HF download cache for a clean re-download")

@@ -581,7 +581,12 @@ final class LibraryWindow: NSWindowController {
             // NOT include `.breadcrumb-rename`: it's draggable AND
             // click-to-rename — the native overlay forwards the click
             // via elementFromPoint when there's no drag movement.
-            var sel = '.main-header button, .main-header a, .main-header input, .main-header select, .main-header textarea, .main-header [role="button"]';
+            // ALSO the sidebar search row: it sits in the same top strip the
+            // drag overlay covers (full window width), so without reporting its
+            // input + the archive back button here, clicks on them land on the
+            // overlay and get dropped (forwardClick only forwards `.main-header`
+            // targets). That was the "archive back button does nothing" bug.
+            var sel = '.main-header button, .main-header a, .main-header input, .main-header select, .main-header textarea, .main-header [role="button"], .sidebar-search input, .sidebar-search button';
             var els = document.querySelectorAll(sel);
             var interactive = [];
             for (var i = 0; i < els.length; i++) {

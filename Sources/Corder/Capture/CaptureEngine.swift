@@ -9,6 +9,9 @@ protocol CaptureEngineDelegate: AnyObject {
     @MainActor func captureEngine(_ engine: CaptureEngine, didStartMeeting id: String)
     @MainActor func captureEngine(_ engine: CaptureEngine, didStopMeeting id: String)
     @MainActor func captureEngine(_ engine: CaptureEngine, didFailWithError error: Error)
+    /// The process tap exhausted its rebuilds on a Bluetooth route — the far end
+    /// is being lost RIGHT NOW. Warn the user mid-recording so they can react.
+    @MainActor func captureEngineFarEndUnavailable(_ engine: CaptureEngine)
 }
 
 enum CaptureError: Error, LocalizedError {
@@ -268,8 +271,14 @@ final class CaptureEngine: NSObject {
         // far end is captured by the Core Audio process tap regardless. So a
         // fresh user on Bluetooth records audio-only with only the Microphone
         // prompt, no Screen Recording wall.
-        let needSCStream = AppSettings.captureVideo
-            || (outputBluetoothAtStart && CGPreflightScreenCaptureAccess())
+        // BOTH arms now require Screen Recording to be ALREADY granted. Screen
+        // video defaults ON, so without this gate every fresh recording would
+        // call `SCShareableContent` and fire the macOS Screen Recording system
+        // prompt (only satisfiable by a restart). Instead: video-on + ungranted
+        // → no SCStream → audio-only, and the Library ghost panel pitches the
+        // grant. Once granted (preflight true), SCStream arms and video records.
+        let screenGranted = CGPreflightScreenCaptureAccess()
+        let needSCStream = screenGranted && (AppSettings.captureVideo || outputBluetoothAtStart)
         if needSCStream {
             do {
                 // 1. Build the SCContentFilter for the chosen source.
@@ -648,6 +657,18 @@ final class CaptureEngine: NSObject {
             RecordingLevelMeter.shared.ingestSystem(pcm: pcm)
             self?.writeQueue.async { [weak self] in
                 self?.writeSystemAudioPCM(pcm, hostTime: hostTime)
+            }
+        }
+        // The tap watchdog gave up (BT HFP/SCO — far end uncapturable). Tell the
+        // user NOW so they can switch output off Bluetooth and re-record, instead
+        // of finding out at stop. Gated on BT so a rare non-BT tap failure stays
+        // a silent log. Fires once (the give-up branch is terminal).
+        let btAtStart = outputBluetoothAtStart
+        systemTap.onGaveUp = { [weak self] in
+            guard btAtStart else { return }
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.delegate?.captureEngineFarEndUnavailable(self)
             }
         }
         // ALWAYS start the Core-Audio process tap — including on Bluetooth.

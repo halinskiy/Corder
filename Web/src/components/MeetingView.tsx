@@ -648,10 +648,10 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
             />
           </div>
           <div style={{ display: rightTab === "settings-general" ? "contents" : "none" }}>
-            <SettingsPane t={t} section="general" />
+            <SettingsPane t={t} section="general" active={rightTab === "settings-general"} />
           </div>
           <div style={{ display: rightTab === "settings-advanced" ? "contents" : "none" }}>
-            <SettingsPane t={t} section="advanced" />
+            <SettingsPane t={t} section="advanced" active={rightTab === "settings-advanced"} />
           </div>
           {/* IntegrationsPane mount disabled while the tab is
               hidden (see the comment in the tab strip above). */}

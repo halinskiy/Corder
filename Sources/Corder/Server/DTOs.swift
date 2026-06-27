@@ -56,6 +56,13 @@ enum DTO {
         /// `transcribe_progress` once the model lands. Without it a new user
         /// just sees a frozen spinner for minutes.
         let model_download_progress: Double?
+        /// True while the model bytes are fully down but we're in the SILENT
+        /// post-download phase — staging the tokenizer + the one-time ANE
+        /// Core ML compile (minutes on a slow Mac, no progress callbacks).
+        /// Progress is pinned at 0.99 here, so the frontend uses this to show
+        /// a "Preparing model…" / indeterminate state instead of a frozen
+        /// "Downloading model · 99%" that reads as a stuck download.
+        let model_preparing: Bool?
     }
 
     struct ExpectedSpeakersRequest: Codable {

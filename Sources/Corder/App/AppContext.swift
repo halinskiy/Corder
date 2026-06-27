@@ -140,12 +140,16 @@ enum AppSettings {
     static func setScreenGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenGrantedOnce) }
 
     static var notificationsEnabled: Bool { flag(kNotifications) }
-    // Screen video recording defaults OFF (opt-in): the HEVC screen encode
-    // is a heavy continuous load that can make the machine lag during a
-    // recording. Most users only need audio. `object(forKey:) as? Bool ?? false`
-    // (NOT `flag()`, which defaults true) so a fresh install + anyone who
-    // never touched the toggle gets audio-only.
-    static var captureVideo: Bool          { UserDefaults.standard.object(forKey: kCaptureVideo) as? Bool ?? false }
+    // Screen video recording defaults ON. It only ACTUALLY captures video when
+    // Screen Recording is granted — otherwise the recording silently degrades to
+    // audio (no wall, no system prompt: `CaptureEngine` gates SCStream on
+    // `CGPreflightScreenCaptureAccess()`, and the Library's "Capture your screen
+    // too" ghost panel is the grant path). So default-ON costs an audio-only
+    // user nothing (no heavy HEVC encode until they grant) but means video is the
+    // default intent and the ghost pitch shows out of the box. `flag()` would
+    // also default true, but keep the explicit `?? true` to mirror the
+    // setter/DTO round-trip semantics.
+    static var captureVideo: Bool          { UserDefaults.standard.object(forKey: kCaptureVideo) as? Bool ?? true }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
     static var autoTitle: Bool             { flag(kAutoTitle) }

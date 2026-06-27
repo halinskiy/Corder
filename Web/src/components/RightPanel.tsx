@@ -11,7 +11,6 @@ import { Tooltip } from "./Tooltip";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { displaySpeakerName } from "../format";
 import { getSettings, requestScreenRecording } from "../api";
-import { Video } from "lucide-react";
 
 interface Props {
   detail: MeetingDetail;
@@ -36,29 +35,54 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   // entices the user to grant it. `undefined` until the first fetch resolves
   // (don't flash the ghost before we know).
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
+  // The "Screen video recording" toggle. The ghost pitch is tied to it: turning
+  // screen video OFF removes the pitch entirely (there's nothing to grant for).
+  // Defaults true (the setting defaults ON) so we don't flash it off first paint.
+  const [captureVideo, setCaptureVideo] = React.useState<boolean>(true);
   React.useEffect(() => {
     let alive = true;
     const refresh = () => getSettings()
-      .then((s) => { if (alive) setScreenGranted(s.screen_recording_granted ?? true); })
+      .then((s) => { if (alive) { setScreenGranted(s.screen_recording_granted ?? true); setCaptureVideo(s.capture_video ?? true); } })
       .catch(() => {});
     refresh();
     // Re-check when the user returns to Corder (e.g. after granting Screen
     // Recording in System Settings) so the ghost clears without a reload.
     window.addEventListener("focus", refresh);
-    return () => { alive = false; window.removeEventListener("focus", refresh); };
+    // React in the SAME frame the user flips the "Screen video recording"
+    // toggle (SettingsPane broadcasts it), instead of lagging until focus.
+    const onCaptureVideo = (e: Event) => { if (alive) setCaptureVideo(!!(e as CustomEvent).detail); };
+    window.addEventListener("corder-capture-video", onCaptureVideo);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("corder-capture-video", onCaptureVideo);
+    };
   }, []);
-  // Show the ghost only when this meeting has NO real video AND the grant is
-  // missing — a granted user simply records video, an un-granted one gets the
-  // pitch to turn it on.
-  const showGhostVideo = !detail.has_video && screenGranted === false && !downloadOpen;
+  // Video slot. A FINALISED video plays via `ScreenVideo`; while a recording is
+  // in flight the file exists but isn't streamable yet (the moov atom only lands
+  // on finishWriting), so we must NOT try to play it — otherwise the Recording
+  // panel's video slot is just empty. When screen video is ON but there's no
+  // playable file, fill the slot: pitch the grant if it's missing, else (granted)
+  // show the "your screen appears here while you record" placeholder — which is
+  // exactly the case the Recording panel hit during an active capture.
+  const isRecording = detail.status === "recording";
+  // A finalised, playable video file (ready meeting with a video).
+  const hasFinalisedVideo = detail.has_video && !isRecording;
+  // The whole VIDEO SLOT (real player / ghost pitch / "shows here" placeholder)
+  // stays put when the Download view opens — it does NOT gate on downloadOpen.
+  // Only the bottom section swaps (Timeline ↔ Download chooser), so the top of
+  // the panel never jumps. (The video used to vanish on download, which read as
+  // a bug.)
+  const showScreenVideo = hasFinalisedVideo;
+  const wantVideoSlot = captureVideo && !hasFinalisedVideo;
+  const showGhostVideo = wantVideoSlot && screenGranted === false;
+  const showVideoPlaceholder = wantVideoSlot && screenGranted === true && isRecording;
   return (
     <div className="right-panel">
-      {/* Download is its own view, not an overlay: when it's open the
-          screen-video preview and the speaker Timeline are hidden so
-          the panel reads as a dedicated "Download" tab — only the
-          audio scrubber (which carries the toggle back) stays mounted
-          so playback never stops. */}
-      {detail.has_video && !downloadOpen && (
+      {/* Download is its own view for the BOTTOM section only (Timeline ↔
+          Download chooser). The video slot + audio scrubber stay mounted above
+          it so playback never stops and the panel top doesn't jump. */}
+      {showScreenVideo && (
         <ScreenVideo
           detail={detail}
           videoRef={screenVideoRef}
@@ -66,7 +90,8 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
           currentTimeSec={currentTimeSec}
         />
       )}
-      {showGhostVideo && <GhostVideo t={t} />}
+      {showGhostVideo && <GhostVideo t={t} recording={isRecording} />}
+      {showVideoPlaceholder && <VideoShowsHereCard t={t} />}
       <AudioCard
         detail={detail}
         audioRef={audioRef}
@@ -82,33 +107,57 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   );
 }
 
+/// Granted-state video placeholder: screen video is ON and being captured, but
+/// there's no playable file yet (recording in progress, or the Welcome preview).
+/// Same dashed ghost shell as the grant pitch so the slot doesn't change shape.
+function VideoShowsHereCard({ t }: { t: T }) {
+  return (
+    <div className="trans-banner clarify-banner dash-banner ghost-video-card" aria-hidden>
+      <div className="clarify-text">
+        <div className="clarify-body">{t.ghost_video_on_title ?? "Screen video"}</div>
+        <div className="dash-sub">
+          {t.ghost_video_on_sub ?? "Your screen appears here while you record."}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /// "Ghost" screen-video preview shown when Screen Recording isn't granted.
 /// Video capture is unavailable until the user allows it, so instead of a real
 /// preview we show a placeholder frame with an enticing CTA that kicks off the
 /// macOS Screen Recording grant (and turns screen video on). Audio recording is
 /// unaffected — only the video half waits on the permission.
-function GhostVideo({ t }: { t: T }) {
+/// `recording` = a session is in flight. Screen Recording can only be granted
+/// through a relaunch, so enabling it mid-recording is a dead end — the CTA is
+/// disabled until the recording stops.
+function GhostVideo({ t, recording = false }: { t: T; recording?: boolean }) {
+  // Same outline-card vocabulary as the "Ready when you are." home card
+  // (`.dash-banner`): heading + sub in a `.clarify-text` stack, a full-width
+  // green CTA in a `.clarify-actions-stack`. The CTA uses `.clarify-btn.accent`
+  // (NOT `.dash-primary-btn`) so it matches Start recording WITHOUT the accent
+  // glow the home button carries.
   return (
-    <div className="ghost-video">
-      <button
-        type="button"
-        className="toolbar-icon-btn ghost-video-icon-btn"
-        onClick={() => requestScreenRecording()}
-        aria-label={t.ghost_video_cta ?? "Enable screen video"}
-      >
-        <Video size={17} strokeWidth={2} />
-      </button>
-      <div className="ghost-video-title">{t.ghost_video_title ?? "Capture your screen too"}</div>
-      <div className="ghost-video-sub">
-        {t.ghost_video_sub ?? "Allow Screen Recording to include screen video. Audio recording works without it."}
+    <div className="trans-banner clarify-banner dash-banner ghost-video-card">
+      <div className="clarify-text">
+        <div className="clarify-body">{t.ghost_video_title ?? "Capture your screen too"}</div>
+        <div className="dash-sub">
+          {t.ghost_video_sub ?? "Allow Screen Recording to include screen video. Audio recording works without it."}
+        </div>
       </div>
-      <button
-        type="button"
-        className="clarify-btn accent ghost-video-cta"
-        onClick={() => requestScreenRecording()}
-      >
-        {t.ghost_video_cta ?? "Enable screen video"}
-      </button>
+      <div className="clarify-actions clarify-actions-stack">
+        {/* Secondary CTA (plain `.clarify-btn` — white/outline, no accent fill):
+            granting screen video is optional, so it ranks below the green
+            primary actions elsewhere on the surface. */}
+        <button
+          type="button"
+          className="clarify-btn"
+          onClick={() => requestScreenRecording()}
+          disabled={recording}
+        >
+          <span>{t.ghost_video_cta ?? "Enable screen video"}</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -118,32 +167,32 @@ function GhostVideo({ t }: { t: T }) {
 /// + speaker timeline). The video block doubles as the Screen Recording grant
 /// pitch when the permission isn't granted yet, or a quiet "video shows here"
 /// placeholder once it is.
-export function GhostRecordingPanel({ t }: { t: T }) {
+export function GhostRecordingPanel({ t, recording = false }: { t: T; recording?: boolean }) {
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
+  // "Screen video recording" toggle — when OFF the ghost VIDEO block disappears
+  // entirely (the audio + timeline ghosts stay). Defaults true (setting is ON).
+  const [captureVideo, setCaptureVideo] = React.useState<boolean>(true);
   React.useEffect(() => {
     let alive = true;
     const refresh = () => getSettings()
-      .then((s) => { if (alive) setScreenGranted(s.screen_recording_granted ?? true); })
+      .then((s) => { if (alive) { setScreenGranted(s.screen_recording_granted ?? true); setCaptureVideo(s.capture_video ?? true); } })
       .catch(() => {});
     refresh();
     window.addEventListener("focus", refresh);
-    return () => { alive = false; window.removeEventListener("focus", refresh); };
+    // Flip the ghost in lockstep with the SettingsPane toggle (no focus lag).
+    const onCaptureVideo = (e: Event) => { if (alive) setCaptureVideo(!!(e as CustomEvent).detail); };
+    window.addEventListener("corder-capture-video", onCaptureVideo);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("corder-capture-video", onCaptureVideo);
+    };
   }, []);
   return (
     <div className="right-panel ghost-recording-panel">
-      {screenGranted === false ? (
-        <GhostVideo t={t} />
-      ) : (
-        <div className="ghost-video" aria-hidden>
-          <div className="toolbar-icon-btn ghost-video-icon-btn">
-            <Video size={17} strokeWidth={2} />
-          </div>
-          <div className="ghost-video-title">{t.ghost_video_on_title ?? "Screen video"}</div>
-          <div className="ghost-video-sub">
-            {t.ghost_video_on_sub ?? "Your screen appears here while you record."}
-          </div>
-        </div>
-      )}
+      {captureVideo && (screenGranted === false
+        ? <GhostVideo t={t} recording={recording} />
+        : <VideoShowsHereCard t={t} />)}
       <div className="ghost-audio" aria-hidden>
         <div className="ghost-audio-play"><Play size={15} strokeWidth={2} /></div>
         <span className="ghost-audio-time">0:00 / 0:00</span>

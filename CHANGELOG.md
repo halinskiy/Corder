@@ -16,6 +16,39 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.90] — 2026-06-28
+
+### Changed
+- The Welcome screen's right column now shows a proper preview panel
+  (Capture-your-screen card + audio scrubber + timeline), styled to match the
+  Home card — same heading and spacing, dashed ghost outline, secondary
+  Enable-screen-video button. It no longer drops to the bottom of the page.
+- Screen video recording is ON by default. It only actually captures video once
+  you grant Screen Recording — until then recording stays audio-only with no
+  prompt, and the "Capture your screen too" panel is the one-tap way to enable
+  it. Turn the setting off and that panel goes away.
+- The Capture-your-screen panel stays put when you open the Download chooser
+  (it no longer disappears).
+- On-device model: while the model finishes preparing after download (the
+  one-time Neural-Engine optimization), the status now reads "Preparing model…
+  / Optimizing for your Mac" instead of a stuck "Downloading model · 99%". The
+  percentage was never wrong — that phase just has no download left to report.
+
+### Fixed
+- If the other side of a call can't be recorded over Bluetooth (the headset is in
+  call/HFP mode, where macOS gives no capturable system audio), Corder now tells
+  you a few seconds in — so you can switch your Mac's output off Bluetooth and
+  re-record — instead of only finding out after you stop.
+- On-device transcription no longer fails on slower Macs where the first-run
+  model compile is unusually long: the compile gets much more headroom and
+  rides to completion instead of timing out. (First run can still take several
+  minutes; every run after is fast.)
+- Recordings made while signed out now follow you into your account when you
+  sign in, instead of staying hidden. Signing in merges them with whatever is
+  already on your account.
+- The "Enable screen video" button is disabled while a recording is in
+  progress (screen access can only be granted between sessions).
+
 ## [0.14.89] — 2026-06-27
 
 ### Changed

@@ -30,6 +30,12 @@ final class SystemAudioTap {
     /// left-pad system.wav to the recording's start clock.
     var onAudio: ((AVAudioPCMBuffer, UInt64) -> Void)?
 
+    /// Fired (off the watchdog queue) the one time the watchdog exhausts its
+    /// rebuilds without ever seeing a buffer — i.e. the BT HFP/SCO failure where
+    /// the far end is genuinely uncapturable. Lets the engine warn the user
+    /// ~8 s in (so they can switch output and re-record) instead of only at stop.
+    var onGaveUp: (() -> Void)?
+
     /// Format of the tapped stream, valid only after a successful
     /// `start()`. Used by the caller to open the destination WAV.
     ///
@@ -110,6 +116,7 @@ final class SystemAudioTap {
             if !canRetry {
                 self.stateLock.unlock()
                 FileLogger.log("SystemAudioTap: still no audio after \(self.maxRestarts) restarts — giving up (BT route likely in HFP/SCO; remote side not capturable).")
+                self.onGaveUp?()
                 return
             }
             self.restarts += 1

@@ -8,6 +8,11 @@ final class RecordingController {
         AppContext.shared.capture.delegate = self
     }
 
+    /// Set when the mid-recording "far end lost on Bluetooth" warning has fired
+    /// for the current session, so the stop-time warning doesn't repeat it.
+    /// Reset at the top of each `startRecording`.
+    private var farEndWarnedThisSession = false
+
     /// Start a new recording.
     ///
     /// `expectedOtherSpeakers` lets the caller seed the meeting with a
@@ -45,21 +50,16 @@ final class RecordingController {
             return
         }
         // Permissions are requested ON DEMAND, only for what THIS recording
-        // actually needs — there is no up-front permission gate anymore. An
-        // audio-only recording runs entirely off the Core Audio process tap +
-        // the mic, NEITHER of which needs Screen Recording, so we only ask for
-        // Screen Recording when the user has screen video turned ON. (Video
-        // defaults OFF, so a brand-new user records audio the instant they hit
-        // Start.) The CaptureEngine also degrades to audio-only if the grant is
-        // somehow missing at capture time, so this prompt is the friendly
-        // heads-up, not the only line of defence.
-        if AppSettings.captureVideo {
-            switch await PermissionsChecker.checkScreenRecording() {
-            case .granted: break
-            case .denied, .notDetermined:
-                presentScreenRecordingNeeded(source: source, expectedOtherSpeakers: expectedOtherSpeakers)
-                return
-            }
+        // actually needs — there is no up-front permission gate, and no modal
+        // wall even though screen video defaults ON. Audio runs entirely off the
+        // Core Audio process tap + the mic, neither of which needs Screen
+        // Recording. When screen video is ON but Screen Recording isn't granted,
+        // we DON'T block or prompt: the recording silently degrades to audio
+        // (CaptureEngine only arms SCStream when the grant is already live), and
+        // the Library's "Capture your screen too" ghost panel is the grant path.
+        // So a brand-new user records the instant they hit Start, video or not.
+        if AppSettings.captureVideo, await PermissionsChecker.checkScreenRecording() != .granted {
+            FileLogger.log("RecordingController: screen video on but Screen Recording not granted — recording audio-only (ghost panel handles the grant)")
         }
         // Microphone permission: only block on explicit .denied. For .notDetermined
         // we let AVAudioEngine.start() in CaptureEngine trigger the real TCC prompt —
@@ -83,6 +83,7 @@ final class RecordingController {
         // Per-recording session: zero the level meter so the post-stop
         // silence check reflects THIS recording only.
         RecordingLevelMeter.shared.reset()
+        farEndWarnedThisSession = false
 
         let id = UUID().uuidString.lowercased()
         let dir = AppPaths.recordingDir(for: id)
@@ -242,12 +243,14 @@ final class RecordingController {
         // have the save fail).
         if capturedSilence {
             FileLogger.log("stopRecording: \(id) captured silence (maxMic=\(maxMic) maxSys=\(maxSys))")
-        } else if maxSys < 0.004 && AppContext.shared.capture.outputBluetoothAtStart {
+        } else if maxSys < 0.004 && AppContext.shared.capture.outputBluetoothAtStart && !farEndWarnedThisSession {
             // We DID record audio (not the total-silence case above), but
             // the system track is empty while the output route was
             // Bluetooth — the exact signature of the process-tap-on-BT
             // failure. The user's own voice is fine; the remote side was
-            // silently lost. Tell them why and how to fix it.
+            // silently lost. Tell them why and how to fix it — UNLESS the
+            // mid-recording warning already fired for this session (the tap
+            // watchdog gave up early), so we don't double up.
             FileLogger.log("stopRecording: \(id) system track silent on Bluetooth output — remote side not captured (maxMic=\(maxMic) maxSys=\(maxSys))")
             if AppSettings.notificationsEnabled {
                 NotificationsService.post(
@@ -454,50 +457,38 @@ final class RecordingController {
         alert.runModal()
     }
 
-    /// Screen Recording is needed ONLY for screen-video recordings (audio runs
-    /// off the process tap + mic without it). macOS hands a freshly-granted
-    /// Screen Recording permission to the app only on its NEXT launch, so this
-    /// prompt is RESTART-AWARE: it opens System Settings and offers to quit
-    /// Corder so the user can reopen it with the grant live. The escape hatch
-    /// is "Record audio only" — it captures this one session without video,
-    /// no extra permission, no restart.
-    private func presentScreenRecordingNeeded(source: CaptureSource, expectedOtherSpeakers: Int?) {
-        PermissionsChecker.openScreenRecordingSettings()
-        let alert = NSAlert()
-        alert.messageText = "Allow Screen Recording to capture video"
-        alert.informativeText = """
-        Corder records your screen, so macOS needs Screen Recording permission. \
-        Turn Corder on under System Settings → Privacy & Security → Screen Recording, \
-        then quit and reopen Corder so the change takes effect.
-
-        Prefer not to? You can record audio only — that needs no extra permission \
-        and no restart.
-        """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit Corder")        // .alertFirstButtonReturn
-        alert.addButton(withTitle: "Record audio only")  // .alertSecondButtonReturn
-        alert.addButton(withTitle: "Cancel")             // .alertThirdButtonReturn
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            CorderRelaunch.now()
-        case .alertSecondButtonReturn:
-            // One-tap fallback: drop screen video and start right now. The
-            // CaptureEngine reads `captureVideo` at start, so we persist the
-            // flag; the user can re-enable screen video in Settings later.
-            AppSettings.setCaptureVideo(false)
-            FileLogger.log("RecordingController: user chose audio-only over Screen Recording — starting audio capture")
-            Task { @MainActor in
-                await self.startRecording(source: source, expectedOtherSpeakers: expectedOtherSpeakers)
-            }
-        default:
-            break
-        }
-    }
+    // `presentScreenRecordingNeeded` (the restart-aware "Allow Screen Recording"
+    // modal wall) was removed: screen video defaults ON and a missing grant
+    // degrades to audio silently, with the Library's "Capture your screen too"
+    // ghost panel as the grant path. No modal interrupts the record click.
 }
 
 extension RecordingController: CaptureEngineDelegate {
     func captureEngine(_ engine: CaptureEngine, didStartMeeting id: String) {}
     func captureEngine(_ engine: CaptureEngine, didStopMeeting id: String) {}
+
+    /// The process tap gave up on a Bluetooth route (HFP/SCO) — the far end is
+    /// being lost right now. Warn the user mid-recording (≈8 s in) so they can
+    /// switch their Mac's output off Bluetooth and re-record, instead of only
+    /// discovering it at stop. Same copy as the stop-time warning; a guard stops
+    /// the stop path from repeating it.
+    func captureEngineFarEndUnavailable(_ engine: CaptureEngine) {
+        guard !farEndWarnedThisSession else { return }
+        guard case .recording = AppContext.shared.recordingState else { return }
+        farEndWarnedThisSession = true
+        FileLogger.log("RecordingController: far end uncapturable on Bluetooth (tap watchdog gave up) — warning mid-recording")
+        if AppSettings.notificationsEnabled {
+            NotificationsService.post(
+                title: L.notif("notif_bt_title"),
+                body: L.notif("notif_bt_body"))
+        }
+        // Always surface in-window too (not gated by the notifications toggle) —
+        // losing the far end is important enough to show regardless.
+        LibraryWindow.shared.postToast(
+            title: L.notif("notif_bt_title"),
+            body: L.notif("notif_bt_body"),
+            kind: "error")
+    }
     func captureEngine(_ engine: CaptureEngine, didFailWithError error: Error) {
         FileLogger.log("RecordingController: capture failed: \(error)")
         // Whatever meeting was being recorded is now toast — flip its DB
