@@ -68,14 +68,47 @@ enum Hallucinations {
         "see you guys next time",
         "subtitles by",
         "transcribed by",
-        "amaraorg",
+        "please subscribe",
         "редактор субтитров",
         "субтитри",
         "дякую за перегляд",
         "дякую за увагу",
     ]
 
+    /// Distinctive watermark FRAGMENTS that are never real meeting speech, so
+    /// any segment CONTAINING one is a hallucination regardless of length (no
+    /// 60%-domination requirement, and safe for the destructive launch purge).
+    /// "amaraorg" alone covers the ENTIRE Amara.org subtitle-community credit
+    /// family across every language Whisper emits it in over silence —
+    /// "Subtitles by the Amara.org community", "Sous-titres … d'Amara.org",
+    /// "Untertitel der Amara.org-Community", "Legendas pela comunidade
+    /// Amara.org", … all normalise to contain "amaraorg". No real call says
+    /// "amara.org" or "CastingWords". (Reported by Kostya: an empty recording
+    /// transcribed as "Subtitles by the Amara.org community".)
+    static let alwaysDropFragments: [String] = [
+        "amaraorg",
+        "castingwords",
+    ]
+
+    /// True when the WHOLE (raw) segment is a non-speech CAPTION: only music
+    /// notes, or fully wrapped in `[...]` / `(...)`. Whisper emits "[Music]",
+    /// "[Applause]", "(applause)", "[BLANK_AUDIO]", "♪ ♪" over silence; those
+    /// normalise away their brackets ("[Music]" → "music"), so we detect them
+    /// on the raw text instead, whole-segment only (never inside real speech).
+    static func isNonSpeechCaption(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return false }
+        if t.allSatisfy({ $0 == "♪" || $0 == "♫" || $0.isWhitespace }) { return true }
+        if (t.hasPrefix("[") && t.hasSuffix("]")) || (t.hasPrefix("(") && t.hasSuffix(")")) {
+            return true
+        }
+        return false
+    }
+
     static func isHallucination(_ text: String) -> Bool {
+        // Bracket/music captions normalise to empty or a bare word, so check
+        // the raw text first.
+        if isNonSpeechCaption(text) { return true }
         let lower = text.lowercased()
         let stripped = lower.unicodeScalars.filter {
             CharacterSet.alphanumerics.contains($0) || $0 == " "
@@ -84,6 +117,8 @@ enum Hallucinations {
             .replacingOccurrences(of: "  ", with: " ")
             .trimmingCharacters(in: .whitespaces)
         guard !normalised.isEmpty else { return false }
+        // Distinctive watermark fragments → drop regardless of length.
+        for frag in alwaysDropFragments where normalised.contains(frag) { return true }
         for pat in patterns where normalised.contains(pat) {
             // Exact match → definitely a hallucination.
             if normalised == pat { return true }
@@ -107,6 +142,7 @@ enum Hallucinations {
     /// просмотр презентации") must survive there even though the live
     /// insert-time filter (`isHallucination`) still skips it.
     static func isExactHallucination(_ text: String) -> Bool {
+        if isNonSpeechCaption(text) { return true }
         let lower = text.lowercased()
         let stripped = lower.unicodeScalars.filter {
             CharacterSet.alphanumerics.contains($0) || $0 == " "
@@ -115,6 +151,9 @@ enum Hallucinations {
             .replacingOccurrences(of: "  ", with: " ")
             .trimmingCharacters(in: .whitespaces)
         guard !normalised.isEmpty else { return false }
+        // A watermark fragment (amaraorg / castingwords) is never real speech,
+        // so it's safe to hard-delete even on the destructive purge path.
+        for frag in alwaysDropFragments where normalised.contains(frag) { return true }
         return patterns.contains(normalised)
     }
 }

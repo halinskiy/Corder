@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.84] — 2026-06-27
+
+### Changed
+- Ghost screen-video card: bigger subtitle with tighter leading, the title and
+  subtitle cling together with more room before the button, and the video icon
+  is a real header-style button that also requests Screen Recording.
+
+### Fixed
+- Filtered out Whisper subtitle-watermark hallucinations on near-silent audio:
+  "Subtitles by the Amara.org community" (and every language variant, via the
+  amaraorg fragment) plus non-speech captions like [Music], [Applause], and ♪
+  no longer leak into transcripts.
+
 ## [0.14.83] — 2026-06-27
 
 ### Changed
