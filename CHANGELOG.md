@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.88] — 2026-06-27
+
+### Changed
+- The in-app updater no longer needs a second Install click. Press Install once,
+  the download runs, and it then installs and relaunches Corder automatically.
+
 ## [0.14.87] — 2026-06-27
 
 ### Changed
