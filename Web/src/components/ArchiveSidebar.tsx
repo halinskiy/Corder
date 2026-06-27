@@ -1,5 +1,5 @@
 import React from "react";
-import { RotateCcw, Search } from "lucide-react";
+import { ArrowLeft, RotateCcw, Search } from "lucide-react";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
 import { listArchive, restoreMeeting, deleteMeeting, ArchivedMeeting } from "../api";
@@ -139,11 +139,19 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
   return (
     <aside className="sidebar arc-sidebar" ref={sidebarRef}>
       <div className="sidebar-titlebar-pad" />
-      {/* Identical search header to the meeting Sidebar — no "Archive"
-          title, no "< Library" back button (leaving archive is the
-          Archive icon in the main header, which toggles). Just the
-          same search field so the two panels read as one surface. */}
-      <div className="sidebar-search">
+      {/* Search header with a back button to its LEFT (same circular
+          `.toolbar-icon-btn` shell as the header Settings/Archive buttons, but
+          a back arrow). It closes the archive — exactly what the active Archive
+          toolbar button does. 6px gap to the search mirrors the top toolbar's
+          button spacing. */}
+      <div className="sidebar-search arc-sidebar-search">
+        <button
+          className="toolbar-icon-btn arc-back-btn"
+          onClick={onClose}
+          aria-label={t.archive_open_title}
+        >
+          <ArrowLeft size={16} strokeWidth={2} />
+        </button>
         <div className="search-field">
           <Search size={14} strokeWidth={2} />
           <input

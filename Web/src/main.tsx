@@ -117,13 +117,26 @@ function App() {
   // the "open / close Settings" toggle in main.tsx.
   const [openSettingsNonce, setOpenSettingsNonce] = React.useState(0);
   const lastSettingsNonceRef = React.useRef(openSettingsNonce);
+  // Remember which slice (General/Advanced) the user was last on so reopening
+  // Settings returns there instead of snapping back to General every time.
+  // Persisted so it survives relaunches too.
+  const lastSettingsSectionRef = React.useRef<"general" | "advanced">(
+    (typeof localStorage !== "undefined" && localStorage.getItem("corder.settingsSection") === "advanced")
+      ? "advanced" : "general"
+  );
+  React.useEffect(() => {
+    if (settingsSection !== null) {
+      lastSettingsSectionRef.current = settingsSection;
+      try { localStorage.setItem("corder.settingsSection", settingsSection); } catch { /* private mode */ }
+    }
+  }, [settingsSection]);
   React.useEffect(() => {
     if (openSettingsNonce === lastSettingsNonceRef.current) return;
     lastSettingsNonceRef.current = openSettingsNonce;
-    // Toggle: if Settings already open (in either slice), close;
-    // otherwise open on General — Advanced stays one click away in
-    // the tab strip.
-    setSettingsSection((cur) => (cur === null ? "general" : null));
+    // Toggle: if Settings already open (in either slice), close; otherwise
+    // reopen on the slice the user last closed (remembered above), not always
+    // General.
+    setSettingsSection((cur) => (cur === null ? lastSettingsSectionRef.current : null));
   }, [openSettingsNonce]);
   // Last meeting the user actually opened — keeps MeetingView mounted
   // across Dashboard↔Meeting flips so its `detail` survives and the

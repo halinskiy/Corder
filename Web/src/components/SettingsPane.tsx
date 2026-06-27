@@ -19,9 +19,17 @@ import { useTheme } from "../theme";
 /// recorder must capture audio, it's intrinsic; and mic/system stay
 /// coupled because the dual-track pipeline assumes both exist. Video
 /// IS optional.
+/// Per-section scroll offset, remembered across close/reopen. Module-level (not
+/// state) because both Settings panes stay MOUNTED (display-toggled) — WebKit
+/// drops their scrollTop when the wrapper goes display:none, so we restore it
+/// ourselves when the section becomes active again. Survives navigation within a
+/// session; a relaunch starts at the top (fine).
+const settingsScrollCache: Record<string, number> = {};
+
 export function SettingsPane({
   t,
   section = "general",
+  active = true,
 }: {
   t: T;
   /// Which slice of Settings to render. The parent surface owns the
@@ -29,8 +37,23 @@ export function SettingsPane({
   /// Recording back-chip in MeetingView / Dashboard headers, instead
   /// of duplicating navigation inside this pane.
   section?: "general" | "advanced";
+  /// Whether this section is the one currently shown. Both panes stay mounted
+  /// (display-toggled), so this is how we know WHEN to restore the saved scroll
+  /// offset (on the false→true flip). Defaults true for standalone callers.
+  active?: boolean;
 }) {
   const [s, setS] = React.useState<Settings | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  // Restore the remembered scroll offset when this section becomes active, so
+  // reopening Settings lands where the user left off instead of at the top.
+  // useLayoutEffect → set scrollTop before paint (no visible jump).
+  React.useLayoutEffect(() => {
+    if (!active) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const saved = settingsScrollCache[section] ?? 0;
+    el.scrollTop = saved;
+  }, [active, section]);
   const [apps, setApps] = React.useState<InstalledApp[]>([]);
   const pending = React.useRef<Settings>({});
   const timer = React.useRef<number | null>(null);
@@ -90,7 +113,11 @@ export function SettingsPane({
   // header), so this pane just renders the selected slice.
 
   return (
-    <div className="settings-pane">
+    <div
+      className="settings-pane"
+      ref={scrollRef}
+      onScroll={(e) => { settingsScrollCache[section] = (e.currentTarget as HTMLDivElement).scrollTop; }}
+    >
       <div style={{ display: section === "general" ? "contents" : "none" }}>
         {/* Microphone picker FIRST — the most-used setting. "System default"
             stays the first option (the value when mic_device_uid is empty);
@@ -175,6 +202,12 @@ export function SettingsPane({
             disabled={!loaded}
             onChange={(v) => {
               patch({ capture_video: v });
+              // Broadcast immediately so the "Capture your screen too" ghost
+              // panel shows/hides in the SAME frame as the toggle, instead of
+              // waiting for its next focus-refresh (the laggy disappear).
+              try {
+                window.dispatchEvent(new CustomEvent("corder-capture-video", { detail: v }));
+              } catch { /* dev shell */ }
               // Screen video is a heavy HEVC encode — warn on enable.
               if (v) {
                 try {

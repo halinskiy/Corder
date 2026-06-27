@@ -412,12 +412,16 @@ export function ProfileMenu({
               need to surface it twice. Get help took its slot,
               filling out the navigation pair. */}
           <div className="profile-pop-sep" />
-          {userEmail && (
-            <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
-              <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
-            </button>
-          )}
+          {/* Welcome lives INSIDE `.profile-pop-foot` with Get help / Check for
+              updates so all three share the same item spacing — as a standalone
+              item before the foot it picked up the foot's 4px top padding and
+              sat visibly further from the rest. */}
           <div className="profile-pop-foot">
+            {userEmail && (
+              <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
+                <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
+              </button>
+            )}
             <button className="profile-pop-item" onClick={goHelp} role="menuitem">
               <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
             </button>

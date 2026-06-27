@@ -728,7 +728,13 @@ enum Routes {
                 // meaningful when the active provider is whisperLocal.
                 model_download_progress: m.status == .transcribing
                     && AppSettings.transcriptionProvider == .whisperLocal
-                    ? LocalWhisperTranscriber.currentProgress(AppSettings.whisperLocalVariant) : nil
+                    ? LocalWhisperTranscriber.currentProgress(AppSettings.whisperLocalVariant) : nil,
+                // Silent post-download "preparing" (tokenizer + ANE compile)
+                // phase — lets the UI swap the frozen 99% download bar for a
+                // "Preparing model…" indeterminate state.
+                model_preparing: m.status == .transcribing
+                    && AppSettings.transcriptionProvider == .whisperLocal
+                    ? LocalWhisperTranscriber.isPreparing(AppSettings.whisperLocalVariant) : nil
             )
             return jsonResponse(dto)
         } catch {

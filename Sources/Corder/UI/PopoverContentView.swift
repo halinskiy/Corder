@@ -283,7 +283,11 @@ private struct FlatButtonView: View {
             // visible border). The other roles keep the original
             // menu-bar popover sizing (14 / regular, 8 px radius).
             .font(.system(size: fontSize, weight: fontWeight))
-            .frame(maxWidth: .infinity)
+            // Uniform CONTENT height so every role is the same button size. The
+            // icons differ (Open library's `rectangle.stack` SF Symbol is taller
+            // than Stop's 9px square / Start's 8px dot), which otherwise left
+            // Start/Stop visibly shorter than Open library right under them.
+            .frame(maxWidth: .infinity, minHeight: 20)
             .padding(.vertical, verticalPadding)
             .padding(.horizontal, 16)
             .foregroundColor(foreground)

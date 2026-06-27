@@ -61,6 +61,10 @@ export interface MeetingDetail {
   /// Real transcription progress 0…1 while transcribing; null otherwise.
   transcribe_progress?: number | null;
   model_download_progress?: number | null;
+  /// True during the silent post-download "preparing" phase (tokenizer
+  /// staging + one-time ANE compile). Progress is pinned at 0.99 then, so
+  /// the banner shows "Preparing model…" instead of a stuck "· 99%".
+  model_preparing?: boolean | null;
 }
 
 export interface UsageBucket {

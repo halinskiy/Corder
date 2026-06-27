@@ -126,6 +126,9 @@ interface Strings {
   /// Dashboard pill that shows the launch-time auto-prefetch of the
   /// on-device Whisper model.
   whisper_prefetch_label?: string;
+  /// Button label during the silent post-download "preparing" phase
+  /// (tokenizer staging + one-time ANE compile), no percentage.
+  whisper_preparing_label?: string;
   whisper_prefetch_loading?: string;
   settings_pro_note: string;
   settings_sec_soon: string;
@@ -234,6 +237,8 @@ interface Strings {
   rec_stop: string;
   trans_label: string;
   trans_downloading_model?: string;
+  /// Headline for the silent post-download compile phase.
+  trans_preparing_model?: string;
   trans_start_new?: string;
   trans_slow_hint?: string;
   trans_stop: string;
@@ -493,6 +498,7 @@ const en: Strings = {
   settings_asr_download_cta: "Download model",
   settings_asr_downloading: "Downloading…",
   whisper_prefetch_label: "Downloading model",
+  whisper_preparing_label: "Optimizing for your Mac",
   whisper_prefetch_loading: "Loading model…",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud.",
@@ -602,6 +608,7 @@ const en: Strings = {
   rec_stop: "Stop recording",
   trans_label: "Transcribing",
   trans_downloading_model: "Downloading model…",
+  trans_preparing_model: "Preparing model…",
   trans_start_new: "Start a new recording",
   trans_slow_hint: "The on-device model compiles for the Neural Engine the first time it runs. That one-time step can take a few minutes on some Macs; after it, transcripts are fast.",
   trans_stop: "Stop transcription",

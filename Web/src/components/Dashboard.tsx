@@ -195,17 +195,15 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
   const [leftTab, setLeftTab] = useState<"stats" | "upcoming">("stats");
 
   return (
-    <div className={"detail dashboard-detail" + (inSettings ? "" : " dashboard-solo")}>
-      {/* Plain dashboard = ONE column (Home content), no divider, no empty
-          right column. Opening Settings adds the right panel at the SHARED
-          --right-w width (same as MeetingView's settings/right pane); the
-          Home card is left-aligned so the reflow doesn't visibly move it.
-          The splitter drags --right-w, so resizing here resizes the right
-          pane everywhere — identical to how the left sidebar width is shared
-          across sessions/archive. */}
-      {inSettings && (
-        <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
-      )}
+    <div className="detail dashboard-detail">
+      {/* The Welcome surface is ALWAYS two-column now (1fr | --right-w), exactly
+          like MeetingView: the left column holds the Home card, the right column
+          holds the ghost recording preview (Recent view) or the Settings pane.
+          No more `dashboard-solo` single-column collapse — that left the ghost
+          panel with nowhere to land in the grid and it dropped to the bottom of
+          the main column. The splitter drags --right-w, so resizing here resizes
+          the right pane everywhere, identical to a session. */}
+      <ResizeHandle className="resizer-split" onDrag={onResizeSplit} onReset={onResetSplit} />
       <div className="detail-tabs">
         <div className="detail-tab-col detail-tab-col-left">
           <span
@@ -335,15 +333,15 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
             left sidebar). Both settings sections stay mounted, display
             toggled, so toggle state survives a tab flip. */}
         <div style={{ display: rightSection === "settings-general" ? "contents" : "none" }}>
-          <SettingsPane t={t} section="general" />
+          <SettingsPane t={t} section="general" active={rightSection === "settings-general"} />
         </div>
         <div style={{ display: rightSection === "settings-advanced" ? "contents" : "none" }}>
-          <SettingsPane t={t} section="advanced" />
+          <SettingsPane t={t} section="advanced" active={rightSection === "settings-advanced"} />
         </div>
         {/* Welcome state: a ghost preview of the session right panel (screen
             video grant pitch + ghost audio + ghost timeline) so the right
             column isn't empty and the user sees what a recording looks like. */}
-        {rightSection === "recent" && <GhostRecordingPanel t={t} />}
+        {rightSection === "recent" && <GhostRecordingPanel t={t} recording={isRecording} />}
       </div>
     </div>
   );

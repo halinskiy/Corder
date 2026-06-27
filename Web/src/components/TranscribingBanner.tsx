@@ -64,6 +64,12 @@ interface Props {
   /// When set, the banner shows a "Downloading model" state and the fill
   /// tracks THIS, then switches to `progress` once the model lands.
   modelDownloadProgress: number | null;
+  /// True during the silent post-download phase (tokenizer staging + the
+  /// one-time ANE Core ML compile). The byte progress is pinned at 0.99 then,
+  /// so we swap the frozen "Downloading model · 99%" for a "Preparing model…"
+  /// indeterminate state — the compile can take minutes on a slow Mac and the
+  /// old label read as a stuck download.
+  modelPreparing: boolean | null;
   onCancelled: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
   t: T;
@@ -132,17 +138,29 @@ function resolveUpsell(s: Settings | null, u: Usage | null): UpsellKind {
 /// between recording / transcribing / failed / empty states. The
 /// spinner sits inline next to the headline so the "this is moving"
 /// signal is part of the title, not a separate row that grows the card.
-export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDownloadProgress, onCancelled, onToast, t }: Props) {
+export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDownloadProgress, modelPreparing, onCancelled, onToast, t }: Props) {
   // When the on-device model is still downloading, the banner reads
   // "Downloading model" and the fill tracks the download; once the model
   // lands, modelDownloadProgress goes null and we fall back to the real
   // transcription progress. This is what tells a first-run free user
   // "it's fetching a 1.5 GB model" instead of looking frozen.
   const downloadingModel = modelDownloadProgress != null;
+  // Preparing = bytes are down but we're in the silent tokenizer-stage + ANE
+  // compile (minutes on a slow Mac, no callbacks → progress frozen at 0.99).
+  // Show an indeterminate "Preparing model…" instead of a stuck "· 99%".
+  const preparing = downloadingModel && modelPreparing === true;
   const dlPct = Math.round(Math.max(0, Math.min(1, modelDownloadProgress ?? 0)) * 100);
-  const dlLabel = `${t.whisper_prefetch_label ?? "Downloading model"} · ${dlPct}%`;
+  // While preparing the bar is indeterminate: pin the fill to 100% (a full
+  // green surface) and let the CSS pulse carry the "still working" signal —
+  // no misleading percentage, since this phase has no real progress to report.
+  const dlFillPct = preparing ? 100 : dlPct;
+  const dlLabel = preparing
+    ? (t.whisper_preparing_label ?? "Optimizing for your Mac")
+    : `${t.whisper_prefetch_label ?? "Downloading model"} · ${dlPct}%`;
   const headline = downloadingModel
-    ? (t.trans_downloading_model ?? "Downloading model…")
+    ? (preparing
+        ? (t.trans_preparing_model ?? "Preparing model…")
+        : (t.trans_downloading_model ?? "Downloading model…"))
     : t.trans_label;
   // Backend mark when the pipeline went into .transcribing. Falling
   // back to Date.now() for legacy rows that don't carry the field —
@@ -301,9 +319,11 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
         <button
           className={
             "clarify-btn trans-stop-btn " +
-            (downloadingModel ? "trans-stop-btn--downloading" : "danger")
+            (downloadingModel
+              ? "trans-stop-btn--downloading" + (preparing ? " trans-stop-btn--preparing" : "")
+              : "danger")
           }
-          style={downloadingModel ? ({ ["--wl-progress" as string]: `${dlPct}%` } as React.CSSProperties) : undefined}
+          style={downloadingModel ? ({ ["--wl-progress" as string]: `${dlFillPct}%` } as React.CSSProperties) : undefined}
           // While the model is downloading the button is a progress
           // INDICATOR, not a Stop control — clicking it must do nothing
           // (a click during the download was cancelling the whole run and

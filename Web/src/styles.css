@@ -233,6 +233,26 @@ button {
 }
 button:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 
+/* Pointer cursor on EVERY interactive control. Native <button> already gets it
+   (rule above), but a lot of clickables in the app render as span/div/label/a
+   (React onClick, which CSS can't target) and otherwise keep the default arrow
+   inside the WKWebView. Cover them by role + the known clickable component
+   classes so anything you can click reads as clickable. Disabled controls below
+   opt back out. */
+a,
+label,
+select,
+summary,
+[role="button"],
+.tab,
+.meeting-item,
+.dash-recent-card,
+.ctx-item,
+.profile-pop-item,
+.news-bar,
+.news-bar-x,
+.audio-scrub { cursor: pointer; }
+
 
 /* Toolbar divider before the profile avatar. */
 .toolbar-sep {
@@ -781,6 +801,14 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .sidebar-titlebar-pad { height: 36px; }
 .sidebar-search { padding: 4px 12px 12px; }
+/* Archive variant: a back button sits to the LEFT of the search. Lay them in a
+   row with a 6px gap (same as the top toolbar's button spacing), search grows. */
+.arc-sidebar-search { display: flex; align-items: center; gap: 6px; }
+.arc-sidebar-search .search-field { flex: 1; min-width: 0; }
+/* No size override: the default 38px `.toolbar-icon-btn` circle already equals
+   the search input's height (13px × line-height 1.5 + 16px padding + 2px border
+   ≈ 38px), so the back button matches the input out of the box. (The earlier
+   32px shrank it; an `aspect-ratio` attempt collapsed its width in flex.) */
 /* Ghost placeholder row shown in the empty library — `.meeting-item`
    geometry, just faded and non-interactive. The user reads it as
    "this is where your recordings will appear", not as a separate
@@ -2033,26 +2061,22 @@ input[type="text"]:focus, input[type="search"]:focus {
   overflow: hidden;
 }
 
-/* Dashboard (session list removed). Plain dashboard = ONE full-width column
-   (Home content left-aligned), no divider, no empty right column. Opening
-   Settings switches to the SAME `1fr | --right-w` grid MeetingView uses, so
-   the Settings panel is identical width everywhere and the shared splitter
-   (resizer-split, drags --right-w) resizes the right pane app-wide. The Home
-   card is left-aligned, so the content reflow on open doesn't visibly move it. */
-.dashboard-detail.dashboard-solo .detail-tabs,
-.dashboard-detail.dashboard-solo .detail-body {
-  grid-template-columns: minmax(0, 1fr);
+/* Dashboard uses the SAME `1fr | --right-w` two-column grid as MeetingView in
+   EVERY state: the right column hosts the ghost recording preview (Welcome /
+   Recent view) or the Settings pane. The old `.dashboard-solo` single-column
+   collapse is gone — it left the ghost panel with no grid cell to occupy, so it
+   wrapped to an implicit second row at the bottom of the main column (the bug
+   the user pointed at: "Почему оно снизу??? Это же просто правая колонка должна
+   быть"). The shared splitter (resizer-split, drags --right-w) resizes the right
+   pane app-wide; the Home card is left-aligned so reflow never moves it. */
+/* Ghost recording preview pins to the RIGHT grid cell of `.detail-body`, exactly
+   like the real session RightPanel. Without this it auto-places into col 2 only
+   by accident of source order; the explicit placement is what makes it the right
+   column regardless of sibling order. */
+.ghost-recording-panel {
+  grid-column: 2;
+  grid-row: 1;
 }
-/* No divider-to-nowhere on the plain dashboard: flatten the 1px right-edge
-   seam the tab/body left columns paint. It returns in Settings to separate
-   the content from the panel. */
-.dashboard-detail.dashboard-solo .detail-tab-col-left,
-.dashboard-detail.dashboard-solo .dashboard-left {
-  background: var(--bg);
-}
-/* Empty right tab cell must not spawn an implicit grid track on the plain
-   dashboard. */
-.dashboard-detail.dashboard-solo .detail-tab-col-right { display: none; }
 
 /* Drag strips. Invisible until hover; a short centred grip fades in so
    the affordance is discoverable without adding a permanent visual
@@ -2614,6 +2638,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: default;
 }
 .trans-stop-btn--downloading:hover { border-color: var(--accent); }
+/* Silent post-download "preparing" phase (tokenizer + ANE compile). There's no
+   real progress here — the byte bar is pinned full (100%) and we breathe its
+   opacity so the button reads as "still working" rather than a frozen 99%. The
+   label switches to "Optimizing for your Mac" (no percentage) in the markup. */
+.trans-stop-btn--preparing { animation: trans-prepare-pulse 1.6s ease-in-out infinite; }
+.trans-stop-btn--preparing:hover { border-color: var(--border-strong); }
+@keyframes trans-prepare-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 /* Left-anchored fill driven by REAL transcription progress (the local ASR
    reports window-by-window via /api/meetings/:id → transcribe_progress).
    width is set inline. Long linear ease so it glides between the 2s polls
@@ -3404,42 +3435,29 @@ body.resizing { cursor: col-resize; user-select: none; }
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0,0,0,0.18);
 }
-/* "Ghost" screen-video placeholder in the recording panel: shown when Screen
-   Recording isn't granted, so video capture is unavailable. A dashed, muted
-   frame that pitches turning screen video on. Same 20px horizontal margin as
-   the timeline card so it lines up under the audio controls. */
-.ghost-video {
-  margin: 14px 20px 0;
-  padding: 22px 18px;
+/* Screen-video card in the recording / Welcome ghost panel. It borrows the
+   "Ready when you are." home card's TYPOGRAPHY (heading `.clarify-body`, sub
+   `.dash-sub`) + the green CTA (`.clarify-btn.accent`, no `.dash-primary-btn`
+   glow → matches Start recording minus the shadow), but KEEPS its own GHOST
+   shell — a dashed outline over a barely-there fill — so it still reads as the
+   "video not available yet" placeholder, not a solid card. When Screen Recording
+   isn't granted it pitches the grant ("Capture your screen too" + Enable screen
+   video); once granted it's a quiet "video shows here" note with no button. */
+.ghost-video-card {
+  /* width:auto OVERRIDES `.clarify-banner`'s width:100%. A width:100% box PLUS
+     20px side margins is (column + 40px) wide → the card and its button spilled
+     past the panel's right edge. With auto width the column flex stretches it to
+     (column − margins) instead, so it sits flush inside the panel. */
+  width: auto;
+  /* 20px side + 20px top lines it up with the ghost audio/timeline below and
+     the session video preview. */
+  margin: 20px 20px 0;
+  /* Ghost shell — dashed outline over a TRANSPARENT fill (no faint tint, and
+     NOT the solid `.trans-banner` bg). `background: transparent` is explicit to
+     override `.trans-banner`'s `var(--bg)`. This is the placeholder look. */
   border: 1px dashed var(--border-strong);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--fg) 3%, transparent);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  /* Spacing is per-element below (asymmetric: title+sub cling together, the
-     CTA is set apart), so no uniform gap. */
+  background: transparent;
 }
-/* The video icon is a real header-style button (same .toolbar-icon-btn 38px
-   circle + tint as the toolbar gear) that ALSO triggers the grant. */
-.ghost-video-icon-btn { margin-bottom: 10px; }
-.ghost-video-title { font-size: 14px; font-weight: 600; color: var(--fg); }
-.ghost-video-sub {
-  /* Tight leading (like the profile menu subtitle) but a readable size. The
-     small margin-top keeps the sub close to the title (they read as one
-     block); the CTA below gets a much larger gap to set it apart. */
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 1.3;
-  color: var(--fg-muted);
-  max-width: 260px;
-}
-/* `flex: none` so the button keeps its natural height: `.clarify-btn` carries
-   `flex: 1 1 72px`, and inside this column-flex card grow:1 stretched it to
-   fill the whole card (taller than the Stop button). Slightly tighter vertical
-   padding than the 13px Stop button too. */
-.ghost-video-cta { flex: none; margin-top: 16px; width: 100%; padding: 11px 16px; }
 
 /* Welcome-screen ghost preview of the session right panel: ghost audio
    scrubber + ghost speaker timeline (muted placeholders), under the ghost

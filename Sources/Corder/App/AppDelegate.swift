@@ -29,6 +29,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and bail out without touching anything.
         if let email = AppSettings.userEmail, !email.isEmpty {
             AppPaths.migrateLegacyIfNeeded(forEmail: email)
+            // Drain any signed-out `_guest` recordings into this account so
+            // sessions recorded before sign-in follow the user in (instead of
+            // being stranded, invisible, in the guest bucket). Idempotent +
+            // defensive; no-op when there's nothing to drain. Runs BEFORE the
+            // account DB's shared connection opens (same as the legacy migrate).
+            GuestMigration.drainIntoAccount(forEmail: email)
         }
         try? AppPaths.ensureExists()
         // Salvage recordings interrupted by a crash BEFORE the cleanup
