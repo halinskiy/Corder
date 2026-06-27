@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.87] — 2026-06-27
+
+### Changed
+- Microphone is the first setting in General now.
+- The "Never offer to record" app picker flips above the Add button when there
+  isn't room below, so its search box and results are no longer cut off at the
+  bottom of the settings panel.
+
 ## [0.14.86] — 2026-06-27
 
 ### Added
