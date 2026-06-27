@@ -3418,24 +3418,19 @@ body.resizing { cursor: col-resize; user-select: none; }
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 7px;
+  /* Spacing is per-element below (asymmetric: title+sub cling together, the
+     CTA is set apart), so no uniform gap. */
 }
-.ghost-video-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
-  color: var(--fg-muted);
-  margin-bottom: 2px;
-}
+/* The video icon is a real header-style button (same .toolbar-icon-btn 38px
+   circle + tint as the toolbar gear) that ALSO triggers the grant. */
+.ghost-video-icon-btn { margin-bottom: 10px; }
 .ghost-video-title { font-size: 14px; font-weight: 600; color: var(--fg); }
 .ghost-video-sub {
-  /* Smaller + tighter leading, matching the profile menu subtitle
-     (`.profile-pop-sub`, 1.3) so the two read as the same voice. */
-  font-size: 11px;
+  /* Tight leading (like the profile menu subtitle) but a readable size. The
+     small margin-top keeps the sub close to the title (they read as one
+     block); the CTA below gets a much larger gap to set it apart. */
+  margin-top: 4px;
+  font-size: 13px;
   line-height: 1.3;
   color: var(--fg-muted);
   max-width: 260px;
@@ -3444,7 +3439,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    `flex: 1 1 72px`, and inside this column-flex card grow:1 stretched it to
    fill the whole card (taller than the Stop button). Slightly tighter vertical
    padding than the 13px Stop button too. */
-.ghost-video-cta { flex: none; margin-top: 6px; width: 100%; padding: 11px 16px; }
+.ghost-video-cta { flex: none; margin-top: 16px; width: 100%; padding: 11px 16px; }
 
 .timeline-card {
   background: var(--bg);

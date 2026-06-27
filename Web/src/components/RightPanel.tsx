@@ -90,9 +90,14 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
 function GhostVideo({ t }: { t: T }) {
   return (
     <div className="ghost-video">
-      <div className="ghost-video-icon" aria-hidden>
-        <Video size={24} strokeWidth={1.5} />
-      </div>
+      <button
+        type="button"
+        className="toolbar-icon-btn ghost-video-icon-btn"
+        onClick={() => requestScreenRecording()}
+        aria-label={t.ghost_video_cta ?? "Enable screen video"}
+      >
+        <Video size={17} strokeWidth={2} />
+      </button>
       <div className="ghost-video-title">{t.ghost_video_title ?? "Capture your screen too"}</div>
       <div className="ghost-video-sub">
         {t.ghost_video_sub ?? "Allow Screen Recording to include screen video. Audio recording works without it."}
