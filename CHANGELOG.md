@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.86] — 2026-06-27
+
+### Added
+- The Welcome screen shows a ghost preview of the session right panel (screen
+  video, audio, timeline) so you can see what a recording looks like and enable
+  screen video before you start.
+
+### Changed
+- The guest recording limit counts only your ACTIVE recordings now. Archiving a
+  recording frees a slot (the cap is 5 held at once, not a lifetime count).
+
 ## [0.14.85] — 2026-06-27
 
 ### Fixed

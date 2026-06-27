@@ -3441,6 +3441,50 @@ body.resizing { cursor: col-resize; user-select: none; }
    padding than the 13px Stop button too. */
 .ghost-video-cta { flex: none; margin-top: 16px; width: 100%; padding: 11px 16px; }
 
+/* Welcome-screen ghost preview of the session right panel: ghost audio
+   scrubber + ghost speaker timeline (muted placeholders), under the ghost
+   video block. Mirrors the real .audio-controls / .timeline-card geometry. */
+.ghost-audio {
+  margin: 16px 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ghost-audio-play {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+.ghost-audio-time {
+  font-size: 13px; color: var(--fg-muted);
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.ghost-audio-track {
+  flex: 1; height: 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.ghost-timeline {
+  margin: 14px 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 14px 16px;
+}
+.ghost-timeline-label {
+  font-size: 13px; font-weight: 600; color: var(--fg-muted); margin-bottom: 14px;
+}
+.ghost-timeline-row { margin-bottom: 14px; }
+.ghost-timeline-row:last-child { margin-bottom: 0; }
+.ghost-timeline-name {
+  display: block; width: 64px; height: 9px; border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent); margin-bottom: 7px;
+}
+.ghost-timeline-bar {
+  height: 9px; border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+
 .timeline-card {
   background: var(--bg);
   border: 1px solid var(--border);
