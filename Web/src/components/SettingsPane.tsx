@@ -92,6 +92,20 @@ export function SettingsPane({
   return (
     <div className="settings-pane">
       <div style={{ display: section === "general" ? "contents" : "none" }}>
+        {/* Microphone picker FIRST — the most-used setting. "System default"
+            stays the first option (the value when mic_device_uid is empty);
+            the choice applies to the NEXT recording (no live AVAudioEngine
+            hot-swap). */}
+        <SoloCard>
+          <MicDevicePicker
+            devices={s?.audio_input_devices ?? []}
+            value={s?.mic_device_uid ?? ""}
+            disabled={!loaded}
+            onChange={(uid) => patch({ mic_device_uid: uid })}
+            t={t}
+          />
+        </SoloCard>
+
         <SoloCard>
           <ThemeToggleRow t={t} />
         </SoloCard>
@@ -123,21 +137,6 @@ export function SettingsPane({
             checked={(s?.telemetry as boolean | undefined) ?? false}
             disabled={!loaded}
             onChange={(v) => patch({ telemetry: v })}
-          />
-        </SoloCard>
-
-        {/* Microphone picker. Pre-feature behaviour ("System default")
-            stays available as the first option and is the value used
-            when `mic_device_uid` is empty/null. The choice applies to
-            the NEXT recording — we don't hot-swap a live AVAudioEngine
-            binding (would need a stop/start cycle). */}
-        <SoloCard>
-          <MicDevicePicker
-            devices={s?.audio_input_devices ?? []}
-            value={s?.mic_device_uid ?? ""}
-            disabled={!loaded}
-            onChange={(uid) => patch({ mic_device_uid: uid })}
-            t={t}
           />
         </SoloCard>
 
@@ -354,11 +353,23 @@ function AppListEditor({
   const [q, setQ] = React.useState("");
   const addRef = React.useRef<HTMLButtonElement | null>(null);
   const popRef = React.useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
+  const [pos, setPos] = React.useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
 
   const place = React.useCallback(() => {
     const r = addRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, left: r.left, width: r.width });
+    if (!r) return;
+    const margin = 16;
+    const spaceBelow = window.innerHeight - r.bottom - margin;
+    const spaceAbove = r.top - margin;
+    // Flip the picker ABOVE the Add button when there isn't enough room below
+    // (it sits at the bottom of the settings pane and was overflowing off the
+    // window edge, with the results unreachable). Cap the height to whatever
+    // side it opens on so the list scrolls instead of clipping.
+    if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+      setPos({ bottom: window.innerHeight - r.top + 6, left: r.left, width: r.width, maxHeight: spaceAbove });
+    } else {
+      setPos({ top: r.bottom + 6, left: r.left, width: r.width, maxHeight: spaceBelow });
+    }
   }, []);
 
   const nameFor = (b: string) => apps.find((a) => a.bundle === b)?.name ?? b;
@@ -453,7 +464,7 @@ function AppListEditor({
         <div
           ref={popRef}
           className="apick"
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width, maxHeight: pos.maxHeight, zIndex: 9999 }}
         >
           <div className="apick-head">
             <div className="search-field">

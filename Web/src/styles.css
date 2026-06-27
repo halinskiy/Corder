@@ -3879,12 +3879,16 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-radius: 12px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
   overflow: hidden;
+  /* Column so the list scrolls within the JS-capped maxHeight (the picker
+     flips above the button when it's near the window bottom). */
+  display: flex;
+  flex-direction: column;
   animation: donate-fade 140ms ease;
 }
 /* Reuses the shared `.search-field` component (same as the sidebar /
    transcript search) — no bespoke search input. */
 .apick-head { padding: 8px; border-bottom: 1px solid var(--border); }
-.apick-list { max-height: 240px; overflow-y: auto; padding: 4px; }
+.apick-list { flex: 1; min-height: 0; max-height: 240px; overflow-y: auto; padding: 4px; }
 .apick-none { padding: 12px; font-size: 13px; color: var(--fg-muted); }
 .apick-item {
   display: flex;
