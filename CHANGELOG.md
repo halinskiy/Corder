@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.89] — 2026-06-27
+
+### Changed
+- The updater now finishes on a SINGLE Install press: download, install, and
+  relaunch happen automatically with no second click (the one-click flow added
+  in 0.14.88 is active for updates from 0.14.88 onward).
+
 ## [0.14.88] — 2026-06-27
 
 ### Changed
