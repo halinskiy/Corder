@@ -6,6 +6,7 @@ import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
+import { GhostRecordingPanel } from "./RightPanel";
 import { UpcomingPane } from "./UpcomingPane";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
@@ -339,6 +340,10 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
         <div style={{ display: rightSection === "settings-advanced" ? "contents" : "none" }}>
           <SettingsPane t={t} section="advanced" />
         </div>
+        {/* Welcome state: a ghost preview of the session right panel (screen
+            video grant pitch + ghost audio + ghost timeline) so the right
+            column isn't empty and the user sees what a recording looks like. */}
+        {rightSection === "recent" && <GhostRecordingPanel t={t} />}
       </div>
     </div>
   );

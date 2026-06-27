@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { Download, Maximize2, X } from "lucide-react";
+import { Download, Maximize2, X, Play } from "lucide-react";
 import {
   MeetingDetail, audioSrc, videoSrc, videoWithAudioSrc, audioM4ASrc,
   transcriptSrc, transcriptMdSrc, transcriptJsonSrc, bundleSrc,
@@ -109,6 +109,51 @@ function GhostVideo({ t }: { t: T }) {
       >
         {t.ghost_video_cta ?? "Enable screen video"}
       </button>
+    </div>
+  );
+}
+
+/// "Ghost" recording panel for the Welcome screen: a muted preview of what the
+/// right column looks like during a real session (screen video + audio scrubber
+/// + speaker timeline). The video block doubles as the Screen Recording grant
+/// pitch when the permission isn't granted yet, or a quiet "video shows here"
+/// placeholder once it is.
+export function GhostRecordingPanel({ t }: { t: T }) {
+  const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
+  React.useEffect(() => {
+    let alive = true;
+    const refresh = () => getSettings()
+      .then((s) => { if (alive) setScreenGranted(s.screen_recording_granted ?? true); })
+      .catch(() => {});
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { alive = false; window.removeEventListener("focus", refresh); };
+  }, []);
+  return (
+    <div className="right-panel ghost-recording-panel">
+      {screenGranted === false ? (
+        <GhostVideo t={t} />
+      ) : (
+        <div className="ghost-video" aria-hidden>
+          <div className="toolbar-icon-btn ghost-video-icon-btn">
+            <Video size={17} strokeWidth={2} />
+          </div>
+          <div className="ghost-video-title">{t.ghost_video_on_title ?? "Screen video"}</div>
+          <div className="ghost-video-sub">
+            {t.ghost_video_on_sub ?? "Your screen appears here while you record."}
+          </div>
+        </div>
+      )}
+      <div className="ghost-audio" aria-hidden>
+        <div className="ghost-audio-play"><Play size={15} strokeWidth={2} /></div>
+        <span className="ghost-audio-time">0:00 / 0:00</span>
+        <div className="ghost-audio-track" />
+      </div>
+      <div className="ghost-timeline" aria-hidden>
+        <div className="ghost-timeline-label">Timeline</div>
+        <div className="ghost-timeline-row"><span className="ghost-timeline-name" /><div className="ghost-timeline-bar" /></div>
+        <div className="ghost-timeline-row"><span className="ghost-timeline-name" /><div className="ghost-timeline-bar" /></div>
+      </div>
     </div>
   );
 }

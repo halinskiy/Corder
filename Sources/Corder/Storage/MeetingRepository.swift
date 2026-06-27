@@ -160,14 +160,16 @@ struct MeetingRepository {
         }
     }
 
-    /// Count of meetings the account currently HOLDS — library + archive,
-    /// excluding only transient pre-roll rows. A hard delete frees a slot;
-    /// archiving does not. Used for the guest session cap (max 5 for a
-    /// signed-out user).
+    /// Count of recordings the account currently HOLDS in the ACTIVE library
+    /// (not archived, and excluding transient pre-roll rows). The guest cap is
+    /// on how many recordings you hold AT ONCE (max 5), not a lifetime count, so
+    /// archiving frees a slot (as does a hard delete). Used for the guest
+    /// session cap + the "N left" header badge.
     func heldMeetingCount() throws -> Int {
         try dbq.read { db in
             try Meeting
                 .filter(Column("status") != MeetingStatus.preroll.rawValue)
+                .filter(Column("archived_at") == nil)
                 .fetchCount(db)
         }
     }
