@@ -15,6 +15,10 @@ behaviour, not internal refactors.
 ### Changed
 
 ### Fixed
+- The on-device model is no longer re-downloaded when you sign in or out. It's now
+  stored once per Mac (it's a shared, public model), so switching between guest and
+  your account never costs another ~1.5 GB download. Existing installs move their
+  copy up automatically and reclaim any duplicate.
 
 ## [0.14.90] — 2026-06-28
 

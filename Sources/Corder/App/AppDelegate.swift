@@ -27,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the right path on the very first access. Idempotent —
         // re-runs notice the destination already has a corder.db
         // and bail out without touching anything.
+        // Model storage moved from per-account to machine-wide (supportRoot/models)
+        // so sign-in/sign-out never re-downloads the ~1.5 GB model. Move an
+        // existing per-account model up + reclaim duplicate copies. Runs for
+        // everyone (guest or signed-in), before any model load. See AppPaths.
+        AppPaths.migrateModelToSharedIfNeeded()
         if let email = AppSettings.userEmail, !email.isEmpty {
             AppPaths.migrateLegacyIfNeeded(forEmail: email)
             // Drain any signed-out `_guest` recordings into this account so
