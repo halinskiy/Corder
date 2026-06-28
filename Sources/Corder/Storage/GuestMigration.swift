@@ -44,15 +44,9 @@ enum GuestMigration {
         let guestRoot = accountsRoot.appendingPathComponent("_guest", isDirectory: true)
         let accountRoot = accountsRoot.appendingPathComponent(accountID, isDirectory: true)
 
-        // Move the on-device model FIRST (before any early return), independent of
-        // recordings. It's downloaded per-account into accounts/_guest/models;
-        // without this, signing in switches to the account's EMPTY models dir and
-        // re-downloads the ~1.5 GB model the user already has on disk (the "why is
-        // it downloading again after I signed in?" bug). Move (instant rename on
-        // the same volume) only when the account has no model yet — if it already
-        // has its own, leave the guest copy for a future signed-out session.
-        migrateModelIfNeeded(fm: fm, guestRoot: guestRoot, accountRoot: accountRoot, accountID: accountID)
-
+        // (The on-device model is no longer migrated here — it's MACHINE-WIDE
+        // now, `supportRoot/models`, shared across guest + every account, so a
+        // sign-in/out never re-downloads it. See AppPaths.migrateModelToSharedIfNeeded.)
         let guestDB = guestRoot.appendingPathComponent("corder.db")
         guard fm.fileExists(atPath: guestDB.path) else { return }
 
@@ -133,36 +127,8 @@ enum GuestMigration {
         }
     }
 
-    /// Move the guest's on-device model folder into the signed-in account so the
-    /// app doesn't re-download it. The model lives at `_guest/models/` (WhisperKit
-    /// nests a second `models/` inside). Only moves when the account has NO model
-    /// of its own yet — checks for a non-empty `models/` dir, since `ensureExists`
-    /// can leave an empty one. Best-effort: a failure just means a re-download,
-    /// never a crash.
-    private static func migrateModelIfNeeded(fm: FileManager, guestRoot: URL, accountRoot: URL, accountID: String) {
-        let guestModels = guestRoot.appendingPathComponent("models", isDirectory: true)
-        let accountModels = accountRoot.appendingPathComponent("models", isDirectory: true)
-        // Guest must actually have a non-empty model folder.
-        guard fm.fileExists(atPath: guestModels.path),
-              let guestContents = try? fm.contentsOfDirectory(atPath: guestModels.path),
-              !guestContents.isEmpty else { return }
-        // Account must NOT already have a non-empty one (don't clobber it).
-        let accountContents = (try? fm.contentsOfDirectory(atPath: accountModels.path)) ?? []
-        guard accountContents.isEmpty else { return }
-        do {
-            try fm.createDirectory(at: accountRoot, withIntermediateDirectories: true)
-            // If an empty account models dir exists (from ensureExists), drop it
-            // so moveItem doesn't fail on an existing destination.
-            if fm.fileExists(atPath: accountModels.path) { try? fm.removeItem(at: accountModels) }
-            try fm.moveItem(at: guestModels, to: accountModels)
-            FileLogger.log("GuestMigration: moved on-device model from _guest into accounts/\(accountID)/ (no re-download)")
-        } catch {
-            FileLogger.log("GuestMigration: model move failed: \(error) — model may re-download")
-        }
-    }
-
     /// Remove the guest DB (+ WAL/SHM sidecars) and the now-emptied recordings
-    /// dir. `_guest/models/` is moved out separately by `migrateModelIfNeeded`.
+    /// dir. (The model is machine-wide now — not under `_guest` — so it's untouched.)
     private static func clearGuestData(fm: FileManager, guestDB: URL, guestRoot: URL, guestRecordings: URL) {
         for suffix in ["", "-wal", "-shm"] {
             let p = guestDB.path + suffix
