@@ -456,14 +456,15 @@ export function ProfileMenu({
             </>
           )}
 
-          {/* Auxiliary group: Sign out as the bottom full-width action,
-              styled like the guest Sign-in CTA (`.profile-pop-signin`) so
-              the menu's last action is visually symmetric across states. */}
+          {/* Auxiliary group: Sign out as the bottom full-width action —
+              same shape as the guest Sign-in CTA (`.profile-pop-signin`) so
+              the menu's last action is visually symmetric across states, but
+              RED (`.profile-pop-signout`) because it's a destructive exit. */}
           {userEmail && (
             <>
               <div className="profile-pop-sep" />
               <button
-                className="profile-pop-signin"
+                className="profile-pop-signin profile-pop-signout"
                 onClick={async () => {
                   setOpen(false);
                   try { await signOut(); } catch {}

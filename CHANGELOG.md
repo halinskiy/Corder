@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.93] — 2026-06-28
+
+### Changed
+- Sign out is now red (it's a destructive exit), while keeping the full-width
+  button shape. Both Sign out and Sign in have slightly squarer corners.
+
 ## [0.14.92] — 2026-06-28
 
 ### Changed
