@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, LifeBuoy, LogOut, RefreshCw, Shield, Shuffle } from "lucide-react";
+import { LifeBuoy, RefreshCw, Shield, Shuffle } from "lucide-react";
 import type { T } from "../i18n";
 import { getSettings, signOut, triggerUpdateCheck, openWelcome } from "../api";
 
@@ -295,13 +295,13 @@ export function ProfileMenu({
     try { window.dispatchEvent(new CustomEvent(AVATAR_EVENT, { detail: next })); } catch {}
   };
 
-  const goDashboard = () => { onOpenDashboard(); setOpen(false); };
-  // `onOpenSettings` removed from the popover rows (header has
-  // its own gear icon). Reference it once so TS's
-  // noUnusedParameters check doesn't complain — the prop stays
-  // on the type to avoid cascading the rename through MainHeader
-  // / main.tsx call sites.
+  // `onOpenSettings` / `onOpenDashboard` are no longer wired to popover
+  // rows (the header has its own gear icon, and the Welcome/Home item was
+  // removed). Reference them once so TS's noUnusedParameters check doesn't
+  // complain — the props stay on the type to avoid cascading the rename
+  // through MainHeader / main.tsx call sites.
   void onOpenSettings;
+  void onOpenDashboard;
 
   /// Opens the landing's /contact page in the system browser.
   /// The page on getcorder.com carries the support form + the
@@ -394,7 +394,7 @@ export function ProfileMenu({
                       {userName ?? userEmail.split("@")[0] ?? "Account"}
                     </div>
                   )}
-                  <div className="profile-pop-sub">{userEmail}</div>
+                  <div className="profile-pop-sub profile-pop-email">{userEmail}</div>
                 </>
               ) : (
                 <>
@@ -412,16 +412,10 @@ export function ProfileMenu({
               need to surface it twice. Get help took its slot,
               filling out the navigation pair. */}
           <div className="profile-pop-sep" />
-          {/* Welcome lives INSIDE `.profile-pop-foot` with Get help / Check for
-              updates so all three share the same item spacing — as a standalone
-              item before the foot it picked up the foot's 4px top padding and
-              sat visibly further from the rest. */}
+          {/* Foot group: Get help / Check for updates (+ admin shortcut).
+              The Welcome/Home item was removed — there's already a Home
+              affordance on the surface and it cluttered the menu. */}
           <div className="profile-pop-foot">
-            {userEmail && (
-              <button className="profile-pop-item" onClick={goDashboard} role="menuitem">
-                <Home size={15} strokeWidth={2} /> {t.profile_dashboard}
-              </button>
-            )}
             <button className="profile-pop-item" onClick={goHelp} role="menuitem">
               <LifeBuoy size={15} strokeWidth={2} /> {t.profile_help ?? "Get help"}
             </button>
@@ -462,14 +456,14 @@ export function ProfileMenu({
             </>
           )}
 
-          {/* Auxiliary group: Sign out (+ legacy danger row slot,
-              currently empty — Delete account moved into Settings).
-              Same 8 px breathing room from the divider above. */}
+          {/* Auxiliary group: Sign out as the bottom full-width action,
+              styled like the guest Sign-in CTA (`.profile-pop-signin`) so
+              the menu's last action is visually symmetric across states. */}
           {userEmail && (
             <>
               <div className="profile-pop-sep" />
               <button
-                className="profile-pop-item profile-pop-item-danger"
+                className="profile-pop-signin"
                 onClick={async () => {
                   setOpen(false);
                   try { await signOut(); } catch {}
@@ -480,7 +474,7 @@ export function ProfileMenu({
                 }}
                 role="menuitem"
               >
-                <LogOut size={15} strokeWidth={2} /> {t.profile_signout}
+                {t.profile_signout}
               </button>
             </>
           )}
