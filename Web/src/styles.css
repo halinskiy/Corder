@@ -600,10 +600,10 @@ summary,
   padding: 9px 12px;
   margin: 2px 0;
   border: 1px solid var(--accent);
-  /* Squarer than the nav items: a small 7px radius reads as "barely
+  /* Squarer than the nav items: a small 5px radius reads as "barely
      rounded, mostly square", per the brief (more square, just slightly
-     softened corners). */
-  border-radius: 7px;
+     softened corners). Shared by the Sign-out variant below. */
+  border-radius: 5px;
   background: var(--accent);
   color: #fff;
   font-size: 13px;
@@ -614,6 +614,17 @@ summary,
 .profile-pop-signin:hover {
   background: color-mix(in srgb, var(--accent) 88%, #000);
   border-color: color-mix(in srgb, var(--accent) 88%, #000);
+}
+/* Sign out reuses the Sign-in geometry (full-width, squarish) but is RED —
+   it's a destructive exit, not a primary CTA. The red mirrors the old
+   `.profile-pop-item-danger` row colour, now as a filled button. */
+.profile-pop-signout {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+.profile-pop-signout:hover {
+  background: color-mix(in srgb, var(--danger) 88%, #000);
+  border-color: color-mix(in srgb, var(--danger) 88%, #000);
 }
 /* Support group (Get help / Check for updates / admin). +4px above it so
    it doesn't crowd the green Sign-in CTA, and matching air below so the
