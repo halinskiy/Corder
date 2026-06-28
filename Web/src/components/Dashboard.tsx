@@ -74,6 +74,8 @@ interface Props {
   onSettingsOpenChange?: (open: boolean) => void;
   /// Surfaces one-line nudge/error toasts from the Dashboard surface.
   onToast?: (msg: string, kind?: "success" | "error") => void;
+  /// Signed-in marker — guests don't see the Advanced settings tab.
+  signedIn?: boolean;
 }
 
 /// Home / landing surface (shown when no specific meeting is open).
@@ -82,7 +84,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange }: Props) {
+export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, signedIn = true }: Props) {
   // Counters read off `statsMeetings` (lifetime — includes archived
   // rows) so archiving never silently decreases the user's totals.
   // The Recent list and everything else below still uses `meetings`
@@ -230,12 +232,15 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
               >
                 {t.tab_general_settings ?? "General"}
               </span>
-              <span
-                className={"tab" + (rightSection === "settings-advanced" ? " active" : "")}
-                onClick={() => setRightSection("settings-advanced")}
-              >
-                {t.tab_advanced_settings ?? "Advanced"}
-              </span>
+              {/* Advanced hidden for guests (cloud-only auto-* settings). */}
+              {signedIn && (
+                <span
+                  className={"tab" + (rightSection === "settings-advanced" ? " active" : "")}
+                  onClick={() => setRightSection("settings-advanced")}
+                >
+                  {t.tab_advanced_settings ?? "Advanced"}
+                </span>
+              )}
             </>
           )}
         </div>

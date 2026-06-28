@@ -230,6 +230,9 @@ export function SettingsPane({
           />
         </SoloCard>
 
+        {/* Auto-title / Auto-summary / Auto-chapters are cloud features (need
+            sign-in). They live in the Advanced tab, which is hidden wholesale for
+            guests (see MeetingView/Dashboard), so no per-row guard needed here. */}
         <SoloCard>
           <Toggle
             label={t.settings_autotitle}

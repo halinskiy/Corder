@@ -358,16 +358,33 @@ function App() {
   // so a manual `defaults write Corder.set.userTier` shows up after a
   // window reload.
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
+  // Signed-in marker (`user_email` present). Drives hiding the Advanced settings
+  // tab for guests — everything in Advanced beyond local toggles is cloud
+  // (auto-title/summary/chapters) and useless signed-out. Default true so a
+  // signed-in user never flashes it hidden; a guest hides it after the first poll.
+  const [signedIn, setSignedIn] = React.useState(true);
 
   React.useEffect(() => {
-    (async () => {
+    let alive = true;
+    const tick = async () => {
       try {
         const s = await getSettings();
+        if (!alive) return;
         const v = s.tier ?? (s.is_pro ? "pro" : "free");
         if (v === "free" || v === "pro" || v === "max") setTier(v);
+        setSignedIn(!!s.user_email);
       } catch {}
-    })();
+    };
+    void tick();
+    const id = window.setInterval(tick, 4000);
+    return () => { alive = false; window.clearInterval(id); };
   }, []);
+
+  // A guest must never sit on the (now-hidden) Advanced settings slice — if they
+  // were on it when signing out, snap back to General.
+  React.useEffect(() => {
+    if (!signedIn && settingsSection === "advanced") setSettingsSection("general");
+  }, [signedIn, settingsSection]);
 
   // Batched soft-archive: every meeting archived within a 5-second window
   // collects into ONE pending batch with ONE shared timer + ONE toast.
@@ -602,6 +619,7 @@ function App() {
                     settingsSection={settingsSection}
                     onSettingsSectionChange={setSettingsSection}
                     onSettingsOpenChange={() => {}}
+                    signedIn={signedIn}
                   />
                 </>
               )}
@@ -649,6 +667,7 @@ function App() {
                     onResetSplit={() => setRightW(RIGHT_DEFAULT)}
                     onPlayingChange={(playing) => setPlayingId(playing && activeId ? activeId : null)}
                     onSettingsOpenChange={() => {}}
+                    signedIn={signedIn}
                     t={t}
                   />
                 </div>

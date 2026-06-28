@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.92] — 2026-06-28
+
+### Changed
+- The Advanced settings tab is now hidden entirely while you're signed out.
+  Its options (auto-title, auto-summary, auto-chapters) need an account to
+  run, so a guest no longer sees toggles that can't do anything yet.
+- Profile menu cleanup: the redundant Home item is gone, Sign out is now the
+  bottom full-width button styled like Sign in, and the account email reads a
+  touch larger.
+
 ## [0.14.91] — 2026-06-28
 
 ### Fixed

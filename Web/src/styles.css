@@ -555,6 +555,12 @@ summary,
      reads as a snug 2-line block, not a loose 3rd line under the title. */
   line-height: 1.3;
 }
+/* The signed-in email reads +2px vs the guest subtitle — it's the
+   account identity, worth a touch more presence. Scoped so it doesn't
+   touch the guest "Sign in to access…" copy. */
+.profile-pop-email {
+  font-size: 14px;
+}
 .profile-pop-sep {
   height: 1px;
   background: var(--border);
