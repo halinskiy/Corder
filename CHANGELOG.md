@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.95] — 2026-06-29
+
+### Fixed
+- The recording HUD equalizer no longer flickers or disappears during a
+  recording when the Library window's visibility changes. Rapid show/hide flaps
+  are now smoothed out.
+- "Other side not recorded" now warns on ANY output, not just Bluetooth. If the
+  system-audio capture genuinely fails (so a 2-person call would record only
+  your side), you're told mid-recording instead of being surprised by a
+  one-speaker transcript.
+- Cloud sync of speaker labels no longer fails on a freshly created meeting
+  (a background ordering race that left speakers out of the cloud copy).
+
 ## [0.14.94] — 2026-06-29
 
 ### Fixed
