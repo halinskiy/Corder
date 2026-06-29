@@ -724,16 +724,21 @@ enum Routes {
                 transcribe_progress: m.status == .transcribing
                     ? TranscriptionProgressStore.read(meetingId: id) : nil,
                 // Surface the on-device model download while a transcription
-                // waits on it (new free-tier user, ~1.5 GB first fetch). Only
-                // meaningful when the active provider is whisperLocal.
+                // waits on it (new free-tier user, ~1.5 GB first fetch). Gated
+                // on the LIVE load flags, NOT on AppSettings.transcriptionProvider:
+                // a cap-fallback or tier-gate-fallback run uses the on-device
+                // model for THIS run while the stored preference is still a cloud
+                // provider, and those users were seeing a frozen plain spinner
+                // for the whole compile. currentProgress/isPreparing are only
+                // ever non-nil while the on-device model is actively loading in
+                // THIS process, so they're authoritative for any run regardless
+                // of the persisted pick (a pure-cloud run never sets them → nil).
                 model_download_progress: m.status == .transcribing
-                    && AppSettings.transcriptionProvider == .whisperLocal
                     ? LocalWhisperTranscriber.currentProgress(AppSettings.whisperLocalVariant) : nil,
                 // Silent post-download "preparing" (tokenizer + ANE compile)
                 // phase — lets the UI swap the frozen 99% download bar for a
                 // "Preparing model…" indeterminate state.
                 model_preparing: m.status == .transcribing
-                    && AppSettings.transcriptionProvider == .whisperLocal
                     ? LocalWhisperTranscriber.isPreparing(AppSettings.whisperLocalVariant) : nil
             )
             return jsonResponse(dto)

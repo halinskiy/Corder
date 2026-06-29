@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.94] — 2026-06-29
+
+### Fixed
+- The on-device model now sets up reliably on more Macs. On 8 GB / older Apple
+  Silicon the one-time "Optimizing for your Mac" step now gets the time it needs
+  instead of timing out and failing your first transcript.
+- If your Mac genuinely can't run the on-device model, signed-in users now fall
+  back to cloud transcription automatically, so you still get a transcript
+  instead of a dead end.
+- You can now Cancel during the one-time model setup (it keeps finishing in the
+  background, so next time it's instant).
+- Clearer status while the model downloads or prepares — including when a cloud
+  plan temporarily runs on the on-device model — and a connection-aware message
+  (with automatic retry) if the model download drops.
+
 ## [0.14.93] — 2026-06-28
 
 ### Changed
