@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 
 /// Floating panel that hovers over every other window while Corder is
 /// recording. The visual is a live frequency-spectrum equalizer: a row of
@@ -780,7 +781,19 @@ struct RecordingHUDView: View {
         // check ALL windows — if the blob's host is among the visible
         // ones, we animate; otherwise pause. Cheap: NSApp.windows
         // returns a few items, comparison is by reference identity.
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { _ in
+        //
+        // DEBOUNCED (350 ms): this notification fires in BURSTS during any
+        // window transition (Space switch, full-screen app coming forward,
+        // the panel itself ordering in/out). Each raw event re-evaluated
+        // `visible`, and a single transient `false` PAUSED the TimelineView,
+        // freezing the per-frame bar lerp — read by a tester as the equalizer
+        // "appears then disappears" repeatedly. Coalescing the burst and
+        // applying only the SETTLED state kills that flicker (the LibraryWindow
+        // occlusion debounce in 0.14.95 only covered the window-open regime;
+        // this is the closed-window regime it missed).
+        .onReceive(NotificationCenter.default
+            .publisher(for: NSWindow.didChangeOcclusionStateNotification)
+            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)) { _ in
             visible = Self.anyHostWindowVisible()
         }
         .help("Click to start or stop recording")

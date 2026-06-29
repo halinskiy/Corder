@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.96] — 2026-06-29
+
+### Fixed
+- The recording HUD equalizer no longer flickers / disappears repeatedly during
+  a recording. A burst of window-occlusion events (Space switches, a full-screen
+  call app coming forward) was momentarily pausing the animation and freezing the
+  bars; those events are now smoothed so the equalizer stays steady. This
+  completes the flicker fix started in 0.14.95.
+
 ## [0.14.95] — 2026-06-29
 
 ### Fixed
