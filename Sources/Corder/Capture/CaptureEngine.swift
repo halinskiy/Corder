@@ -659,13 +659,17 @@ final class CaptureEngine: NSObject {
                 self?.writeSystemAudioPCM(pcm, hostTime: hostTime)
             }
         }
-        // The tap watchdog gave up (BT HFP/SCO — far end uncapturable). Tell the
-        // user NOW so they can switch output off Bluetooth and re-record, instead
-        // of finding out at stop. Gated on BT so a rare non-BT tap failure stays
-        // a silent log. Fires once (the give-up branch is terminal).
-        let btAtStart = outputBluetoothAtStart
+        // The tap watchdog gave up rebuilding (4× fail) — the far end is
+        // genuinely not being captured. Tell the user NOW so they can re-record,
+        // instead of finding out at stop (or worse, only realising when a
+        // 2-person call transcribes as one speaker). This fires on ANY output
+        // route, NOT just Bluetooth (was BT-gated, which silently swallowed a
+        // non-BT tap failure — the exact "didn't record the other side" surprise
+        // a tester hit). A give-up is a REAL capture failure, not normal solo
+        // silence (a working tap delivers silent samples, it doesn't give up),
+        // so warning here can't false-positive on a solo recording. Fires once
+        // (the give-up branch is terminal).
         systemTap.onGaveUp = { [weak self] in
-            guard btAtStart else { return }
             Task { @MainActor in
                 guard let self = self else { return }
                 self.delegate?.captureEngineFarEndUnavailable(self)

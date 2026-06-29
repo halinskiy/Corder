@@ -246,6 +246,25 @@ enum SupabaseSync {
         speakerIdByLocalId: [String: UUID]
     ) {
         push {
+            // RLS on `speakers` / `segments` only allows a write when the
+            // PARENT `meetings` row already exists for this user (the policy's
+            // `exists(select 1 from meetings m where m.id = … and m.user_id =
+            // auth.uid())` check). The meeting upsert is a SEPARATE
+            // fire-and-forget `push` with no ordering guarantee, so on a fresh
+            // meeting the speakers insert raced AHEAD of it and got rejected
+            // ("new row violates row-level security policy", 42501). Upsert the
+            // parent HERE first, awaited, so the children always have a row to
+            // FK against. Idempotent (on conflict id) so it's cheap if already
+            // present.
+            if let row = await MainActor.run(body: { () -> MeetingRow? in
+                guard let m = (try? AppContext.shared.repo.meeting(id: meetingId)) ?? nil else { return nil }
+                return toRow(m)
+            }) {
+                try await SupabaseClientHolder.shared
+                    .from("meetings")
+                    .upsert(row, onConflict: "id")
+                    .execute()
+            }
             try await SupabaseClientHolder.shared
                 .from("speakers")
                 .delete()

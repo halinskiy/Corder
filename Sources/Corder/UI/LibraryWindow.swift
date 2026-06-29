@@ -509,6 +509,13 @@ final class LibraryWindow: NSWindowController {
     private var bridgeHandler: WebBridgeHandler?
     private var downloadDelegate: WebDownloadDelegate?
     private var uiDelegate: WebUIDelegate?
+    /// Debounce for occlusion-driven HUD suppression. `occlusionState` can
+    /// flap rapidly (overlapping panels, Space/animation transitions, the
+    /// floating HUD itself ordering in/out over the window), and mirroring
+    /// every flip straight onto the HUD made the pill visibly flicker /
+    /// disappear during recording. We coalesce flaps and act on the SETTLED
+    /// state after a short delay instead.
+    private var occlusionDebounce: DispatchWorkItem?
 
     private init() {
         let win = NSWindow(
@@ -857,6 +864,20 @@ extension LibraryWindow: NSWindowDelegate {
         guard let window = self.window else { return }
         let visible = window.occlusionState.contains(.visible)
         FileLogger.log("LibraryWindow.windowDidChangeOcclusionState visible=\(visible)")
-        RecordingHUDPanel.shared.setLibrarySuppressed(visible)
+        // DEBOUNCE: `occlusionState` can flap several times in a row (overlapping
+        // panels, Space/animation transitions, the floating HUD ordering in/out
+        // over the window). Mirroring every flip straight onto the HUD made the
+        // pill flicker / vanish during recording. Coalesce: cancel any pending
+        // decision and apply the SETTLED state ~350 ms later, so a burst of
+        // changes collapses into one suppress/unsuppress.
+        occlusionDebounce?.cancel()
+        let work = DispatchWorkItem { [weak window] in
+            // Re-read the live state at fire time — if it flapped back, this
+            // reflects where it actually settled, not the value at schedule time.
+            let settled = window?.occlusionState.contains(.visible) ?? false
+            RecordingHUDPanel.shared.setLibrarySuppressed(settled)
+        }
+        occlusionDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 }
