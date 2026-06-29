@@ -240,6 +240,9 @@ interface Strings {
   /// Headline for the silent post-download compile phase.
   trans_preparing_model?: string;
   trans_start_new?: string;
+  /// Tertiary "Cancel" during the model download/preparing phase + its hint.
+  trans_cancel_prepare?: string;
+  trans_cancel_prepare_hint?: string;
   trans_slow_hint?: string;
   trans_stop: string;
   trans_cancelled: string;
@@ -610,6 +613,8 @@ const en: Strings = {
   trans_downloading_model: "Downloading model…",
   trans_preparing_model: "Preparing model…",
   trans_start_new: "Start a new recording",
+  trans_cancel_prepare: "Cancel",
+  trans_cancel_prepare_hint: "Stops transcribing this meeting. The one-time setup keeps finishing in the background, so next time it's instant.",
   trans_slow_hint: "The on-device model compiles for the Neural Engine the first time it runs. That one-time step can take a few minutes on some Macs; after it, transcripts are fast.",
   trans_stop: "Stop transcription",
   trans_cancelled: "Transcription stopped",

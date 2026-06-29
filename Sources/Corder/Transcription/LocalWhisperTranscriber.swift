@@ -84,6 +84,11 @@ enum LocalWhisperTranscriber {
         /// the background. Distinct from `modelCorruptWiped` so callers can wait
         /// for the in-flight compile instead of treating it as corruption.
         case modelLoadTimedOut
+        /// The ~1.5 GB model download itself failed (flaky wifi, CDN hiccup,
+        /// disk full) after a resumable retry. Carries a connection-aware
+        /// message so the toast points at the network instead of a generic
+        /// "send a report"; the partial bytes are resumable on the next attempt.
+        case modelDownloadFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -101,6 +106,23 @@ enum LocalWhisperTranscriber {
                 return "The on-device model was incomplete and has been removed; it re-downloads automatically."
             case .modelLoadTimedOut:
                 return "The on-device model is still preparing (first-time compile). It will finish shortly."
+            case .modelDownloadFailed:
+                return "Couldn't download the on-device model. Check your connection — Corder retries automatically."
+            }
+        }
+
+        /// True when the on-device model genuinely could NOT run on THIS Mac
+        /// (slow/old hardware whose cold compile never landed, a corrupt bundle
+        /// a re-download couldn't fix, or an init failure) — i.e. the cases
+        /// where a cloud fallback is the right safety net. NOT the logic errors
+        /// (`diarizeNotSupported`, `missingFile`) or the Intel guard, which a
+        /// cloud retry wouldn't fix and which are handled elsewhere.
+        var isModelUnavailable: Bool {
+            switch self {
+            case .modelLoadTimedOut, .modelCorruptWiped, .transcribeFailed, .modelNotReady, .modelDownloadFailed:
+                return true
+            case .notAvailableOnIntel, .missingFile, .diarizeNotSupported:
+                return false
             }
         }
     }
@@ -328,16 +350,20 @@ enum LocalWhisperTranscriber {
         // model folder.
         if !isModelDownloaded(variant), currentProgress(variant) != nil {
             FileLogger.log("LocalWhisper: \(variant.rawValue) prewarm in flight — waiting")
-            // Bounded wait — a stalled prewarm download (CDN/network hiccup)
-            // must NOT block the transcription forever (the "transcribing for
-            // 56 minutes" hang). After the deadline, give up waiting and let
-            // the download-ourselves path below take over; if the model
-            // genuinely never lands, that path throws and the meeting fails
-            // cleanly instead of spinning.
-            let waitDeadline = Date().addingTimeInterval(600)   // 10 min
-            while currentProgress(variant) != nil {
-                if Date() >= waitDeadline {
-                    FileLogger.log("LocalWhisper: prewarm wait exceeded 10 min — proceeding without it")
+            // Wait on the prewarm download by STALL, not a flat timeout. A flat
+            // 10-min cap abandoned a slow-but-PROGRESSING download and let the
+            // on-demand path below start a SECOND concurrent WhisperKit.download
+            // into the same folder, which raced to *.incomplete corruption on a
+            // slow link. Instead we only give up if the prewarm makes NO
+            // progress for 120 s (a genuinely stalled CDN/network), so a
+            // legitimately slow download runs to completion on a single writer
+            // and the transcription never spins forever on a wedged fetch.
+            var lastProg = currentProgress(variant) ?? 0
+            var lastAdvance = Date()
+            while let p = currentProgress(variant) {
+                if p > lastProg { lastProg = p; lastAdvance = Date() }
+                if Date().timeIntervalSince(lastAdvance) >= 120 {
+                    FileLogger.log("LocalWhisper: prewarm download stalled 120s (\(Int(lastProg * 100))%) — proceeding without it")
                     break
                 }
                 try await Task.sleep(nanoseconds: 500_000_000)
@@ -348,7 +374,7 @@ enum LocalWhisperTranscriber {
             FileLogger.log("LocalWhisper: model not on disk — downloading \(variant.rawValue) into \(downloadBaseURL.path)")
             setProgress(variant, 0.0)
             defer { setProgress(variant, nil) }
-            do {
+            @Sendable func doDownload() async throws {
                 _ = try await WhisperKit.download(
                     variant: variant.rawValue,
                     downloadBase: downloadBaseURL,
@@ -360,9 +386,23 @@ enum LocalWhisperTranscriber {
                         setProgress(variant, f)
                     }
                 )
+            }
+            do {
+                try await doDownload()
             } catch {
-                FileLogger.log("LocalWhisper: download failed (\(variant.rawValue)) — \(error)")
-                throw error
+                // One resumable retry. The HuggingFace cache keeps the partial
+                // bytes, so a transient blip (flaky wifi, CDN hiccup) usually
+                // completes on the second try without re-fetching what landed.
+                // A second failure surfaces as a typed, connection-aware error
+                // so the toast points at the network, not a generic bug report.
+                FileLogger.log("LocalWhisper: download failed (\(variant.rawValue)) — \(error); retrying once")
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                do {
+                    try await doDownload()
+                } catch {
+                    FileLogger.log("LocalWhisper: download failed again (\(variant.rawValue)) — \(error)")
+                    throw LocalWhisperError.modelDownloadFailed(error.localizedDescription)
+                }
             }
             FileLogger.log("LocalWhisper: download complete (\(variant.rawValue))")
         }
@@ -550,10 +590,20 @@ enum LocalWhisperTranscriber {
         // memory at once, which can swap-storm an 8 GB machine (worst with a
         // manual turbo pick). Load GPU directly: reliable, single load, no
         // leak. The ANE speed-up isn't worth the OOM risk on these Macs.
+        //
+        // Budget here is GENEROUS (1500s), NOT the 180s used on the >8 GB
+        // fallback path. The 180s cap exists only to stop a GPU compile from
+        // thrashing ALONGSIDE a leaked ANE compile (double heat) — but on ≤8 GB
+        // ANE never started, so the GPU compile runs ALONE with nothing to
+        // race. A slow cold compile just needs time; capping it at 180s here
+        // would hard-fail the very first transcript on exactly the weak Macs
+        // this branch is meant to protect. Single engine, no contention, no
+        // OOM. If even 1500s isn't enough the run fails and the Free cloud
+        // fallback (TranscriptionPipeline) picks it up.
         let ramGB = ProcessInfo.processInfo.physicalMemory / 1_073_741_824
         if ramGB <= 8 {
-            FileLogger.log("LocalWhisper: \(ramGB) GB RAM — loading GPU directly (skip ANE leak-and-fallback)")
-            try await loadGPU(variant)
+            FileLogger.log("LocalWhisper: \(ramGB) GB RAM — loading GPU directly, generous budget (skip ANE leak-and-fallback)")
+            try await loadGPU(variant, budget: 1500)
             return
         }
 
@@ -618,24 +668,28 @@ enum LocalWhisperTranscriber {
     /// (prewarm) compile. On a real init error here the model has failed
     /// BOTH encoders, so it's treated as corrupt and wiped for a clean
     /// re-download; a load timeout keeps the model (slow compile ≠ corruption).
-    private static func loadGPU(_ variant: Variant) async throws {
+    private static func loadGPU(_ variant: Variant, budget: TimeInterval = 180) async throws {
         let t0 = Date()
         do {
-            // 180s. The GPU compile is ~50s on a typical Mac, so 180s gives
-            // comfortable margin for the fast/mid path. We DON'T wait longer: on
-            // a genuinely slow Mac the GPU compile never lands (measured: it ran
-            // the FULL 900s without finishing) — it just thrashes ALONGSIDE the
-            // leaked ANE compile and DOUBLES the heat for 15 min. Failing fast
-            // here drops to the ANE ride below (the path that actually completes
-            // on slow Macs, ~15-18 min), so the slow case compiles on ONE engine
-            // instead of two. Don't bump this back up — long GPU budget = cooked
-            // laptop with nothing to show for it.
-            pipe = try await Self.withDeadline(180) { try await WhisperKit(makeConfig(variant, useANE: false)) }
+            // Default 180s, used on the >8 GB fallback path where the GPU
+            // compile races a LEAKED ANE compile. The GPU compile is ~50s on a
+            // typical Mac, so 180s gives comfortable margin for the fast/mid
+            // path. We DON'T wait longer there: on a genuinely slow Mac the GPU
+            // compile never lands (measured: it ran the FULL 900s without
+            // finishing) — it just thrashes ALONGSIDE the leaked ANE compile and
+            // DOUBLES the heat for 15 min. Failing fast there drops to the ANE
+            // ride below (the path that actually completes on slow Macs,
+            // ~15-18 min), so the slow case compiles on ONE engine instead of
+            // two. Don't bump THIS (the 180s default) back up — long GPU budget
+            // racing ANE = cooked laptop with nothing to show. The ≤8 GB caller
+            // overrides with a GENEROUS budget because there ANE never started,
+            // so the GPU runs alone with nothing to race (see loadPipe).
+            pipe = try await Self.withDeadline(budget) { try await WhisperKit(makeConfig(variant, useANE: false)) }
             FileLogger.log(String(format: "LocalWhisper: WhisperKit loaded in %.1fs (%@, encoder=GPU)",
                                   Date().timeIntervalSince(t0), variant.rawValue))
             pipeVariant = variant
         } catch is DeadlineError {
-            FileLogger.log("LocalWhisper: GPU load timed out (>180s) — slow cold compile, dropping to ANE ride")
+            FileLogger.log("LocalWhisper: GPU load timed out (>\(Int(budget))s) — slow cold compile")
             throw LocalWhisperError.modelLoadTimedOut
         } catch {
             FileLogger.log("LocalWhisper: GPU init error (\(error)) — both encoders failed, deleting model + HF download cache for a clean re-download")

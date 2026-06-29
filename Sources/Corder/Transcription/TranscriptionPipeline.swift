@@ -184,22 +184,39 @@ final class TranscriptionPipeline {
         TranscriptionProgressStore.begin(meetingId: meetingId)
         defer { TranscriptionProgressStore.clear(meetingId: meetingId) }
 
-        // Watchdog: if this meeting is STILL `.transcribing` after the
-        // deadline, something hung (a stalled model download, a wedged Core
-        // ML load, an uncancellable WhisperKit call) — flip it to `.failed`
-        // so the UI stops showing "transcribing" forever and the user can
-        // re-try. Decoupled from this task's own cancellability: even if the
-        // work below is wedged in a call that ignores cancellation, the DB
-        // status changes and the polling Library UI unblocks. 45 min is well
-        // past any real run (a one-time ~1.5 GB model fetch + a long meeting),
-        // so a legitimate transcription is never killed.
+        // Watchdog: a HANG detector, NOT a hard time cap. A cold first-run can
+        // legitimately spend 15-25 min downloading (~1.5 GB) + paying the
+        // one-time ANE/GPU compile (especially the ≤8 GB generous-GPU-budget
+        // path), and a long meeting then takes real wall-time to transcribe —
+        // none of that is a hang. A flat 45-min-from-entry cap would kill those
+        // legitimately-slow first runs. So we fire ONLY after 45 CONTIGUOUS
+        // minutes with NO forward progress: the idle timer resets whenever the
+        // on-device model is actively loading (download bytes or the silent
+        // compile) OR the transcription fraction advances. Decoupled from this
+        // task's own cancellability so even a wedged uncancellable call still
+        // flips the DB status and unblocks the polling Library UI.
         let watchdog = Task.detached {
-            try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
+            let variant = AppSettings.whisperLocalVariant
+            var idleMin = 0
+            var lastFrac = -1.0
+            while idleMin < 45 {
+                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                if Task.isCancelled { return }
+                let loading = LocalWhisperTranscriber.currentProgress(variant) != nil
+                    || LocalWhisperTranscriber.isPreparing(variant)
+                let frac = TranscriptionProgressStore.read(meetingId: meetingId) ?? 0
+                if loading || frac > lastFrac {
+                    idleMin = 0
+                    lastFrac = frac
+                } else {
+                    idleMin += 1
+                }
+            }
             if Task.isCancelled { return }
             await MainActor.run {
                 let repo = AppContext.shared.repo
                 if let m = try? repo.meeting(id: meetingId), m.status == .transcribing {
-                    FileLogger.log("transcribe(): WATCHDOG — \(meetingId) stuck > 45 min, marking failed")
+                    FileLogger.log("transcribe(): WATCHDOG — \(meetingId) no forward progress for 45 min, marking failed")
                     TranscriptionErrors.record(meetingId: meetingId,
                                                message: "Transcription took too long and was stopped. Please try again.")
                     try? repo.setStatus(meetingId: meetingId, status: .failed)
@@ -1863,9 +1880,42 @@ final class TranscriptionPipeline {
                     audioURL: wavURL, mode: .single, variant: variant,
                     initialPrompt: prompt, onProgress: onProgress)
             } catch let err as LocalWhisperTranscriber.LocalWhisperError {
-                TranscriptionErrors.record(meetingId: meetingId,
-                                           message: err.localizedDescription)
-                throw err
+                // Free cloud fallback (the audit's #1 safety net). The on-device
+                // model couldn't run on THIS Mac — a slow/old/8 GB cold compile
+                // that never landed, a corrupt bundle a re-download couldn't fix,
+                // or an init failure. Rather than dead-end the user's first
+                // transcript with a red "failed" card + upsell, fall back to Groq
+                // cloud so they still get a transcript. Requires a JWT (signed
+                // in): the Worker meters a small free monthly cloud budget. A
+                // signed-out guest has no JWT, so we nudge them to sign in. Don't
+                // pass a localFallbackVariant — local just failed, so a per-chunk
+                // "recover locally" would loop straight back into the failure.
+                guard err.isModelUnavailable else {
+                    TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
+                    throw err
+                }
+                guard AppSettings.isSignedIn else {
+                    TranscriptionErrors.record(meetingId: meetingId,
+                        message: "Your Mac couldn't run the on-device model. Sign in to transcribe in the cloud.")
+                    throw err
+                }
+                FileLogger.log("LocalWhisper: model unavailable on this Mac (\(err)) — falling back to Groq cloud for this track")
+                do {
+                    let prompt = AppVocabulary.current.nilIfEmpty
+                    let turns = try await WhisperTranscriber.transcribe(
+                        audioURL: wavURL, mode: .single, initialPrompt: prompt,
+                        backend: .groq, onProgress: onProgress)
+                    TranscriptionErrors.record(meetingId: meetingId,
+                        message: "Your Mac couldn't run the on-device model, so this was transcribed in the cloud.")
+                    return turns
+                } catch let cloudErr as WhisperTranscriber.WhisperError {
+                    // Cloud also unavailable (over the free cloud budget, or the
+                    // Worker refused). Surface the ORIGINAL local error — it's the
+                    // actionable one (the model couldn't run on this Mac).
+                    FileLogger.log("LocalWhisper: cloud fallback also failed (\(cloudErr)) — failing with local error")
+                    TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
+                    throw err
+                }
             }
         }
     }

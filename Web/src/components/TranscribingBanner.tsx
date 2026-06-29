@@ -365,22 +365,45 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
           )}
         </button>
         {downloadingModel && (
-          // The model download/compile can take a while on a slow Mac. Let
-          // the user start a NEW recording without waiting for it — the
-          // current meeting keeps preparing in the background and transcribes
-          // once the model lands. Secondary (outlined) so it never competes
-          // with the primary progress button above.
-          <button
-            type="button"
-            className="clarify-btn"
-            onClick={async () => {
-              try { await startRecordingNow(); }
-              catch { onToast(t.toast_settings_failed, "error"); }
-            }}
-          >
-            <span className="rec-startnew-dot" aria-hidden />
-            {t.trans_start_new ?? "Start a new recording"}
-          </button>
+          <>
+            {/* The model download/compile can take a while on a slow Mac. Let
+                the user start a NEW recording without waiting for it — the
+                current meeting keeps preparing in the background and transcribes
+                once the model lands. Secondary (outlined) so it never competes
+                with the primary progress button above. */}
+            <button
+              type="button"
+              className="clarify-btn"
+              onClick={async () => {
+                try { await startRecordingNow(); }
+                catch { onToast(t.toast_settings_failed, "error"); }
+              }}
+            >
+              <span className="rec-startnew-dot" aria-hidden />
+              {t.trans_start_new ?? "Start a new recording"}
+            </button>
+            {/* Explicit abort for a long/hot one-time setup. Previously the only
+                out during the 5-18 min compile was starting ANOTHER recording,
+                which reads as a trap on a slow/hot Mac. The Core ML compile is
+                OS-uncancellable so it keeps caching in the background — hence the
+                copy promises it resumes from cache next time, not that it stops
+                the heat instantly. Tertiary text style so it stays below the two
+                buttons. Routes through onStop → cancel-transcription (writes
+                .failed safely) so a stray click can't corrupt anything. */}
+            <Tooltip
+              multiline
+              label={t.trans_cancel_prepare_hint ?? "Stops transcribing this meeting. The one-time setup keeps finishing in the background, so next time it's instant."}
+            >
+              <button
+                type="button"
+                className="trans-cancel-link"
+                onClick={onStop}
+                disabled={stopping}
+              >
+                {t.trans_cancel_prepare ?? "Cancel"}
+              </button>
+            </Tooltip>
+          </>
         )}
       </div>
       {upsellCopy && upsell && !isSnoozed(upsell, upsellDismissedAt) && (

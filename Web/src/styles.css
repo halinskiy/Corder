@@ -2566,6 +2566,21 @@ body.resizing { cursor: col-resize; user-select: none; }
    Re-transcribe / Archive Session blocks. Pin stacked buttons to
    their content height instead. */
 .clarify-actions-stack .clarify-btn { flex: 0 0 auto; }
+/* Tertiary "Cancel" under the model download/preparing buttons. Muted,
+   link-like, no border/fill so it stays clearly below the two real
+   buttons (progress + Start a new recording). */
+.trans-cancel-link {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.trans-cancel-link:hover { color: var(--fg); text-decoration: underline; }
+.trans-cancel-link:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
 .clarify-btn {
   /* Grow to share the row, but allow shrinking and wrapping: when the
      section narrows the pills drop onto their own rows instead of
