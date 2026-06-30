@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.99] — 2026-06-30
+
+### Changed
+- The header record button is now a single toggle: a green "+" to start a
+  recording, which turns into a red stop button while recording. Tightened its
+  spacing and styling to match the other controls.
+
 ## [0.14.98] — 2026-06-30
 
 ### Changed
