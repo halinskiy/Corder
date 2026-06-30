@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.5] — 2026-06-30
+
+### Fixed
+- The update card no longer shimmers / ripples while it tilts under the cursor —
+  it's pinned to its own GPU layer so the text stays crisp through the 3D tilt.
+
 ## [0.15.4] — 2026-06-30
 
 ### Changed
