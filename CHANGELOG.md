@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.3] — 2026-06-30
+
+### Changed
+- The header record button is 1px smaller on each side, so the filled green
+  circle sits level with the outlined toolbar icons next to it.
+
 ## [0.15.2] — 2026-06-30
 
 ### Fixed

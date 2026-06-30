@@ -2385,6 +2385,11 @@ body.resizing { cursor: col-resize; user-select: none; }
      NEGATIVE margin pulls the title back in: 12 + (-4) = 8px. Don't touch the
      global gap — it spaces all the other toolbar controls. */
   margin-right: -4px;
+  /* 1px smaller on every side than the 38px toolbar icons (→ 36px): a SOLID
+     filled circle reads visually larger than an outlined one of equal size, so
+     shrinking it 2px diameter makes it sit level with the outlined controls. */
+  width: 36px;
+  height: 36px;
   /* Match the audio play button EXACTLY (`.audio-btn-primary`): hardcoded
      #1E7A50 at rest, #186439 on hover — NOT var(--accent)/color-mix, so the
      two green circles read as the same button. */
