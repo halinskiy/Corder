@@ -173,6 +173,10 @@ function App() {
   const softDeletedRef = React.useRef<Set<string>>(softDeleted);
   React.useEffect(() => { softDeletedRef.current = softDeleted; }, [softDeleted]);
   const [recState, setRecState] = React.useState<RecordingState>({ active: false });
+  // Tracks the previous recording-active state so we can detect the
+  // false→true EDGE (a recording just started) and jump straight into that
+  // new session, instead of leaving the user on the dashboard / a prior meeting.
+  const wasRecordingRef = React.useRef(false);
   // Hide the native recording-blob (bottom-right NSView) while the user
   // sits on the Dashboard and nothing is recording — the Dashboard's
   // "Start recording" CTA already covers that role, the blob is just
@@ -236,6 +240,25 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The header "+" button fires this the instant it starts a recording, so we
+  // jump into the new session WITHOUT waiting for the (idle, 5 s) state poll —
+  // "сразу переместиться". The poll's false→true edge above is the fallback
+  // that also covers a menu-bar start.
+  React.useEffect(() => {
+    const onStarted = () => {
+      getRecordingState().then((s) => {
+        if (s.active && s.meeting_id) {
+          setActiveId(s.meeting_id);
+          wasRecordingRef.current = true;
+          refresh();
+        }
+      }).catch(() => {});
+    };
+    window.addEventListener("corder-recording-started", onStarted);
+    return () => window.removeEventListener("corder-recording-started", onStarted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const refresh = React.useCallback(async () => {
     try {
       const [m, a] = await Promise.all([
@@ -276,7 +299,17 @@ function App() {
     if (!windowActive) return;          // window hidden → stop polling
     const ms = isActive ? 1000 : 5000;
     const tick = async () => {
-      try { setRecState(await getRecordingState()); } catch {}
+      try {
+        const s = await getRecordingState();
+        setRecState(s);
+        // false→true edge = a recording just started (via the "+" button or
+        // the menu bar). Land the user on that live session immediately.
+        if (s.active && s.meeting_id && !wasRecordingRef.current) {
+          setActiveId(s.meeting_id);
+          refresh();                   // pull the new .recording row in so it sticks
+        }
+        wasRecordingRef.current = s.active;
+      } catch {}
     };
     tick();                            // immediate refresh on (re)activate
     const t = setInterval(tick, ms);

@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.4] — 2026-06-30
+
+### Changed
+- Starting a recording (the header "+" or the menu bar) now jumps straight into
+  that new session, so you land on the live recording instead of staying on the
+  previous screen.
+
 ## [0.15.3] — 2026-06-30
 
 ### Changed
