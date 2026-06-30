@@ -175,7 +175,13 @@ function HeaderRecordButton({
       catch { setRecording(true); onToast(t.toast_settings_failed ?? "Couldn't stop recording.", "error"); }
     } else {
       setRecording(true); // optimistic
-      try { await startRecordingNow(); }
+      try {
+        await startRecordingNow();
+        // Tell the shell to jump straight into the freshly-started session
+        // (main.tsx selects it), so the user lands on the live recording
+        // immediately instead of waiting for the next state poll.
+        window.dispatchEvent(new CustomEvent("corder-recording-started"));
+      }
       catch { setRecording(false); onToast(t.toast_settings_failed ?? "Couldn't start recording.", "error"); }
     }
   };
