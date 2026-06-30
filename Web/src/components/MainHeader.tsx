@@ -1,5 +1,5 @@
 import React from "react";
-import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug } from "lucide-react";
+import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug, Plus } from "lucide-react";
 
 /// Filled (solid) twins of the Lucide outline icons used in the
 /// toolbar's active state. Lucide ships only outlines; layering a
@@ -40,7 +40,7 @@ function ArchiveFilled({ size = 16 }: { size?: number }) {
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
-import { submitLogs, hasBugEvents, getAccountUsage, openWelcome } from "../api";
+import { submitLogs, hasBugEvents, getAccountUsage, openWelcome, startRecordingNow } from "../api";
 import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip — breadcrumb
@@ -92,8 +92,27 @@ export function MainHeader({
   ) => void;
   t: T;
 }) {
+  // Leftmost header action: start a new recording from INSIDE the app
+  // (mirrors the menu-bar Start). Addresses the tester note that the only
+  // way to start a meeting lived in the menu bar. startRecordingNow funnels
+  // through the same /api/recording/start gate (guest cap, permissions), so
+  // a guest at the cap is offered sign-in rather than recording.
+  const onNewRecording = async () => {
+    try { await startRecordingNow(); }
+    catch { onToast(t.toast_settings_failed ?? "Couldn't start recording.", "error"); }
+  };
   return (
     <div className="main-header">
+      <Tooltip label={t.header_new_recording ?? "New recording"}>
+        <button
+          type="button"
+          className="toolbar-icon-btn header-new-btn"
+          onClick={onNewRecording}
+          aria-label={t.header_new_recording ?? "New recording"}
+        >
+          <Plus size={18} strokeWidth={2.5} />
+        </button>
+      </Tooltip>
       <div className="breadcrumb">{breadcrumb}</div>
       <div className="spacer" />
       <div className="toolbar">

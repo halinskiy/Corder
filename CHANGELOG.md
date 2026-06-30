@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.97] — 2026-06-30
+
+### Added
+- A green "+" button in the header (left of the title) starts a new recording
+  right from the app — no need to reach for the menu bar.
+
 ## [0.14.96] — 2026-06-29
 
 ### Fixed

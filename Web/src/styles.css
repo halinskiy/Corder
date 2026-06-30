@@ -2373,6 +2373,21 @@ body.resizing { cursor: col-resize; user-select: none; }
   flex-shrink: 0;
 }
 .toolbar-icon-btn:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
+/* Leftmost header action: start a new recording. Same 38px circle as the
+   toolbar icons (inherits .toolbar-icon-btn geometry) but FILLED brand-green
+   with a white plus — the one prominent action in the header strip. Sits
+   left of the breadcrumb title, with breathing room before it. */
+.header-new-btn {
+  margin-right: 12px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.header-new-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+  color: #fff;
+}
 .toolbar-icon-btn:disabled {
   /* Nothing to copy / no transcript yet — kill ALL pointer interaction
      so the button reads as inert. `pointer-events: none` is the only
