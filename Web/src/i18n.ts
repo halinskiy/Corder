@@ -357,6 +357,8 @@ interface Strings {
   dashboard_stat_time: string;
   dashboard_stat_thisweek: string;
   dashboard_start: string;
+  /// Tooltip/label for the green "+" header button that starts a new recording.
+  header_new_recording?: string;
   dashboard_recent: string;
   dashboard_recent_empty: string;
   dashboard_tab_stats: string;
@@ -714,6 +716,7 @@ const en: Strings = {
   dashboard_stat_time: "Total recorded",
   dashboard_stat_thisweek: "This week",
   dashboard_start: "Start recording",
+  header_new_recording: "New recording",
   dashboard_recent: "Recent",
   dashboard_recent_empty: "No recordings yet.",
   dashboard_tab_stats: "Stats",
