@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.2] — 2026-06-30
+
+### Fixed
+- The header record button now keeps its green on hover (it was falling back to
+  the neutral grey hover). Green/red hover shades now match the play button.
+
 ## [0.15.1] — 2026-06-30
 
 ### Changed
