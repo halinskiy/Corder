@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.0] — 2026-06-30
+
+### Changed
+- Tightened the spacing between the header record button and the title.
+
 ## [0.14.99] — 2026-06-30
 
 ### Changed

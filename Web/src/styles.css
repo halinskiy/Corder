@@ -2380,7 +2380,11 @@ body.resizing { cursor: col-resize; user-select: none; }
    icons), and only 4px before the title. Hover = darker shade, the same
    darken-toward-black the green play button uses. */
 .header-new-btn {
-  margin-right: 4px;
+  /* The header is a flex row with a global `gap: 12px`. A positive margin
+     ADDS to that (12 + 4 = 16px, too far from the title). We want ~8px, so a
+     NEGATIVE margin pulls the title back in: 12 + (-4) = 8px. Don't touch the
+     global gap — it spaces all the other toolbar controls. */
+  margin-right: -4px;
   background: var(--accent);
   border: none;
   color: #fff;
