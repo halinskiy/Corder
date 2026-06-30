@@ -2385,12 +2385,15 @@ body.resizing { cursor: col-resize; user-select: none; }
      NEGATIVE margin pulls the title back in: 12 + (-4) = 8px. Don't touch the
      global gap — it spaces all the other toolbar controls. */
   margin-right: -4px;
-  background: var(--accent);
+  /* Match the audio play button EXACTLY (`.audio-btn-primary`): hardcoded
+     #1E7A50 at rest, #186439 on hover — NOT var(--accent)/color-mix, so the
+     two green circles read as the same button. */
+  background: #1E7A50;
   border: none;
   color: #fff;
 }
 .header-new-btn:not(:disabled):hover {
-  background: color-mix(in srgb, var(--accent) 88%, #000);
+  background: #186439;
   color: #fff;
 }
 .header-new-btn.is-recording {
