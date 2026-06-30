@@ -1,5 +1,5 @@
 import React from "react";
-import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug, Plus } from "lucide-react";
+import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug, Plus, Square } from "lucide-react";
 
 /// Filled (solid) twins of the Lucide outline icons used in the
 /// toolbar's active state. Lucide ships only outlines; layering a
@@ -40,7 +40,7 @@ function ArchiveFilled({ size = 16 }: { size?: number }) {
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
-import { submitLogs, hasBugEvents, getAccountUsage, openWelcome, startRecordingNow } from "../api";
+import { submitLogs, hasBugEvents, getAccountUsage, openWelcome, startRecordingNow, stopRecordingNow, getRecordingState } from "../api";
 import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip — breadcrumb
@@ -92,27 +92,9 @@ export function MainHeader({
   ) => void;
   t: T;
 }) {
-  // Leftmost header action: start a new recording from INSIDE the app
-  // (mirrors the menu-bar Start). Addresses the tester note that the only
-  // way to start a meeting lived in the menu bar. startRecordingNow funnels
-  // through the same /api/recording/start gate (guest cap, permissions), so
-  // a guest at the cap is offered sign-in rather than recording.
-  const onNewRecording = async () => {
-    try { await startRecordingNow(); }
-    catch { onToast(t.toast_settings_failed ?? "Couldn't start recording.", "error"); }
-  };
   return (
     <div className="main-header">
-      <Tooltip label={t.header_new_recording ?? "New recording"}>
-        <button
-          type="button"
-          className="toolbar-icon-btn header-new-btn"
-          onClick={onNewRecording}
-          aria-label={t.header_new_recording ?? "New recording"}
-        >
-          <Plus size={18} strokeWidth={2.5} />
-        </button>
-      </Tooltip>
+      <HeaderRecordButton onToast={onToast} t={t} />
       <div className="breadcrumb">{breadcrumb}</div>
       <div className="spacer" />
       <div className="toolbar">
@@ -158,6 +140,62 @@ export function MainHeader({
         />
       </div>
     </div>
+  );
+}
+
+/// Leftmost header action: a single button that TOGGLES recording.
+/// Idle → green circle with a white "+", click starts a recording (same
+/// /api/recording/start gate as the menu-bar Start: guest cap, permissions).
+/// Recording → red circle with a white stop square, click stops it. Mirrors
+/// the menu-bar control inside the app (a tester noted the only way to start
+/// a meeting was the menu bar). Self-polls recording state (like the other
+/// header widgets) and flips optimistically on click for instant feedback.
+function HeaderRecordButton({
+  onToast,
+  t,
+}: {
+  onToast: (msg: string, kind?: "success" | "error") => void;
+  t: T;
+}) {
+  const [recording, setRecording] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      getRecordingState().then((s) => { if (alive) setRecording(!!s.active); }).catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 1500);
+    return () => { alive = false; window.clearInterval(id); };
+  }, []);
+
+  const onClick = async () => {
+    if (recording) {
+      setRecording(false); // optimistic
+      try { await stopRecordingNow(); }
+      catch { setRecording(true); onToast(t.toast_settings_failed ?? "Couldn't stop recording.", "error"); }
+    } else {
+      setRecording(true); // optimistic
+      try { await startRecordingNow(); }
+      catch { setRecording(false); onToast(t.toast_settings_failed ?? "Couldn't start recording.", "error"); }
+    }
+  };
+
+  const label = recording
+    ? (t.header_stop_recording ?? "Stop recording")
+    : (t.header_new_recording ?? "New recording");
+  return (
+    <Tooltip label={label}>
+      <button
+        type="button"
+        className={"toolbar-icon-btn header-new-btn" + (recording ? " is-recording" : "")}
+        onClick={onClick}
+        aria-label={label}
+      >
+        {recording
+          ? <Square size={13} strokeWidth={2} fill="currentColor" />
+          : <Plus size={18} strokeWidth={2.5} />}
+      </button>
+    </Tooltip>
   );
 }
 
