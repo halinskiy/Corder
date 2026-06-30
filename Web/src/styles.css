@@ -2392,18 +2392,15 @@ body.resizing { cursor: col-resize; user-select: none; }
   border: none;
   color: #fff;
 }
-.header-new-btn:not(:disabled):hover {
-  background: #186439;
-  color: #fff;
-}
 .header-new-btn.is-recording {
   background: var(--danger);
   color: #fff;
 }
-.header-new-btn.is-recording:not(:disabled):hover {
-  background: color-mix(in srgb, var(--danger) 88%, #000);
-  color: #fff;
-}
+/* NOTE: the :hover overrides live further down, SCOPED to `.main-header`. A
+   bare `.header-new-btn:hover` (0,3,0) is out-ranked by the existing
+   `.main-header .toolbar-icon-btn:not(.active):hover` (0,4,0) neutral-grey
+   fill, so the green hover only sticks when scoped to .main-header AND placed
+   after that rule. */
 .toolbar-icon-btn:disabled {
   /* Nothing to copy / no transcript yet — kill ALL pointer interaction
      so the button reads as inert. `pointer-events: none` is the only
@@ -2498,6 +2495,24 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: var(--accent-pressed);
   color: #fff;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-pressed) 35%, transparent);
+}
+/* Header record button hover — a FILLED green/red CTA, NOT the muted-grey
+   `.main-header .toolbar-icon-btn:hover` fill. Scoped to `.main-header` and
+   placed AFTER that rule so it wins (same/higher specificity, later in file);
+   `.dark` variants mirror it so dark mode doesn't fall back to the grey
+   `.dark .main-header .toolbar-icon-btn:hover`. Green = the audio play
+   button's #186439; red darkens var(--danger). */
+.main-header .header-new-btn:not(:disabled):hover,
+.dark .main-header .header-new-btn:not(:disabled):hover {
+  background: #186439;
+  color: #fff;
+  border-color: transparent;
+}
+.main-header .header-new-btn.is-recording:not(:disabled):hover,
+.dark .main-header .header-new-btn.is-recording:not(:disabled):hover {
+  background: color-mix(in srgb, var(--danger) 88%, #000);
+  color: #fff;
+  border-color: transparent;
 }
 
 /* Entry animation removed: the earlier keyframe + `is-fresh` one-shot
