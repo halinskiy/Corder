@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.1] — 2026-06-30
+
+### Changed
+- The header record button's green now matches the audio play button exactly,
+  including its hover shade.
+
 ## [0.15.0] — 2026-06-30
 
 ### Changed
