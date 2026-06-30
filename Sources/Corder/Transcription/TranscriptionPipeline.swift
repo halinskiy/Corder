@@ -416,11 +416,13 @@ final class TranscriptionPipeline {
             // treat that as "might be a call" (not silent), so we don't
             // wrongly bake the speaker hint into a real call's cache.
             let systemSilent: Bool
+            var systemVadSegs = -1   // -1 = file absent; -2 = VAD read error
             if !systemExists {
                 systemSilent = true
             } else {
                 // Off-main — `detect` is another full-file decode (see chooser).
                 let vad = await Task.detached { VoiceActivityDetector.detect(audioURL: systemURL) }.value
+                systemVadSegs = vad?.count ?? -2
                 systemSilent = (vad?.isEmpty == true)
             }
             // In-person = there's a mic but no usable remote track. This
@@ -428,6 +430,16 @@ final class TranscriptionPipeline {
             // Gemini prompt, so it's the only cache key that must carry
             // the count.
             let inPerson = micExists && systemSilent
+
+            // DIAGNOSTIC SUMMARY — one self-contained line so a Send-Report log
+            // tail ALWAYS carries the capture/routing decision, with no need to
+            // ask the user to dig. This is the signature for the "2 people → 1
+            // speaker" class: bt=false + systemSilent=true + fork=in-person means
+            // the far end reached only the mic via speaker bleed and got
+            // collapsed; bt=true means a Bluetooth route genuinely lost it. Keep
+            // this line cheap (no extra decode — it reuses values already
+            // computed above) and present on EVERY transcribe.
+            FileLogger.log("DIAG capture: meeting=\(meetingId) bt=\(meeting.outputBluetoothAtStart) micExists=\(micExists) systemExists=\(systemExists) systemSilent=\(systemSilent) systemVadSegs=\(systemVadSegs) fork=\(inPerson ? "in-person/mic-only" : "call/dual-track") provider=\(currentProvider.rawValue)")
 
             try Task.checkCancellation()
 

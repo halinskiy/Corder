@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.14.98] — 2026-06-30
+
+### Changed
+- Bug reports now carry a compact one-line capture diagnostic (output route,
+  whether the other side's audio track came up silent, which transcription path
+  ran), so a report alone is enough to pinpoint issues like a 2-person call that
+  transcribed as one speaker — no back-and-forth needed.
+
 ## [0.14.97] — 2026-06-30
 
 ### Added
