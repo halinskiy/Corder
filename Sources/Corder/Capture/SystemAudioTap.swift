@@ -55,20 +55,37 @@ final class SystemAudioTap {
     private var ioProcID: AudioDeviceIOProcID?
     private let ioQueue = DispatchQueue(label: "com.3mpq.corder.systemtap", qos: .userInitiated)
 
-    // Self-heal watchdog. Confirmed failure mode (from the BT logs): the
-    // tap + aggregate are created and `AudioDeviceStart` returns noErr, but
-    // the IOProc NEVER fires — zero audio callbacks — when the Bluetooth
-    // route is mid-switch (A2DP↔SCO) at create time. The whole session then
-    // records system silence. We detect "no buffer within `watchdogDelay`"
-    // and rebuild the tap from scratch, up to `maxRestarts` times. In a
-    // healthy start the first buffer arrives in ~100 ms, so the watchdog is
-    // a no-op and the working (non-BT) path is untouched.
+    // Self-heal watchdog. Two DISTINCT failure modes, and the fix for one
+    // was hurting the other:
+    //  1. BT mid-switch (A2DP↔SCO) at create time — the tap+aggregate build
+    //     OK (`AudioDeviceStart` == noErr) but the IOProc NEVER fires. A
+    //     from-scratch rebuild recovers it.
+    //  2. SLOW-Mac cold start (8 GB, macOS busy encoding screen video) — the
+    //     IOProc is simply LATE: the aggregate device takes ~9-15 s to begin
+    //     delivering. This is NOT a wedge; the tap works if left alone.
+    // The old 1.5 s × 4 watchdog treated #2 as #1: it tore down and rebuilt a
+    // perfectly-fine-but-warming-up tap every 1.5 s, RESETTING its warm-up
+    // clock each time, then "gave up" at ~8 s and fired the scary "other side
+    // not recorded" warning — even though the tap recovered on its own a few
+    // seconds later (measured on a tester's 8 GB Mac: gave up at 8 s, first
+    // real buffer at 15.9 s, so the first ~16 s of the far end was lost to
+    // needless rebuilds + a false alarm). A HEALTHY tap delivers its first
+    // buffer in ~100 ms (even pure silence counts — `gotFirstBuffer` flips on
+    // ANY callback), so a LONG first-check delay is a no-op on every fast/
+    // working path and only ever bites a genuinely-not-yet-delivering tap.
+    // So: wait a generous `watchdogDelay` (10 s) before the FIRST rebuild —
+    // long enough for a slow cold tap to warm up untouched — and cap rebuilds
+    // at 2 (a real BT wedge recovers on the first fresh build). Only give up
+    // (and warn) after all of that, i.e. the tap is genuinely dead. Trade-off:
+    // a true BT-switch wedge now takes ~10 s to trigger its first rebuild
+    // instead of 1.5 s; that case is rare and re-recordable, whereas the
+    // slow-Mac false alarm hit a paying tester's real meeting.
     private let stateLock = NSLock()
     private var gotFirstBuffer = false
     private var generation = 0
     private var restarts = 0
-    private let maxRestarts = 4
-    private let watchdogDelay: TimeInterval = 1.5
+    private let maxRestarts = 2
+    private let watchdogDelay: TimeInterval = 10.0
     private let watchdogQueue = DispatchQueue(label: "com.3mpq.corder.systemtap.watchdog")
 
     enum TapError: Error, LocalizedError {
@@ -115,7 +132,7 @@ final class SystemAudioTap {
             if stale || healthy { self.stateLock.unlock(); return }
             if !canRetry {
                 self.stateLock.unlock()
-                FileLogger.log("SystemAudioTap: still no audio after \(self.maxRestarts) restarts — giving up (BT route likely in HFP/SCO; remote side not capturable).")
+                FileLogger.log("SystemAudioTap: still no audio after \(self.maxRestarts) restarts + \(self.watchdogDelay)s warm-up grace — giving up (tap genuinely not delivering: BT HFP/SCO, or a Mac that never brought the aggregate up; remote side not capturable).")
                 self.onGaveUp?()
                 return
             }
