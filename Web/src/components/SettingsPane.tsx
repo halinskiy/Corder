@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Search, Loader2 } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  setTestTier, openRecordingsFolder,
+  setTestTier, openRecordingsFolder, requestScreenRecording,
   type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
 import { type T } from "../i18n";
@@ -148,8 +148,13 @@ export function SettingsPane({
               try {
                 window.dispatchEvent(new CustomEvent("corder-capture-video", { detail: v }));
               } catch { /* dev shell */ }
-              // Screen video is a heavy HEVC encode — warn on enable.
+              // Screen video is now opt-in (default OFF). Enabling it is the
+              // moment we ask for Screen Recording — the native bridge fires the
+              // macOS permission prompt (or points to System Settings if already
+              // asked). No more record-time permission surprise. Also warn that
+              // it's a heavy HEVC encode.
               if (v) {
+                requestScreenRecording();
                 try {
                   window.dispatchEvent(new CustomEvent("corder-toast", {
                     detail: { title: t.settings_video_perf_toast, kind: "success" },
@@ -194,12 +199,16 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Recordings folder — short row: an Open button that reveals the
-            folder with every recording (audio + video) in Finder. */}
+        {/* Recordings folder — same vertical `.hk-block` shell as the
+            Microphone block (label + desc + full-width control), only the
+            control is an "Open" button instead of a dropdown, sized identically
+            (full-width, backgroundless — matches the dropdown surface). Strict
+            component reuse: same shell + the shared `.clarify-btn`. */}
         <SoloCard>
-          <div className="settings-row settings-row-action">
-            <div className="settings-row-text">
-              <div className="settings-row-label">{t.settings_recordings_folder_title ?? "Recordings folder"}</div>
+          <div className="hk-block">
+            <div className="settings-row-label">{t.settings_recordings_folder_title ?? "Recordings folder"}</div>
+            <div className="settings-row-desc recordings-folder-desc">
+              {t.settings_recordings_folder_desc ?? "Open the folder with all your recordings in Finder."}
             </div>
             <button
               type="button"

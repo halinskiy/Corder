@@ -16,6 +16,27 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.9] — 2026-07-01
+
+### Changed
+- Screen video recording is now OFF by default. It's a niche feature, so it's
+  opt-in: turn it on in Settings, where Corder now asks for Screen Recording
+  permission at that moment instead of at record time. Audio-only recordings
+  never touch screen capture (less heat, no permission prompts, fewer failure
+  modes).
+- Secondary buttons are now backgroundless (outlined) to match the dropdowns,
+  for one consistent control style across the app.
+- The "Recordings folder" setting matches the Microphone block, with a
+  full-width Open button.
+
+### Fixed
+- Summary and Chapters now show a clear "Sign in" prompt for signed-out users
+  instead of a generic "didn't work" card — they just need a free account.
+- Searching the transcript no longer shrinks the search box when the match
+  counter appears.
+- Clicking a session in the sidebar now closes the Settings pane.
+- Signed-out users no longer generate noisy cloud-sync errors in the log.
+
 ## [0.15.8] — 2026-07-01
 
 ### Fixed

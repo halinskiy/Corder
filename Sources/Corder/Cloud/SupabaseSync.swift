@@ -33,6 +33,13 @@ enum SupabaseSync {
     /// Fire-and-forget background push. Logs failures, never throws.
     /// Use for write-through mirroring of local mutations.
     static func push(_ work: @escaping () async throws -> Void) {
+        // SKIP entirely when signed out. A guest has no Supabase session, so
+        // every write lands as `anon` and the RLS policy rejects it with 42501
+        // ("new row violates row-level security policy for table speakers") —
+        // pure log noise that made testers think their recording failed to
+        // save (it didn't; local GRDB is the source of truth and is untouched).
+        // Cloud mirroring only makes sense once there's an authenticated user.
+        guard userId() != nil else { return }
         Task.detached {
             do { try await work() }
             catch { FileLogger.log("SupabaseSync: push failed — \(error)") }

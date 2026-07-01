@@ -1565,6 +1565,14 @@ enum Routes {
         guard !segs.isEmpty else {
             return jsonResponse(["summary": "", "error": "no transcript"])
         }
+        // Summary/Chapters run through the Worker (Gemini), which needs a
+        // Supabase JWT. A signed-OUT guest has none, so generation would fail
+        // with a bare "generation failed" card (what a tester reported). Tell
+        // the frontend to show a "Sign in to generate" CTA instead — the
+        // feature is free, it just needs an account.
+        guard AppSettings.isSignedIn else {
+            return jsonResponse(["summary": "", "error": "sign_in_required"])
+        }
         let spks = (try? repo.speakers(forMeeting: id)) ?? []
         let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
 
@@ -1608,6 +1616,9 @@ enum Routes {
         let segs = (try? repo.segments(forMeeting: id)) ?? []
         guard !segs.isEmpty else {
             return jsonResponse(["chapters": "", "error": "no transcript"])
+        }
+        guard AppSettings.isSignedIn else {
+            return jsonResponse(["chapters": "", "error": "sign_in_required"])
         }
         let timed: [(startMs: Int64, text: String)] = segs.map {
             (startMs: Int64($0.startMs), text: $0.text)
