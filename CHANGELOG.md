@@ -16,6 +16,20 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.6] — 2026-07-01
+
+### Added
+- Settings now has a "Recordings folder" row with an Open button that reveals
+  the folder with all your recordings (audio + video) in Finder.
+
+### Changed
+- "Screen video recording" moved into General settings, right under Microphone.
+- The empty Welcome screen no longer shows the header "+" button (it already has
+  its own Start recording button).
+
+### Removed
+- The "Catch the start of calls" setting.
+
 ## [0.15.5] — 2026-06-30
 
 ### Fixed
