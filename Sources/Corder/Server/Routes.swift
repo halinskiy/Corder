@@ -183,6 +183,17 @@ enum Routes {
             Task { @MainActor in AuthController.shared.present() }
             return .ok(.text("ok"))
         }
+        // Reveal the recordings folder in Finder (all meeting subfolders, each
+        // holding that meeting's mic/system/mix .wav + video.mov). Create it
+        // first so a fresh account never fails to open.
+        server.post["/api/open-recordings-folder"] = { _ in
+            Task { @MainActor in
+                let dir = AppPaths.recordingsDir
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                NSWorkspace.shared.open(dir)
+            }
+            return .ok(.text("ok"))
+        }
         // Deep-link into System Settings → Notifications → Corder.
         // macOS denies re-request after the user said no, so the
         // only way back to "allow" is a trip through System Settings.

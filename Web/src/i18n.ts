@@ -65,6 +65,9 @@ interface Strings {
   settings_sec_capture: string;
   settings_video: string;
   settings_video_desc: string;
+  /// "Recordings folder" row + its "Open" button (opens the folder in Finder).
+  settings_recordings_folder_title?: string;
+  settings_recordings_folder_open?: string;
   settings_system_audio: string;
   settings_system_audio_desc: string;
   settings_mic: string;
@@ -453,6 +456,8 @@ const en: Strings = {
   settings_transcription_language_desc: "Auto-detect works for most calls.",
   settings_transcription_language_auto: "Auto-detect",
   settings_sec_capture: "Capture",
+  settings_recordings_folder_title: "Recordings folder",
+  settings_recordings_folder_open: "Open",
   settings_video: "Screen video recording",
   settings_video_desc: "Save a video of what was on screen during the meeting.",
   settings_system_audio: "System audio",

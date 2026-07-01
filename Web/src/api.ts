@@ -131,6 +131,11 @@ export async function openWelcome(): Promise<void> {
   await fetch("/api/open-welcome", { method: "POST" });
 }
 
+/// Reveal the recordings folder (all meetings' audio + video) in Finder.
+export async function openRecordingsFolder(): Promise<void> {
+  await fetch("/api/open-recordings-folder", { method: "POST" });
+}
+
 export async function listMeetings(): Promise<MeetingSummary[]> {
   const r = await fetch("/api/meetings");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

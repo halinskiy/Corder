@@ -62,6 +62,7 @@ export function MainHeader({
   settingsOpen,
   onOpenDashboard,
   onToast,
+  hideRecordButton,
   t,
 }: {
   breadcrumb: React.ReactNode;
@@ -90,11 +91,14 @@ export function MainHeader({
     kind?: "success" | "error",
     opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }
   ) => void;
+  /// Hide the record "+" button — used on the empty Welcome, which has its
+  /// own Start CTA, so the toolbar "+" is redundant there. Defaults to shown.
+  hideRecordButton?: boolean;
   t: T;
 }) {
   return (
     <div className="main-header">
-      <HeaderRecordButton onToast={onToast} t={t} />
+      {!hideRecordButton && <HeaderRecordButton onToast={onToast} t={t} />}
       <div className="breadcrumb">{breadcrumb}</div>
       <div className="spacer" />
       <div className="toolbar">

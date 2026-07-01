@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Search, Loader2 } from "lucide-react";
 import {
   getSettings, setSettings, getInstalledApps, appIconSrc,
-  setTestTier,
+  setTestTier, openRecordingsFolder,
   type Settings, type InstalledApp, type AudioInputDevice,
 } from "../api";
 import { type T } from "../i18n";
@@ -133,6 +133,33 @@ export function SettingsPane({
           />
         </SoloCard>
 
+        {/* Screen video recording — sits right under Microphone in General
+            now (was in Advanced). It's local capture, fine for guests. */}
+        <SoloCard>
+          <Toggle
+            label={t.settings_video}
+            desc={t.settings_video_desc}
+            checked={on("capture_video")}
+            disabled={!loaded}
+            onChange={(v) => {
+              patch({ capture_video: v });
+              // Broadcast immediately so the "Capture your screen too" ghost
+              // panel shows/hides in the SAME frame as the toggle.
+              try {
+                window.dispatchEvent(new CustomEvent("corder-capture-video", { detail: v }));
+              } catch { /* dev shell */ }
+              // Screen video is a heavy HEVC encode — warn on enable.
+              if (v) {
+                try {
+                  window.dispatchEvent(new CustomEvent("corder-toast", {
+                    detail: { title: t.settings_video_perf_toast, kind: "success" },
+                  }));
+                } catch { /* dev shell */ }
+              }
+            }}
+          />
+        </SoloCard>
+
         <SoloCard>
           <ThemeToggleRow t={t} />
         </SoloCard>
@@ -167,6 +194,23 @@ export function SettingsPane({
           />
         </SoloCard>
 
+        {/* Recordings folder — short row: an Open button that reveals the
+            folder with every recording (audio + video) in Finder. */}
+        <SoloCard>
+          <div className="settings-row settings-row-action">
+            <div className="settings-row-text">
+              <div className="settings-row-label">{t.settings_recordings_folder_title ?? "Recordings folder"}</div>
+            </div>
+            <button
+              type="button"
+              className="clarify-btn settings-open-btn"
+              onClick={() => { openRecordingsFolder().catch(() => {}); }}
+            >
+              {t.settings_recordings_folder_open ?? "Open"}
+            </button>
+          </div>
+        </SoloCard>
+
         {/* Subscription flip is an admin/QA-only lever — regular users
             must not be able to change their own tier from Settings. */}
         {s?.is_admin === true && (
@@ -193,32 +237,6 @@ export function SettingsPane({
             </div>
           </SoloCard>
         )}
-
-        <SoloCard>
-          <Toggle
-            label={t.settings_video}
-            desc={t.settings_video_desc}
-            checked={on("capture_video")}
-            disabled={!loaded}
-            onChange={(v) => {
-              patch({ capture_video: v });
-              // Broadcast immediately so the "Capture your screen too" ghost
-              // panel shows/hides in the SAME frame as the toggle, instead of
-              // waiting for its next focus-refresh (the laggy disappear).
-              try {
-                window.dispatchEvent(new CustomEvent("corder-capture-video", { detail: v }));
-              } catch { /* dev shell */ }
-              // Screen video is a heavy HEVC encode — warn on enable.
-              if (v) {
-                try {
-                  window.dispatchEvent(new CustomEvent("corder-toast", {
-                    detail: { title: t.settings_video_perf_toast, kind: "success" },
-                  }));
-                } catch { /* dev shell */ }
-              }
-            }}
-          />
-        </SoloCard>
 
         <SoloCard>
           <Toggle
@@ -262,22 +280,6 @@ export function SettingsPane({
             onChange={(v) => patch({ auto_chapters: v })}
           />
         </SoloCard>
-
-        {/* Silent pre-roll — buffer a detected call from its start so
-            accepting the record offer keeps the beginning. ON by default
-            for everyone (the buffer is discarded if you decline); the TOGGLE
-            is admin-only, so regular users just get the default behaviour. */}
-        {s?.is_admin === true && (
-          <SoloCard>
-            <Toggle
-              label={t.settings_preroll_title ?? "Catch the start of calls"}
-              desc={t.settings_preroll_desc ?? "Keep the beginning of a detected call."}
-              checked={(s?.preroll as boolean | undefined) ?? true}
-              disabled={!loaded}
-              onChange={(v) => patch({ preroll: v })}
-            />
-          </SoloCard>
-        )}
 
         {/* Transcription-language picker removed — transcription is always
             Auto-detect for everyone, so there's nothing to choose. */}

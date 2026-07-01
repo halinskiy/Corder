@@ -3825,6 +3825,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   -webkit-tap-highlight-color: transparent;
   transition: background 80ms ease;
 }
+/* Action row (label + a button, NOT a toggle): the row itself isn't clickable,
+   only the button is. Label takes the space, button sits compact on the right. */
+.settings-row-action { cursor: default; }
+.settings-row-action .settings-row-text { flex: 1 1 auto; min-width: 0; }
+.settings-open-btn { flex: 0 0 auto; padding: 7px 18px; }
 /* The settings card sits on white, so #ececea (fine on the grey
    sidebar) reads as a heavy slab here. Use a much softer step so it
    feels like the sidebar item hover does against ITS surface. */

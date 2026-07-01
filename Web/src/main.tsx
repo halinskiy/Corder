@@ -632,6 +632,7 @@ function App() {
                     settingsOpen={settingsOpenUI}
                     onOpenDashboard={goLanding}
                     onToast={showToast}
+                    hideRecordButton
                     t={t}
                   />
                   <Dashboard
