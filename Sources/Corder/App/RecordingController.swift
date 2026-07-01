@@ -476,7 +476,7 @@ extension RecordingController: CaptureEngineDelegate {
         guard !farEndWarnedThisSession else { return }
         guard case .recording = AppContext.shared.recordingState else { return }
         farEndWarnedThisSession = true
-        FileLogger.log("RecordingController: far end uncapturable on Bluetooth (tap watchdog gave up) — warning mid-recording")
+        FileLogger.log("RecordingController: far end uncapturable (tap watchdog gave up after warm-up grace; BT HFP/SCO or a Mac that never brought the aggregate up) — warning mid-recording")
         if AppSettings.notificationsEnabled {
             NotificationsService.post(
                 title: L.notif("notif_bt_title"),

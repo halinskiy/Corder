@@ -155,7 +155,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   // no misleading percentage, since this phase has no real progress to report.
   const dlFillPct = preparing ? 100 : dlPct;
   const dlLabel = preparing
-    ? (t.whisper_preparing_label ?? "Optimizing for your Mac")
+    ? (t.whisper_preparing_label ?? "Loading the model…")
     : `${t.whisper_prefetch_label ?? "Downloading model"} · ${dlPct}%`;
   const headline = downloadingModel
     ? (preparing

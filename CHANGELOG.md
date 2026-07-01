@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.8] — 2026-07-01
+
+### Fixed
+- The other side of a call is no longer lost on slower Macs. On an 8 GB
+  machine the system-audio tap can take several seconds to warm up; the
+  watchdog was tearing it down and rebuilding every 1.5 s, which reset that
+  warm-up and then falsely warned "other side not recorded" even though the
+  tap recovered on its own moments later. It now gives a slow tap time to come
+  up instead of fighting it, so the first seconds of the far end survive.
+- The transcription status now reads "Loading the model…" instead of
+  "Optimizing for your Mac", which wrongly implied a one-time setup was running
+  again every session when the model was actually already installed.
+
 ## [0.15.7] — 2026-07-01
 
 ### Changed

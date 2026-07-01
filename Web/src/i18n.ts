@@ -510,7 +510,7 @@ const en: Strings = {
   settings_asr_download_cta: "Download model",
   settings_asr_downloading: "Downloading…",
   whisper_prefetch_label: "Downloading model",
-  whisper_preparing_label: "Optimizing for your Mac",
+  whisper_preparing_label: "Loading the model…",
   whisper_prefetch_loading: "Loading model…",
   settings_asr_suffix_pro: "Pro+",
   settings_asr_intel_warn: "Local Whisper isn't available on Intel Macs and transcription will fall back to the cloud.",
