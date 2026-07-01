@@ -68,6 +68,7 @@ interface Strings {
   /// "Recordings folder" row + its "Open" button (opens the folder in Finder).
   settings_recordings_folder_title?: string;
   settings_recordings_folder_open?: string;
+  settings_recordings_folder_desc?: string;
   settings_system_audio: string;
   settings_system_audio_desc: string;
   settings_mic: string;
@@ -272,6 +273,8 @@ interface Strings {
   report_sent?: string;
   summary_locked_body?: string;
   chapters_locked_body?: string;
+  summary_signin_body?: string;
+  summary_signin_cta?: string;
 
   clarify_question: string;
   clarify_just_me: string;
@@ -458,6 +461,7 @@ const en: Strings = {
   settings_sec_capture: "Capture",
   settings_recordings_folder_title: "Recordings folder",
   settings_recordings_folder_open: "Open",
+  settings_recordings_folder_desc: "Open the folder with all your recordings in Finder.",
   settings_video: "Screen video recording",
   settings_video_desc: "Save a video of what was on screen during the meeting.",
   settings_system_audio: "System audio",
@@ -760,6 +764,8 @@ const en: Strings = {
   send_report: "Send a report",
   report_sent: "Report sent.",
   summary_locked_body: "Summaries are a Pro feature.",
+  summary_signin_body: "Sign in to generate a summary. It's free.",
+  summary_signin_cta: "Sign in",
   chapters_locked_body: "Chapters are a Pro feature.",
   update_available_title: "Click to install",
 

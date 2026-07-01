@@ -2203,7 +2203,19 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 6px;
 }
 .transcript-toolbar .search-field { flex: 1; min-width: 0; }
-.transcript-toolbar .search-field input { width: 100%; }
+/* The match-counter + prev/next chevrons OVERLAY the right edge of the field
+   (absolute) instead of joining the flex row, so typing a query never shrinks
+   the text input — the box keeps the exact same width whether empty or
+   searching. The input reserves a constant right padding for them so a long
+   query can't slide under the counter. Scoped to the transcript toolbar; the
+   sidebar/settings/summary search fields have no `.search-nav`. */
+.transcript-toolbar .search-field input { width: 100%; padding-right: 92px; }
+.transcript-toolbar .search-nav {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
 
 /* Summary tab — Granola-style structured Markdown. Shares the left
    column grid cell with `.transcript-wrap`, only one is visible at
@@ -2661,19 +2673,21 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* Disabled / "Soon" state: greyed, inert, no hover, default cursor —
    the design-system convention for an inactive CTA. */
 .clarify-btn:disabled { opacity: 0.5; cursor: default; }
-/* Dark theme — secondary (non-accent / non-danger / non-active) variants
-   invert to a WHITE fill with dark text. The transparent + light-grey
-   outline pattern read as a hollow tile on a dark surface and pulled
-   too little focus from primary actions; flipping them solid keeps the
-   secondary CTA legible while still ranking below the green accent. */
+/* Dark theme — secondary (non-accent / non-danger / non-active) buttons stay
+   TRANSPARENT + outlined, matching the SettingsSelect dropdown surface
+   (`.settings-select-trigger`: transparent bg + `--border-strong`). They used
+   to flip to a solid white fill, but that made the filled pills inconsistent
+   with the product's many backgroundless controls (dropdowns, toolbar icons);
+   per design they now all read the same — backgroundless like a dropdown.
+   Accent (green CTA), danger (red) and active (selected, green fill) unchanged. */
 .dark .clarify-btn:not(.accent):not(.danger):not(.active) {
-  background: var(--fg);
-  color: var(--bg);
-  border-color: var(--fg);
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--border-strong);
 }
 .dark .clarify-btn:not(.accent):not(.danger):not(.active):hover {
-  background: color-mix(in srgb, var(--fg) 88%, var(--bg));
-  border-color: color-mix(in srgb, var(--fg) 88%, var(--bg));
+  background: var(--bg-hover);
+  border-color: var(--fg-muted);
 }
 /* Currently-selected option — auto-detected by the diarizer or picked
    by the user previously. Filled with the accent green so the choice
@@ -3829,7 +3843,11 @@ body.resizing { cursor: col-resize; user-select: none; }
    only the button is. Label takes the space, button sits compact on the right. */
 .settings-row-action { cursor: default; }
 .settings-row-action .settings-row-text { flex: 1 1 auto; min-width: 0; }
-.settings-open-btn { flex: 0 0 auto; padding: 7px 18px; }
+/* Recordings-folder "Open" — full-width control that visually matches the
+   Microphone dropdown (same shell, same width). Inherits `.clarify-btn`'s
+   transparent + outlined surface, so it reads exactly like a SettingsSelect. */
+.settings-open-btn { width: 100%; }
+.recordings-folder-desc { margin-bottom: 10px; }
 /* The settings card sits on white, so #ececea (fine on the grey
    sidebar) reads as a heavy slab here. Use a much softer step so it
    feels like the sidebar item hover does against ITS surface. */

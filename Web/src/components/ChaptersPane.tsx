@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RefreshCw, Copy, Search } from "lucide-react";
-import { MeetingDetail, generateChapters, submitLogs } from "../api";
+import { MeetingDetail, generateChapters, submitLogs, openWelcome } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
@@ -40,12 +40,15 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
   const [error, setError] = useState<string | null>(null);
   // Paid-feature gate (HTTP 403) → upsell instead of the generic error.
   const [locked, setLocked] = useState(false);
+  // Signed-out guest → sign-in CTA (Chapters needs a Worker JWT), not an error.
+  const [needSignIn, setNeedSignIn] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     setChapters(parse(detail.chapters));
     setError(null);
     setLocked(false);
+    setNeedSignIn(false);
     setLoading(false);
     setSearch("");
   }, [detail.id, detail.chapters]);
@@ -57,11 +60,14 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
     setLoading(true);
     setError(null);
     setLocked(false);
+    setNeedSignIn(false);
     try {
       const raw = await generateChapters(detail.id, force);
       setChapters(parse(raw));
     } catch (e) {
-      if (String((e as Error)?.message || "").includes("403")) setLocked(true);
+      const msg = String((e as Error)?.message || "");
+      if (msg.includes("403")) setLocked(true);
+      else if (msg.includes("sign_in_required")) setNeedSignIn(true);
       else setError(t.chapters_error ?? t.summary_error);
     } finally {
       setLoading(false);
@@ -101,6 +107,21 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
           title={t.chapters_pending_title ?? "Generating chapters…"}
           body={t.chapters_loading ?? "Hang tight."}
           spinner
+        />
+      </div>
+    );
+  }
+  if (needSignIn && chapters.length === 0) {
+    return (
+      <div className="summary-wrap summary-wrap-empty">
+        <ChaptersBanner
+          title={t.chapters_empty_title ?? "Chapters appear here"}
+          body={t.summary_signin_body ?? "Sign in to generate chapters. It's free."}
+          action={{
+            label: t.summary_signin_cta ?? "Sign in",
+            onClick: () => { openWelcome().catch(() => {}); },
+            accent: true,
+          }}
         />
       </div>
     );

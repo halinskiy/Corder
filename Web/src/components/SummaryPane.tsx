@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RefreshCw, Search, Copy } from "lucide-react";
-import { MeetingDetail, summarize, submitLogs } from "../api";
+import { MeetingDetail, summarize, submitLogs, openWelcome } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
@@ -44,6 +44,10 @@ export function SummaryPane({ detail, onToast, t }: Props) {
   // 403). We show an upsell instead of the generic "didn't work" error,
   // which read as a bug to free users.
   const [locked, setLocked] = useState(false);
+  // `needSignIn` = the server refused because the user is a signed-out guest
+  // (Summary needs a Worker JWT). Show a "Sign in to generate" CTA, not an
+  // error card — the feature is free, it just needs an account.
+  const [needSignIn, setNeedSignIn] = useState(false);
   const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,6 +57,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
     setSummary(pickStructured(detail.summary ?? null));
     setError(null);
     setLocked(false);
+    setNeedSignIn(false);
     setLoading(false);
     setSearch("");
   }, [detail.id, detail.summary]);
@@ -64,12 +69,16 @@ export function SummaryPane({ detail, onToast, t }: Props) {
     setLoading(true);
     setError(null);
     setLocked(false);
+    setNeedSignIn(false);
     try {
       const s = await summarize(detail.id, force);
       setSummary(s);
     } catch (e) {
+      const msg = String((e as Error)?.message || "");
       // Paid-feature gate → upsell, not an error card.
-      if (String((e as Error)?.message || "").includes("403")) setLocked(true);
+      if (msg.includes("403")) setLocked(true);
+      // Signed-out guest → sign-in CTA, not an error card.
+      else if (msg.includes("sign_in_required")) setNeedSignIn(true);
       else setError(t.summary_error);
     } finally {
       setLoading(false);
@@ -110,6 +119,21 @@ export function SummaryPane({ detail, onToast, t }: Props) {
     return (
       <div className="summary-wrap summary-wrap-empty">
         <SummaryBanner title={t.summary_empty_title} body={t.summary_loading} spinner />
+      </div>
+    );
+  }
+  if (needSignIn && !summary) {
+    return (
+      <div className="summary-wrap summary-wrap-empty">
+        <SummaryBanner
+          title={t.summary_empty_title}
+          body={t.summary_signin_body ?? "Sign in to generate a summary. It's free."}
+          action={{
+            label: t.summary_signin_cta ?? "Sign in",
+            onClick: () => { openWelcome().catch(() => {}); },
+            accent: true,
+          }}
+        />
       </div>
     );
   }

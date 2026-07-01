@@ -104,11 +104,10 @@ function App() {
   const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   // Lifted "which Settings slice is open" — null = not in Settings.
-  // Lives up here so Settings PERSIST across Dashboard ↔ Meeting
-  // flips: opening Settings on Dashboard and then clicking a
-  // session keeps the right pane on Settings until the user
-  // explicitly closes it (or flips to Advanced). Same shape as
-  // `archiveOpen` already does for the archive overlay.
+  // Lives up here so the open Settings slice survives a Dashboard ↔ Meeting
+  // render flip. NOTE: clicking a session in the sidebar now CLOSES Settings
+  // (see `pickMeeting`) — Settings is a detour, not a sticky mode; it only
+  // persists across flips that aren't an explicit session pick.
   const [settingsSection, setSettingsSection] = React.useState<null | "general" | "advanced">(null);
   const settingsOpenUI = settingsSection !== null;
   // Bumped each time the user taps the gear (header / profile menu)
@@ -534,6 +533,11 @@ function App() {
       prev.map((m) => (m.id === id && m.viewed === false ? { ...m, viewed: true } : m))
     );
     setActiveId(id);
+    // Clicking ANY session (even the already-selected one) closes an open
+    // Settings pane and returns to the transcript — Settings is a detour, not a
+    // sticky mode. (This intentionally reverses the old "keep Settings open
+    // across session clicks" behaviour.)
+    setSettingsSection(null);
   }, []);
 
   // "Home" / landing target. The Dashboard start screen only exists when

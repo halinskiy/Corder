@@ -140,16 +140,18 @@ enum AppSettings {
     static func setScreenGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenGrantedOnce) }
 
     static var notificationsEnabled: Bool { flag(kNotifications) }
-    // Screen video recording defaults ON. It only ACTUALLY captures video when
-    // Screen Recording is granted — otherwise the recording silently degrades to
-    // audio (no wall, no system prompt: `CaptureEngine` gates SCStream on
-    // `CGPreflightScreenCaptureAccess()`, and the Library's "Capture your screen
-    // too" ghost panel is the grant path). So default-ON costs an audio-only
-    // user nothing (no heavy HEVC encode until they grant) but means video is the
-    // default intent and the ghost pitch shows out of the box. `flag()` would
-    // also default true, but keep the explicit `?? true` to mirror the
-    // setter/DTO round-trip semantics.
-    static var captureVideo: Bool          { UserDefaults.standard.object(forKey: kCaptureVideo) as? Bool ?? true }
+    // Screen video recording defaults OFF (reversed from the earlier default-ON,
+    // 0.15.9). Screen video is a niche feature — most users only want the
+    // transcript — and default-ON dragged the whole SCStream path into EVERY
+    // recording: the Screen Recording permission dance, ~600 mW of HEVC encode,
+    // and SCStream failure modes (e.g. -3815 "no displays to capture" when the
+    // display sleeps / Spaces churn, and heavy encode contending with the audio
+    // tap's warm-up on weak Macs — the far-end-loss amplifier seen on an 8 GB
+    // tester Mac). Audio + the process tap is the reliable core; video is now
+    // strictly opt-in via the Settings toggle, and Screen Recording is requested
+    // AT TOGGLE TIME (SettingsPane → `requestScreenRecording`), not at record
+    // time. So an audio-only user never touches ScreenCaptureKit at all.
+    static var captureVideo: Bool          { UserDefaults.standard.object(forKey: kCaptureVideo) as? Bool ?? false }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
     static var autoTitle: Bool             { flag(kAutoTitle) }
