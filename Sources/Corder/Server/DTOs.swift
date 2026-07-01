@@ -35,6 +35,12 @@ enum DTO {
         /// uses this to decide whether to render the `<video>` block
         /// above the audio player.
         let has_video: Bool
+        /// True when a PLAYABLE audio file exists (the audio.wav mix, or the
+        /// raw mic.wav, or a Dropbox-archived copy). The player gates its Play
+        /// button on this instead of `duration_ms > 0`: an orphaned/rescued row
+        /// can carry a 0/nil duration yet still have real audio on disk, and the
+        /// old gate greyed the control out on a perfectly playable recording.
+        let has_audio: Bool
         /// JSON string with `[{start_ms, title}]` for the Chapters tab.
         /// Returned as-is from the DB column; frontend parses it.
         let chapters: String?

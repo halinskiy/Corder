@@ -16,6 +16,20 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.10] — 2026-07-01
+
+### Fixed
+- Corder no longer installs an update while you're recording. Clicking Install
+  mid-recording used to quit and relaunch the app, which killed the in-progress
+  recording (a tester lost a meeting this way, and it looked like the app
+  "glitched" mid-meeting). The update now waits: finish the recording, then
+  install.
+- The audio Play button no longer greys out on a finished recording. It used to
+  be disabled whenever the stored duration was 0 — even though the audio file
+  was on disk and perfectly playable — so an in-person / phone-call capture
+  looked unplayable. It now enables whenever a playable file exists, and the
+  synced screen video plays again with it.
+
 ## [0.15.9] — 2026-07-01
 
 ### Changed

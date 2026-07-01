@@ -859,12 +859,16 @@ function AudioCard({
 
   const cursorPct = duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;
 
-  // Empty / not-yet-finalised meetings have nothing to play — disable the
-  // primary control instead of letting the user click into nothing.
+  // Playable = a finished recording that has audio ON DISK. We gate on
+  // `has_audio` (server checks the mix / mic / archived file exists), NOT on
+  // `duration_ms > 0`: an orphaned or crash-rescued row can carry a 0/nil
+  // duration yet still have a perfectly playable file, and the old
+  // duration-based gate greyed the Play button out on real recordings (a
+  // tester hit exactly this on an in-person phone-call capture). Fall back to
+  // the duration check only for older backends that don't send `has_audio`.
   const playable =
-    duration > 0 &&
     detail.status !== "recording" &&
-    !!detail.duration_ms;
+    (detail.has_audio ?? ((detail.duration_ms ?? 0) > 0));
 
   return (
     <>

@@ -76,6 +76,22 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         }
 
         bridge.onPrimary = { [weak self] in
+            // NEVER install while a recording is live. Installing terminates +
+            // relaunches the app (see showInstallingUpdate), which KILLS the
+            // in-flight recording — a tester lost a meeting exactly this way
+            // (RecordingRecovery logged it "unsalvageable (0ms)"). Defer: keep
+            // the update pill lit (appcast still offers it) and tell the user to
+            // finish first. The install runs when they click again after Stop.
+            if RecordingStateSnapshot.read() != .idle {
+                FileLogger.log("UpdateDriver: onPrimary while RECORDING → deferring install, not terminating")
+                self?.pushPhase(phase, primaryLabel: "Install", primaryEnabled: true)
+                LibraryWindow.shared.postToast(
+                    title: L.notif("notif_update_recording_title"),
+                    body: L.notif("notif_update_recording_body"),
+                    kind: "error")
+                reply(.dismiss)
+                return
+            }
             FileLogger.log("UpdateDriver: onPrimary(showUpdateFound) phase=\(phase) → reply(.install)")
             // Reflect that work started (button shows the in-button
             // progress fill, label stays "Install", button disabled).
@@ -215,6 +231,19 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         // resumed already-downloaded update comes through
         // showUpdateFound(readyToInstall) and still needs an explicit click — so
         // this never relaunches the app unprompted on launch.
+        // A recording can START during the download window (user clicked
+        // Install while idle, then began a meeting). Auto-installing now would
+        // terminate + kill that recording — defer instead.
+        if RecordingStateSnapshot.read() != .idle {
+            FileLogger.log("UpdateDriver: showReady while RECORDING → deferring install, not terminating")
+            pushPhase("readyToInstall", primaryLabel: "Install", primaryEnabled: true)
+            LibraryWindow.shared.postToast(
+                title: L.notif("notif_update_recording_title"),
+                body: L.notif("notif_update_recording_body"),
+                kind: "error")
+            reply(.dismiss)
+            return
+        }
         bridge.onDismiss = { reply(.dismiss) }
         pushPhase("installing", primaryLabel: "Install", primaryEnabled: false,
                   statusLine: "Installing. Corder will relaunch.",
