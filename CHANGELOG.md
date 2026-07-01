@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.7] — 2026-07-01
+
+### Changed
+- The record button in the header is smaller, so it sits lighter next to the
+  title instead of dominating the top bar.
+
+### Fixed
+- Corrected the screen-video card wording: your screen video appears after you
+  finish recording, not live while you record.
+
 ## [0.15.6] — 2026-07-01
 
 ### Added

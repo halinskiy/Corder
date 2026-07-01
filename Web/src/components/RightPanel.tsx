@@ -116,7 +116,7 @@ function VideoShowsHereCard({ t }: { t: T }) {
       <div className="clarify-text">
         <div className="clarify-body">{t.ghost_video_on_title ?? "Screen video"}</div>
         <div className="dash-sub">
-          {t.ghost_video_on_sub ?? "Your screen appears here while you record."}
+          {t.ghost_video_on_sub ?? "Your screen video appears here after you finish recording."}
         </div>
       </div>
     </div>

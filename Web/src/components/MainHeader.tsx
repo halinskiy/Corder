@@ -202,8 +202,8 @@ function HeaderRecordButton({
         aria-label={label}
       >
         {recording
-          ? <Square size={13} strokeWidth={2} fill="currentColor" />
-          : <Plus size={18} strokeWidth={2.5} />}
+          ? <Square size={11} strokeWidth={2} fill="currentColor" />
+          : <Plus size={16} strokeWidth={2.5} />}
       </button>
     </Tooltip>
   );
