@@ -715,6 +715,12 @@ enum Routes {
             let segments = try repo.segments(forMeeting: id)
             let hasVideo = FileManager.default.fileExists(atPath: m.videoPath)
                 || (m.dropboxVideoPath != nil)
+            // Playable audio = the mix (audio.wav), or the raw mic track, or a
+            // Dropbox-archived copy. Mirrors serveMedia's resolution order.
+            let mixAudioPath = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav").path
+            let hasAudio = FileManager.default.fileExists(atPath: mixAudioPath)
+                || FileManager.default.fileExists(atPath: m.audioPath)
+                || (m.dropboxAudioPath != nil)
             let dto = DTO.MeetingDetail(
                 id: m.id, started_at: m.startedAt, duration_ms: m.durationMs,
                 status: m.status.rawValue,
@@ -730,6 +736,7 @@ enum Routes {
                 },
                 expected_other_speakers: m.expectedOtherSpeakers,
                 has_video: hasVideo,
+                has_audio: hasAudio,
                 chapters: m.chapters,
                 transcribing_started_at: m.transcribingStartedAt,
                 transcribe_progress: m.status == .transcribing

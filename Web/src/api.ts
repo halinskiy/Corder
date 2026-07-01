@@ -50,6 +50,9 @@ export interface MeetingDetail {
   /// archived to Dropbox. The RightPanel uses it to decide
   /// whether to render the screen-capture preview above the audio.
   has_video?: boolean;
+  /// True when a playable audio file exists on disk (mix, mic, or archived).
+  /// The player's Play button gates on this, not on duration_ms.
+  has_audio?: boolean;
   /// JSON-encoded `[{start_ms, title}]` — Chapters tab. May be
   /// absent on rows that haven't been auto-chaptered yet.
   chapters?: string | null;
