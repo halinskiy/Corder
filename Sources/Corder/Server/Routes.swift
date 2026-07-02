@@ -1909,23 +1909,30 @@ enum Routes {
             } else {
                 let recDir = AppPaths.recordingDir(for: id)
                 let mixURL = recDir.appendingPathComponent("audio.wav")
-                if FileManager.default.fileExists(atPath: mixURL.path) {
+                let fm = FileManager.default
+                if fm.fileExists(atPath: mixURL.path) {
+                    // Heal an OLD float32 mix to 16-bit PCM so WKWebView's
+                    // <audio> can actually decode it (float WAV plays silent
+                    // with no duration / no scrub). Idempotent no-op once the
+                    // file is already int16; one blocking pass on first play,
+                    // then cached on disk.
+                    AudioMixer.rewriteFloat32ToInt16IfNeeded(at: mixURL)
                     url = mixURL
                 } else {
                     // No playback mix on disk. Before serving mic.wav ALONE —
                     // which silently drops the far end even though system.wav
                     // captured it (the mix-production-threw / never-ran case) —
-                    // BUILD the mix on demand now. Blocks this one Swifter worker
-                    // (the same accepted pattern as the Dropbox hydration below);
-                    // once written it's cached on disk for every later Range
-                    // request. Only when the raw local sources are present.
-                    let fm = FileManager.default
+                    // BUILD the mix on demand now (mic-only is fine; the tap is
+                    // preferred when present). `produceWhisperInput` writes
+                    // 16-bit PCM. Blocks this one Swifter worker (the same
+                    // accepted pattern as the Dropbox hydration below); once
+                    // written it's cached for every later Range request.
                     let micURL = recDir.appendingPathComponent("mic.wav")
                     let tapURL = recDir.appendingPathComponent("system.wav")
                     let sckURL = recDir.appendingPathComponent("system_sck.wav")
                     let sysURL: URL? = fm.fileExists(atPath: tapURL.path) ? tapURL
                         : (fm.fileExists(atPath: sckURL.path) ? sckURL : nil)
-                    if fm.fileExists(atPath: micURL.path), let sysURL {
+                    if fm.fileExists(atPath: micURL.path) {
                         let sema = DispatchSemaphore(value: 0)
                         Task {
                             do {
