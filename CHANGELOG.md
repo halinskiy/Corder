@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.17] — 2026-07-03
+
+### Fixed
+- The transcript search Clear (×) button hover is now a full circle. A global
+  button padding had inflated the box to a rectangle, so the hover fill looked
+  like a rounded rectangle instead of a round button.
+
 ## [0.15.16] — 2026-07-02
 
 ### Fixed

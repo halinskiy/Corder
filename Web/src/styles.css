@@ -918,9 +918,14 @@ input[type="search"]::-webkit-search-decoration {
   justify-content: center;
   width: 22px;
   height: 22px;
+  /* `padding: 0` + `flex: none` are load-bearing: a global button padding
+     (8px 14px) was inflating the box to 28×22, so the hover fill rendered as a
+     rounded RECTANGLE, not a circle. Pin it square and round it fully. */
+  padding: 0;
+  flex: none;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 50%;
   color: var(--fg-muted);
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
