@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.12] — 2026-07-02
+
+### Fixed
+- The other side of a call can no longer go missing from PLAYBACK. Two cases
+  are fixed: (1) if the playback mix ever failed to build at record/transcribe
+  time, opening the recording now rebuilds it on demand from the mic + system
+  tracks (verified end to end), instead of quietly playing your voice only;
+  (2) an untranscribed recording whose far end was quiet no longer drops the
+  system track from the mix — it's kept whenever it was captured. The
+  transcript was always intact; this is about actually hearing the other side
+  on playback.
+
 ## [0.15.11] — 2026-07-02
 
 ### Changed

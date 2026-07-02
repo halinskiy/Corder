@@ -388,7 +388,17 @@ final class RecordingController {
                     let sckV = f.fileExists(atPath: sckURL.path)
                         ? (VoiceActivityDetector.voicedEnergy(audioURL: sckURL)?.voicedMs ?? -1)
                         : -1
-                    if max(tapV, sckV) <= 0 { return nil }
+                    // If VAD detected NO voiced speech in either system track,
+                    // still fold in the tap's system.wav for playback when it
+                    // exists — VAD can miss a quiet / sub-threshold far end, and
+                    // a silent system track is harmless in the mix whereas
+                    // DROPPING it makes a soft-spoken remote side vanish from
+                    // playback. Mirrors the transcribe() chooser, which always
+                    // defaults to the tap. Only mic-only when no system file at
+                    // all (a genuine solo / in-person capture).
+                    if max(tapV, sckV) <= 0 {
+                        return f.fileExists(atPath: tapURL.path) ? tapURL : nil
+                    }
                     return sckV > tapV ? sckURL : tapURL
                 }.value
                 do {
