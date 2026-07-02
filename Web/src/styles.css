@@ -925,7 +925,11 @@ input[type="search"]::-webkit-search-decoration {
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
-.search-nav-btn svg { width: 14px; height: 14px; color: inherit; }
+/* `flex: none` is load-bearing: as a flex child with `min-width: auto`, the
+   icon SVG collapsed to width 0 (visible height, zero width → the Clear × was
+   invisible), while the magnifier escaped only because it's absolutely
+   positioned. Pin the box so the glyph always renders. */
+.search-nav-btn svg { width: 14px; height: 14px; color: inherit; flex: none; }
 .search-nav-btn:hover:not(:disabled) { background: var(--bg-elev); color: var(--fg); }
 .search-nav-btn:disabled { opacity: 0.4; cursor: default; }
 
