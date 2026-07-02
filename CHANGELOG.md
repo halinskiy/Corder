@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.16] — 2026-07-02
+
+### Fixed
+- The Clear (×) button in the transcript search is now actually visible. Its
+  icon was collapsing to zero width as a flex child (the button was there but
+  drew nothing), so searches looked like they had a stray empty gap on the
+  right. The counter stays pinned right beside it.
+
 ## [0.15.15] — 2026-07-02
 
 ### Fixed
