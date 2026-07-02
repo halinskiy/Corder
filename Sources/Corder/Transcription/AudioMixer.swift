@@ -48,12 +48,82 @@ enum AudioMixer {
         //    stream is longer.
         let mixed = mix(buffers: [systemBuffer, micBuffer], format: target)
 
-        // 3. Write to outputURL as 16 kHz mono Float32 WAV.
+        // 3. Write to outputURL as 16 kHz mono 16-bit PCM WAV. NOT Float32:
+        // WKWebView's <audio> media element decodes PCM-INTEGER WAV but NOT
+        // IEEE-float WAV (WAVE_FORMAT_IEEE_FLOAT, fmt=3). A float32 mix loaded
+        // in the player but produced NO sound, NO duration and NO scrubbing
+        // (the decoder silently rejected it). 16-bit PCM is universally
+        // decodable and is an equally fine Whisper/Groq input. AVAudioFile
+        // converts the float32 `mixed` buffer to int16 on write (file format =
+        // int16 settings, processing format = float32).
         let outFile = try AVAudioFile(forWriting: outputURL,
-                                      settings: target.settings,
+                                      settings: Self.playbackInt16Settings(sampleRate: target.sampleRate,
+                                                                           channels: target.channelCount),
                                       commonFormat: .pcmFormatFloat32,
                                       interleaved: false)
         try outFile.write(from: mixed)
+    }
+
+    /// 16-bit little-endian PCM WAV settings — the format WKWebView's <audio>
+    /// element can actually decode (a float32 WAV cannot be played by the media
+    /// element). Used for the playback mix and the float32→int16 rewrite.
+    static func playbackInt16Settings(sampleRate: Double, channels: AVAudioChannelCount) -> [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channels,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+    }
+
+    /// Rewrite a Float32 playback WAV in place as 16-bit PCM so WKWebView's
+    /// <audio> can decode it. Idempotent: a file that's ALREADY PCM-integer is
+    /// left untouched (fast path — one header read). Best-effort: on any error
+    /// the original file is left exactly as it was. Streams in frame chunks so
+    /// even a long recording doesn't balloon memory. Heals the existing
+    /// installed base whose `audio.wav` was written as float32 before the fix.
+    static func rewriteFloat32ToInt16IfNeeded(at url: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path),
+              let inFile = try? AVAudioFile(forReading: url) else { return }
+        guard inFile.fileFormat.commonFormat == .pcmFormatFloat32 else { return }
+        let proc = inFile.processingFormat
+        let total = inFile.length
+        guard total > 0 else { return }
+
+        let tmp = url.deletingLastPathComponent()
+            .appendingPathComponent("audio.int16.\(UInt64(total)).tmp.wav")
+        try? fm.removeItem(at: tmp)
+        do {
+            let outFile = try AVAudioFile(
+                forWriting: tmp,
+                settings: playbackInt16Settings(sampleRate: proc.sampleRate, channels: proc.channelCount),
+                commonFormat: proc.commonFormat,
+                interleaved: proc.isInterleaved)
+            let chunk: AVAudioFrameCount = 1 << 20   // ~1M frames per pass
+            while inFile.framePosition < total {
+                let remaining = AVAudioFrameCount(total - inFile.framePosition)
+                let n = min(chunk, remaining)
+                guard let buf = AVAudioPCMBuffer(pcmFormat: proc, frameCapacity: n) else { break }
+                try inFile.read(into: buf, frameCount: n)
+                if buf.frameLength == 0 { break }
+                try outFile.write(from: buf)
+            }
+        } catch {
+            FileLogger.log("AudioMixer: float32→int16 rewrite failed for \(url.lastPathComponent): \(error)")
+            try? fm.removeItem(at: tmp)
+            return
+        }
+        do {
+            _ = try fm.replaceItemAt(url, withItemAt: tmp)
+        } catch {
+            try? fm.removeItem(at: url)
+            try? fm.moveItem(at: tmp, to: url)
+        }
+        FileLogger.log("AudioMixer: rewrote \(url.lastPathComponent) float32 → 16-bit PCM for WKWebView playback")
     }
 
     /// Returns a 1-frame silent buffer when the file is missing, empty,

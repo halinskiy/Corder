@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.13] — 2026-07-02
+
+### Fixed
+- Recordings now actually PLAY in the app. The playback file was written as a
+  32-bit float WAV, which the in-app player (WKWebView) can't decode — so the
+  Play button clicked but produced no sound, no duration and no timeline
+  scrubbing. The mix is now written as 16-bit PCM, and any older float32 file is
+  converted to 16-bit the first time you open the recording. (Audio and
+  transcripts were always captured fine; this was purely a playback-format
+  issue.)
+
 ## [0.15.12] — 2026-07-02
 
 ### Fixed
