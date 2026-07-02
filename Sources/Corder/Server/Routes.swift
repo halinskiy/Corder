@@ -1907,16 +1907,45 @@ enum Routes {
             if kind == .video {
                 url = URL(fileURLWithPath: m.videoPath)
             } else {
-                let mixURL = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav")
+                let recDir = AppPaths.recordingDir(for: id)
+                let mixURL = recDir.appendingPathComponent("audio.wav")
                 if FileManager.default.fileExists(atPath: mixURL.path) {
                     url = mixURL
                 } else {
-                    let direct = URL(fileURLWithPath: m.audioPath)
-                    if FileManager.default.fileExists(atPath: direct.path) {
-                        url = direct
-                    } else {
-                        // Hydrate target — full mix lives at audio.wav remote.
+                    // No playback mix on disk. Before serving mic.wav ALONE —
+                    // which silently drops the far end even though system.wav
+                    // captured it (the mix-production-threw / never-ran case) —
+                    // BUILD the mix on demand now. Blocks this one Swifter worker
+                    // (the same accepted pattern as the Dropbox hydration below);
+                    // once written it's cached on disk for every later Range
+                    // request. Only when the raw local sources are present.
+                    let fm = FileManager.default
+                    let micURL = recDir.appendingPathComponent("mic.wav")
+                    let tapURL = recDir.appendingPathComponent("system.wav")
+                    let sckURL = recDir.appendingPathComponent("system_sck.wav")
+                    let sysURL: URL? = fm.fileExists(atPath: tapURL.path) ? tapURL
+                        : (fm.fileExists(atPath: sckURL.path) ? sckURL : nil)
+                    if fm.fileExists(atPath: micURL.path), let sysURL {
+                        let sema = DispatchSemaphore(value: 0)
+                        Task {
+                            do {
+                                try await AudioMixer.produceWhisperInput(
+                                    systemURL: sysURL, micURL: micURL, outputURL: mixURL)
+                            } catch {
+                                FileLogger.log("serveMedia: on-demand mix failed for \(id): \(error)")
+                            }
+                            sema.signal()
+                        }
+                        sema.wait()
+                    }
+                    if fm.fileExists(atPath: mixURL.path) {
+                        FileLogger.log("serveMedia: built playback mix on demand for \(id)")
                         url = mixURL
+                    } else {
+                        // Couldn't build one (no sources / corrupt) — serve the
+                        // raw mic track, or fall through to Dropbox hydrate.
+                        let direct = URL(fileURLWithPath: m.audioPath)
+                        url = fm.fileExists(atPath: direct.path) ? direct : mixURL
                     }
                 }
             }
