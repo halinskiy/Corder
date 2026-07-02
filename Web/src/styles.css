@@ -905,6 +905,12 @@ input[type="search"]::-webkit-search-decoration {
   margin-right: 4px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  /* Fixed box + right-aligned digits so the counter NEVER shifts horizontally
+     as the number changes width (1/237 → 1/3 → 0/0). Pinned just left of the
+     Clear button, which is the fixed right anchor. */
+  display: inline-block;
+  min-width: 44px;
+  text-align: right;
 }
 .search-nav-btn {
   display: inline-flex;

@@ -1,5 +1,5 @@
 import React from "react";
-import { Copy, Users, Search, ChevronUp, ChevronDown } from "lucide-react";
+import { Copy, Users, Search, X } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { Tooltip } from "./Tooltip";
 import { MainHeader } from "./MainHeader";
@@ -555,26 +555,22 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                 />
                 {search.trim() && (
                   <div className="search-nav">
+                    {/* Fixed-width, right-aligned counter so it NEVER shifts
+                        horizontally as the number changes (1/237 → 1/3 → 0/0):
+                        the digits right-align inside a stable box pinned just
+                        left of the Clear button. Enter / Shift+Enter jump to the
+                        next / previous match (see the input's onKeyDown), so
+                        there are no prev/next chevrons to move things around. */}
                     <span className="search-count">
                       {matchCount ? `${Math.min(matchIdx, matchCount - 1) + 1}/${matchCount}` : "0/0"}
                     </span>
                     <button
                       type="button"
-                      className="search-nav-btn"
-                      onClick={() => stepMatch(-1)}
-                      disabled={!matchCount}
-                      aria-label={t.search_prev_match ?? "Previous match"}
+                      className="search-nav-btn search-clear-btn"
+                      onClick={() => setSearch("")}
+                      aria-label={t.search_clear ?? "Clear search"}
                     >
-                      <ChevronUp size={14} strokeWidth={2.5} />
-                    </button>
-                    <button
-                      type="button"
-                      className="search-nav-btn"
-                      onClick={() => stepMatch(1)}
-                      disabled={!matchCount}
-                      aria-label={t.search_next_match ?? "Next match"}
-                    >
-                      <ChevronDown size={14} strokeWidth={2.5} />
+                      <X size={14} strokeWidth={2.5} />
                     </button>
                   </div>
                 )}

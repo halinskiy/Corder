@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.15] — 2026-07-02
+
+### Fixed
+- The transcript search match counter no longer jumps around. It's now pinned
+  to the right of the field in a fixed-width, right-aligned box, so the digits
+  stay put as the count changes (1/237 → 1/3 → 0/0). A Clear (×) button is back
+  too — sits right beside the counter. Prev/next now happen with Enter and
+  Shift+Enter (no more chevrons crowding the field).
+
 ## [0.15.14] — 2026-07-02
 
 ### Fixed
