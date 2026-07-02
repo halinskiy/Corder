@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.14] — 2026-07-02
+
+### Fixed
+- The transcript search no longer shows a stray native "×" clear button
+  colliding with the match counter (the "×41" clutter). WebKit draws its own
+  clear glyph on every search field; it's now hidden so only the clean
+  match-counter + prev/next controls remain.
+
 ## [0.15.13] — 2026-07-02
 
 ### Fixed
