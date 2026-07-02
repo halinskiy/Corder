@@ -163,6 +163,7 @@ interface Strings {
   transcript_search: string;
   search_prev_match: string;
   search_next_match: string;
+  search_clear?: string;
   settings_video_perf_toast: string;
   transcript_empty_failed: string;
   transcript_empty_recording: string;
@@ -547,6 +548,7 @@ const en: Strings = {
   transcript_search: "Search the transcript…",
   search_prev_match: "Previous match",
   search_next_match: "Next match",
+  search_clear: "Clear search",
   settings_video_perf_toast: "May affect performance",
   transcript_empty_failed: "Transcription failed.",
   transcript_empty_recording: "Recording…",
