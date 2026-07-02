@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.11] — 2026-07-02
+
+### Changed
+- Screen video recording is now turned OFF for everyone on this update,
+  including anyone who had it enabled. Video is a niche, opt-in feature — turn
+  it back on any time in Settings (that's also where Corder asks for Screen
+  Recording permission). Audio recording and transcription are unaffected.
+
 ## [0.15.10] — 2026-07-01
 
 ### Fixed
