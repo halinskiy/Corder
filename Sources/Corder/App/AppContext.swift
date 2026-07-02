@@ -223,6 +223,19 @@ enum AppSettings {
 
     static func setNotifications(_ v: Bool)  { setFlag(kNotifications, v) }
     static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
+    /// One-time forced reset: turn screen video OFF for EVERYONE — including
+    /// users who had explicitly enabled it — then let them opt back in via
+    /// Settings. The 0.15.9 default flip to OFF only affected users who never
+    /// touched the toggle; this forces the (now niche, opt-in) feature off for
+    /// the whole base once. Guarded by a migration flag so a user who later
+    /// re-enables video isn't force-disabled again on the next launch.
+    static func forceVideoOffOnceIfNeeded() {
+        let key = "Corder.migration.forceVideoOff.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(false, forKey: kCaptureVideo)
+        UserDefaults.standard.set(true, forKey: key)
+        FileLogger.log("AppSettings: one-time forced screen video OFF for all users (0.15.11)")
+    }
     static func setCaptureAudio(_ v: Bool)   { setFlag(kCaptureAudio, v) }
     static func setAutoTranscribe(_ v: Bool) { setFlag(kAutoTranscribe, v) }
     static func setAutoTitle(_ v: Bool)      { setFlag(kAutoTitle, v) }

@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (The code/NOTES.md long referred to a "duplicate-instance killer"
         // that never actually existed; this is it.)
         Self.terminateOtherInstances()
+        // One-time: force screen video OFF for the whole base (even users who
+        // had it on). Runs before any capture reads `captureVideo`. Idempotent.
+        AppSettings.forceVideoOffOnceIfNeeded()
         // Multi-account local layout: if there's still a legacy
         // flat `corder.db` at supportRoot AND we already know
         // which user owns this Mac (email persisted from previous
