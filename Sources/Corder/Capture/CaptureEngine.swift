@@ -449,14 +449,19 @@ final class CaptureEngine: NSObject {
                 if AppSettings.captureVideo {
                     try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
                 }
-                // SCK (system_sck.wav) is ONLY a Bluetooth-output fallback for the
-                // process tap, and is empirically pure silence on every non-BT
-                // recording — yet each buffer still allocated an AVAudioPCMBuffer,
-                // ran CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer and
-                // wrote to disk. So register the `.audio` output ONLY on a BT
-                // route. On a video+non-BT recording we now keep just the `.screen`
-                // output and drop the third tap entirely (issue #1, item 2).
-                if outputBluetoothAtStart {
+                // SCK (system_sck.wav) is the SCStream-`.audio` far-end backup for
+                // a Bluetooth output. Measured DEAD — all-zero buffers in 100% of
+                // recordings, BT route included (see AGENTS "SCK is DEAD at the OS
+                // level") — yet it wrote a 48 kHz STEREO FLOAT32 file at ~384 KB/s
+                // of pure silence: 596 MB on one real BT meeting, the single
+                // biggest file on disk. We no longer persist it. The track chooser
+                // (TranscriptionPipeline / RecordingController mix) already falls
+                // back to the process tap when `system_sck.wav` is absent, so
+                // nothing downstream changes. Flip `captureSCKBackup` to true to
+                // re-arm if a future macOS ever makes SCStream `.audio` actually
+                // capture the system mix.
+                let captureSCKBackup = false
+                if captureSCKBackup && outputBluetoothAtStart {
                     do {
                         try activeStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
                         self.sckSystemURL = sckSystemURL
@@ -472,7 +477,7 @@ final class CaptureEngine: NSObject {
                     }
                 } else {
                     self.sckSystemURL = nil
-                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), non-BT → no SCK tap, process tap only)")
+                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart)) — SCK backup not persisted (dead 48k float32 silence), process tap only")
                 }
                 do {
                     try await activeStream.startCapture()

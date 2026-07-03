@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.22] — 2026-07-03
+
+### Changed
+- Recordings take far less disk. The `system_sck.wav` backup track — a second
+  far-end capture that is always silent (48 kHz stereo, hundreds of MB on a
+  long call) — is no longer written, and any left by older builds are cleaned
+  up automatically on launch.
+
 ## [0.15.21] — 2026-07-03
 
 ### Fixed
