@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.20] — 2026-07-03
+
+### Fixed
+- The "Capture your screen too" pitch no longer appears when Screen video
+  recording is turned off. It could show for audio-only users because the panel
+  assumed screen video was on until settings loaded (a stale default from when
+  video used to be on by default); it now stays hidden unless screen video is
+  actually enabled.
+
 ## [0.15.19] — 2026-07-03
 
 ### Fixed
