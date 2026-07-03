@@ -74,6 +74,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // longer write it). One-time-per-launch, guarded to never remove a
         // meeting's only system track.
         Self.reclaimDeadSCKBackups()
+        // Shrink retained audio (mic/system/playback) to 16 kHz mono 16-bit PCM
+        // — the format ASR + playback actually use — reclaiming the capture-time
+        // 44.1/48 kHz stereo Float32 waste. Heavy (transcodes files), so it runs
+        // in the BACKGROUND off the launch path; atomic + idempotent per file so
+        // a concurrent open never sees a half-written file. The skip set (this
+        // launch's to-be-transcribed meetings) is read from the @MainActor repo
+        // HERE and handed to the detached task, which touches no actor state.
+        var compactSkip = Set<String>()
+        if let s = try? AppContext.shared.repo.stuckTranscribingMeetingIds() { compactSkip.formUnion(s) }
+        if let f = try? AppContext.shared.repo.failedRetriableMeetingIds(maxAttempts: 3) { compactSkip.formUnion(f) }
+        Task.detached(priority: .utility) { Self.compactRetainedAudio(skip: compactSkip) }
         // If a transcription was in flight when the previous process died
         // (forced quit, rebuild during dev, machine sleep), pick it up
         // again automatically. The audio files (mic.wav / system.wav) are
@@ -440,6 +451,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if count > 0 {
             FileLogger.log("reclaimDeadSCKBackups: removed \(count) dead system_sck.wav file(s), freed \(freedBytes / 1_000_000) MB")
+        }
+    }
+
+    /// Background sweep: compact every meeting's retained `mic.wav` /
+    /// `system.wav` / `audio.wav` to 16 kHz mono 16-bit PCM (see
+    /// `AudioMixer.compactToTranscriptionFormat`). Covers ALL accounts on this
+    /// Mac. SKIPS meetings that this launch will (re)transcribe — compacting a
+    /// source under an active transcription read would race; those get compacted
+    /// on a later launch once they're `.ready`. Every file op is atomic +
+    /// best-effort, so the pass can never corrupt a recording.
+    nonisolated static func compactRetainedAudio(skip: Set<String>) {
+        // `skip` = the current account's meetings this launch will re-transcribe
+        // (computed on the MainActor by the caller). Dormant accounts have no
+        // live transcription, so everything else is safe to compact.
+        let fm = FileManager.default
+        guard let accounts = try? fm.contentsOfDirectory(
+            at: AppPaths.accountsRoot, includingPropertiesForKeys: nil) else { return }
+        var freedBytes: Int64 = 0
+        var files = 0
+        for account in accounts {
+            let recordings = account.appendingPathComponent("recordings", isDirectory: true)
+            guard let dirs = try? fm.contentsOfDirectory(
+                at: recordings, includingPropertiesForKeys: nil) else { continue }
+            for dir in dirs where !skip.contains(dir.lastPathComponent) {
+                for name in ["mic.wav", "system.wav", "audio.wav"] {
+                    let f = dir.appendingPathComponent(name)
+                    let before = ((try? fm.attributesOfItem(atPath: f.path))?[.size] as? NSNumber)?.int64Value ?? 0
+                    if AudioMixer.compactToTranscriptionFormat(at: f) {
+                        let after = ((try? fm.attributesOfItem(atPath: f.path))?[.size] as? NSNumber)?.int64Value ?? 0
+                        freedBytes += max(0, before - after)
+                        files += 1
+                    }
+                }
+            }
+        }
+        if files > 0 {
+            FileLogger.log("compactRetainedAudio: compacted \(files) file(s), reclaimed \(freedBytes / 1_000_000) MB")
         }
     }
 

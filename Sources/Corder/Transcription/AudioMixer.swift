@@ -64,6 +64,54 @@ enum AudioMixer {
         try outFile.write(from: mixed)
     }
 
+    /// Shrink a retained WAV to the exact format ASR and playback actually
+    /// consume — 16 kHz MONO 16-bit PCM — reclaiming the disk the capture-time
+    /// 44.1/48 kHz stereo Float32 originals waste (a 44.1k mono f32 mic.wav is
+    /// ~176 KB/s; 16k mono int16 is 32 KB/s → ~5.5x smaller; a 48k STEREO f32
+    /// system.wav is ~12x). Lossless for our purposes: Whisper/Groq downsample
+    /// to 16k mono anyway, and the playback mix is already 16k mono. Idempotent
+    /// (a file already 16 kHz/mono/int16 is skipped — the fast path), atomic
+    /// (temp file then swap), best-effort (on ANY error the original is left
+    /// exactly as it was, so a bulk pass can never corrupt a recording).
+    @discardableResult
+    static func compactToTranscriptionFormat(at url: URL) -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path),
+              let inFile = try? AVAudioFile(forReading: url) else { return false }
+        let src = inFile.fileFormat
+        // Already 16 kHz mono integer PCM → nothing to gain, skip.
+        if src.sampleRate == 16_000, src.channelCount == 1, src.commonFormat != .pcmFormatFloat32 {
+            return false
+        }
+        let target = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                   sampleRate: 16_000, channels: 1, interleaved: false)!
+        // readAndConvert resamples + downmixes to 16k mono float32 (same path,
+        // and same memory profile, as the per-transcription playback mix).
+        guard let buf = try? readAndConvert(fileURL: url, targetFormat: target),
+              buf.frameLength > 1 else { return false }
+        let base = url.deletingPathExtension().lastPathComponent
+        let tmp = url.deletingLastPathComponent()
+            .appendingPathComponent("\(base).compact.\(UInt64(buf.frameLength)).tmp.wav")
+        try? fm.removeItem(at: tmp)
+        do {
+            let out = try AVAudioFile(
+                forWriting: tmp,
+                settings: playbackInt16Settings(sampleRate: 16_000, channels: 1),
+                commonFormat: .pcmFormatFloat32, interleaved: false)
+            try out.write(from: buf)
+        } catch {
+            FileLogger.log("AudioMixer: compact failed for \(url.lastPathComponent): \(error)")
+            try? fm.removeItem(at: tmp)
+            return false
+        }
+        do { _ = try fm.replaceItemAt(url, withItemAt: tmp) }
+        catch {
+            try? fm.removeItem(at: url); try? fm.moveItem(at: tmp, to: url)
+        }
+        FileLogger.log("AudioMixer: compacted \(url.lastPathComponent) → 16 kHz mono 16-bit PCM")
+        return true
+    }
+
     /// 16-bit little-endian PCM WAV settings — the format WKWebView's <audio>
     /// element can actually decode (a float32 WAV cannot be played by the media
     /// element). Used for the playback mix and the float32→int16 rewrite.

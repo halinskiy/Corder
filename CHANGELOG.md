@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.23] — 2026-07-03
+
+### Changed
+- Recordings take much less disk. Retained audio (your mic, the far end, and the
+  playback mix) is now stored as 16 kHz mono 16-bit PCM — exactly what
+  transcription and playback use — instead of the far larger 44.1/48 kHz stereo
+  float32 the capture produced. Existing recordings are compacted in the
+  background on launch. Combined with the removed silent backup track, a
+  reported ~940 MB meeting drops to roughly ~110 MB with no change to transcript
+  or playback quality.
+
 ## [0.15.22] — 2026-07-03
 
 ### Changed
