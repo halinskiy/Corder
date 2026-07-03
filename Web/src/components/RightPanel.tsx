@@ -37,12 +37,14 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
   // The "Screen video recording" toggle. The ghost pitch is tied to it: turning
   // screen video OFF removes the pitch entirely (there's nothing to grant for).
-  // Defaults true (the setting defaults ON) so we don't flash it off first paint.
-  const [captureVideo, setCaptureVideo] = React.useState<boolean>(true);
+  // Defaults FALSE — screen video is opt-in / default-OFF (since 0.15.11), so we
+  // must NOT flash the "Capture your screen too" pitch before the real setting
+  // loads (or if the fetch fails). Only a confirmed capture_video=true shows it.
+  const [captureVideo, setCaptureVideo] = React.useState<boolean>(false);
   React.useEffect(() => {
     let alive = true;
     const refresh = () => getSettings()
-      .then((s) => { if (alive) { setScreenGranted(s.screen_recording_granted ?? true); setCaptureVideo(s.capture_video ?? true); } })
+      .then((s) => { if (alive) { setScreenGranted(s.screen_recording_granted ?? true); setCaptureVideo(s.capture_video ?? false); } })
       .catch(() => {});
     refresh();
     // Re-check when the user returns to Corder (e.g. after granting Screen
@@ -170,12 +172,14 @@ function GhostVideo({ t, recording = false }: { t: T; recording?: boolean }) {
 export function GhostRecordingPanel({ t, recording = false }: { t: T; recording?: boolean }) {
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
   // "Screen video recording" toggle — when OFF the ghost VIDEO block disappears
-  // entirely (the audio + timeline ghosts stay). Defaults true (setting is ON).
-  const [captureVideo, setCaptureVideo] = React.useState<boolean>(true);
+  // entirely (the audio + timeline ghosts stay). Defaults FALSE — screen video
+  // is opt-in / default-OFF (since 0.15.11), so the video ghost stays hidden
+  // until a confirmed capture_video=true arrives (no first-paint flash).
+  const [captureVideo, setCaptureVideo] = React.useState<boolean>(false);
   React.useEffect(() => {
     let alive = true;
     const refresh = () => getSettings()
-      .then((s) => { if (alive) { setScreenGranted(s.screen_recording_granted ?? true); setCaptureVideo(s.capture_video ?? true); } })
+      .then((s) => { if (alive) { setScreenGranted(s.screen_recording_granted ?? true); setCaptureVideo(s.capture_video ?? false); } })
       .catch(() => {});
     refresh();
     window.addEventListener("focus", refresh);
