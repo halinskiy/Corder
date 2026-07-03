@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.21] — 2026-07-03
+
+### Fixed
+- Screen video from a recording interrupted by a crash, a forced quit, or an
+  app update is no longer lost. The video is now written in a crash-safe form
+  and is recovered on the next launch alongside the audio (up to the last few
+  seconds before the interruption), instead of the interrupted file being
+  unplayable. Only relevant when Screen video recording is enabled.
+
 ## [0.15.20] — 2026-07-03
 
 ### Fixed
