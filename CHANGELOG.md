@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.19] — 2026-07-03
+
+### Fixed
+- A recording interrupted by a crash, a forced quit, or an app update is no
+  longer lost. Whatever was captured up to the interruption is now recovered
+  and transcribed automatically on the next launch. Previously the interrupted
+  file's header was never finalized, so it read as empty (zero length) and got
+  discarded even though the audio was sitting on disk.
+
 ## [0.15.18] — 2026-07-03
 
 ### Added
