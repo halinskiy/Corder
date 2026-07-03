@@ -151,34 +151,50 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
     const overlay = document.querySelector(".update-overlay") as HTMLElement | null;
     const card = cardRef.current;
     if (!overlay || !card) return;
+    // Cache the rects — the modal is fixed/centered so they only change on
+    // resize. Reading getBoundingClientRect on EVERY mousemove forced two
+    // synchronous reflows per event, which was the main cause of the tilt
+    // stutter. Recompute only on resize.
+    let oRect = overlay.getBoundingClientRect();
+    let cRect = card.getBoundingClientRect();
+    const remeasure = () => { oRect = overlay.getBoundingClientRect(); cRect = card.getBoundingClientRect(); };
+    let raf = 0;
+    let px = 0, py = 0;
+    const max = 11;  // max tilt degrees
+    // Coalesce all mousemoves in a frame into ONE style write via rAF, so the
+    // transform updates at the display refresh rate instead of per event.
+    const apply = () => {
+      raf = 0;
+      const nx = ((px - oRect.left) / oRect.width) * 2 - 1;   // -1..1
+      const ny = ((py - oRect.top) / oRect.height) * 2 - 1;   // -1..1
+      card.style.setProperty("--tilt-x", `${(-ny * max).toFixed(2)}deg`);
+      card.style.setProperty("--tilt-y", `${(nx * max).toFixed(2)}deg`);
+      const sx = ((px - cRect.left) / cRect.width) * 100;
+      const sy = ((py - cRect.top) / cRect.height) * 100;
+      card.style.setProperty("--tilt-shine-x", `${sx.toFixed(1)}%`);
+      card.style.setProperty("--tilt-shine-y", `${sy.toFixed(1)}%`);
+    };
+    const onMove = (e: MouseEvent) => {
+      px = e.clientX; py = e.clientY;
+      card.classList.remove("tilt-snap-back");   // direct tracking, no transition
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
     const reset = () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      card.classList.add("tilt-snap-back");       // ease back to flat on leave
       card.style.setProperty("--tilt-x", "0deg");
       card.style.setProperty("--tilt-y", "0deg");
       card.style.setProperty("--tilt-shine-x", "50%");
       card.style.setProperty("--tilt-shine-y", "50%");
     };
-    const onMove = (e: MouseEvent) => {
-      const r = overlay.getBoundingClientRect();
-      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;   // -1..1
-      const ny = ((e.clientY - r.top) / r.height) * 2 - 1;   // -1..1
-      const max = 11;  // max tilt degrees
-      const ry = nx * max;
-      const rx = -ny * max;
-      card.style.setProperty("--tilt-x", `${rx.toFixed(2)}deg`);
-      card.style.setProperty("--tilt-y", `${ry.toFixed(2)}deg`);
-      // Sheen position follows the cursor for an extra layer of
-      // depth, again only when state.visible is true.
-      const cardRect = card.getBoundingClientRect();
-      const sx = ((e.clientX - cardRect.left) / cardRect.width) * 100;
-      const sy = ((e.clientY - cardRect.top) / cardRect.height) * 100;
-      card.style.setProperty("--tilt-shine-x", `${sx}%`);
-      card.style.setProperty("--tilt-shine-y", `${sy}%`);
-    };
     overlay.addEventListener("mousemove", onMove);
     overlay.addEventListener("mouseleave", reset);
+    window.addEventListener("resize", remeasure);
     return () => {
       overlay.removeEventListener("mousemove", onMove);
       overlay.removeEventListener("mouseleave", reset);
+      window.removeEventListener("resize", remeasure);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [state.visible]);
 

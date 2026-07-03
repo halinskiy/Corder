@@ -108,6 +108,9 @@ enum DTO {
         /// as "leave unchanged" (migration/compat guarantee). Defaults
         /// live in `AppSettings` (every Bool → true).
         let notifications: Bool?
+        /// Floating recording HUD (the live equalizer pill). Default ON;
+        /// toggling off suppresses the pill for the whole session.
+        let hud_enabled: Bool?
         let capture_video: Bool?
         /// Read-only: whether macOS Screen Recording is currently granted to
         /// Corder. Drives the "ghost video" CTA in the recording panel (video

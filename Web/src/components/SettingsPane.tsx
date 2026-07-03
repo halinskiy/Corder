@@ -119,22 +119,21 @@ export function SettingsPane({
       onScroll={(e) => { settingsScrollCache[section] = (e.currentTarget as HTMLDivElement).scrollTop; }}
     >
       <div style={{ display: section === "general" ? "contents" : "none" }}>
-        {/* Microphone picker FIRST — the most-used setting. "System default"
-            stays the first option (the value when mic_device_uid is empty);
-            the choice applies to the NEXT recording (no live AVAudioEngine
-            hot-swap). */}
+        {/* Recording equalizer (the floating HUD pill) — default ON. Same
+            SoloCard + Toggle shell as Screen video recording, sits directly
+            above it. Off suppresses the floating pill for the whole session
+            (recording still starts/stops from the popover + in-app button). */}
         <SoloCard>
-          <MicDevicePicker
-            devices={s?.audio_input_devices ?? []}
-            value={s?.mic_device_uid ?? ""}
+          <Toggle
+            label={t.settings_hud_title ?? "Recording equalizer"}
+            desc={t.settings_hud_desc ?? "Show the floating equalizer pill that hovers over your screen while recording."}
+            checked={on("hud_enabled")}
             disabled={!loaded}
-            onChange={(uid) => patch({ mic_device_uid: uid })}
-            t={t}
+            onChange={(v) => patch({ hud_enabled: v })}
           />
         </SoloCard>
 
-        {/* Screen video recording — sits right under Microphone in General
-            now (was in Advanced). It's local capture, fine for guests. */}
+        {/* Screen video recording — local capture, fine for guests. */}
         <SoloCard>
           <Toggle
             label={t.settings_video}
@@ -196,6 +195,21 @@ export function SettingsPane({
             checked={(s?.telemetry as boolean | undefined) ?? false}
             disabled={!loaded}
             onChange={(v) => patch({ telemetry: v })}
+          />
+        </SoloCard>
+
+        {/* Microphone picker — moved here (was at the top of General) so it
+            sits directly above the Recordings folder block. "System default"
+            stays the first option (the value when mic_device_uid is empty);
+            the choice applies to the NEXT recording (no live AVAudioEngine
+            hot-swap). */}
+        <SoloCard>
+          <MicDevicePicker
+            devices={s?.audio_input_devices ?? []}
+            value={s?.mic_device_uid ?? ""}
+            disabled={!loaded}
+            onChange={(uid) => patch({ mic_device_uid: uid })}
+            t={t}
           />
         </SoloCard>
 

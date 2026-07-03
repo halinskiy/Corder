@@ -102,6 +102,7 @@ enum AppSettings {
     }
 
     private static let kNotifications  = "Corder.set.notifications"
+    private static let kHudEnabled     = "Corder.set.hudEnabled"
     private static let kCaptureVideo   = "Corder.set.captureVideo"
     private static let kCaptureAudio   = "Corder.set.captureAudio"
     private static let kAutoTranscribe = "Corder.set.autoTranscribe"
@@ -139,7 +140,24 @@ enum AppSettings {
     static func setMicGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kMicGrantedOnce) }
     static func setScreenGrantedSticky(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenGrantedOnce) }
 
-    static var notificationsEnabled: Bool { flag(kNotifications) }
+    // System notifications default OFF for everyone (0.15.18). They were
+    // default-ON via `flag()`, but on a fresh install the record-start /
+    // transcript-ready / network-loss banners read as noise before the
+    // user has opted in. Now opt-in via the Settings toggle;
+    // `forceNotificationsOffOnceIfNeeded()` also forces the existing base
+    // off once (mirrors the one-time screen-video reset).
+    static var notificationsEnabled: Bool {
+        UserDefaults.standard.object(forKey: kNotifications) as? Bool ?? false
+    }
+    /// Floating recording HUD — the live equalizer pill that hovers over
+    /// every Space while recording (also the Stop button). Default ON: it's
+    /// the primary "you're being recorded" affordance. Turning it off in
+    /// Settings suppresses the pill for the whole session (see
+    /// `RecordingHUDPanel.show`); recording still starts/stops from the
+    /// menu-bar popover and the in-app button.
+    static var hudEnabled: Bool {
+        UserDefaults.standard.object(forKey: kHudEnabled) as? Bool ?? true
+    }
     // Screen video recording defaults OFF (reversed from the earlier default-ON,
     // 0.15.9). Screen video is a niche feature — most users only want the
     // transcript — and default-ON dragged the whole SCStream path into EVERY
@@ -222,6 +240,7 @@ enum AppSettings {
     static func setScreenRecordingAsked(_ v: Bool) { UserDefaults.standard.set(v, forKey: kScreenRecAsked) }
 
     static func setNotifications(_ v: Bool)  { setFlag(kNotifications, v) }
+    static func setHudEnabled(_ v: Bool)     { setFlag(kHudEnabled, v) }
     static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
     /// One-time forced reset: turn screen video OFF for EVERYONE — including
     /// users who had explicitly enabled it — then let them opt back in via
@@ -235,6 +254,19 @@ enum AppSettings {
         UserDefaults.standard.set(false, forKey: kCaptureVideo)
         UserDefaults.standard.set(true, forKey: key)
         FileLogger.log("AppSettings: one-time forced screen video OFF for all users (0.15.11)")
+    }
+    /// One-time forced reset: turn System notifications OFF for EVERYONE —
+    /// including users who had them on under the old default-ON behaviour —
+    /// then let them opt back in via Settings. Mirrors
+    /// `forceVideoOffOnceIfNeeded`; guarded by its own migration flag so a
+    /// user who later re-enables notifications isn't force-disabled again on
+    /// the next launch.
+    static func forceNotificationsOffOnceIfNeeded() {
+        let key = "Corder.migration.forceNotifOff.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(false, forKey: kNotifications)
+        UserDefaults.standard.set(true, forKey: key)
+        FileLogger.log("AppSettings: one-time forced System notifications OFF for all users (0.15.18)")
     }
     static func setCaptureAudio(_ v: Bool)   { setFlag(kCaptureAudio, v) }
     static func setAutoTranscribe(_ v: Bool) { setFlag(kAutoTranscribe, v) }

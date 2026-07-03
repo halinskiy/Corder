@@ -16,6 +16,27 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.18] — 2026-07-03
+
+### Added
+- Settings → General has a new "Recording equalizer" switch (on by default).
+  Turn it off to hide the floating equalizer pill that hovers over your screen
+  while recording. Recording still starts and stops from the menu-bar icon and
+  the in-app button.
+
+### Changed
+- System notifications are now off by default. Turn them back on any time in
+  Settings → General for banners on recording start, transcript ready, and
+  network loss.
+- Settings → General is reordered: the recording equalizer and screen-video
+  switches sit at the top, and the Microphone picker now sits just above the
+  Recordings folder.
+
+### Fixed
+- The update and sign-in cards no longer stutter as their 3D tilt follows the
+  cursor. The tilt tracks smoothly now and eases back to flat when the pointer
+  leaves.
+
 ## [0.15.17] — 2026-07-03
 
 ### Fixed
