@@ -106,7 +106,13 @@ enum AudioMixer {
         }
         do { _ = try fm.replaceItemAt(url, withItemAt: tmp) }
         catch {
-            try? fm.removeItem(at: url); try? fm.moveItem(at: tmp, to: url)
+            // replaceItemAt IS the atomic swap. If it fails, do NOT fall back to
+            // remove-then-move: a move that fails after the remove would delete
+            // the recording (data loss). Keep the original intact and drop the
+            // temp — this file simply stays uncompacted.
+            FileLogger.log("AudioMixer: compact swap failed for \(url.lastPathComponent), keeping original: \(error)")
+            try? fm.removeItem(at: tmp)
+            return false
         }
         FileLogger.log("AudioMixer: compacted \(url.lastPathComponent) → 16 kHz mono 16-bit PCM")
         return true
@@ -168,8 +174,11 @@ enum AudioMixer {
         do {
             _ = try fm.replaceItemAt(url, withItemAt: tmp)
         } catch {
-            try? fm.removeItem(at: url)
-            try? fm.moveItem(at: tmp, to: url)
+            // Don't remove-then-move: a failed move after the remove would
+            // delete the playback file. Keep the original, drop the temp.
+            FileLogger.log("AudioMixer: int16 swap failed for \(url.lastPathComponent), keeping original: \(error)")
+            try? fm.removeItem(at: tmp)
+            return
         }
         FileLogger.log("AudioMixer: rewrote \(url.lastPathComponent) float32 → 16-bit PCM for WKWebView playback")
     }

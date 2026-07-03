@@ -233,6 +233,15 @@ enum Migrations {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_speakers_meeting ON speakers(meeting_id);")
         }
 
+        // Index segments by speaker so the hot per-speaker queries (merge,
+        // reassign, orphan-speaker purge, and the listMeetingSummaries preview
+        // subquery) stop full-scanning the segments table on a large library.
+        // Pure perf — no behaviour change (mirrors v21). idx_segments_meeting_start
+        // already covers meeting_id, but not speaker_id.
+        m.registerMigration("v22_segments_speaker_index") { db in
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_segments_speaker ON segments(speaker_id);")
+        }
+
         return m
     }
 }
