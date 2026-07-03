@@ -3,13 +3,17 @@ import Foundation
 
 /// Salvages recordings interrupted by a crash / forced quit / power loss.
 ///
-/// A row left in `.recording` means the stop path never ran. The audio
-/// is written incrementally (AVAudioFile, per-buffer), so whatever was
-/// captured up to the crash is a valid, playable WAV on disk — only the
-/// DB bookkeeping is missing. We reconstruct `endedAt`/`durationMs` from
-/// the file itself and flip the row to `.transcribing`, so the launch
-/// auto-resume transcribes it like any normal recording instead of the
-/// user losing the meeting.
+/// A row left in `.recording` means the stop path never ran. The audio is
+/// written incrementally (AVAudioFile, per-buffer), so the SAMPLES up to the
+/// crash are all on disk — but the WAV HEADER is not: `AVAudioFile` only
+/// writes the `data`/RIFF chunk sizes on close, so a hard-killed file reports
+/// ZERO frames to every reader and looks empty. `WavHeaderRepair` patches the
+/// header from the real file length first, THEN we reconstruct
+/// `endedAt`/`durationMs` from the (now-readable) file and flip the row to
+/// `.transcribing`, so the launch auto-resume transcribes it like any normal
+/// recording instead of the user losing the meeting. Repairing the file in
+/// place also makes it playable + transcribable downstream (the pipeline reads
+/// the same `mic.wav`/`system.wav`).
 ///
 /// Must run BEFORE `resetStuckMeetings()` (which deletes duration-less
 /// `.recording` rows): salvageable rows become `.transcribing` first and
@@ -31,6 +35,10 @@ enum RecordingRecovery {
 
             var bestMs: Int64 = 0
             for url in candidates where FileManager.default.fileExists(atPath: url.path) {
+                // Fix the never-finalized WAV header (data/RIFF size = 0 after a
+                // hard kill) BEFORE measuring — otherwise every file reads as
+                // 0 ms and a real recording is wrongly dropped as unsalvageable.
+                WavHeaderRepair.repairIfTruncated(at: url)
                 bestMs = max(bestMs, durationMs(of: url))
             }
 
