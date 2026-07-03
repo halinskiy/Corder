@@ -2000,6 +2000,17 @@ enum Routes {
                 }
             }
 
+            // Video: heal a crash-safe FRAGMENTED .mov (written with
+            // movieFragmentInterval) into a faststart file the WKWebView
+            // <video> element can progressively load. Idempotent (no-op once
+            // faststart / for legacy moov-first files); one blocking pass on
+            // first play, then cached on disk. Also recovers a kill-interrupted
+            // partial video (valid to its last flushed fragment). Runs after all
+            // hydration so `url` is the final local file.
+            if kind == .video {
+                VideoRemux.faststartIfNeeded(at: url)
+            }
+
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
 

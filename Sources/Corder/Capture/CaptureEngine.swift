@@ -392,19 +392,15 @@ final class CaptureEngine: NSObject {
                         if writer.canAdd(input) {
                             writer.add(input)
                         }
-                        // Faststart, NOT fragmented. `movieFragmentInterval` produced a
-                        // fragmented QuickTime MOV whose `moov` atom lands in the MIDDLE of
-                        // the file (after the first `mdat`), which AVFoundation plays fine
-                        // but the WKWebView `<video>` element can't progressively load — it
-                        // fired `error`, so `ScreenVideo` hid the whole card and a recorded
-                        // video looked like "no video was captured". `shouldOptimizeFor
-                        // NetworkUse` rewrites the `moov` to the FRONT (faststart) on
-                        // finishWriting, so the in-app player can stream it. The
-                        // crash-safety tradeoff is acceptable: only the (secondary) video is
-                        // lost on an interrupted recording, never the transcript — mic.wav /
-                        // system.wav are separate files and untouched. (Mutually exclusive
-                        // with movieFragmentInterval, so we use one OR the other.)
-                        writer.shouldOptimizeForNetworkUse = true
+                        // CRASH-SAFE fragmented writing. A faststart writer buffers the
+                        // whole movie and flushes moov+mdat only on finishWriting, so a hard
+                        // kill leaves a ZERO-byte video.mov (measured) — total video loss.
+                        // Fragmenting flushes a self-describing chunk to disk every few
+                        // seconds, so an interrupted recording keeps the video up to the last
+                        // flush. A fragmented file isn't WKWebView-progressive-loadable, so
+                        // serveMedia remuxes it to faststart on first play (VideoRemux).
+                        // Mutually exclusive with shouldOptimizeForNetworkUse.
+                        writer.movieFragmentInterval = CMTime(seconds: 3, preferredTimescale: 600)
                         if writer.startWriting() {
                             self.videoWriter = writer
                             self.videoInput = input
