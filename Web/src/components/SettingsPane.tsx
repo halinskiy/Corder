@@ -58,6 +58,12 @@ export function SettingsPane({
   const pending = React.useRef<Settings>({});
   const timer = React.useRef<number | null>(null);
 
+  // Clear any pending debounced settings POST on unmount so the timer can't
+  // fire a setState on an unmounted component (or flush a stale write).
+  React.useEffect(() => () => {
+    if (timer.current != null) window.clearTimeout(timer.current);
+  }, []);
+
   React.useEffect(() => {
     let alive = true;
     getSettings().then((v) => { if (alive) setS(v); }).catch(() => {});

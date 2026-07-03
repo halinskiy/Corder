@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.24] — 2026-07-03
+
+### Fixed
+- A failed atomic file-swap during audio compaction or the playback-format
+  rewrite could delete a recording's audio instead of leaving it untouched. The
+  swap now always keeps the original intact on any failure.
+
+### Changed
+- Added a database index on segments-by-speaker, speeding up speaker
+  merge/reassign and the meeting-list preview on large libraries.
+- Settings cancels a pending debounced save when the panel unmounts.
+
 ## [0.15.23] — 2026-07-03
 
 ### Changed
