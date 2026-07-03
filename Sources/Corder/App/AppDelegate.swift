@@ -69,6 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to ship a canned dashboard. Real users want an empty Library
         // on first launch, not someone else's "Daily standup" sample.
         DemoSeeder.removeAll(repo: AppContext.shared.repo)
+        // Reclaim disk from dead `system_sck.wav` backups left by older builds
+        // (48kHz stereo float32 SILENCE — the biggest file per BT meeting; we no
+        // longer write it). One-time-per-launch, guarded to never remove a
+        // meeting's only system track.
+        Self.reclaimDeadSCKBackups()
         // If a transcription was in flight when the previous process died
         // (forced quit, rebuild during dev, machine sleep), pick it up
         // again automatically. The audio files (mic.wav / system.wav) are
@@ -400,6 +405,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Reap any OLDER Corder process still running (this instance is the
     /// newest). Graceful terminate first, force-kill stragglers after a
     /// beat. Prevents two processes fighting over the loopback port + DB.
+    /// Delete the dead `system_sck.wav` backups left on disk by older builds.
+    /// SCK is the SCStream-`.audio` far-end backup that measured all-zero
+    /// silence in 100% of recordings (see AGENTS); at 48 kHz stereo float32 it
+    /// was ~384 KB/s of zeros (596 MB on one real BT meeting — the single
+    /// biggest file). New recordings no longer write it; this reclaims the ones
+    /// already on disk. Guarded: only removes `system_sck.wav` when the primary
+    /// `system.wav` (process tap) is present, so a meeting's only system track
+    /// is never deleted. Best-effort, silent on any per-file failure.
+    static func reclaimDeadSCKBackups() {
+        let fm = FileManager.default
+        // Sweep EVERY account on this Mac (accounts/<id>/recordings/<meeting>/),
+        // not just the active one — a signed-in user's dead backups live under
+        // their account folder, which may not be the account that's active right
+        // now. `_guest` is just another entry here.
+        guard let accounts = try? fm.contentsOfDirectory(
+            at: AppPaths.accountsRoot, includingPropertiesForKeys: nil) else { return }
+        var freedBytes: Int64 = 0
+        var count = 0
+        for account in accounts {
+            let recordings = account.appendingPathComponent("recordings", isDirectory: true)
+            guard let meetingDirs = try? fm.contentsOfDirectory(
+                at: recordings, includingPropertiesForKeys: nil) else { continue }
+            for dir in meetingDirs {
+                let sck = dir.appendingPathComponent("system_sck.wav")
+                let tap = dir.appendingPathComponent("system.wav")
+                guard fm.fileExists(atPath: sck.path), fm.fileExists(atPath: tap.path) else { continue }
+                let size = ((try? fm.attributesOfItem(atPath: sck.path))?[.size] as? NSNumber)?.int64Value ?? 0
+                if (try? fm.removeItem(at: sck)) != nil {
+                    freedBytes += size
+                    count += 1
+                }
+            }
+        }
+        if count > 0 {
+            FileLogger.log("reclaimDeadSCKBackups: removed \(count) dead system_sck.wav file(s), freed \(freedBytes / 1_000_000) MB")
+        }
+    }
+
     static func terminateOtherInstances() {
         guard let bundleID = Bundle.main.bundleIdentifier else { return }
         let me = ProcessInfo.processInfo.processIdentifier
