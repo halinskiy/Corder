@@ -953,6 +953,7 @@ enum Routes {
             gemini_key: nil,        // never echo the key back
             gemini_key_set: FileManager.default.fileExists(atPath: geminiKeyPath),
             notifications: AppSettings.notificationsEnabled,
+            hud_enabled: AppSettings.hudEnabled,
             capture_video: AppSettings.captureVideo,
             screen_recording_granted: CGPreflightScreenCaptureAccess(),
             capture_audio: AppSettings.captureAudio,
@@ -1399,6 +1400,20 @@ enum Routes {
             // Functional toggles + app lists. Absent field ⇒ unchanged
             // (a stale frontend can never silently flip a new toggle).
             if let v = parsed.notifications    { AppSettings.setNotifications(v) }
+            if let v = parsed.hud_enabled      {
+                AppSettings.setHudEnabled(v)
+                // Reflect it LIVE if a recording is on screen: show/hide the
+                // floating equalizer pill now instead of waiting for the next
+                // recording. Only for a real `.recording` (preroll is silent
+                // and never shows the pill). Hop to the main actor — Swifter
+                // handlers run off it.
+                if case .recording = RecordingStateSnapshot.read() {
+                    Task { @MainActor in
+                        if v { RecordingHUDPanel.shared.show() }
+                        else { RecordingHUDPanel.shared.hide() }
+                    }
+                }
+            }
             if let v = parsed.capture_video    { AppSettings.setCaptureVideo(v) }
             if let v = parsed.capture_audio    { AppSettings.setCaptureAudio(v) }
             if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }

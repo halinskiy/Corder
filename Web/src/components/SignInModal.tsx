@@ -84,33 +84,55 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
     return () => { delete window.corderAuthState; };
   }, []);
 
-  // Same cursor-tilt parallax as the update card: map the pointer over the
-  // overlay into a small rotateX/rotateY pair + a sheen position, written
-  // onto CSS variables the `.update-card` rules read.
+  // Same cursor-tilt parallax as the update card (identical rAF-batched loop,
+  // so this shares the jank fix): map the pointer over the overlay into a
+  // small rotateX/rotateY pair + a sheen position, written onto CSS variables
+  // the shared `.update-card` rules read. The rects are CACHED (recomputed on
+  // resize only) — reading getBoundingClientRect on every mousemove forced two
+  // synchronous reflows per event, the tilt-stutter root cause; the writes are
+  // coalesced into ONE per frame via requestAnimationFrame; and the
+  // `tilt-snap-back` class eases the card back to flat only on cursor-leave.
   React.useEffect(() => {
     const overlay = document.querySelector(".update-overlay.auth-overlay") as HTMLElement | null;
     const card = cardRef.current;
     if (!overlay || !card) return;
+    let oRect = overlay.getBoundingClientRect();
+    let cRect = card.getBoundingClientRect();
+    const remeasure = () => { oRect = overlay.getBoundingClientRect(); cRect = card.getBoundingClientRect(); };
+    let raf = 0;
+    let px = 0, py = 0;
+    const max = 4;   // gentle tilt — subtler than the update modal
+    const apply = () => {
+      raf = 0;
+      const nx = ((px - oRect.left) / oRect.width) * 2 - 1;
+      const ny = ((py - oRect.top) / oRect.height) * 2 - 1;
+      card.style.setProperty("--tilt-x", `${(-ny * max).toFixed(2)}deg`);
+      card.style.setProperty("--tilt-y", `${(nx * max).toFixed(2)}deg`);
+      card.style.setProperty("--tilt-shine-x", `${(((px - cRect.left) / cRect.width) * 100).toFixed(1)}%`);
+      card.style.setProperty("--tilt-shine-y", `${(((py - cRect.top) / cRect.height) * 100).toFixed(1)}%`);
+    };
+    const onMove = (e: MouseEvent) => {
+      px = e.clientX; py = e.clientY;
+      card.classList.remove("tilt-snap-back");
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
     const reset = () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      card.classList.add("tilt-snap-back");
       card.style.setProperty("--tilt-x", "0deg");
       card.style.setProperty("--tilt-y", "0deg");
       card.style.setProperty("--tilt-shine-x", "50%");
       card.style.setProperty("--tilt-shine-y", "50%");
     };
-    const onMove = (e: MouseEvent) => {
-      const r = overlay.getBoundingClientRect();
-      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
-      const ny = ((e.clientY - r.top) / r.height) * 2 - 1;
-      const max = 4;   // gentle tilt — subtler than the update modal
-      card.style.setProperty("--tilt-x", `${(-ny * max).toFixed(2)}deg`);
-      card.style.setProperty("--tilt-y", `${(nx * max).toFixed(2)}deg`);
-      const cr = card.getBoundingClientRect();
-      card.style.setProperty("--tilt-shine-x", `${((e.clientX - cr.left) / cr.width) * 100}%`);
-      card.style.setProperty("--tilt-shine-y", `${((e.clientY - cr.top) / cr.height) * 100}%`);
-    };
     overlay.addEventListener("mousemove", onMove);
     overlay.addEventListener("mouseleave", reset);
-    return () => { overlay.removeEventListener("mousemove", onMove); overlay.removeEventListener("mouseleave", reset); };
+    window.addEventListener("resize", remeasure);
+    return () => {
+      overlay.removeEventListener("mousemove", onMove);
+      overlay.removeEventListener("mouseleave", reset);
+      window.removeEventListener("resize", remeasure);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [state.visible]);
 
   if (!state.visible && !leaving) return null;

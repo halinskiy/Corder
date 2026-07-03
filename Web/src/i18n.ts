@@ -63,6 +63,8 @@ interface Strings {
   settings_transcription_language_desc?: string;
   settings_transcription_language_auto?: string;
   settings_sec_capture: string;
+  settings_hud_title?: string;
+  settings_hud_desc?: string;
   settings_video: string;
   settings_video_desc: string;
   /// "Recordings folder" row + its "Open" button (opens the folder in Finder).
@@ -463,6 +465,8 @@ const en: Strings = {
   settings_recordings_folder_title: "Recordings folder",
   settings_recordings_folder_open: "Open",
   settings_recordings_folder_desc: "Open the folder with all your recordings in Finder.",
+  settings_hud_title: "Recording equalizer",
+  settings_hud_desc: "Show the floating equalizer pill that hovers over your screen while recording.",
   settings_video: "Screen video recording",
   settings_video_desc: "Save a video of what was on screen during the meeting.",
   settings_system_audio: "System audio",

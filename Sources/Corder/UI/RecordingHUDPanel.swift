@@ -50,6 +50,16 @@ final class RecordingHUDPanel {
     private static let originYKey = "Corder.HUDOrigin.y"
 
     func show() {
+        // The floating equalizer HUD is user-toggleable (Settings → General
+        // → "Recording equalizer", default ON). When off, never bring the
+        // pill up — and keep `wantsVisible` false so a later Library-suppress
+        // toggle can't resurrect it either. Recording runs headless; Stop is
+        // still reachable from the popover + the in-app button.
+        guard AppSettings.hudEnabled else {
+            wantsVisible = false
+            FileLogger.log("RecordingHUDPanel.show: suppressed (hudEnabled=false)")
+            return
+        }
         wantsVisible = true
         FileLogger.log("RecordingHUDPanel.show: wantsVisible=true librarySuppressed=\(librarySuppressed)")
         if librarySuppressed { return }

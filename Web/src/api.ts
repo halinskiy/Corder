@@ -417,6 +417,8 @@ export interface Settings {
   gemini_key_set?: boolean;
   /** Functional toggles. Absent ⇒ unchanged on POST; default true. */
   notifications?: boolean;
+  /** floating recording HUD (the live equalizer pill); default on. */
+  hud_enabled?: boolean;
   capture_video?: boolean;
   /** read-only: macOS Screen Recording currently granted to Corder. Video
    *  capture is unavailable (ghosted) until this is true. */

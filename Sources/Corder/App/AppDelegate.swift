@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // One-time: force screen video OFF for the whole base (even users who
         // had it on). Runs before any capture reads `captureVideo`. Idempotent.
         AppSettings.forceVideoOffOnceIfNeeded()
+        // One-time: force System notifications OFF for the whole base (default
+        // flipped to opt-in in 0.15.18). Same idempotent migration shape.
+        AppSettings.forceNotificationsOffOnceIfNeeded()
         // Multi-account local layout: if there's still a legacy
         // flat `corder.db` at supportRoot AND we already know
         // which user owns this Mac (email persisted from previous

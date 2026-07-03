@@ -5264,7 +5264,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   --tilt-shine-y: 50%;
   transform-style: preserve-3d;
   transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-  transition: transform 135ms ease;
+  /* NO transition on the tracked transform — the tilt must follow the cursor
+     directly. A transition here made the tilt lag and STUTTER behind the
+     pointer (it kept restarting toward a moving target every mousemove).
+     Smoothness now comes from the rAF-batched JS loop; a transition is applied
+     ONLY on cursor-leave to snap back to flat. */
   animation: update-card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
   transform-origin: center 70%;
   overflow: hidden;
@@ -5276,6 +5280,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   will-change: transform;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+/* Applied by the tilt handler ONLY on cursor-leave, so the card eases back to
+   flat instead of snapping. During active tracking there is no transition. */
+.update-card.tilt-snap-back {
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 /* Sheen is a soft radial highlight that follows the cursor — and
    now sits ABOVE the card content (z-index: 2) so it actually lights
