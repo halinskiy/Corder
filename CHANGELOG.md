@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.25] — 2026-07-04
+
+### Added
+- Screen video now records at a small, space-saving resolution (720p) by
+  default, so recordings stay light on disk. Signed-in users get a new "Record
+  in high resolution" toggle (Settings, under Screen video recording) to capture
+  at the display's native resolution, up to 4K. Bitrate scales with the chosen
+  size.
+
 ## [0.15.24] — 2026-07-03
 
 ### Fixed

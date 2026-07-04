@@ -420,6 +420,10 @@ export interface Settings {
   /** floating recording HUD (the live equalizer pill); default on. */
   hud_enabled?: boolean;
   capture_video?: boolean;
+  /** record screen video at native resolution (up to 4K) instead of the small
+   *  default. Opt-in + sign-in-gated; the toggle is only shown to a signed-in
+   *  user with screen video on. */
+  capture_video_hires?: boolean;
   /** read-only: macOS Screen Recording currently granted to Corder. Video
    *  capture is unavailable (ghosted) until this is true. */
   screen_recording_granted?: boolean;

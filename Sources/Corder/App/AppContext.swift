@@ -104,6 +104,7 @@ enum AppSettings {
     private static let kNotifications  = "Corder.set.notifications"
     private static let kHudEnabled     = "Corder.set.hudEnabled"
     private static let kCaptureVideo   = "Corder.set.captureVideo"
+    private static let kCaptureVideoHires = "Corder.set.captureVideoHires"
     private static let kCaptureAudio   = "Corder.set.captureAudio"
     private static let kAutoTranscribe = "Corder.set.autoTranscribe"
     private static let kAutoTitle      = "Corder.set.autoTitle"
@@ -170,6 +171,16 @@ enum AppSettings {
     // AT TOGGLE TIME (SettingsPane → `requestScreenRecording`), not at record
     // time. So an audio-only user never touches ScreenCaptureKit at all.
     static var captureVideo: Bool          { UserDefaults.standard.object(forKey: kCaptureVideo) as? Bool ?? false }
+    /// Record screen video at the display's NATIVE resolution (up to 4K) instead
+    /// of the small space-saving default. Opt-in (default false) AND gated on
+    /// sign-in: the capture path uses `captureVideoHiresEffective`, so a signed-
+    /// out user — or one who never enabled it — always gets the small default
+    /// size. The UI only surfaces the toggle to a signed-in user with screen
+    /// video on; this getter is just the stored preference.
+    static var captureVideoHires: Bool     { UserDefaults.standard.object(forKey: kCaptureVideoHires) as? Bool ?? false }
+    /// True only when the high-res preference is set AND an account is bound —
+    /// the single value the capture engine reads to pick the output size.
+    static var captureVideoHiresEffective: Bool { captureVideoHires && isSignedIn }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
     static var autoTitle: Bool             { flag(kAutoTitle) }
@@ -242,6 +253,7 @@ enum AppSettings {
     static func setNotifications(_ v: Bool)  { setFlag(kNotifications, v) }
     static func setHudEnabled(_ v: Bool)     { setFlag(kHudEnabled, v) }
     static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
+    static func setCaptureVideoHires(_ v: Bool) { setFlag(kCaptureVideoHires, v) }
     /// One-time forced reset: turn screen video OFF for EVERYONE — including
     /// users who had explicitly enabled it — then let them opt back in via
     /// Settings. The 0.15.9 default flip to OFF only affected users who never
