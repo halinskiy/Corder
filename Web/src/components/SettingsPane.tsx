@@ -170,6 +170,22 @@ export function SettingsPane({
           />
         </SoloCard>
 
+        {/* High-resolution video — appears ONLY for a SIGNED-IN user who has
+            screen video ON. Default OFF records a small 720p file to keep
+            recordings tiny; ON records at the display's native resolution (up
+            to 4K). Sign-in-gated because native-res files are large. */}
+        {on("capture_video") && !!s?.user_email && (
+          <SoloCard>
+            <Toggle
+              label={t.settings_video_hires_title ?? "Record in high resolution"}
+              desc={t.settings_video_hires_desc ?? "Capture screen video at your display's native resolution (up to 4K). Off keeps recordings small."}
+              checked={(s?.capture_video_hires as boolean | undefined) ?? false}
+              disabled={!loaded}
+              onChange={(v) => patch({ capture_video_hires: v })}
+            />
+          </SoloCard>
+        )}
+
         <SoloCard>
           <ThemeToggleRow t={t} />
         </SoloCard>

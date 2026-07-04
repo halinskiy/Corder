@@ -112,6 +112,10 @@ enum DTO {
         /// toggling off suppresses the pill for the whole session.
         let hud_enabled: Bool?
         let capture_video: Bool?
+        /// Record screen video at native resolution (up to 4K) instead of the
+        /// small default. Opt-in + sign-in-gated (the UI only offers it to a
+        /// signed-in user with screen video on; capture enforces sign-in).
+        let capture_video_hires: Bool?
         /// Read-only: whether macOS Screen Recording is currently granted to
         /// Corder. Drives the "ghost video" CTA in the recording panel (video
         /// capture is unavailable until this is true).

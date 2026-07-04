@@ -67,6 +67,8 @@ interface Strings {
   settings_hud_desc?: string;
   settings_video: string;
   settings_video_desc: string;
+  settings_video_hires_title?: string;
+  settings_video_hires_desc?: string;
   /// "Recordings folder" row + its "Open" button (opens the folder in Finder).
   settings_recordings_folder_title?: string;
   settings_recordings_folder_open?: string;
@@ -469,6 +471,8 @@ const en: Strings = {
   settings_hud_desc: "Show the floating equalizer pill that hovers over your screen while recording.",
   settings_video: "Screen video recording",
   settings_video_desc: "Save a video of what was on screen during the meeting.",
+  settings_video_hires_title: "Record in high resolution",
+  settings_video_hires_desc: "Capture screen video at your display's native resolution (up to 4K). Off keeps recordings small.",
   settings_system_audio: "System audio",
   settings_system_audio_desc: "Capture the other side's audio (calls, video conferences).",
   settings_mic: "Microphone",

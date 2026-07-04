@@ -314,13 +314,17 @@ final class CaptureEngine: NSObject {
                 // "Stream failed to start audio" on devices where the actual output is
                 // mono (Bluetooth headsets, some external DACs, AirPods in HFP mode).
                 let config = SCStreamConfiguration()
-                // Output size: the display's point resolution, capped at 1080p height
-                // so a 4K/5K panel doesn't make the encoder chew huge frames. Aspect-
-                // matched + even dimensions (H.264 requirement). Tracer-style "fixed
-                // 1080p cap", NOT backing-resolution-scaled.
+                // Output size: the display's point resolution, capped by the
+                // "high resolution" setting. DEFAULT is a small 720p cap so a
+                // recording stays tiny on disk (Loom-style small files); a
+                // SIGNED-IN user who opts into high resolution gets the native
+                // size capped at 4K so a 5K/6K panel doesn't make the encoder
+                // chew huge frames. Aspect-matched + even dimensions (H.264
+                // requirement). Point resolution, NOT backing-scaled (heat).
+                let maxH = AppSettings.captureVideoHiresEffective ? 2160 : 720
                 let srcAspect = captureHeight > 0
                     ? CGFloat(captureWidth) / CGFloat(captureHeight) : 16.0 / 9.0
-                let outH = min(1080, captureHeight)
+                let outH = min(maxH, captureHeight)
                 let outW = Int((CGFloat(outH) * srcAspect).rounded())
                 config.width = outW - (outW % 2)
                 config.height = outH - (outH % 2)
@@ -378,9 +382,10 @@ final class CaptureEngine: NSObject {
                             AVVideoWidthKey: config.width,
                             AVVideoHeightKey: config.height,
                             AVVideoCompressionPropertiesKey: [
-                                // ~2.5 Mbps for 1080p10 H.264 screen content (mostly
-                                // static, dips well below most of the time).
-                                AVVideoAverageBitRateKey: 2_500_000,
+                                // Bitrate scales with the output height (screen content
+                                // is mostly static; 2.5 Mbps was tuned for 1080p). 720p
+                                // default → ~1.4 Mbps; native/hires up to 4K → ~5 Mbps.
+                                AVVideoAverageBitRateKey: max(1_200_000, Int(Double(config.height) / 1080.0 * 2_500_000)),
                                 AVVideoExpectedSourceFrameRateKey: 10,
                                 // I-frame every 4s at 10fps → fast scrubbing in the Library.
                                 AVVideoMaxKeyFrameIntervalKey: 40,
@@ -406,7 +411,7 @@ final class CaptureEngine: NSObject {
                             self.videoInput = input
                             self.videoSessionStarted = false
                             self.videoFramesAppended = 0
-                            FileLogger.log("CaptureEngine.start: AVAssetWriter armed (H.264, \(config.width)x\(config.height), 10fps, 2.5 Mbps, BGRA)")
+                            FileLogger.log("CaptureEngine.start: AVAssetWriter armed (H.264, \(config.width)x\(config.height), 10fps, hires=\(AppSettings.captureVideoHiresEffective), BGRA)")
                         } else {
                             FileLogger.log("CaptureEngine.start: AVAssetWriter.startWriting failed: \(writer.error?.localizedDescription ?? "?"). Continuing without video.")
                         }

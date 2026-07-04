@@ -955,6 +955,7 @@ enum Routes {
             notifications: AppSettings.notificationsEnabled,
             hud_enabled: AppSettings.hudEnabled,
             capture_video: AppSettings.captureVideo,
+            capture_video_hires: AppSettings.captureVideoHires,
             screen_recording_granted: CGPreflightScreenCaptureAccess(),
             capture_audio: AppSettings.captureAudio,
             auto_transcribe: AppSettings.autoTranscribe,
@@ -1415,6 +1416,7 @@ enum Routes {
                 }
             }
             if let v = parsed.capture_video    { AppSettings.setCaptureVideo(v) }
+            if let v = parsed.capture_video_hires { AppSettings.setCaptureVideoHires(v) }
             if let v = parsed.capture_audio    { AppSettings.setCaptureAudio(v) }
             if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
