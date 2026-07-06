@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.26] — 2026-07-06
+
+### Fixed
+- The menu-bar icon no longer intermittently clips to "( )". The idle ring was
+  an SF Symbol whose rendered size sat at the menu-bar height limit, so macOS
+  clipped its top and bottom (instead of scaling) whenever it re-laid-out the
+  status item — on display sleep/wake, external-monitor connect/disconnect, or
+  fullscreen transitions. It's now a fixed-size ring drawn the same way as the
+  recording dot (which never clipped), and the button scales any icon down
+  rather than clipping it.
+
 ## [0.15.25] — 2026-07-04
 
 ### Added
