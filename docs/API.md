@@ -184,9 +184,12 @@ Settings {
   vocabulary?: string;       // domain terms fed into the transcription prompt
   gemini_key?: string;       // write-only: POST to set; never echoed back by GET
   gemini_key_set?: boolean;  // read-only: whether a key is on disk
-  // Functional toggles. Absent on POST ⇒ unchanged. Default true.
-  notifications?: boolean;
-  capture_video?: boolean;   // screen video.mov (mic+system audio is always on)
+  // Functional toggles. Absent on POST ⇒ unchanged. Most default true; see the
+  // opt-in list below for the default-OFF ones.
+  notifications?: boolean;   // default OFF since 0.15.18 (+ one-time forced-off migration)
+  hud_enabled?: boolean;     // "Recording equalizer" floating pill; default ON (0.15.18)
+  capture_video?: boolean;   // screen video.mov (mic+system audio is always on); default OFF
+  capture_video_hires?: boolean; // native-res (up to 4K) video; default OFF, sign-in-gated (0.15.25)
   capture_audio?: boolean;   // server-side master; not surfaced as a UI toggle
   auto_transcribe?: boolean; // off ⇒ recording kept .ready, transcribe on demand
   auto_title?: boolean;

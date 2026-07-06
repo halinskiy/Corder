@@ -34,7 +34,8 @@ communicate via shared state in `AppContext`:
 ┌──────── CaptureEngine ─────────────────┐       │
 │ SCStream (SKIPPED in audio-only mode): │       │
 │   .screen  →  video.mov (H.264/BGRA)   │       │
-│   .audio   →  system_sck.wav (BT bkp)  │       │
+│   .audio   →  system_sck.wav DROPPED    │       │
+│              (0.15.22, was dead silence) │       │
 │ Core-Audio tap → system.wav (primary)  │       │
 │ AVAudioEngine:                         │       │
 │   default input →  mic.wav             │       │
@@ -126,8 +127,10 @@ Update/
 
 Capture/
 ├ CaptureEngine.swift       SCStream wiring (.screen video, H.264 on
-│                           32BGRA input ~2.5 Mbps capped at 1080p +
-│                           .audio → system_sck.wav as the BT backup),
+│                           32BGRA input, height-capped at 720p by
+│                           default / 4K for signed-in high-res, bitrate
+│                           scaled with height; the .audio → system_sck.wav
+│                           BT backup was DROPPED in 0.15.22 — dead silence),
 │                           AVAudioEngine.installTap on default input
 │                           for mic (4-attempt init retry around the
 │                           -10868 audio-device-change failure),
@@ -136,10 +139,11 @@ Capture/
 │                           non-BT) SCStream is SKIPPED entirely (it
 │                           used to capture the whole screen even with
 │                           video off, the real recording-heat source).
-│                           AVAssetWriter.movieFragmentInterval = 5s so
+│                           AVAssetWriter.movieFragmentInterval = 3s so
 │                           a crash/power-loss mid-recording leaves a
-│                           PLAYABLE partial video.mov (the moov atom
-│                           otherwise only lands on finishWriting).
+│                           recoverable partial video.mov (fragmented,
+│                           remuxed to faststart on first play by
+│                           VideoRemux; a faststart writer left 0 bytes).
 │                           `tearingDown` flag latched at stop so a
 │                           late tap/SCK buffer can't reopen-truncate
 │                           the just-finished WAV.
@@ -524,18 +528,26 @@ Video IS recorded now (this section used to claim the opposite). The
 old `kAudioCodecAudioFormatErr (-16122)` failures came from feeding
 `AVAssetWriter` BGRA→YUV-converted samples with an audio input attached;
 the working path is **H.264 on 32BGRA input** (the Apple-Silicon H.264
-hardware encoder takes BGRA and converts internally), capped at 1080p,
-~2.5 Mbps, no audio track on the writer (audio lives in the WAVs). It is
-gated by the **Screen video recording** setting; when off (and not on a
-BT route) the SCStream is SKIPPED entirely, since registering `.screen`
-just to keep the audio clock pacing was the real always-on recording-heat
-source. The frontend renders `<audio>` when `has_video=false`.
+hardware encoder takes BGRA and converts internally), no audio track on
+the writer (audio lives in the WAVs). Output height is capped at **720p by
+default** to keep recordings small; a **signed-in** user who enables "Record
+in high resolution" (Settings → General) gets the display's native size
+capped at **4K**, and the bitrate scales with height (~1.4 Mbps at 720p,
+~5 Mbps at 4K). Gate: `captureVideoHiresEffective = captureVideoHires &&
+isSignedIn`. It is gated by the **Screen video recording** setting; when off
+(and not on a BT route) the SCStream is SKIPPED entirely, since registering
+`.screen` just to keep the audio clock pacing was the real always-on
+recording-heat source. The frontend renders `<audio>` when `has_video=false`.
 
-**Crash-safe partial video.** `AVAssetWriter.movieFragmentInterval = 5s`
-flushes a fragment moov every 5 seconds, so a crash or power-loss
-mid-recording leaves a PLAYABLE partial `video.mov` instead of a 0-byte
-file (the top-level moov atom otherwise only lands on `finishWriting`).
-Technique borrowed from NoCorny Tracer.
+**Crash-safe partial video (fragmented + serve-time remux, 0.15.21).**
+`AVAssetWriter.movieFragmentInterval = 3s` flushes a self-describing
+`moof`+`mdat` fragment every 3 s, so a crash / power-loss / app-update kill
+mid-recording leaves a RECOVERABLE partial `video.mov` instead of a 0-byte
+file (a faststart writer's top-level moov only lands on `finishWriting`). A
+fragmented QuickTime MOV can't be progressively loaded by WKWebView, so
+`Shared/VideoRemux.swift` remuxes it to faststart LAZILY on first play
+(`serveMedia` → passthrough export moving the moov to the front, idempotent,
+atomic swap). This gets crash-safety AND WKWebView playback.
 
 ## Concurrency model
 
