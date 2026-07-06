@@ -100,6 +100,15 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(togglePopover(_:))
+            // Never CLIP the icon: scale any image down to fit the menu-bar
+            // height instead. This is the belt-and-suspenders fix for the
+            // "ring periodically shows as ( )" report — when macOS re-lays-out
+            // the status item (display sleep/wake, external-monitor connect/
+            // disconnect, fullscreen transition) an image sitting at the height
+            // limit was clipped top+bottom rather than scaled.
+            // `.scaleProportionallyDown` guarantees it scales, never clips,
+            // regardless of image size.
+            button.imageScaling = .scaleProportionallyDown
         }
 
         popover.behavior = .transient
@@ -142,14 +151,16 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         switch state {
         case .idle, .preroll:
-            // Outline circle SF Symbol — template-rendered so it
-            // follows the menu bar's light/dark tint. `.preroll` shows the
-            // SAME idle icon: the silent pre-roll must give no indicator.
-            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            let img = NSImage(systemSymbolName: "circle", accessibilityDescription: "Corder")?
-                .withSymbolConfiguration(config)
-            img?.isTemplate = true
-            button.image = img
+            // FULL outline ring, hand-drawn — NOT the SF `circle` symbol.
+            // The SF `circle` at menu-bar size rendered as a too-thin ring
+            // whose top/bottom arcs sub-pixelled to nothing, so it read as
+            // "( )" (clipped) — the SAME SF-in-status-bar unreliability that
+            // already forced `makeRedDot` (see that comment). Drawing the ring
+            // ourselves with a controlled stroke + inset guarantees a full,
+            // crisp ring. Template so it follows the menu bar's light/dark
+            // tint. `.preroll` shows the SAME idle icon (silent pre-roll gives
+            // no indicator).
+            button.image = Self.makeRing(size: 14)
             button.contentTintColor = nil
             button.title = ""
         case .recording, .stopping:
@@ -169,6 +180,26 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             return true
         }
         img.isTemplate = false   // keep the actual red colour
+        return img
+    }
+
+    /// Idle-state icon: a FULL outline ring, drawn ourselves so it renders
+    /// crisply at menu-bar size instead of the too-thin SF `circle` that
+    /// clipped to "( )". `lineWidth` gives it real presence; the inset is
+    /// half the stroke + a hair so the whole ring (top AND bottom) stays
+    /// inside the image bounds and never clips. Template so it adopts the
+    /// menu bar's light/dark foreground tint, same as the SF symbol did.
+    private static func makeRing(size: CGFloat) -> NSImage {
+        let lineWidth: CGFloat = 1.6
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            let inset = lineWidth / 2 + 0.5
+            let path = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
+            path.lineWidth = lineWidth
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
+        }
+        img.isTemplate = true    // follow the menu-bar foreground tint
         return img
     }
 
