@@ -474,10 +474,36 @@ function avatarColor(name: string): string {
 // targets the specific Whisper outros, anchored to the end.
 const TRAILING_OUTRO =
   /(?:[\s.,!?…]*\b(?:thank you(?: very much| so much)?(?: for watching)?|thanks(?: for watching)?|see you (?:next time|in the next (?:video|one))|have a (?:nice|good|great|wonderful) day)\b[\s.!?…]*)+$/iu;
+// Whisper/WhisperKit loop hallucination: a short phrase repeated back-to-back
+// ("Bye-bye. Bye-bye. Bye-bye.", "Спасибо. Спасибо. Спасибо."). Real speech
+// almost never repeats a SHORT phrase 3+ times verbatim, so collapse such a run
+// to a single instance. Conservative on purpose (short phrase + ≥3 repeats)
+// so emphatic "No. No." or a repeated long sentence is left untouched. Display
+// only — the stored transcript is unchanged.
+function collapseRepeatHallucination(s: string): string {
+  const parts = s.match(/[^.!?…]+[.!?…]*\s*/gu);
+  if (!parts || parts.length < 3) return s;
+  const norm = (p: string) => p.trim().toLowerCase().replace(/[\s.!?…,]+$/u, "");
+  const out: string[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const key = norm(parts[i]);
+    let j = i + 1;
+    while (j < parts.length && norm(parts[j]) === key) j++;
+    if (j - i >= 3 && key.length > 0 && key.length <= 30) {
+      out.push(parts[i]); // keep one
+    } else {
+      for (let k = i; k < j; k++) out.push(parts[k]);
+    }
+    i = j;
+  }
+  return out.join("").trim();
+}
 function cleanSegmentText(t: string): string {
   let s = t.trim();
   s = s.replace(/^[\s.,;:!?·•*]+/u, "");
   s = s.replace(TRAILING_OUTRO, "").trim();
+  s = collapseRepeatHallucination(s);
   return s;
 }
 

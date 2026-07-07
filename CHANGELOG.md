@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.29] — 2026-07-07
+
+### Added
+- Recording folders on disk now have readable names — `2026-07-07_10-19 Sync
+  with team` instead of a random `a34e3352-…` id. Existing recordings are
+  renamed automatically. Recordings without a title yet (or while signed out)
+  get a date-and-time name; the title is filled in once it's generated.
+
+### Fixed
+- The transcript now collapses a short phrase Whisper sometimes repeats over
+  silence ("Bye-bye. Bye-bye. Bye-bye.") down to a single instance.
+
 ## [0.15.28] — 2026-07-07
 
 ### Fixed

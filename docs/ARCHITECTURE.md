@@ -268,8 +268,13 @@ Shared/
 
 ## Data lifecycle
 
-Each meeting has a UUID. All filesystem state for that meeting lives
-under `~/Library/Application Support/Corder/recordings/<uuid>/`. After a
+Each meeting has a UUID. All filesystem state for that meeting lives under
+`…/accounts/<id>/recordings/<dir>/`. The folder is CREATED as the `<uuid>` and
+RENAMED to a human-readable `<yyyy-MM-dd_HH-mm> <title>` (or just the date when
+untitled) once the auto-title lands (0.15.29). The name is stored in
+`meetings.dir_name` (migration `v23`); `AppPaths.recordingDir(for:)` resolves it
+via a launch-loaded index and always prefers a folder that exists on disk, so
+`<uuid>` stays a valid fallback. See `Shared/RecordingDirNaming.swift`. After a
 successful Dropbox upload, local files are deleted and the SQLite row gets
 `dropbox_audio_path` filled in.
 

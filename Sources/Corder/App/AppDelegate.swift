@@ -48,6 +48,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             GuestMigration.drainIntoAccount(forEmail: email)
         }
         try? AppPaths.ensureExists()
+        // Load the human-readable recording-folder name index (meetingId →
+        // "<date> <title>") BEFORE anything resolves a recording path
+        // (RecordingRecovery below already calls AppPaths.recordingDir). The
+        // actual RENAME of not-yet-titled folders runs later, after title
+        // backfill. Resolution always falls back to a real folder, so an
+        // unloaded index is never fatal — this just makes already-renamed
+        // folders resolvable immediately.
+        AppPaths.loadDirNameIndex((try? AppContext.shared.repo.allDirNames()) ?? [:])
         // Salvage recordings interrupted by a crash BEFORE the cleanup
         // below deletes them: any with usable audio on disk are flipped
         // to 'transcribing' (and picked up by the auto-resume pass), so
@@ -134,6 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // title pass failed) — generates titles in the background so the
         // sidebar stops showing bare dates for old transcripts.
         TranscriptionPipeline.backfillTitles(repo: AppContext.shared.repo)
+        // One-time: rename recording folders from the opaque `<id>` to the
+        // browsable "<date> <title>" form for meetings that ALREADY have a
+        // title. (Freshly backfilled titles above rename themselves via the
+        // hook next to setTitle, so this only covers the pre-titled set.)
+        RecordingDirNaming.migrateExistingFolders(repo: AppContext.shared.repo)
         // Hard-delete archived meetings older than 7 days (DB row + local
         // recording dir + Dropbox files). Runs once per launch; missing
         // a launch just means the entries linger one extra day, which is

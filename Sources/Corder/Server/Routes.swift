@@ -1879,6 +1879,8 @@ enum Routes {
             let trimmed = parsed.title?.trimmingCharacters(in: .whitespacesAndNewlines)
             let title = (trimmed?.isEmpty ?? true) ? nil : trimmed
             try repo.setTitle(meetingId: id, title: title)
+            // Folder follows the title (user renamed the meeting).
+            RecordingDirNaming.renameToTitled(repo: repo, meetingId: id)
             return .ok(.text("ok"))
         } catch {
             return .badRequest(.text("\(error)"))
