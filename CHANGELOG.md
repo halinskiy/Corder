@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.33] — 2026-07-07
+
+### Fixed
+- An audio-only recording no longer lights up the macOS screen-sharing
+  indicator (the "Currently Sharing / Stop Sharing" control) when your output is
+  Bluetooth. Corder was starting a screen-capture stream to feed a system-audio
+  backup that's been dead since 0.15.22 — so it did nothing but show a scary
+  "is recording my screen?" indicator and a Stop Sharing button that killed part
+  of the capture without stopping the recording. Screen capture now starts only
+  when you actually record video.
+
 ## [0.15.32] — 2026-07-07
 
 ### Fixed
