@@ -463,7 +463,16 @@ function ScreenVideo({
   const togglePlay = React.useCallback(() => {
     const a = audioRef.current;
     if (!a) return;
-    if (a.paused) a.play().catch(() => {}); else a.pause();
+    if (a.paused) {
+      // Recover a stuck element: if the user hit play WHILE the meeting was
+      // still recording, the playback mix didn't exist yet (the backend makes
+      // it only at stop), so the element errored and won't play even after the
+      // file appears. A fresh load() re-fetches the now-available audio.
+      if (a.error || a.readyState === 0) { try { a.load(); } catch {} }
+      a.play().catch(() => {});
+    } else {
+      a.pause();
+    }
   }, [audioRef]);
 
   // FLIP open: once the overlay is mounted, place the inner box at the
@@ -843,8 +852,17 @@ function AudioCard({
 
   const togglePlay = () => {
     const a = audioRef.current; if (!a) return;
-    if (a.paused) a.play().catch(() => {});
-    else a.pause();
+    if (a.paused) {
+      // Recover a stuck element: the browser preloads the audio src, and if it
+      // was fetched WHILE the meeting was still recording (the playback mix is
+      // produced only at stop) it 404s and the element sticks in an error state
+      // — so play() stays silent even once the file exists. A fresh load()
+      // re-fetches the now-available audio before playing.
+      if (a.error || a.readyState === 0) { try { a.load(); } catch {} }
+      a.play().catch(() => {});
+    } else {
+      a.pause();
+    }
   };
   const onScrubClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const a = audioRef.current; if (!a || !duration) return;
