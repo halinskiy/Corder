@@ -167,8 +167,8 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
           <div className="update-title">{isSignUp ? "Sign up" : "Sign in"}</div>
           <div className="update-status">
             {isSignUp
-              ? "Create an account to unlock more with a subscription."
-              : "Signing in unlocks more with a subscription."}
+              ? "Create an account to unlock unlimited sessions."
+              : "Signing in unlocks unlimited sessions."}
           </div>
         </div>
 

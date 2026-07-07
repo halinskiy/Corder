@@ -183,7 +183,10 @@ enum AppSettings {
     static var captureVideoHiresEffective: Bool { captureVideoHires && isSignedIn }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
-    static var autoTitle: Bool             { flag(kAutoTitle) }
+    // Auto-title is ALWAYS on now — it has no Settings toggle (recording folder
+    // names depend on a title being generated). The stored key is ignored; a
+    // stale client POSTing auto_title:false can't turn it off.
+    static var autoTitle: Bool             { true }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
     /// Diagnostic telemetry. Default ON now (opt-OUT) — capture reliability
