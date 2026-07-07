@@ -288,14 +288,23 @@ final class CaptureEngine: NSObject {
         // far end is captured by the Core Audio process tap regardless. So a
         // fresh user on Bluetooth records audio-only with only the Microphone
         // prompt, no Screen Recording wall.
-        // BOTH arms now require Screen Recording to be ALREADY granted. Screen
-        // video defaults ON, so without this gate every fresh recording would
-        // call `SCShareableContent` and fire the macOS Screen Recording system
-        // prompt (only satisfiable by a restart). Instead: video-on + ungranted
-        // → no SCStream → audio-only, and the Library ghost panel pitches the
-        // grant. Once granted (preflight true), SCStream arms and video records.
+        // SCStream (ScreenCaptureKit) is armed ONLY when we actually record
+        // VIDEO. It used to ALSO arm on a Bluetooth output (`|| outputBluetoothAtStart`)
+        // to feed the SCK system-audio backup — but that backup is DEAD (SCStream
+        // `.audio` is all-zero silence, `captureSCKBackup = false`, never
+        // persisted since 0.15.22). So on a BT AUDIO call it started a
+        // ScreenCaptureKit stream with NO outputs, purely lighting up macOS's
+        // "Currently Sharing" / Screen-Recording indicator (and offering a
+        // "Stop Sharing" control that kills the stream but not the recording —
+        // user confusion, reported 2026-07-07). The far end is captured by the
+        // Core Audio process tap regardless (the tap watchdog, not SCStream,
+        // drives the far-end-unavailable warning), so dropping the BT arm loses
+        // nothing and removes the misleading indicator + a Screen-Recording
+        // permission need on plain audio calls.
+        // Requires Screen Recording ALREADY granted: video-on + ungranted → no
+        // SCStream → audio-only, and the Library ghost panel pitches the grant.
         let screenGranted = CGPreflightScreenCaptureAccess()
-        let needSCStream = screenGranted && (AppSettings.captureVideo || outputBluetoothAtStart)
+        let needSCStream = screenGranted && AppSettings.captureVideo
         if needSCStream {
             do {
                 // 1. Build the SCContentFilter for the chosen source.
