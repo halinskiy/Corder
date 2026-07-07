@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.31] — 2026-07-07
+
+### Changed
+- The "Send a report" button on the red transcription-error toast is now a solid
+  white button with black text (was a hard-to-read transparent white).
+
+## [0.15.30] — 2026-07-07
+
+### Changed
+- The floating recording equalizer now stays visible the whole time you're
+  recording, including while the Corder window is open — it used to hide
+  itself whenever Corder was in the foreground.
+
 ## [0.15.29] — 2026-07-07
 
 ### Added

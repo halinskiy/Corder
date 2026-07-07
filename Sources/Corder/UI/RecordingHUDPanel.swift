@@ -203,7 +203,20 @@ final class RecordingHUDPanel {
     /// recording — the user is looking at the Library, where the inline
     /// blob covers the same affordance.
     func setLibrarySuppressed(_ suppressed: Bool) {
-        FileLogger.log("RecordingHUDPanel.setLibrarySuppressed(\(suppressed)) [was=\(librarySuppressed), wantsVisible=\(wantsVisible)]")
+        // The floating equalizer HUD now stays visible even while the Library
+        // window is focused — the user wants it ALWAYS up during recording, not
+        // only when Corder is hidden (there's no inline in-window equalizer to
+        // fall back on anymore). We keep this hook (many callers: Library
+        // key/occlusion/⌘H) but no longer hide the pill; we just make sure it's
+        // up when it should be. Flip `hudFollowsLibrary` back to re-enable
+        // hiding if that's ever wanted again.
+        let hudFollowsLibrary = false
+        FileLogger.log("RecordingHUDPanel.setLibrarySuppressed(\(suppressed)) [follows=\(hudFollowsLibrary), wantsVisible=\(wantsVisible)]")
+        guard hudFollowsLibrary else {
+            if librarySuppressed { librarySuppressed = false }
+            if wantsVisible { ensureVisible() }
+            return
+        }
         guard librarySuppressed != suppressed else { return }
         librarySuppressed = suppressed
         if suppressed {
