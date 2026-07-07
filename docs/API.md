@@ -53,7 +53,7 @@ with the Dropbox `app_secret` + refresh token.
 | GET    | `/api/meetings/:id/video`               | `video.mov` when present (Range supported). Silent screen video; used by the in-app preview player, not offered as a standalone download. |
 | GET    | `/api/meetings/:id/video-audio.mp4`     | The silent `video.mov` muxed WITH the mixed audio into one `.mp4`. Video is passthrough (no re-encode); only the audio is AAC-encoded. Built on demand by `MediaExporter`, cached. |
 | GET    | `/api/meetings/:id/bundle.zip`          | ZIP of audio + video + transcript.* |
-| POST   | `/api/meetings/:id/rename`              | Body `{title: string|null}`. Empty/`null` clears to the auto/date label. |
+| POST   | `/api/meetings/:id/rename`              | Body `{title: string|null}`. Empty/`null` clears to the auto/date label. Also renames the on-disk recording folder to `<date> <title>` (0.15.29). |
 | POST   | `/api/meetings/:id/retranscribe`        | Optimistically flips status to `transcribing`, clears segments, enqueues pipeline. |
 | POST   | `/api/meetings/:id/cancel-transcription`| Cancels in-flight pipeline task; flips status to `failed`. |
 | POST   | `/api/meetings/:id/summarize`           | Returns `{summary}` (cached or generated on demand). |

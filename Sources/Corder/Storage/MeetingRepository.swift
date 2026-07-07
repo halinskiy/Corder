@@ -451,6 +451,44 @@ struct MeetingRepository {
         }
     }
 
+    /// Persist a recording folder rename: the new human-readable `dir_name` plus
+    /// the re-based absolute `video_path` / `audio_path` (stored paths are read
+    /// directly in several places, so they must follow the folder). Targeted
+    /// UPDATE — never touches `status` (mirrors setTitle / setTranscribeFinished).
+    func setDirName(meetingId: String, dirName: String?, videoPath: String, audioPath: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: """
+                UPDATE meetings SET dir_name = ?, video_path = ?, audio_path = ? WHERE id = ?
+            """, arguments: [dirName, videoPath, audioPath, meetingId])
+        }
+    }
+
+    /// All (meetingId → dir_name) pairs for recordings whose folder has been
+    /// renamed. Loaded once at launch into the AppPaths resolver index.
+    func allDirNames() throws -> [String: String] {
+        try dbq.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT id, dir_name FROM meetings WHERE dir_name IS NOT NULL")
+            var map: [String: String] = [:]
+            for row in rows {
+                if let id: String = row["id"], let name: String = row["dir_name"] { map[id] = name }
+            }
+            return map
+        }
+    }
+
+    /// Meetings whose folder is still the plain `<id>` (dir_name NULL) — the
+    /// launch pass that renames folders to "<date> <title>" (or just "<date>"
+    /// when there's no title yet, e.g. a signed-out guest whose auto-title
+    /// hasn't run). Excludes pre-roll (transient, no lasting folder).
+    func meetingIdsNeedingFolderRename() throws -> [String] {
+        try dbq.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT id FROM meetings
+                WHERE dir_name IS NULL AND status != 'preroll'
+            """)
+        }
+    }
+
     func setSummary(meetingId: String, summary: String?) throws {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET summary = ? WHERE id = ?",

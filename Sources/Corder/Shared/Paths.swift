@@ -75,9 +75,89 @@ enum AppPaths {
         }
     }
 
-    static func recordingDir(for meetingId: String) -> URL {
-        recordingsDir.appendingPathComponent(meetingId, isDirectory: true)
+    // MARK: - Human-readable recording folder names
+
+    /// meetingId → human-readable folder name (e.g. "2026-07-07_10-19 Sync").
+    /// Populated at launch from the DB (`dir_name` column) and updated when a
+    /// folder is renamed. Guarded by a lock — read from capture/pipeline/Swifter
+    /// threads. A recording whose folder is still the plain `<id>` is simply
+    /// absent here.
+    private static var dirNameIndex: [String: String] = [:]
+    private static let dirNameLock = NSLock()
+
+    /// Register the on-disk folder name for a meeting so `recordingDir` resolves
+    /// to it. Passing `name == id` (or nil) clears any override.
+    static func registerDirName(_ name: String?, for id: String) {
+        dirNameLock.lock(); defer { dirNameLock.unlock() }
+        if let name = name, name != id { dirNameIndex[id] = name } else { dirNameIndex[id] = nil }
     }
+
+    /// Bulk-load the index (called once at launch / on account switch from the
+    /// DB). Replaces the whole map so a stale account's names never leak.
+    static func loadDirNameIndex(_ map: [String: String]) {
+        dirNameLock.lock(); dirNameIndex = map; dirNameLock.unlock()
+    }
+
+    static func recordingDir(for meetingId: String) -> URL {
+        // Prefer an explicit human-readable name IF its folder actually exists;
+        // otherwise fall back to the plain `<id>` folder. This ordering is
+        // bulletproof: a brand-new recording (no name yet), a not-yet-migrated
+        // legacy folder, and a half-finished rename all resolve to a folder that
+        // exists, never a dangling path.
+        dirNameLock.lock(); let name = dirNameIndex[meetingId]; dirNameLock.unlock()
+        if let name = name, name != meetingId {
+            let named = recordingsDir.appendingPathComponent(name, isDirectory: true)
+            if FileManager.default.fileExists(atPath: named.path) { return named }
+        }
+        return recordingsDir.appendingPathComponent(meetingId, isDirectory: true)
+    }
+
+    /// Filesystem-safe folder name for a recording: `yyyy-MM-dd_HH-mm Title`
+    /// (or just the timestamp when there's no usable title). The timestamp comes
+    /// first so Finder sorts chronologically; the title is sanitised (path
+    /// separators / control chars stripped, whitespace collapsed, length capped)
+    /// so it can never escape the recordings dir or break the filesystem.
+    static func folderName(startedAtMs: Int64, title: String?) -> String {
+        let date = Date(timeIntervalSince1970: Double(startedAtMs) / 1000)
+        let stamp = folderDateFormatter.string(from: date)
+        guard let clean = sanitizedTitleForFolder(title), !clean.isEmpty else { return stamp }
+        return "\(stamp) \(clean)"
+    }
+
+    /// Given a desired folder name, return one that doesn't collide with an
+    /// existing folder in `recordingsDir` (appends " (2)", " (3)", …). `selfId`
+    /// is excluded so re-titling a meeting to the same slot isn't seen as a clash.
+    static func uniqueFolderName(_ base: String, excluding selfName: String?) -> String {
+        let fm = FileManager.default
+        func taken(_ n: String) -> Bool {
+            if n == selfName { return false }
+            return fm.fileExists(atPath: recordingsDir.appendingPathComponent(n, isDirectory: true).path)
+        }
+        if !taken(base) { return base }
+        var i = 2
+        while taken("\(base) (\(i))") { i += 1; if i > 999 { break } }
+        return "\(base) (\(i))"
+    }
+
+    private static func sanitizedTitleForFolder(_ title: String?) -> String? {
+        guard let title = title else { return nil }
+        // Drop path separators + control chars + a few characters Finder / other
+        // tools choke on; collapse whitespace; trim leading dots (hidden files)
+        // and trailing dots/spaces (Windows-hostile, and harmless to drop).
+        let banned = CharacterSet(charactersIn: "/\\:\u{0}\n\r\t*?\"<>|")
+        var out = title.components(separatedBy: banned).joined(separator: " ")
+        out = out.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        out = out.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+        if out.count > 60 { out = String(out.prefix(60)).trimmingCharacters(in: CharacterSet(charactersIn: ". ")) }
+        return out.isEmpty ? nil : out
+    }
+
+    private static let folderDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd_HH-mm"
+        return f
+    }()
 
     // MARK: - Legacy migration
 

@@ -960,6 +960,7 @@ final class TranscriptionPipeline {
                     let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
                     if let title = await GeminiTitler.generate(transcript: text) {
                         try? repo.setTitle(meetingId: meetingId, title: title)
+                        RecordingDirNaming.renameToTitled(repo: repo, meetingId: meetingId)
                         FileLogger.log("transcribe(): titled \(meetingId) → \"\(title)\"")
                     }
                 }
@@ -2325,6 +2326,7 @@ final class TranscriptionPipeline {
                 let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
                 if let title = await GeminiTitler.generate(transcript: text) {
                     try? repo.setTitle(meetingId: id, title: title)
+                    RecordingDirNaming.renameToTitled(repo: repo, meetingId: id)
                     FileLogger.log("startup: titled \(id) → \"\(title)\"")
                 }
                 // Be polite to the API between meetings.

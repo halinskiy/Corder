@@ -69,6 +69,10 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     /// launch-time auto-retry of `.failed` meetings is bounded by this so
     /// a permanently-broken row can't re-run (and re-bill) every launch.
     var transcribeAttempts: Int = 0
+    /// Human-readable on-disk folder name (e.g. "2026-07-07_10-19 Sync with
+    /// team"). nil = the folder is still the plain `<id>` (the fallback
+    /// `AppPaths.recordingDir` resolves to). Set when the auto-title lands.
+    var dirName: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -95,6 +99,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case transcriptionClass = "transcription_class"
         case chapters
         case transcribeAttempts = "transcribe_attempts"
+        case dirName = "dir_name"
     }
 }
 

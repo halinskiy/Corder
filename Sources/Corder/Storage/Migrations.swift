@@ -242,6 +242,15 @@ enum Migrations {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_segments_speaker ON segments(speaker_id);")
         }
 
+        // Human-readable on-disk folder name for a recording (e.g.
+        // "2026-07-07_10-19 Sync with team"). NULL means the folder is still the
+        // legacy/plain `<meeting-id>` (the fallback AppPaths resolves to). Set
+        // when the auto-title lands (RecordingDirNaming.renameToTitled) and by
+        // the one-time launch migration that renames existing folders.
+        m.registerMigration("v23_dir_name") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN dir_name TEXT;")
+        }
+
         return m
     }
 }
