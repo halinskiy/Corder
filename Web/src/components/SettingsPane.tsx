@@ -293,19 +293,11 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Auto-title / Auto-summary / Auto-chapters are cloud features (need
-            sign-in). They live in the Advanced tab, which is hidden wholesale for
-            guests (see MeetingView/Dashboard), so no per-row guard needed here. */}
-        <SoloCard>
-          <Toggle
-            label={t.settings_autotitle}
-            desc={t.settings_autotitle_desc}
-            checked={on("auto_title")}
-            disabled={!loaded}
-            onChange={(v) => patch({ auto_title: v })}
-          />
-        </SoloCard>
-
+        {/* Auto-summary / Auto-chapters are cloud features (need sign-in). They
+            live in the Advanced tab, which is hidden wholesale for guests (see
+            MeetingView/Dashboard), so no per-row guard needed here. Auto-title is
+            NOT user-toggleable anymore — it's always on (recording folder names
+            depend on it), so it has no Settings row. */}
         <SoloCard>
           <Toggle
             label={t.settings_autosummary}

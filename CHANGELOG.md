@@ -16,6 +16,24 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.28] — 2026-07-07
+
+### Fixed
+- Your voice no longer records sped-up/garbled when your mic switches to a
+  different-rate device mid-recording (e.g. AirPods, which capture at 16 kHz,
+  grabbing the mic a moment after recording started on the 44.1 kHz built-in
+  mic). A 0.15.27 regression wrote the alignment padding in the new device's
+  sample rate into the original file, scrambling the timeline. Padding now
+  always matches the file, and a buffer that can't be resampled cleanly is
+  dropped rather than written at the wrong rate.
+
+### Changed
+- Auto-title is always on now and no longer has a Settings toggle — every
+  recording gets a generated title.
+- The bug-report button sends immediately instead of waiting out a 10-second
+  countdown.
+- Sign-in copy now reads "unlocks unlimited sessions".
+
 ## [0.15.27] — 2026-07-07
 
 ### Fixed

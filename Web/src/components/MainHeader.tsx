@@ -319,47 +319,28 @@ function SubmitLogsButton({
   // gating here hid the report button exactly when we needed it.
   if (pending || inCooldown || !hasEvents) return null;
 
-  const onClick = () => {
+  const onClick = async () => {
+    // Send immediately — no 10s countdown / Undo window. The button unmounts
+    // while `pending` (see the gate above) and pendingRef guards a double-fire.
     if (pendingRef.current !== null) return;
-    const cancel = () => {
-      if (pendingRef.current !== null) {
-        window.clearTimeout(pendingRef.current);
-        pendingRef.current = null;
-      }
-      setPending(false);
-      // Force an immediate re-evaluation of `inCooldown` so the button
-      // pops back in without waiting for the next 30-s tick.
-      setNow(Date.now());
-    };
+    pendingRef.current = 1;
     setPending(true);
-    pendingRef.current = window.setTimeout(async () => {
+    try {
+      await submitLogs();
+      try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
+      onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
+    } catch {
+      // Failed send still costs a cooldown so a flapping endpoint can't be
+      // hammered. Clearing the localStorage entry lets the user retry sooner.
+      try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
+      onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
+    } finally {
+      // Re-render to flip from `pending` to `inCooldown` (button stays hidden —
+      // only the gating reason changes).
       pendingRef.current = null;
-      try {
-        await submitLogs();
-        try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
-        onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
-      } catch {
-        // Failed send still costs a cooldown so a flapping endpoint
-        // can't be hammered. If the user really wants to retry sooner
-        // they can clear the localStorage entry.
-        try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
-        onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
-      } finally {
-        // Re-render to flip from `pending` to `inCooldown` (button
-        // stays hidden — only the gating reason changes).
-        setPending(false);
-        setNow(Date.now());
-      }
-    }, 10_000);
-    onToast(
-      t.submit_logs_pending ?? "Sending log in 10s…",
-      "success",
-      {
-        action: { label: t.toast_undo, onClick: cancel },
-        durationMs: 10_000,
-        countdown: true,
-      }
-    );
+      setPending(false);
+      setNow(Date.now());
+    }
   };
   return (
     <Tooltip label={t.submit_logs_title ?? "Send a bug report"}>

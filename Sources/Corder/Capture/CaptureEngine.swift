@@ -938,13 +938,23 @@ extension CaptureEngine: SCStreamOutput {
             // the switched device's audio appends seamlessly.
             if !self.paddedMic, let micFile = self.micFile {
                 self.paddedMic = true
+                // Pad in the FILE's format, sized by the FILE's sample rate — NOT
+                // the buffer's. If the first buffer arrives from a device whose
+                // rate differs from the file's (AirPods grabbed the mic before the
+                // built-in mic delivered its first buffer, so the file opened at
+                // 44.1k but the first audio is 16k), padding in buffer.format
+                // writes wrong-rate silence into the file and scrambles the whole
+                // timeline — the "sped-up voice" regression. Count the pad toward
+                // micFramesWritten so the gap-fill below doesn't re-add it.
+                let fileFmt = micFile.processingFormat
                 let pad = when.isHostTimeValid
                     ? self.leadingPadFrames(firstBufferHostTime: when.hostTime,
-                                            sampleRate: buffer.format.sampleRate)
+                                            sampleRate: fileFmt.sampleRate)
                     : 0
                 if pad > 0 {
-                    self.writeSilence(pad, to: micFile, format: buffer.format)
-                    FileLogger.log("CaptureEngine: mic.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/buffer.format.sampleRate))s) to align with capture start")
+                    self.writeSilence(pad, to: micFile, format: fileFmt)
+                    self.micFramesWritten &+= Int64(pad)
+                    FileLogger.log("CaptureEngine: mic.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/fileFmt.sampleRate))s) to align with capture start")
                 }
             }
             guard let micFile = self.micFile else { return }
@@ -976,7 +986,13 @@ extension CaptureEngine: SCStreamOutput {
             // file's original format so mic.wav stays one continuous,
             // consistently-formatted file instead of dying silent.
             let target = micFile.processingFormat
-            var toWrite = buffer
+            // Same format (the normal path, incl. same-rate device switch): write
+            // straight through. Different format (a switch to a device with a
+            // different rate/channels, e.g. AirPods 16k after built-in 44.1k):
+            // RESAMPLE to the file's format. If the conversion fails, DROP the
+            // buffer — never write a raw wrong-rate buffer into the file, that is
+            // exactly what plays back sped-up/garbled.
+            var toWrite: AVAudioPCMBuffer? = (buffer.format == target) ? buffer : nil
             if buffer.format != target {
                 if self.micConverter?.inputFormat != buffer.format {
                     self.micConverter = AVAudioConverter(from: buffer.format, to: target)
@@ -994,19 +1010,23 @@ extension CaptureEngine: SCStreamOutput {
                     }
                     if convErr == nil, out.frameLength > 0 {
                         toWrite = out
-                    } else if let convErr = convErr {
-                        FileLogger.log("CaptureEngine: mic format-convert after device switch failed — \(convErr)")
+                    } else {
+                        FileLogger.log("CaptureEngine: mic format-convert after device switch failed (\(convErr?.localizedDescription ?? "0 frames")) — dropping buffer")
                     }
+                } else {
+                    FileLogger.log("CaptureEngine: mic converter/out-buffer alloc failed for \(buffer.format.sampleRate)→\(target.sampleRate) — dropping buffer")
                 }
             }
             // Log write failures and count frames only AFTER a successful write —
             // incrementing before the write (with the error swallowed) gave a
             // falsely-healthy counter.
-            do {
-                try micFile.write(from: toWrite)
-                self.micFramesWritten &+= Int64(toWrite.frameLength)
-            } catch {
-                FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
+            if let toWrite = toWrite {
+                do {
+                    try micFile.write(from: toWrite)
+                    self.micFramesWritten &+= Int64(toWrite.frameLength)
+                } catch {
+                    FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
+                }
             }
             // Push raw peak to the level meter — the floating HUD pill. Always
             // the ORIGINAL buffer (real level), not the converted copy.
