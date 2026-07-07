@@ -4553,10 +4553,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: background 80ms ease, color 80ms ease;
 }
 .toast-error .toast-action {
-  background: rgba(255, 255, 255, 0.18) !important;
-  color: #fff !important;
+  /* Solid white pill with black text — the transparent white-on-red was hard
+     to read; this reads as the clear call-to-action on the red error toast. */
+  background: #fff !important;
+  color: #000 !important;
 }
-.toast-error .toast-action:hover { background: rgba(255, 255, 255, 0.3) !important; }
+.toast-error .toast-action:hover { background: rgba(255, 255, 255, 0.85) !important; }
 .toast-success .toast-action {
   /* Accent green pill — the success toast is "we archived this, hit
      Undo if you didn't mean to". Undo is the bright call-to-action,
