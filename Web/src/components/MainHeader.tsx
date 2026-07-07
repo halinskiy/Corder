@@ -237,12 +237,13 @@ function GuestSessionCounter() {
   }, []);
 
   if (!isGuest || left == null) return null;
-  const low = left <= 1;
+  // Always the neutral pill — never the green "is-low" treatment when running
+  // out (Kostya: "1 left" should look like "5 left", white, not green).
   return (
     <Tooltip label="Sign in to unlock more">
       <button
         type="button"
-        className={"guest-quota" + (low ? " is-low" : "")}
+        className="guest-quota"
         onClick={() => { openWelcome().catch(() => {}); }}
         aria-label="Sign in to unlock more"
       >
