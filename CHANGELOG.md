@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.35] — 2026-07-07
+
+### Changed
+- The guest sessions-left badge stays a neutral pill even when you're down to
+  your last session — it no longer turns green when running low.
+
 ## [0.15.34] — 2026-07-07
 
 ### Fixed
