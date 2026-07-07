@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.34] — 2026-07-07
+
+### Fixed
+- Playback no longer stays stuck after you press play while a recording is still
+  in progress. The player pre-loaded the audio before the mix existed (it's made
+  only at stop) and got stuck in an error state; the play button now re-fetches
+  the finished audio, so it plays once the recording is done.
+
 ## [0.15.33] — 2026-07-07
 
 ### Fixed
