@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.32] — 2026-07-07
+
+### Fixed
+- Recording your voice through headphones/AirPods after switching to them
+  mid-call no longer plays back sped-up. 0.15.28 fixed one cause but missed the
+  audio resampler, which was being finalised after the first buffer — so all the
+  headphone audio after that collapsed. Verified the resampler now keeps the
+  right length across the whole stream.
+
 ## [0.15.31] — 2026-07-07
 
 ### Changed

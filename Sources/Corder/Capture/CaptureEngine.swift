@@ -1003,7 +1003,15 @@ extension CaptureEngine: SCStreamOutput {
                     var convErr: NSError?
                     var fed = false
                     conv.convert(to: out, error: &convErr) { _, status in
-                        if fed { status.pointee = .endOfStream; return nil }
+                        // `.noDataNow` (NOT `.endOfStream`) is load-bearing: the
+                        // converter is REUSED across buffers, and `.endOfStream`
+                        // finalises it so every buffer AFTER the first produces
+                        // zero output — a 16 kHz→44.1 kHz stream (AirPods) then
+                        // collapses to ~1/2.75 its length and plays sped-up.
+                        // `.noDataNow` just says "no more input this call", keeps
+                        // the converter's filter state, and resamples every buffer
+                        // correctly (verified: 2.75x ratio holds across a stream).
+                        if fed { status.pointee = .noDataNow; return nil }
                         fed = true
                         status.pointee = .haveData
                         return buffer
