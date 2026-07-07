@@ -111,6 +111,23 @@ final class CaptureEngine: NSObject {
     // stays at 0 across a recording, AVAudioEngine isn't getting any audio
     // (mic disabled / device race with Telegram / etc.).
     private var micFramesWritten: Int64 = 0
+    // Lazily-built converter used ONLY after a mid-recording input-device
+    // switch, when the new device delivers a different format than mic.wav was
+    // opened with (a headphones/AirPods mic ≠ the built-in mic). The normal
+    // path never touches it (buffer.format == the file format → direct write).
+    private var micConverter: AVAudioConverter?
+    // Observer for `AVAudioEngineConfigurationChange` — fires when the audio
+    // route/device changes mid-recording (user switches Mac ↔ headphones), so
+    // we re-tap the mic on the NEW device instead of the engine silently dying
+    // (the "switched to headphones and lost the whole recording" bug).
+    private var micConfigObserver: NSObjectProtocol?
+    // Bounded/backoff retry counter for rebuilding the mic engine after a
+    // device switch (a fresh device can throw -10868 until it settles).
+    private var micReconfigAttempts = 0
+    // Set when the mic engine was just rebuilt on a new device; the tap's first
+    // buffer then gap-fills the silence between the old engine stopping and the
+    // new one starting, so mic.wav stays frame-aligned to system.wav.
+    private var micRetapPending = false
 
     // Video writer for screen capture. HEVC at 15fps + ~1.5 Mbps —
     // tuned for meeting recordings (mostly static UI, occasional cursor /
@@ -573,42 +590,10 @@ final class CaptureEngine: NSObject {
                 )
                 self.micFile = micFile
                 inputNode.removeTap(onBus: 0)   // clear any tap a failed attempt left
-                // bufferSize 1024 (not 4096): the input runs at 16 kHz, so
-                // 4096 frames = 256 ms = only ~4 level-meter updates/sec — the
-                // floating-HUD equalizer looked stepped no matter how the bars
-                // were smoothed. 1024 = 64 ms ≈ 15.6 Hz, ~4x the spectrum frame
-                // rate, which the HUD's per-frame lerp turns into continuous
-                // motion. mic.wav is unaffected (same bytes, just written in
-                // smaller chunks); the cost is a few more cheap tap callbacks.
-                inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, when in
-                    guard let self = self else { return }
-                    // First buffer: left-pad mic.wav to the capture-start clock
-                    // so all audio tracks share frame 0. Mic normally arms ~at
-                    // start so this is small, but we MEASURE it (it's the
-                    // reference the other tracks align to) rather than assume 0.
-                    if !self.paddedMic, let micFile = self.micFile {
-                        self.paddedMic = true
-                        let pad = when.isHostTimeValid
-                            ? self.leadingPadFrames(firstBufferHostTime: when.hostTime,
-                                                    sampleRate: buffer.format.sampleRate)
-                            : 0
-                        if pad > 0 {
-                            self.writeSilence(pad, to: micFile, format: buffer.format)
-                            FileLogger.log("CaptureEngine: mic.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/buffer.format.sampleRate))s) to align with capture start")
-                        }
-                    }
-                    // Log write failures and count frames only AFTER a successful
-                    // write — incrementing before the write (with the error
-                    // swallowed by `try?`) gave a falsely-healthy counter.
-                    do {
-                        try self.micFile?.write(from: buffer)
-                        self.micFramesWritten &+= Int64(buffer.frameLength)
-                    } catch {
-                        FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
-                    }
-                    // Push raw peak to the level meter — the floating HUD pill.
-                    RecordingLevelMeter.shared.ingestMic(buffer: buffer)
-                }
+                // Install the capture tap. Extracted into installMicTap so the
+                // config-change handler can RE-tap the (possibly new) device
+                // mid-recording without duplicating the padding/write path.
+                installMicTap(on: inputNode)
                 engine.prepare()
                 try engine.start()
                 self.audioEngine = engine
@@ -641,6 +626,22 @@ final class CaptureEngine: NSObject {
             if engine.isRunning { engine.stop() }
             self.micFile = nil
             throw lastMicError ?? CaptureError.noDisplay
+        }
+
+        // Watch for a mid-recording audio route/device change (user switches
+        // Mac ↔ headphones). AVAudioEngine STOPS itself on this notification, so
+        // without re-tapping the mic goes silent for the rest of the session —
+        // the "took a call, plugged in headphones, lost 90 minutes" bug. The
+        // handler re-taps the new device + restarts the engine.
+        if let observer = micConfigObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        micConfigObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: audioEngine,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleMicConfigChange() }
         }
 
         // 6. system.wav via the Core Audio process tap. Opened lazily
@@ -757,6 +758,14 @@ final class CaptureEngine: NSObject {
         // aggregate device. Done before closing systemAudioFile so no
         // in-flight IOProc callback writes after the file is nil'd.
         systemTap.stop()
+
+        // Stop watching for route/device changes before we tear the engine
+        // down — otherwise the config-change notification could fire during
+        // teardown and re-tap a dying engine.
+        if let observer = micConfigObserver {
+            NotificationCenter.default.removeObserver(observer)
+            micConfigObserver = nil
+        }
 
         // Stop microphone — removeTap before stop, then reset() so
         // the engine fully relinquishes its grip on the input device
@@ -907,6 +916,176 @@ extension CaptureEngine: SCStreamOutput {
                 return
             }
             remaining -= n
+        }
+    }
+
+    /// Install the mic-capture tap on `inputNode`. Extracted from `start()` so
+    /// `handleMicConfigChange` can RE-tap the (possibly new) device
+    /// mid-recording without duplicating the padding / write / level-meter path.
+    /// bufferSize 1024 (not 4096): the input runs at 16 kHz, so 4096 frames =
+    /// 256 ms = only ~4 level-meter updates/sec — the floating-HUD equalizer
+    /// looked stepped. 1024 = 64 ms ≈ 15.6 Hz, ~4x the spectrum frame rate,
+    /// which the HUD's per-frame lerp turns into continuous motion. mic.wav is
+    /// unaffected (same bytes, just written in smaller chunks).
+    private func installMicTap(on inputNode: AVAudioInputNode) {
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, when in
+            guard let self = self else { return }
+            // First buffer of the WHOLE recording: left-pad mic.wav to the
+            // capture-start clock so all audio tracks share frame 0. Mic normally
+            // arms ~at start so this is small, but we MEASURE it (it's the
+            // reference the other tracks align to) rather than assume 0. A
+            // mid-recording re-tap does NOT pad again (paddedMic stays true), so
+            // the switched device's audio appends seamlessly.
+            if !self.paddedMic, let micFile = self.micFile {
+                self.paddedMic = true
+                let pad = when.isHostTimeValid
+                    ? self.leadingPadFrames(firstBufferHostTime: when.hostTime,
+                                            sampleRate: buffer.format.sampleRate)
+                    : 0
+                if pad > 0 {
+                    self.writeSilence(pad, to: micFile, format: buffer.format)
+                    FileLogger.log("CaptureEngine: mic.wav left-padded \(pad) frames (\(String(format: "%.2f", Double(pad)/buffer.format.sampleRate))s) to align with capture start")
+                }
+            }
+            guard let micFile = self.micFile else { return }
+            // First buffer AFTER a mid-recording re-tap: fill the gap between the
+            // old engine stopping and this one starting with silence, so mic.wav
+            // stays frame-aligned to system.wav (which kept recording through the
+            // switch via the process tap). Sized from the shared capture clock:
+            // frames that SHOULD exist by now minus frames actually written.
+            if self.micRetapPending {
+                self.micRetapPending = false
+                if when.isHostTimeValid {
+                    let fileRate = micFile.processingFormat.sampleRate
+                    let elapsedTicks = when.hostTime > self.captureStartHostTime
+                        ? when.hostTime - self.captureStartHostTime : 0
+                    let expected = Int64((Double(elapsedTicks) * self.ticksToSeconds * fileRate).rounded())
+                    let shortfall = expected - self.micFramesWritten
+                    if shortfall > 0 {
+                        let gap = AVAudioFrameCount(min(shortfall, Int64(fileRate * 3600)))
+                        self.writeSilence(gap, to: micFile, format: micFile.processingFormat)
+                        self.micFramesWritten &+= Int64(gap)
+                        FileLogger.log("CaptureEngine: mic.wav gap-filled \(gap) frames (\(String(format: "%.2f", Double(gap)/fileRate))s) across device switch to stay aligned")
+                    }
+                }
+            }
+            // Normal path: the tap delivers buffers in the file's own format, so
+            // we write straight through. ONLY after a mid-recording device
+            // switch does the new device hand us a different format (a
+            // headphones/AirPods mic ≠ the built-in mic) — then convert to the
+            // file's original format so mic.wav stays one continuous,
+            // consistently-formatted file instead of dying silent.
+            let target = micFile.processingFormat
+            var toWrite = buffer
+            if buffer.format != target {
+                if self.micConverter?.inputFormat != buffer.format {
+                    self.micConverter = AVAudioConverter(from: buffer.format, to: target)
+                }
+                let cap = AVAudioFrameCount(Double(buffer.frameLength) * target.sampleRate / buffer.format.sampleRate) + 64
+                if let conv = self.micConverter,
+                   let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: cap) {
+                    var convErr: NSError?
+                    var fed = false
+                    conv.convert(to: out, error: &convErr) { _, status in
+                        if fed { status.pointee = .endOfStream; return nil }
+                        fed = true
+                        status.pointee = .haveData
+                        return buffer
+                    }
+                    if convErr == nil, out.frameLength > 0 {
+                        toWrite = out
+                    } else if let convErr = convErr {
+                        FileLogger.log("CaptureEngine: mic format-convert after device switch failed — \(convErr)")
+                    }
+                }
+            }
+            // Log write failures and count frames only AFTER a successful write —
+            // incrementing before the write (with the error swallowed) gave a
+            // falsely-healthy counter.
+            do {
+                try micFile.write(from: toWrite)
+                self.micFramesWritten &+= Int64(toWrite.frameLength)
+            } catch {
+                FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
+            }
+            // Push raw peak to the level meter — the floating HUD pill. Always
+            // the ORIGINAL buffer (real level), not the converted copy.
+            RecordingLevelMeter.shared.ingestMic(buffer: buffer)
+        }
+    }
+
+    /// React to `AVAudioEngineConfigurationChange` — fires when the audio
+    /// route/device changes mid-recording (user switches Mac ↔ headphones). The
+    /// engine STOPS itself on this notification and its input chain is left
+    /// wedged (a bare `start()` on the same engine throws -10868, measured), so
+    /// the fix mirrors `start()` exactly: retire the old engine and build a
+    /// FRESH `AVAudioEngine` on the new device, REUSING the still-open micFile so
+    /// mic.wav stays one continuous file (installMicTap's converter bridges a
+    /// new-device format that differs from the file's; the tap's first buffer
+    /// gap-fills the switch gap). Never throws up — a not-yet-bound device
+    /// retries with backoff (the "took a call, plugged in headphones, lost 90
+    /// minutes" bug this whole path fixes).
+    private func handleMicConfigChange() {
+        guard isRecording, !tearingDown else { micReconfigAttempts = 0; return }
+        // Retire the old engine first — holding it while a fresh engine binds the
+        // same input device causes contention, and it's dead anyway.
+        if let old = audioEngine {
+            old.inputNode.removeTap(onBus: 0)
+            if old.isRunning { old.stop() }
+            old.reset()
+        }
+        let newEngine = AVAudioEngine()
+        if let chosenUID = AppSettings.micDeviceUID {
+            _ = AudioInputDevices.apply(uid: chosenUID, to: newEngine)
+        }
+        let inputNode = newEngine.inputNode
+        let fmt = inputNode.outputFormat(forBus: 0)
+        // 0 Hz / 0 ch = new device not bound yet — the same transient start()
+        // retries. Keep the fresh engine as current so stop()/retry stay coherent.
+        guard fmt.sampleRate > 0, fmt.channelCount > 0 else {
+            audioEngine = newEngine
+            FileLogger.log("CaptureEngine: mic config change — new device not ready (\(fmt.sampleRate) Hz) — retry")
+            return scheduleMicReconfigRetry()
+        }
+        micConverter = nil          // rebuilt lazily for the new device's format
+        micRetapPending = true       // first buffer gap-fills to stay aligned
+        installMicTap(on: inputNode)
+        do {
+            newEngine.prepare()
+            try newEngine.start()
+        } catch {
+            audioEngine = newEngine
+            inputNode.removeTap(onBus: 0)
+            micRetapPending = false
+            FileLogger.log("CaptureEngine: mic config change — fresh engine start FAILED (\(error)) — retry")
+            return scheduleMicReconfigRetry()
+        }
+        audioEngine = newEngine
+        micReconfigAttempts = 0
+        // Re-arm the config observer on the NEW engine (the old one was its
+        // notification object, so it would never fire again otherwise).
+        if let observer = micConfigObserver { NotificationCenter.default.removeObserver(observer) }
+        micConfigObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: newEngine,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleMicConfigChange() }
+        }
+        FileLogger.log("CaptureEngine: mic re-tapped on fresh engine after config change (\(fmt.sampleRate) Hz, \(fmt.channelCount) ch)")
+    }
+
+    /// Schedule another `handleMicConfigChange` attempt. Fast retries while the
+    /// device settles, then a slow heartbeat so a device that only becomes
+    /// bindable later — or the user switching to a working one — still recovers
+    /// instead of leaving the mic dead for the rest of the recording. Stops as
+    /// soon as the recording ends.
+    private func scheduleMicReconfigRetry() {
+        guard isRecording, !tearingDown else { micReconfigAttempts = 0; return }
+        micReconfigAttempts += 1
+        let delay = micReconfigAttempts <= 8 ? 0.45 : 2.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.handleMicConfigChange()
         }
     }
 
