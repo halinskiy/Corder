@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.27] — 2026-07-07
+
+### Fixed
+- Your microphone now follows a mid-recording audio-device change. If you
+  switched your input (for example plugged in headphones or AirPods while on a
+  call), mic capture could silently die for the rest of the meeting — the
+  equalizer went flat and your side recorded as silence. Corder now detects the
+  switch, re-taps the new device, and keeps your voice recording without a gap.
+
 ## [0.15.26] — 2026-07-06
 
 ### Fixed
