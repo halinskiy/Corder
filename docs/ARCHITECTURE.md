@@ -539,10 +539,13 @@ default** to keep recordings small; a **signed-in** user who enables "Record
 in high resolution" (Settings → General) gets the display's native size
 capped at **4K**, and the bitrate scales with height (~1.4 Mbps at 720p,
 ~5 Mbps at 4K). Gate: `captureVideoHiresEffective = captureVideoHires &&
-isSignedIn`. It is gated by the **Screen video recording** setting; when off
-(and not on a BT route) the SCStream is SKIPPED entirely, since registering
-`.screen` just to keep the audio clock pacing was the real always-on
-recording-heat source. The frontend renders `<audio>` when `has_video=false`.
+isSignedIn`. It is gated by the **Screen video recording** setting; when off,
+the SCStream is SKIPPED entirely (`needSCStream = screenGranted && captureVideo`,
+0.15.33 — it no longer arms on a Bluetooth output, which only lit the macOS
+screen-share indicator for a dead audio backup). Registering `.screen` just to
+keep the audio clock pacing was the real always-on recording-heat source; the
+far end comes from the Core Audio process tap regardless. The frontend renders
+`<audio>` when `has_video=false`.
 
 **Crash-safe partial video (fragmented + serve-time remux, 0.15.21).**
 `AVAssetWriter.movieFragmentInterval = 3s` flushes a self-describing
