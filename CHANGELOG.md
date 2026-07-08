@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.36] — 2026-07-08
+
+### Fixed
+- "Launch at login" now survives app updates. If an update ever drops the
+  macOS login-item registration, Corder re-registers it on the next launch
+  instead of silently turning the setting off — you no longer have to re-toggle
+  it after updating.
+
 ## [0.15.35] — 2026-07-07
 
 ### Changed

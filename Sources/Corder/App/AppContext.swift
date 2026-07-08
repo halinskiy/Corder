@@ -246,6 +246,28 @@ enum AppSettings {
         }
     }
 
+    /// Reconcile the live `SMAppService` registration with the saved preference
+    /// at launch. If the user asked for launch-at-login but the registration is
+    /// no longer active (e.g. a Sparkle update replaced the bundle and dropped
+    /// it), silently re-register so the preference self-heals instead of quietly
+    /// turning off. Runs for EVERY user, not a hand-fix — the whole point is that
+    /// launch-at-login survives updates without the user re-toggling it.
+    /// Never self-adds (only acts when the saved preference is already ON), and
+    /// leaves `.requiresApproval` alone — that means the user disabled Corder in
+    /// System Settings > Login Items, which we must respect, not override.
+    static func syncLaunchAtLoginIfNeeded() {
+        guard #available(macOS 13.0, *) else { return }
+        guard UserDefaults.standard.bool(forKey: kLaunchAtLogin) else { return }
+        let status = SMAppService.mainApp.status
+        guard status != .enabled, status != .requiresApproval else { return }
+        do {
+            try SMAppService.mainApp.register()
+            FileLogger.log("launchAtLogin: preference ON but status=\(status.rawValue) — re-registered at launch")
+        } catch {
+            FileLogger.log("launchAtLogin: launch re-register failed (status=\(status.rawValue)): \(error)")
+        }
+    }
+
     // Whether the macOS Screen Recording system prompt was already triggered
     // once. The OS only shows that sheet the FIRST time; afterwards the
     // ghost-video CTA goes straight to System Settings (no double dialog).

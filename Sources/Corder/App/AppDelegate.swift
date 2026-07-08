@@ -170,6 +170,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
             Task { @MainActor in TelemetryService.tickIfDue() }
         }
+        // Self-heal launch-at-login: if the user turned it on but the live
+        // SMAppService registration is gone (e.g. a Sparkle update replaced the
+        // bundle and dropped it), re-register so it survives updates without the
+        // user having to re-toggle. No-op when off / already enabled / disabled
+        // by the user in System Settings.
+        AppSettings.syncLaunchAtLoginIfNeeded()
         installMainMenu()
         // Boot Sparkle's background updater. Reads SUFeedURL / SUPublicEDKey
         // from Info.plist; checks once on launch and then on Sparkle's
