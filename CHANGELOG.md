@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.38] — 2026-07-08
+
+### Fixed
+- **Critical: signing in no longer deletes the audio of recordings you made
+  while signed out.** The sign-in migration moved recording folders by their old
+  id-based name, so it missed the human-readable "<date> <title>" folders (added
+  in 0.15.29), never moved them, and then cleared the guest bucket — deleting the
+  audio. It now moves folders by their real name, re-bases the stored paths onto
+  your account, and **never deletes a recording folder it did not successfully
+  move**. Transcripts were unaffected; only already-lost audio can't be recovered.
+
 ## [0.15.37] — 2026-07-08
 
 ### Fixed
