@@ -1959,6 +1959,22 @@ final class TranscriptionPipeline {
                              meetingId: String) async throws -> [GeminiTranscriber.Turn] {
         guard !rawTurns.isEmpty else { return [] }
 
+        // SINGLE-speaker track (the mic "you" track, numSpeakers == 1): there is
+        // nothing to re-diarize — every turn is the one speaker — and the
+        // re-derivation below DISCARDS Whisper's own timestamps (which the code
+        // itself calls reliable) and re-lays turns proportionally onto diarized
+        // speech spans. On a mic that mostly listened (sparse speech + a few
+        // real replies) that proportional placement drops a real phrase onto a
+        // SILENT span, where the dominance gate then deletes it as "silence" —
+        // the "думаете, белый будет уместен?" / "Неплохо" mis-placement. Whisper
+        // timed those correctly; keep its timing. capUserTurnDurations + the
+        // dominance gate downstream still clamp durations and strip real
+        // hallucinations (which keep their own silent timestamp and get gated).
+        if numSpeakers == 1 {
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — single speaker, keeping \(rawTurns.count) raw ASR turns with Whisper's own timing (no re-derivation)")
+            return rawTurns
+        }
+
         var diarSegs: [DiarizedSegment] = []
         do {
             diarSegs = try await SpeakerDiarizer.shared.diarize(

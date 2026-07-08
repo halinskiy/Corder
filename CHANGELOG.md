@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.37] — 2026-07-08
+
+### Fixed
+- Your own replies no longer go missing or land at the wrong time in the
+  transcript. Corder re-derived the timing of your microphone track and could
+  lay a real phrase onto a silent stretch, where an anti-bleed filter then
+  deleted it. Your track now keeps the transcriber's own (reliable) timing, so
+  short replies stay put and stop disappearing. Verified on a real call: a
+  dropped question came back at the right spot and ~40 more of the speaker's
+  turns were preserved.
+
 ## [0.15.36] — 2026-07-08
 
 ### Fixed
