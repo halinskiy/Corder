@@ -947,7 +947,7 @@ enum LocalWhisperTranscriber {
         // Settings; empty → auto-detect as before. Pinning stops the
         // Russian→Ukrainian misdetection (the two are close enough that
         // auto-detect renders Russian speech as Ukrainian words).
-        let forcedLang = AppSettings.transcriptionLanguage.nilIfEmpty
+        let forcedLang = WhisperTranscriber.languageOverride ?? AppSettings.transcriptionLanguage.nilIfEmpty
         var decodeOpts = DecodingOptions(
             verbose: false,
             task: .transcribe,

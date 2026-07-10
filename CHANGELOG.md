@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.39] — 2026-07-10
+
+### Fixed
+- Calls no longer come back with half the transcript translated into English. Each track's language is detected from the speech itself and pinned for the whole call, so a quiet or Bluetooth-routed other side stays in the language it was actually spoken in instead of being silently translated.
+
 ## [0.15.38] — 2026-07-08
 
 ### Fixed
