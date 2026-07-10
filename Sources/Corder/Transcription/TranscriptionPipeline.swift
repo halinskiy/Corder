@@ -606,15 +606,26 @@ final class TranscriptionPipeline {
                         .appendingPathComponent("corder-aec-\(meetingId).wav")
                     let micTranscribeURL = EchoSuppressor.suppress(micURL: micURL, systemURL: systemURL, outURL: aecTempURL) ?? micURL
                     defer { if micTranscribeURL != micURL { try? FileManager.default.removeItem(at: aecTempURL) } }
+                    // Per-track language tallies: WhisperTranscriber records
+                    // the language Whisper detected for EACH chunk into these,
+                    // so we can spot per-chunk drift (far-end chunks misheard
+                    // as English and translated) and force-correct just the
+                    // affected track below.
+                    let micTally = WhisperTranscriber.LanguageTally()
+                    let sysTally = WhisperTranscriber.LanguageTally()
                     do {
                         // Combine the two concurrent tracks' real per-window
                         // progress into one 0…0.9 fraction (last 10% is the
                         // diarization/mapping stage below). Monotonic.
                         let agg = ProgressAggregator(meetingId: meetingId)
-                        async let micPart = geminiRawTurns(wavURL: micTranscribeURL, meetingId: meetingId,
-                                                           onProgress: { agg.report(mic: $0) })
-                        async let sysPart = geminiRawTurns(wavURL: systemURL, meetingId: meetingId,
-                                                           onProgress: { agg.report(sys: $0) })
+                        async let micPart = WhisperTranscriber.$languageTally.withValue(micTally) {
+                            try await geminiRawTurns(wavURL: micTranscribeURL, meetingId: meetingId,
+                                                     onProgress: { agg.report(mic: $0) })
+                        }
+                        async let sysPart = WhisperTranscriber.$languageTally.withValue(sysTally) {
+                            try await geminiRawTurns(wavURL: systemURL, meetingId: meetingId,
+                                                     onProgress: { agg.report(sys: $0) })
+                        }
                         let (u, o) = try await (micPart, sysPart)
                         rawUserTurns = u
                         rawOtherTurns = o
@@ -635,11 +646,39 @@ final class TranscriptionPipeline {
                     // LLM polish applies to both cloud and local Whisper
                     // — the polish stage only touches text and doesn't
                     // care where the raw turns came from.
+                    // Language guard (Whisper/Groq only; Gemini transcribes
+                    // in-language natively). Each chunk auto-detects its own
+                    // language, so a BT-coded / quiet far-end can have a few
+                    // chunks misheard as English — Whisper then TRANSLATES
+                    // rather than transcribes them, and half the call comes
+                    // back in the wrong language. Using the per-chunk language
+                    // Whisper itself reported (reliable, unlike NL on Cyrillic)
+                    // we take the meeting's majority language; any track whose
+                    // OWN majority is that language yet also carries a minority
+                    // of another (= drift) is re-transcribed forced to it. A
+                    // track genuinely in another language (its majority differs)
+                    // is left alone.
+                    var meetingLang: String? = nil
                     if currentProvider != .gemini {
-                        // Prefer the pinned transcription language so the
-                        // polish doesn't re-introduce the drift we just
-                        // fixed at the ASR layer; fall back to the UI lang.
-                        let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? AppLanguage.current
+                        let meetingName = WhisperTranscriber.LanguageTally
+                            .combinedDominantName(micTally, sysTally)
+                        meetingLang = meetingName.flatMap(WhisperTranscriber.iso639)
+                        FileLogger.log("transcribe(): meeting language '\(meetingName ?? "?")' → iso '\(meetingLang ?? "?")' — mic \(micTally.snapshot().counts), sys \(sysTally.snapshot().counts)")
+                        if let name = meetingName, let iso = meetingLang {
+                            rawUserTurns = await rescueDriftedTrack(
+                                turns: rawUserTurns, tally: micTally, meetingName: name,
+                                forcedISO: iso, wavURL: micTranscribeURL, meetingId: meetingId)
+                            rawOtherTurns = await rescueDriftedTrack(
+                                turns: rawOtherTurns, tally: sysTally, meetingName: name,
+                                forcedISO: iso, wavURL: systemURL, meetingId: meetingId)
+                        }
+                    }
+                    if currentProvider != .gemini {
+                        // Give polish the DETECTED meeting language, not the
+                        // English-only UI default, so it doesn't re-introduce
+                        // the drift we just fixed at the ASR layer. Pinned
+                        // setting still wins if the user set one.
+                        let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? meetingLang ?? AppLanguage.current
                         rawUserTurns = await WhisperCleanup.polish(rawUserTurns, language: lang)
                         rawOtherTurns = await WhisperCleanup.polish(rawOtherTurns, language: lang)
                     }
@@ -1786,6 +1825,43 @@ final class TranscriptionPipeline {
             lock.lock(); mutate(); let c = (micFrac + sysFrac) / 2 * 0.9; lock.unlock()
             TranscriptionProgressStore.set(meetingId: meetingId, fraction: c)
         }
+    }
+
+    /// Re-transcribe a track forced to the meeting language when Whisper's own
+    /// per-chunk detection shows the track is MOSTLY the meeting language but
+    /// drifted on some chunks (misheard as another language and translated).
+    /// A track whose own majority is a DIFFERENT language is genuinely in that
+    /// language and is left untouched. Best-effort: any failure or empty
+    /// re-pass keeps the original turns. The forced pass misses the resume
+    /// cache (its key now carries the language), so it really re-runs ASR
+    /// rather than replaying the wrong-language chunks.
+    private func rescueDriftedTrack(
+        turns: [GeminiTranscriber.Turn],
+        tally: WhisperTranscriber.LanguageTally,
+        meetingName: String,
+        forcedISO: String,
+        wavURL: URL,
+        meetingId: String) async -> [GeminiTranscriber.Turn] {
+        guard !turns.isEmpty else { return turns }
+        let snapshot = tally.snapshot()
+        // The track's own dominant must BE the meeting language (else it is
+        // genuinely another language — don't clobber it) AND it must carry
+        // some minority weight in a different language (the drift to fix).
+        guard snapshot.dominantName == meetingName else { return turns }
+        let hasDrift = snapshot.counts.contains { $0.key != meetingName && $0.value > 0 }
+        guard hasDrift else { return turns }
+        let drifted = snapshot.counts.filter { $0.key != meetingName }
+            .map { "\($0.key)×\($0.value)" }.joined(separator: ",")
+        FileLogger.log("transcribe(): \(wavURL.lastPathComponent) language drift (\(drifted)) vs meeting '\(meetingName)' — re-transcribing forced to '\(forcedISO)'")
+        let forced = try? await WhisperTranscriber.$languageOverride.withValue(forcedISO) {
+            try await geminiRawTurns(wavURL: wavURL, meetingId: meetingId)
+        }
+        guard let forced, !forced.isEmpty else {
+            FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass empty/failed — keeping original")
+            return turns
+        }
+        FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass produced \(forced.count) turns in '\(forcedISO)'")
+        return forced
     }
 
     private func geminiRawTurns(wavURL: URL,

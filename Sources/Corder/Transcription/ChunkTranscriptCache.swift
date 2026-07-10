@@ -40,9 +40,14 @@ enum ChunkTranscriptCache {
                     CREATE TABLE IF NOT EXISTS chunk_cache (
                         cache_key  TEXT PRIMARY KEY NOT NULL,
                         turns_json TEXT NOT NULL,
-                        created_at INTEGER NOT NULL
+                        created_at INTEGER NOT NULL,
+                        language   TEXT NOT NULL DEFAULT ''
                     );
                 """)
+                // Older cache files predate the `language` column; add it so
+                // a resumed chunk can still feed the language-drift tally.
+                // Ignore the error when it already exists.
+                try? db.execute(sql: "ALTER TABLE chunk_cache ADD COLUMN language TEXT NOT NULL DEFAULT ''")
                 // Drop stale entries opportunistically on open — cheap,
                 // and keeps the file from growing unbounded.
                 let cutoff = Int(Date().timeIntervalSince1970) - ttlDays * 86_400
@@ -65,24 +70,29 @@ enum ChunkTranscriptCache {
         return "\(tag):\(md5)"
     }
 
-    static func get(_ key: String) -> [GeminiTranscriber.Turn]? {
+    /// Cached chunk result plus the language Whisper detected for it (empty
+    /// string for entries written before the column existed).
+    static func get(_ key: String) -> (turns: [GeminiTranscriber.Turn], language: String)? {
         guard let q = dbq() else { return nil }
-        let json: String?? = try? q.read { db in
-            try String.fetchOne(db, sql: "SELECT turns_json FROM chunk_cache WHERE cache_key = ?", arguments: [key])
+        let row: Row?? = try? q.read { db in
+            try Row.fetchOne(db, sql: "SELECT turns_json, language FROM chunk_cache WHERE cache_key = ?", arguments: [key])
         }
-        guard let inner = json, let j = inner, let data = j.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode([GeminiTranscriber.Turn].self, from: data)
+        guard let inner = row, let r = inner,
+              let j: String = r["turns_json"], let data = j.data(using: .utf8),
+              let turns = try? JSONDecoder().decode([GeminiTranscriber.Turn].self, from: data) else { return nil }
+        let language: String = r["language"] ?? ""
+        return (turns, language)
     }
 
-    static func put(_ key: String, _ turns: [GeminiTranscriber.Turn]) {
+    static func put(_ key: String, _ turns: [GeminiTranscriber.Turn], language: String) {
         guard let q = dbq(),
               let data = try? JSONEncoder().encode(turns),
               let json = String(data: data, encoding: .utf8) else { return }
         let now = Int(Date().timeIntervalSince1970)
         try? q.write { db in
             try db.execute(
-                sql: "INSERT OR REPLACE INTO chunk_cache (cache_key, turns_json, created_at) VALUES (?, ?, ?)",
-                arguments: [key, json, now])
+                sql: "INSERT OR REPLACE INTO chunk_cache (cache_key, turns_json, created_at, language) VALUES (?, ?, ?, ?)",
+                arguments: [key, json, now, language])
         }
     }
 

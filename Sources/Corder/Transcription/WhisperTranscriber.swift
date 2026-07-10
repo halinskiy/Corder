@@ -30,6 +30,69 @@ import AVFoundation
 @MainActor
 enum WhisperTranscriber {
 
+    /// Per-call forced transcription language (ISO-639-1), scoped to a
+    /// single `transcribe(...)` invocation. The pipeline sets this to the
+    /// meeting's anchor language when it re-transcribes a far-end track that
+    /// auto-detected the WRONG language (and got translated instead of
+    /// transcribed). Wins over the user's `AppSettings.transcriptionLanguage`
+    /// pin. Nil (the default) = fall back to that pin, or auto-detect.
+    @TaskLocal static var languageOverride: String?
+
+    /// Thread-safe tally of the language Whisper detected PER CHUNK (from the
+    /// verbose_json `language` field), weighted by the turns that chunk
+    /// produced. The pipeline sets one per track, reads the majority to find
+    /// the meeting language, and spots per-chunk drift (a few chunks misheard
+    /// as English and translated). Reliable where NLLanguageRecognizer is not
+    /// — NL misreads Cyrillic (it calls Russian "Kazakh" with full confidence).
+    final class LanguageTally: @unchecked Sendable {
+        private let lock = NSLock()
+        private var counts: [String: Int] = [:]
+        private var _last: String = ""
+        func add(_ language: String, weight: Int) {
+            guard weight > 0, !language.isEmpty else { return }
+            lock.lock(); counts[language, default: 0] += weight; _last = language; lock.unlock()
+        }
+        /// The language of the most recently added chunk. A track's chunk
+        /// loop is sequential, so right after a chunk transcribes this is
+        /// THAT chunk's language — used to persist it into the resume cache.
+        var lastLanguage: String { lock.lock(); defer { lock.unlock() }; return _last }
+        struct Snapshot { let counts: [String: Int]; let dominantName: String? }
+        func snapshot() -> Snapshot {
+            lock.lock(); defer { lock.unlock() }
+            return Snapshot(counts: counts,
+                            dominantName: counts.max { $0.value < $1.value }?.key)
+        }
+        /// Majority language NAME across both tracks (weighted). Nil if empty.
+        static func combinedDominantName(_ a: LanguageTally, _ b: LanguageTally) -> String? {
+            var m: [String: Int] = [:]
+            for (k, v) in a.snapshot().counts { m[k, default: 0] += v }
+            for (k, v) in b.snapshot().counts { m[k, default: 0] += v }
+            return m.max { $0.value < $1.value }?.key
+        }
+    }
+    @TaskLocal static var languageTally: LanguageTally?
+
+    /// Map Whisper's verbose_json `language` (a lowercase English NAME like
+    /// "russian", occasionally already an ISO code) to ISO-639-1 for the
+    /// `language=` form field. Returns nil for anything unmapped so we fall
+    /// back to auto-detect rather than force a bogus code.
+    static func iso639(_ language: String) -> String? {
+        let l = language.lowercased()
+        if l.count == 2, l.allSatisfy({ $0.isLetter }) { return l }  // already ISO
+        let map: [String: String] = [
+            "english": "en", "russian": "ru", "ukrainian": "uk", "german": "de",
+            "french": "fr", "spanish": "es", "italian": "it", "portuguese": "pt",
+            "polish": "pl", "dutch": "nl", "turkish": "tr", "arabic": "ar",
+            "chinese": "zh", "japanese": "ja", "korean": "ko", "hindi": "hi",
+            "czech": "cs", "swedish": "sv", "romanian": "ro", "greek": "el",
+            "hebrew": "he", "hungarian": "hu", "finnish": "fi", "danish": "da",
+            "norwegian": "no", "bulgarian": "bg", "belarusian": "be",
+            "kazakh": "kk", "serbian": "sr", "croatian": "hr", "slovak": "sk",
+            "catalan": "ca", "indonesian": "id", "vietnamese": "vi", "thai": "th",
+        ]
+        return map[l]
+    }
+
     enum WMode {
         case single   // one speaker label "user"
         case diarize  // speaker-N labels via gpt-4o-transcribe-diarize
@@ -332,9 +395,13 @@ enum WhisperTranscriber {
 
         var all: [GeminiTranscriber.Turn] = []
         all.reserveCapacity(chunks.count * 100)
-        // Provider/mode tag for the resume cache so a re-transcribe with a
-        // different provider never replays another model's chunk text.
-        let cacheTag = "\(backend):\(mode)"
+        // Provider/mode/language tag for the resume cache so a re-transcribe
+        // with a different provider — OR a language-forced re-pass — never
+        // replays the earlier (wrong-language) chunk text. Without the lang
+        // component, forcing a language would hit the stale auto-detected
+        // chunks and silently no-op the far-end rescue.
+        let langTag = (WhisperTranscriber.languageOverride ?? AppSettings.transcriptionLanguage).nilIfEmpty ?? "auto"
+        let cacheTag = "\(backend):\(mode):\(langTag)"
         for (i, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
             // Real progress: fraction of chunks finished so far. Reported at
@@ -352,7 +419,11 @@ enum WhisperTranscriber {
             let cacheKey = ChunkTranscriptCache.key(forChunkAt: chunk.url, tag: cacheTag)
             if let key = cacheKey, let cached = ChunkTranscriptCache.get(key) {
                 FileLogger.log("WhisperTranscriber: chunk \(i + 1)/\(chunks.count) — resume cache hit, skipping upload")
-                all.append(contentsOf: cached)
+                // Feed the cached chunk's language into the tally so the
+                // drift guard still works when a run resumes over chunks it
+                // already transcribed (parseVerboseJSON isn't called here).
+                languageTally?.add(cached.language, weight: cached.turns.count)
+                all.append(contentsOf: cached.turns)
                 continue
             }
 
@@ -384,7 +455,12 @@ enum WhisperTranscriber {
             // for a chunk the user is paying to get from the cloud. Leaving
             // it uncached means the resume re-fetches it (cloud if back),
             // which is the correct quality/cost trade-off.
-            if let key = cacheKey, !fromLocalFallback { ChunkTranscriptCache.put(key, turns) }
+            if let key = cacheKey, !fromLocalFallback {
+                // `lastLanguage` is this chunk's detected language (the loop is
+                // sequential per track), persisted so a later resume can tally
+                // it without re-uploading.
+                ChunkTranscriptCache.put(key, turns, language: languageTally?.lastLanguage ?? "")
+            }
             all.append(contentsOf: turns)
         }
         onProgress?(0.99)
@@ -528,7 +604,7 @@ enum WhisperTranscriber {
         // let Whisper auto-detect. Read directly off AppSettings (a
         // nonisolated UserDefaults read) rather than threading it through
         // five chunking call-frames. Stops the Russian→Ukrainian drift.
-        let forcedLang = AppSettings.transcriptionLanguage
+        let forcedLang = WhisperTranscriber.languageOverride ?? AppSettings.transcriptionLanguage
         if !forcedLang.isEmpty {
             appendFormField(name: "language", value: forcedLang)
         }
@@ -617,6 +693,11 @@ enum WhisperTranscriber {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw WhisperError.parse("non-JSON response")
         }
+        // Language Whisper auto-detected for THIS chunk (verbose_json top
+        // level). Fed into the active tally so the pipeline can catch a
+        // chunk that drifted to another language and got translated.
+        let detectedLang = ((json["language"] as? String) ?? "")
+            .lowercased().trimmingCharacters(in: .whitespaces)
         // If `segments` is missing the model returned text-only verbose
         // JSON (no per-segment breakdown). Fall back to one turn covering
         // the whole clip so we don't silently lose the transcript.
@@ -626,6 +707,7 @@ enum WhisperTranscriber {
                 let durationSec = (json["duration"] as? Double) ?? 0
                 let endMs = Int64(durationSec * 1000)
                 FileLogger.log("WhisperTranscriber: response had no segments — collapsing to one turn")
+                languageTally?.add(detectedLang, weight: 1)
                 let label = (mode == .single) ? "user" : "speaker-1"
                 return [.init(speakerLabel: label, startMs: 0, endMs: endMs, text: text)]
             }
@@ -657,6 +739,12 @@ enum WhisperTranscriber {
                 startMs: Int64(startSec * 1000),
                 endMs: Int64(endSec * 1000),
                 text: text))
+        }
+        // Weight this chunk's detected language by the turns it produced, so
+        // a long Russian chunk outvotes a short mis-detected English one.
+        if let tally = languageTally {
+            tally.add(detectedLang, weight: out.count)
+            FileLogger.log("WhisperTranscriber: chunk detected language='\(detectedLang.isEmpty ? "?" : detectedLang)' (\(out.count) turns)")
         }
         return out
     }
