@@ -832,7 +832,7 @@ enum Routes {
         let bytes = [UInt8](data)
         return .raw(200, "OK", [
             "Content-Type": "application/zip",
-            "Content-Disposition": "attachment; filename=\"corder-\(id).zip\"",
+            "Content-Disposition": attachmentHeader("\(downloadBaseName(m.title)).zip"),
             "Content-Length": String(bytes.count)
         ]) { try $0.write(bytes) }
     }
@@ -847,20 +847,21 @@ enum Routes {
             let title = (m?.title?.trimmingCharacters(in: .whitespaces)).flatMap {
                 $0.isEmpty ? nil : $0
             } ?? "Corder recording"
+            let base = downloadBaseName(title)
             let (body, ctype, fname): (String, String, String)
             switch kind {
             case .md:
                 body = TranscriptFormatter.markdown(segments: segments, speakers: speakers, title: title)
                 ctype = "text/markdown; charset=utf-8"
-                fname = "\(id).md"
+                fname = "\(base).md"
             case .json:
                 body = TranscriptFormatter.json(segments: segments, speakers: speakers, title: title)
                 ctype = "application/json; charset=utf-8"
-                fname = "\(id).json"
+                fname = "\(base).json"
             }
             return .raw(200, "OK", [
                 "Content-Type": ctype,
-                "Content-Disposition": "attachment; filename=\"corder-\(fname)\""
+                "Content-Disposition": attachmentHeader(fname)
             ]) { try $0.write([UInt8](body.utf8)) }
         } catch {
             return .internalServerError
@@ -2052,6 +2053,40 @@ enum Routes {
 
     private enum MediaExportKind { case audioM4A, videoWithAudio }
 
+    /// A filesystem-safe, presentable download base name from a meeting
+    /// title (so a saved file reads "Вакансия и процесс найма.m4a" instead of
+    /// "corder-<uuid>.m4a"). Strips characters that break Save panels /
+    /// filesystems / HTTP headers, collapses whitespace, caps the length, and
+    /// falls back to a generic name for a not-yet-titled recording.
+    private static func downloadBaseName(_ title: String?) -> String {
+        var s = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let bad = CharacterSet(charactersIn: "/\\:*?\"<>|").union(.controlCharacters).union(.newlines)
+        s = s.components(separatedBy: bad).joined(separator: " ")
+        s = s.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+        while s.hasPrefix(".") { s.removeFirst() }
+        s = s.trimmingCharacters(in: .whitespaces)
+        if s.count > 80 { s = String(s.prefix(80)).trimmingCharacters(in: .whitespaces) }
+        return s.isEmpty ? "Corder recording" : s
+    }
+
+    private static let rfc5987Allowed: CharacterSet = {
+        var cs = CharacterSet.alphanumerics
+        cs.insert(charactersIn: "!#$&+-.^_`|~")   // RFC 5987 attr-char extras
+        return cs
+    }()
+
+    /// A `Content-Disposition` value that survives non-ASCII names (Cyrillic
+    /// titles): a sanitised ASCII `filename=` fallback plus an RFC 5987
+    /// `filename*=UTF-8''…` that WebKit's Save panel prefers.
+    private static func attachmentHeader(_ filename: String) -> String {
+        let ascii = String(filename.unicodeScalars.map {
+            ($0.isASCII && $0.value >= 0x20 && $0 != "\"" && $0 != "\\") ? Character($0) : "_"
+        })
+        let fallback = ascii.isEmpty ? "download" : ascii
+        let pct = filename.addingPercentEncoding(withAllowedCharacters: rfc5987Allowed) ?? filename
+        return "attachment; filename=\"\(fallback)\"; filename*=UTF-8''\(pct)"
+    }
+
     /// Build (or reuse a cached) export via MediaExporter, then STREAM it
     /// to the client in chunks. The video+audio mux can be ~1.6 GB —
     /// loading that into memory with `Data(contentsOf:)` the way the
@@ -2066,15 +2101,16 @@ enum Routes {
             let url: URL?
             let contentType: String
             let filename: String
+            let base = downloadBaseName(m.title)
             switch kind {
             case .audioM4A:
                 url = MediaExporter.audioM4A(meetingId: id)
                 contentType = "audio/mp4"
-                filename = "corder-\(id).m4a"
+                filename = "\(base).m4a"
             case .videoWithAudio:
                 url = MediaExporter.videoWithAudio(meetingId: id, videoPath: m.videoPath)
                 contentType = "video/mp4"
-                filename = "corder-\(id).mp4"
+                filename = "\(base).mp4"
             }
             guard let fileURL = url,
                   let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
@@ -2086,7 +2122,7 @@ enum Routes {
             return .raw(200, "OK", [
                 "Content-Type": contentType,
                 "Content-Length": "\(size)",
-                "Content-Disposition": "attachment; filename=\"\(filename)\"",
+                "Content-Disposition": attachmentHeader(filename),
                 "Accept-Ranges": "none",
             ]) { writer in
                 defer { try? handle.close() }

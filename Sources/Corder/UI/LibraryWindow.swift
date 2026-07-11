@@ -394,14 +394,22 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
     /// server that never comes up) doesn't spin in an endless reload loop.
     /// Reset on every successful load.
     private var reloadAttempts = 0
-    private let maxReloads = 3
+    private let maxReloads = 6
+
+    /// True once the automatic retry budget is exhausted and we've stopped
+    /// trying — the Library is now BLANK. Cleared on the next successful load.
+    /// The window controller re-arms a retry when the window regains focus
+    /// (see `windowDidChangeOcclusionState` → `reattemptIfGaveUp`), so a
+    /// transient startup timeout can never strand the UI blank until relaunch.
+    private var gaveUp = false
 
     /// The WKWebView content process crashed (OOM, GPU reset, sandbox kill).
     /// Without this the Library window is left permanently BLANK until the
     /// user quits + relaunches. Reload to respawn the renderer.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard reloadAttempts < maxReloads else {
-            FileLogger.log("LibraryWindow: WKWebView content process kept terminating (\(reloadAttempts)x) — giving up auto-reload")
+            gaveUp = true
+            FileLogger.log("LibraryWindow: WKWebView content process kept terminating (\(reloadAttempts)x) — giving up (will retry on window focus)")
             return
         }
         reloadAttempts += 1
@@ -410,18 +418,39 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
     }
 
     /// Provisional navigation failed — typically the embedded server hadn't
-    /// finished binding when the window first loaded. Bounded retry so a
-    /// transient startup race doesn't leave a blank Library.
+    /// finished binding when the window first loaded, or its Swifter workers
+    /// were briefly hogged by a blocking export/transcribe so the page load
+    /// timed out. Bounded retry with linear backoff so a slow bind gets
+    /// progressively more time instead of burning the budget in a burst.
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        guard reloadAttempts < maxReloads else { return }
+        guard reloadAttempts < maxReloads else {
+            gaveUp = true
+            FileLogger.log("LibraryWindow: provisional navigation kept failing (\(reloadAttempts)x) — giving up (will retry on window focus)")
+            return
+        }
         reloadAttempts += 1
         FileLogger.log("LibraryWindow: provisional navigation failed (\(error.localizedDescription)) — retrying (attempt \(reloadAttempts))")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { webView.reload() }
+        let delay = 0.5 * Double(reloadAttempts)   // 0.5s, 1.0s, 1.5s …
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { webView.reload() }
     }
 
     /// A load succeeded — refresh the reload budget for any FUTURE crash.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         reloadAttempts = 0
+        gaveUp = false
+    }
+
+    /// Called when the Library window regains visibility. If the automatic
+    /// retry budget was already exhausted (window is BLANK), take a fresh
+    /// budget and reload — the server that was busy at launch has almost
+    /// certainly recovered by the time the user looks at the window again.
+    /// No-op unless we'd actually given up, so normal focus changes are free.
+    func reattemptIfGaveUp(_ webView: WKWebView) {
+        guard gaveUp else { return }
+        gaveUp = false
+        reloadAttempts = 0
+        FileLogger.log("LibraryWindow: window refocused while blank — reloading WKWebView")
+        webView.reload()
     }
 
     private func isFileEndpoint(_ url: URL?) -> Bool {
@@ -864,6 +893,11 @@ extension LibraryWindow: NSWindowDelegate {
         guard let window = self.window else { return }
         let visible = window.occlusionState.contains(.visible)
         FileLogger.log("LibraryWindow.windowDidChangeOcclusionState visible=\(visible)")
+        // Self-heal a blank Library: if the WKWebView had given up loading (a
+        // startup timeout that exhausted the retry budget), reload it now that
+        // the user is looking at the window again. No-op unless we'd given up,
+        // so ordinary focus flaps cost nothing.
+        if visible, let wv = webView { downloadDelegate?.reattemptIfGaveUp(wv) }
         // DEBOUNCE: `occlusionState` can flap several times in a row (overlapping
         // panels, Space/animation transitions, the floating HUD ordering in/out
         // over the window). Mirroring every flip straight onto the HUD made the
