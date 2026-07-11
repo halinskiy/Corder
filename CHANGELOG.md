@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.40] — 2026-07-11
+
+### Changed
+- Downloaded files (audio, transcript, bundle) are now named after the meeting title, e.g. "Вакансия и процесс найма.m4a", instead of the internal recording ID. Titles with non-ASCII characters (Cyrillic and others) are preserved.
+
+### Fixed
+- The Library window could get stuck permanently blank (white) if its content failed to load at launch — e.g. when the Mac was briefly busy. Corder now retries longer, with backoff, and reloads automatically the moment you bring the window back into focus, so a one-off startup hiccup can no longer strand the window blank until a relaunch.
+
 ## [0.15.39] — 2026-07-10
 
 ### Fixed

@@ -139,12 +139,51 @@ if [ -d "$APP/Contents/Frameworks/Sparkle.framework" ]; then
                   "$SPARKLE_VERSIONS/XPCServices/"*.xpc \
                   "$SPARKLE_VERSIONS/Autoupdate"; do
         [ -e "$helper" ] || continue
-        codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --preserve-metadata=entitlements,flags "$helper" 2>/dev/null || true
+        # Retry: codesign can transiently fail if a Corder instance is still
+        # holding the file (kill it before a release build). A SWALLOWED
+        # failure here used to leave a Sparkle helper adhoc-signed, which
+        # sailed through the local build and only bounced back "Invalid" from
+        # Apple ~5 min into notarization. Fail loudly instead.
+        _tries=0
+        until codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --preserve-metadata=entitlements,flags "$helper"; do
+            _tries=$((_tries + 1))
+            if [ "$_tries" -ge 3 ]; then
+                echo "ERROR: failed to codesign $helper after $_tries attempts (is a Corder instance running?)" >&2
+                exit 1
+            fi
+            echo "codesign $helper failed — retry $_tries…" >&2
+            sleep 1
+        done
     done
     codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" "$APP/Contents/Frameworks/Sparkle.framework"
 fi
 codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --entitlements "$ENTITLEMENTS" --identifier com.3mpq.Corder "$APP/Contents/MacOS/Corder"
 codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --entitlements "$ENTITLEMENTS" --identifier com.3mpq.Corder "$APP"
+
+# 4b. On the notarizable (Developer ID) path, fail fast if ANY nested binary
+# is still adhoc-signed — Apple rejects adhoc, but `codesign --verify` treats
+# adhoc as valid, so an adhoc helper passes local verification yet bounces
+# "Invalid" ~5 min into notarization. Check the known Sparkle helpers + main
+# binary explicitly, plus verify the outer seal is intact.
+if [[ "$SIGN_IDENTITY" == Developer\ ID* ]]; then
+    SVDIR="$APP/Contents/Frameworks/Sparkle.framework/Versions/Current"
+    ADHOC=0
+    for b in "$SVDIR/XPCServices/Installer.xpc" \
+             "$SVDIR/XPCServices/Downloader.xpc" \
+             "$SVDIR/Autoupdate" \
+             "$SVDIR/Updater.app" \
+             "$APP/Contents/Frameworks/Sparkle.framework" \
+             "$APP/Contents/MacOS/Corder"; do
+        [ -e "$b" ] || continue
+        if codesign -dvv "$b" 2>&1 | grep -q "Signature=adhoc"; then
+            echo "ERROR: adhoc-signed (notarization will reject): $b" >&2
+            ADHOC=1
+        fi
+    done
+    [ "$ADHOC" = 0 ] || { echo "ERROR: adhoc signatures present — aborting before notarization." >&2; exit 1; }
+    codesign --verify --strict "$APP" || { echo "ERROR: app signature seal is invalid." >&2; exit 1; }
+    echo "✔ Developer ID signature verified (no adhoc, seal intact)"
+fi
 
 # 5. Strip Gatekeeper quarantine
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
