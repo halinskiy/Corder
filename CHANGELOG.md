@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.42] — 2026-07-12
+
+### Fixed
+- Starting a recording no longer aborts with a "couldn't start recording (-10868)" error when a Bluetooth headset's mic is in a finicky state (e.g. AirPods mid-connection or with one earbud). Corder now falls back to the built-in mic and records instead of failing outright.
+
 ## [0.15.41] — 2026-07-12
 
 ### Changed

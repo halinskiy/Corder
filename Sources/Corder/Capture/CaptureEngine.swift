@@ -554,6 +554,7 @@ final class CaptureEngine: NSObject {
         // is saved (fresh install / "System default" choice / device
         // unplugged), we leave AVAudioEngine on the system default —
         // identical to the pre-feature behaviour.
+        FileLogger.log("CaptureEngine.start: system default input = \(AudioInputDevices.defaultInputSummary()), outputBT=\(outputBluetoothAtStart)")
         if let chosenUID = AppSettings.micDeviceUID {
             if let resolvedID = AudioInputDevices.apply(uid: chosenUID, to: engine) {
                 FileLogger.log("CaptureEngine.start: mic device set to UID=\(chosenUID) (AudioDeviceID=\(resolvedID))")
@@ -561,6 +562,13 @@ final class CaptureEngine: NSObject {
                 FileLogger.log("CaptureEngine.start: saved mic UID=\(chosenUID) not found / apply failed — falling back to system default")
             }
         }
+        // NOTE: auto-forcing the BT headset mic here (apply the BT input when
+        // outputBluetoothAtStart) was tried and REVERTED — a freshly-applied
+        // Bluetooth input device throws AVAudioEngine error -10868
+        // (kAudioUnitErr_FormatNotSupported) until it settles, and the START
+        // path has no retry (unlike handleMicConfigChange's backoff), so it
+        // aborted the whole recording. Redo via the settle-retry path, not a
+        // bare apply. The diagnostic line above stays for debugging.
         let inputNode = engine.inputNode
         // NOTE: macOS Voice Processing (AEC) was tried here to cancel
         // speaker→mic echo, but it puts the whole audio session into VoIP
@@ -579,7 +587,21 @@ final class CaptureEngine: NSObject {
         // engine reset — the device almost always binds within a second.
         var micStarted = false
         var lastMicError: Error?
+        var forcedBuiltIn = false
         for attempt in 1...4 {
+            // After a couple of failures on the default device — typically a
+            // flaky BT headset mic (AirPods in a half-connected / HFP-flapping
+            // state) that throws -10868 on every attempt — force the built-in
+            // mic so a recording NEVER fails to start. A working built-in
+            // capture beats the scary "couldn't start recording (-10868)"
+            // popup. Skipped when the user has explicitly pinned a device.
+            if attempt >= 3, !forcedBuiltIn, AppSettings.micDeviceUID == nil,
+               let builtIn = AudioInputDevices.builtInInput(),
+               AudioInputDevices.apply(uid: builtIn.uid, to: engine) != nil {
+                forcedBuiltIn = true
+                FileLogger.log("CaptureEngine.start: forcing built-in mic '\(builtIn.name)' after \(attempt - 1) failed attempt(s) on the default input")
+                try? await Task.sleep(nanoseconds: 200_000_000)   // let it bind
+            }
             let fmt = inputNode.outputFormat(forBus: 0)
             // 0 Hz / 0 ch = device not bound yet. Don't even try to open a
             // file with a bogus format (that's what throws -10868) — wait.
