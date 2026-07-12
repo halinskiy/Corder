@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.41] — 2026-07-12
+
+### Changed
+- The floating recording equalizer no longer hard-stops at the screen edge when you drag it. It now resists with an elastic rubber-band the further you push past the edge and springs back fully into view when you let go, like macOS Picture-in-Picture.
+
 ## [0.15.40] — 2026-07-11
 
 ### Changed
