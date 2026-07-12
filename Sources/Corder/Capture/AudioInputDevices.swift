@@ -70,6 +70,20 @@ enum AudioInputDevices {
         return out
     }
 
+    /// One-line snapshot of the current system default input, for start-up
+    /// diagnostics (so a "recorded from the wrong mic" report is debuggable
+    /// from the log alone).
+    static func defaultInputSummary() -> String {
+        guard let d = list().first(where: { $0.isSystemDefault }) else { return "none" }
+        return "\(d.name) [\(d.transport ?? "?")]"
+    }
+
+    /// The Mac's built-in microphone — the always-reliable fallback when a
+    /// finicky BT headset mic makes AVAudioEngine throw -10868 forever.
+    static func builtInInput() -> Info? {
+        return list().first(where: { $0.transport == "BuiltIn" })
+    }
+
     // MARK: - Apply to AVAudioEngine
 
     /// Set the AVAudioEngine input node to read from the device whose
