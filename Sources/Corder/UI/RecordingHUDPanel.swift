@@ -377,7 +377,15 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
             // a trackpad doesn't either.
             if (dx * dx + dy * dy) >= 16 {
                 dragInitiated = true
+                // `performDrag` is synchronous: it runs AppKit's drag loop
+                // (moving the window through our setFrameOrigin override, where
+                // the rubber-band applies) and RETURNS on mouse-up. Flag the
+                // drag so the panel rubber-bands past the edge instead of hard-
+                // clamping, then spring it back on-screen once the drag ends.
+                panel.isUserDragging = true
                 panel.performDrag(with: event)
+                panel.isUserDragging = false
+                panel.settleOnScreen()
                 return
             }
         }
@@ -399,30 +407,88 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
 /// the screen edge until it's no longer visible — there's no
 /// frameless-window equivalent of AppKit's titlebar clamp.
 final class ScreenClampingPanel: NSPanel {
+    /// True only while the user is hand-dragging the HUD (set around
+    /// `performDrag`). During a drag we let the panel slip PAST the screen
+    /// edge with rubber-band resistance (Apple-PiP feel) instead of a hard
+    /// stop; on release `settleOnScreen()` springs it back. Every OTHER move
+    /// (initial placement, screen change, programmatic reposition) uses the
+    /// hard clamp so the HUD can never be left stranded off-screen.
+    var isUserDragging = false
+    /// True only while `settleOnScreen()`'s spring animation is playing, so
+    /// its interpolated frames (which start off-screen at the overshoot spot)
+    /// aren't hard-clamped mid-flight — that would snap the panel to the edge
+    /// instantly and kill the animation.
+    private var isSettling = false
+
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
-        super.setFrame(clamped(frameRect), display: flag)
+        super.setFrame(bounded(frameRect), display: flag)
     }
     override func setFrame(_ frameRect: NSRect, display flag: Bool, animate: Bool) {
-        super.setFrame(clamped(frameRect), display: flag, animate: animate)
+        super.setFrame(bounded(frameRect), display: flag, animate: animate)
     }
     override func setFrameOrigin(_ point: NSPoint) {
-        let proposed = NSRect(origin: point, size: frame.size)
-        super.setFrameOrigin(clamped(proposed).origin)
+        super.setFrameOrigin(bounded(NSRect(origin: point, size: frame.size)).origin)
     }
-    private func clamped(_ rect: NSRect) -> NSRect {
-        // Pick the screen whose visibleFrame contains the proposed
-        // centre point; fall back to main if the centre is outside
-        // every screen (multi-monitor wraparound, sleep/wake races).
+
+    private func bounded(_ rect: NSRect) -> NSRect {
+        if isSettling { return rect }
+        return isUserDragging ? rubberBanded(rect) : clamped(rect)
+    }
+
+    /// Screen whose visibleFrame contains the proposed centre; main as
+    /// fallback (multi-monitor wraparound, sleep/wake races).
+    private func visibleFrame(for rect: NSRect) -> NSRect? {
         let centre = NSPoint(x: rect.midX, y: rect.midY)
         let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(centre) })
             ?? NSScreen.main
-        guard let visible = screen?.visibleFrame else { return rect }
-        var clamped = rect
-        if clamped.minX < visible.minX { clamped.origin.x = visible.minX }
-        if clamped.minY < visible.minY { clamped.origin.y = visible.minY }
-        if clamped.maxX > visible.maxX { clamped.origin.x = visible.maxX - clamped.width }
-        if clamped.maxY > visible.maxY { clamped.origin.y = visible.maxY - clamped.height }
-        return clamped
+        return screen?.visibleFrame
+    }
+
+    private func clamped(_ rect: NSRect) -> NSRect {
+        guard let visible = visibleFrame(for: rect) else { return rect }
+        var c = rect
+        if c.minX < visible.minX { c.origin.x = visible.minX }
+        if c.minY < visible.minY { c.origin.y = visible.minY }
+        if c.maxX > visible.maxX { c.origin.x = visible.maxX - c.width }
+        if c.maxY > visible.maxY { c.origin.y = visible.maxY - c.height }
+        return c
+    }
+
+    /// Damped overshoot: the panel can cross the edge, but each pixel past it
+    /// counts for less, asymptotically capped at `maxOver` — so it can never
+    /// run fully off-screen no matter how hard you drag (the PiP "push-back").
+    private func rubberBanded(_ rect: NSRect) -> NSRect {
+        guard let visible = visibleFrame(for: rect) else { return rect }
+        var r = rect
+        r.origin.x = resisted(r.origin.x, lo: visible.minX, hi: visible.maxX - r.width)
+        r.origin.y = resisted(r.origin.y, lo: visible.minY, hi: visible.maxY - r.height)
+        return r
+    }
+    private func resisted(_ v: CGFloat, lo: CGFloat, hi: CGFloat) -> CGFloat {
+        if v < lo { return lo - damp(lo - v) }
+        if v > hi { return hi + damp(v - hi) }
+        return v
+    }
+    private func damp(_ over: CGFloat) -> CGFloat {
+        let maxOver: CGFloat = 90          // hyperbolic resistance, →maxOver
+        return maxOver * over / (over + maxOver)
+    }
+
+    /// Spring the HUD fully back on-screen after a drag ends. No-op when it
+    /// already sits inside the visible frame (the common case).
+    func settleOnScreen() {
+        let target = clamped(frame)
+        guard target != frame else { return }
+        isSettling = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.32
+            // Slight back-ease overshoot for that springy PiP snap.
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.4, 0.64, 1)
+            ctx.allowsImplicitAnimation = true
+            animator().setFrame(target, display: true)
+        }, completionHandler: { [weak self] in
+            self?.isSettling = false
+        })
     }
 }
 
