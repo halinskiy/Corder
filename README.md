@@ -119,6 +119,23 @@ to obtain the keys safely.
 
 ## License
 
-MIT (forthcoming). For now: personal project, all rights reserved by
-the author. Open issues / PRs are welcome but the repo is not a
-community project yet.
+Corder is free software, licensed under the **GNU General Public License
+v3.0**. See [LICENSE](LICENSE) for the full text.
+
+Copyright (C) 2026 Kostiantyn Halynskyi.
+
+In short: you are free to read, run, modify and redistribute this code. If
+you distribute a modified version, or a product built on it, you have to
+release your source under the GPL as well.
+
+The source is public on purpose. Corder claims that your recordings and
+their transcription stay on your Mac; the point of publishing the capture
+engine and the on-device transcription pipeline is that you do not have to
+take that on trust. Read `Sources/Corder/Capture/` and
+`Sources/Corder/Transcription/` and check.
+
+The hosted backend (the Cloudflare Worker that proxies cloud transcription
+and meters usage) is a separate, closed component and is not part of this
+repository.
+
+Issues and pull requests are welcome.
