@@ -3,8 +3,8 @@ import Foundation
 /// Thrown by a paid-feature generator (Summary / Chapters) when the Worker
 /// returns HTTP 403 — a tier gate, NOT a generic failure. The route maps it
 /// to a real 403 so the frontend shows the Upgrade upsell instead of the
-/// "didn't work, send a report" error card. (See the "Paid feature gate"
-/// gotcha in NOTES.md — a 403 must surface as an upsell.)
+/// "didn't work, send a report" error card. A 403 is an upsell, never a
+/// failure card.
 enum PaidFeatureError: Error { case tierRequired }
 
 /// Generates a Markdown meeting summary from a finished transcript via

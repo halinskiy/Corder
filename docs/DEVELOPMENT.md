@@ -29,8 +29,8 @@ transcription call goes through the Cloudflare Worker proxy with the
 user's Supabase JWT. You don't need a local key to record, play back, or
 transcribe. Transcription routing: paid tiers use Groq Whisper (cloud),
 the free tier uses on-device WhisperKit, and Gemini / OpenAI whisper-1
-are admin-only (see the HARD PROVIDER LOCK gotcha in `NOTES.md`). The
-app opens straight to the Library and is fully usable signed-out.
+are admin-only, enforced both client-side and in the Worker. The app
+opens straight to the Library and is fully usable signed-out.
 
 ## Build & run
 
@@ -103,8 +103,6 @@ Corder/
 ├── Scripts/                       Build / signing helpers
 ├── Resources/                     SVG icons, AppIcon.icns
 ├── docs/                          you are here
-├── NOTES.md                      single source of truth for AI agents
-├── NOTES.md                       local editor addendum
 └── CHANGELOG.md
 ```
 

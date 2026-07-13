@@ -1614,8 +1614,7 @@ enum Routes {
 
         // A 403 tier-gate must surface as a real 403 so the frontend shows the
         // Upgrade upsell (api.ts throws "HTTP 403", SummaryPane keys off it),
-        // NOT the generic "generation failed" error card. Load-bearing per
-        // the "Paid feature gate" gotcha in NOTES.md.
+        // NOT the generic "generation failed" error card. Load-bearing.
         if tierGated { return tierGatedResponse("summary") }
         guard let summary = result, !summary.isEmpty else {
             return jsonResponse(["summary": "", "error": "generation failed"])

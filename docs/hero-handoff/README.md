@@ -1,9 +1,9 @@
-# Corder Library — hero handoff (real source, not the brief)
+# Corder Library — hero handoff
 
 This folder is a 1:1 dump of the actual Library window from the running
-Corder app. Use these files to recreate the hero block — the previous
-`hero-ui-brief.md` got several things wrong (most importantly the
-font), so trust this folder over that brief on every conflict.
+Corder app. Use these files to recreate the hero block: everything here
+is read out of the app itself, so it wins over any second-hand
+description of the UI.
 
 ## What's in here
 
@@ -18,11 +18,10 @@ font), so trust this folder over that brief on every conflict.
 | `components/RightPanel.tsx`  | Audio scrubber + per-speaker timeline (the right column). |
 | `components/Donate.tsx`      | Floating "Buy me a coffee" FAB — bottom-right of the window. |
 
-## Corrections to the previous brief
+## The typeface, since it gets guessed wrong
 
-The earlier `hero-ui-brief.md` claimed IBM Plex was the typeface. **It
-isn't.** The real font stack (verified via `getComputedStyle` in the
-running app) is:
+Corder is often assumed to use IBM Plex. **It doesn't.** The real font
+stack (verified via `getComputedStyle` in the running app) is:
 
 ```
 font-family:
@@ -179,8 +178,7 @@ purple speaker-1 colour for the avatar.
 3. Inline `styles.css` (or scope it under the hero container if it
    collides with the landing's tokens — they share `--accent`, etc.).
 4. Replace meeting / segment data with whatever you want the hero to
-   read. Keep timestamps and speaker counts plausible — the brief in
-   `docs/hero-ui-brief.md` has 14 reusable English lines.
+   read. Keep timestamps and speaker counts plausible.
 
 If anything still looks off after copying these files, the answer is
 almost always either: (1) you forgot to include `styles.css` ancestors

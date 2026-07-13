@@ -1,0 +1,5 @@
+<ul>
+<li>A failed atomic file-swap during audio compaction or the playback-format rewrite could delete a recording&#x27;s audio instead of leaving it untouched. The swap now always keeps the original intact on any failure.</li>
+<li>Added a database index on segments-by-speaker, speeding up speaker merge/reassign and the meeting-list preview on large libraries.</li>
+<li>Settings cancels a pending debounced save when the panel unmounts.</li>
+</ul>
