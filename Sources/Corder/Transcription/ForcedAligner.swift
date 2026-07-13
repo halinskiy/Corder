@@ -2,7 +2,7 @@ import Foundation
 import FluidAudio
 
 /// One recognised token with its real-timeline position, in ms.
-/// Produced by on-device ASR over the ORIGINAL (uncompressed) track —
+/// Produced by on-device ASR over the ORIGINAL (uncompressed) track
 /// so the times are acoustic ground truth, unlike Gemini's
 /// VAD-compressed-then-projected guesses.
 struct TimedToken: Sendable {
@@ -18,7 +18,7 @@ struct TimedToken: Sendable {
 /// raw audio and returns per-token timestamps on the true file
 /// timeline. We DON'T use its text as the transcript (Gemini's
 /// Russian quality is higher); we use only its token TIMINGS to anchor
-/// Gemini's words to the moment they were actually spoken — replacing
+/// Gemini's words to the moment they were actually spoken, replacing
 /// the proportional placement that could only ever be "roughly right".
 ///
 /// `AsrManager` is a non-Sendable class with mutable Core ML state, so
@@ -34,7 +34,7 @@ actor ForcedAligner {
 
     /// Transcribe `wavURL` on-device and return its tokens with real
     /// start/end times (ms), sorted by start. Throws on missing models
-    /// / no-network-first-run / no speech — callers fall back to the
+    /// / no-network-first-run / no speech, callers fall back to the
     /// proportional placement so a meeting never hard-fails over this.
     func align(wavURL: URL) async throws -> [TimedToken] {
         let mgr: AsrManager

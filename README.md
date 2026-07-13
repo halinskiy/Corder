@@ -11,13 +11,13 @@ you opted into.
 
 ## What it does
 
-- **Records** — single click in the menu bar or the in-app Start
+- **Records**, single click in the menu bar or the in-app Start
   button inside the Library window. Captures system
   audio (Core-Audio process tap + ScreenCaptureKit backup) and your
   microphone (via AVAudioEngine) onto **separate** `.wav` tracks. The
   HUD pill floats over every Space while you're recording, with a live
   waveform meter so you can tell capture is actually working.
-- **Transcribes — dual-track** — `mic.wav` and `system.wav` are
+- **Transcribes, dual-track**, `mic.wav` and `system.wav` are
   transcribed as **two separate jobs**, the mic forced to a single
   speaker ("you") and the system diarised for everyone on the remote
   side, then merged by start-time. This is the fix for the "it merged
@@ -26,21 +26,21 @@ you opted into.
   transcriber is on-device WhisperKit (Apple Silicon, $0) or Groq's
   hosted Whisper-large-v3-turbo; the cloud audio is processed and not
   retained for training.
-- **Caches the raw transcript** by audio MD5 — so re-mapping speakers
+- **Caches the raw transcript** by audio MD5, so re-mapping speakers
   (e.g. after the clarify banner pins a count) and re-transcribes
   after a Dropbox archive don't re-bill the cloud transcription.
-- **Rename & pin** — right-click a session to rename or pin it (pinned
+- **Rename & pin**, right-click a session to rename or pin it (pinned
   sessions float to a group at the top, marked with a gold dot); the
   header title is click-to-edit too.
-- **Exports** — download any recording as video, audio, transcript
+- **Exports**, download any recording as video, audio, transcript
   (TXT / Markdown / JSON) or a single ZIP bundle.
-- **Archives (optional)** — if you fill in `~/.config/corder/dropbox.json`,
+- **Archives (optional)**, if you fill in `~/.config/corder/dropbox.json`,
   each recording's `mix.wav` (plus its mic + system tracks) is uploaded
   after transcription and the local copies are deleted. Playback streams
   via signed Dropbox links.
-- **Archive bin** — sessions you don't want to see go to a 7-day bin
+- **Archive bin**, sessions you don't want to see go to a 7-day bin
   before being purged. Restore or delete-forever from the toolbar.
-- **Lives in a Library window** — sidebar of meetings, transcript with
+- **Lives in a Library window**, sidebar of meetings, transcript with
   speakers, audio scrubber, per-speaker timeline, full-text search.
 
 ## Why
@@ -104,16 +104,16 @@ to obtain the keys safely.
 
 ## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — modules, data
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), modules, data
   lifecycle, SQLite schema, dual-track transcription model.
-- [`docs/SECURITY.md`](docs/SECURITY.md) — threat model, secret
+- [`docs/SECURITY.md`](docs/SECURITY.md), threat model, secret
   hygiene, runtime privacy by provider.
-- [`docs/API.md`](docs/API.md) — every endpoint of the local HTTP
+- [`docs/API.md`](docs/API.md), every endpoint of the local HTTP
   server.
-- [`docs/DESIGN.md`](docs/DESIGN.md) — colour, type, components, motion.
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — first-time setup,
+- [`docs/DESIGN.md`](docs/DESIGN.md), colour, type, components, motion.
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md), first-time setup,
   build loop, common tasks, code style.
-- [`docs/RELEASE.md`](docs/RELEASE.md) — Sparkle update workflow.
+- [`docs/RELEASE.md`](docs/RELEASE.md), Sparkle update workflow.
 
 ## License
 

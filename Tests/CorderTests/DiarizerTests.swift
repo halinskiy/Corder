@@ -84,7 +84,7 @@ final class DiarizerTests: XCTestCase {
 
     func test_userMicDominance_perSegment_independence() throws {
         // Two segments, same audio file pair. Each window is evaluated
-        // independently — the gate result for [0.1, 0.5] doesn't carry
+        // independently, the gate result for [0.1, 0.5] doesn't carry
         // over to [0.5, 0.9].
         let micURL    = try writeMonoTone(level: 0.30, durationSec: 1.0)
         let systemURL = try writeMonoTone(level: 0.05, durationSec: 1.0)

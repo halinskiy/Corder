@@ -2,10 +2,10 @@
   <!-- Apple Icon Template geometry (macOS 11+): the squircle is 824 px
        on a 1024 canvas with a 100-px outer margin reserved for the
        drop-shadow. That margin is what makes a plain white icon read
-       as a solid 3D object on dark Dock backgrounds — without it the
+       as a solid 3D object on dark Dock backgrounds, without it the
        icon looks like a flat rectangle stuck to the wallpaper.
        Corner radius = 824 × 0.2237 ≈ 184 (Apple continuous-curve
-       squircle ratio). NO gradients — those wreck small-size renders. -->
+       squircle ratio). NO gradients, those wreck small-size renders. -->
   <defs>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="8" stdDeviation="14" flood-opacity="0.18"/>

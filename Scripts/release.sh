@@ -56,7 +56,7 @@ SIG="$( "$SPARKLE_BIN/sign_update" "$ZIP" )"
 #    when it shares the archive's base name (Corder-<v>.html beside
 #    Corder-<v>.zip); without it the in-app modal shows "No release notes
 #    attached to this update". We (re)generate notes for EVERY archive
-#    present so backfills + new releases alike are always populated — this is
+#    present so backfills + new releases alike are always populated, this is
 #    the single source that keeps the appcast notes from ever being empty.
 for zip in "$RELEASES_DIR"/Corder-*.zip; do
   [[ -e "$zip" ]] || continue
@@ -66,10 +66,10 @@ for zip in "$RELEASES_DIR"/Corder-*.zip; do
         > "$RELEASES_DIR/$base.html" 2>/dev/null; then
     echo "  notes: $base.html"
   else
-    # No CHANGELOG entry for this version — don't leave an empty file that
+    # No CHANGELOG entry for this version, don't leave an empty file that
     # would embed a blank <description>.
     rm -f "$RELEASES_DIR/$base.html"
-    echo "  notes: (none for $ver — skipped)"
+    echo "  notes: (none for $ver, skipped)"
   fi
 done
 

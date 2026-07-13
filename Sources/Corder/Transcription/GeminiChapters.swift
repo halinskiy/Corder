@@ -33,7 +33,7 @@ enum GeminiChapters {
         if jwt.isEmpty && key.isEmpty { return nil }
         let base = await GeminiTranscriber.endpointBaseForProxy()
 
-        // Cap the prompt at 2000 lines — covers a long meeting while staying
+        // Cap the prompt at 2000 lines, covers a long meeting while staying
         // well inside Flash-Lite's input window (a couple-hour transcript is
         // ~tens of k tokens, far from the limit). The cap is a safety bound,
         // not a quality knob.
@@ -44,7 +44,7 @@ enum GeminiChapters {
             let mm = s / 60
             let ss = s % 60
             // Strip newlines from the line so the prompt stays one-
-            // line-per-input — keeps the model from misreading
+            // line-per-input, keeps the model from misreading
             // mid-sentence breaks as topic shifts.
             let clean = line.text.replacingOccurrences(of: "\n", with: " ")
             // Prefix each line with its INDEX. The model returns the
@@ -53,7 +53,7 @@ enum GeminiChapters {
             // `start_ms` directly with the line tagged `[mm:ss]`, but
             // Gemini Flash Lite (thinkingBudget 0) can't reliably do
             // mm:ss→milliseconds math and returned 0 / seconds /
-            // garbage — every chapter rendered as 0:00. Echoing an
+            // garbage, every chapter rendered as 0:00. Echoing an
             // integer index is mechanical and bulletproof.
             lines += "\(idx) [\(String(format: "%02d:%02d", mm, ss))] \(clean)\n"
         }
@@ -64,7 +64,7 @@ enum GeminiChapters {
         a [mm:ss] timestamp, then the text.
         Output ONLY a JSON object with a `chapters` array. Each
         chapter has `start_index` (the integer index of the line where
-        that chapter begins — copy it exactly from the line prefix)
+        that chapter begins, copy it exactly from the line prefix)
         and `title` (3–7 words describing the topic of that segment in
         the SAME language as the transcript).
 
@@ -77,7 +77,7 @@ enum GeminiChapters {
         - Titles describe the SUBSTANCE ("Pricing for the Q3 launch",
           "Hiring freeze decision"), not boilerplate
           ("Introduction", "Discussion", "Next steps").
-        - No surrounding text, no markdown, no preamble — JSON only.
+        - No surrounding text, no markdown, no preamble, JSON only.
         - If the transcript has no discernible content, return
           `{"chapters": []}`.
         """
@@ -90,7 +90,7 @@ enum GeminiChapters {
             ]],
             "generationConfig": [
                 "temperature": 0.3,
-                // Same disable-thinking trick as GeminiTitler —
+                // Same disable-thinking trick as GeminiTitler
                 // chapter selection is mechanical, not reasoning.
                 "thinkingConfig": ["thinkingBudget": 0],
                 "maxOutputTokens": 1024,
@@ -144,7 +144,7 @@ enum GeminiChapters {
             else { return nil }
             return Chapter(startMs: max(0, startMs), title: title)
         }
-        // Force the first chapter to start at 00:00 — the prompt asks for it,
+        // Force the first chapter to start at 00:00, the prompt asks for it,
         // but the earliest transcript line is almost never at 0 ms (VAD
         // projection + pre-roll push it in by hundreds of ms), so we must NOT
         // insert a synthetic chapter (that duplicated the real first chapter's

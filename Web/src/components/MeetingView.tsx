@@ -76,33 +76,33 @@ interface Props {
   onBackToDashboard?: () => void;
   meetingId: string;
   /// Fallback title shown in the breadcrumb the instant `meetingId`
-  /// changes — before the detail fetch completes — so the header
+  /// changes, before the detail fetch completes, so the header
   /// stops lagging behind the sidebar selection. Sourced from the
   /// already-loaded sidebar `MeetingSummary` row in the parent.
   initialTitle?: string | null;
   initialStartedAt?: number | null;
   onDeleted: (id?: string) => void;
-  /// Opens the global archive panel — toolbar's Archive button hands off
+  /// Opens the global archive panel, toolbar's Archive button hands off
   /// to this. Archiving the *current* meeting happens via Sidebar's
   /// context menu or via the EmptyDeleteBanner on failed transcripts.
   onOpenArchive: () => void;
-  /// Mirrors `archiveOpen` from parent — drives the toolbar Archive
+  /// Mirrors `archiveOpen` from parent, drives the toolbar Archive
   /// button's `.active` state so a second click leaves the archive
   /// surface (toggle semantics replacing the old "< Library" back).
   archiveOpen?: boolean;
-  /// True when the user has no archived meetings — disables the
+  /// True when the user has no archived meetings, disables the
   /// toolbar Archive button so it can't open an empty panel.
   archiveEmpty?: boolean;
-  /// Profile-menu "Settings" handoff — flips the right tab to Settings.
+  /// Profile-menu "Settings" handoff, flips the right tab to Settings.
   onOpenSettings: () => void;
-  /// Profile-menu "Dashboard" handoff — clears `activeId` upstream.
+  /// Profile-menu "Dashboard" handoff, clears `activeId` upstream.
   onOpenDashboard: () => void;
   /// Bumped whenever the profile menu's Settings item is clicked.
   /// Consumed in main.tsx to flip `settingsSection`; passed here
-  /// only for prop-shape compatibility — MeetingView watches
+  /// only for prop-shape compatibility, MeetingView watches
   /// `settingsSection` itself now.
   openSettingsNonce: number;
-  /// Lifted Settings state — see Dashboard.tsx for rationale.
+  /// Lifted Settings state, see Dashboard.tsx for rationale.
   settingsSection: null | "general" | "advanced";
   onSettingsSectionChange: (next: null | "general" | "advanced") => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
@@ -172,13 +172,13 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // Download view replaces the Recording-tab content in place; the
   // tab strip then shows `← Download` instead of `Recording`. Lifted
   // from RightPanel so the strip can render the back-chip without a
-  // ref-chain. Resets on every meeting switch — a stale "Download"
+  // ref-chain. Resets on every meeting switch, a stale "Download"
   // chip would lie about the new meeting's state.
   const [downloadOpen, setDownloadOpen] = React.useState(false);
   React.useEffect(() => { setDownloadOpen(false); }, [meetingId]);
   // Reset the playhead on every meeting switch. RightPanel (and its
   // <audio>/<video>) stay mounted across switches, so a stale
-  // `currentTime` from the previous session used to carry over — seek
+  // `currentTime` from the previous session used to carry over, seek
   // to 6:24 in a long meeting, click a 2-minute one, and its scrubber
   // showed 6:24 (past the end). The AudioCard resets its own element +
   // local time on `detail.id`; this resets the lifted clock the
@@ -196,7 +196,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // Left-column tab: Transcript (default) | Summary. Summary is rendered
   // by `SummaryPane`, which lazily fetches `/summarize` on first open.
   const [leftTab, setLeftTab] = React.useState<"transcript" | "summary" | "chapters">("transcript");
-  // Speakers-clarify banner visibility — controlled here so the toolbar
+  // Speakers-clarify banner visibility, controlled here so the toolbar
   // icon button can toggle it. Auto-opens once per meeting if the diarizer
   // looks over-segmented and the user hasn't already dismissed for this id.
   const [clarifyOpen, setClarifyOpen] = React.useState(false);
@@ -253,7 +253,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   const [showLoading, setShowLoading] = React.useState(true);
   React.useEffect(() => {
     // Reset only the UI bits that are scoped to a meeting (search
-    // input, clarify banner). DO NOT setDetail(null) — clearing it
+    // input, clarify banner). DO NOT setDetail(null), clearing it
     // pops the skeleton on every click ("прогрузка всех элементов"
     // bug). The previous detail stays on screen until `load()` swaps
     // it for the new one; a stale 50-100 ms preview beats a blank
@@ -271,13 +271,13 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   }, [detail]);
 
   // Decide whether the clarify banner is open on first paint. Priority:
-  //   1. Persisted per-meeting state — whatever we left it as last time
+  //   1. Persisted per-meeting state, whatever we left it as last time
   //      wins. Toggling via the toolbar icon or dismissing via X both
   //      write here.
-  //   2. Auto-open heuristic — only when the diarizer looks unsure
+  //   2. Auto-open heuristic, only when the diarizer looks unsure
   //      (≥2 detected "others" AND user never told us how many people
   //      were on the call). This is the original Granola-style nudge:
-  //      "I noticed multiple speakers — was it really N?"
+  //      "I noticed multiple speakers, was it really N?"
   //   3. Otherwise stay closed; the toolbar icon reopens it on demand.
   React.useEffect(() => {
     if (!detail) return;
@@ -309,7 +309,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   const onClarifyChosen = () => {
     // Keep the banner open on purpose: the active pill shows the user
     // what they just picked, and one more click on a neighbour switches
-    // immediately. Closing it here used to leave people stranded — they
+    // immediately. Closing it here used to leave people stranded, they
     // didn't realise the toolbar's Users icon reopens it. Dismiss only
     // happens via the explicit X button or the toolbar toggle.
     load();
@@ -339,7 +339,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   }, [detail, load]);
 
   // Surface backend transcription errors (Gemini quota / billing, missing
-  // key, timeout) as a red toast. Polled once per meeting load — server
+  // key, timeout) as a red toast. Polled once per meeting load, server
   // clears the marker on the next successful run.
   const lastErrorShown = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -352,7 +352,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
         if (lastErrorShown.current === err) return;
         lastErrorShown.current = err;
         // Show a SHORT message, never the raw provider error (it used to
-        // dump a wall of "http(403, no X-Goog-Upload-URL — {…}")". The
+        // dump a wall of "http(403, no X-Goog-Upload-URL, {…}")". The
         // details live in the log; the error toast carries a Send-a-report
         // button (added by showToast) for when it keeps happening.
         onToast(t.transcribe_failed_short ?? "Transcription failed.", "error");
@@ -363,7 +363,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
 
   if (error) return <div className="empty"><div className="empty-title">{t.error_label}</div><div>{error}</div></div>;
   if (!detail) {
-    // Skeleton during the first detail fetch — keeps the layout stable
+    // Skeleton during the first detail fetch, keeps the layout stable
     // so the header/columns don't flash in on arrival. We only show
     // the skeleton once `showLoading` flips (delayed ~150 ms so fast
     // local fetches don't strobe), and only on the very first load
@@ -378,7 +378,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
       // currentTime is only meaningful once metadata has loaded; setting it
       // before that quietly snaps back to 0. Wait for `loadedmetadata` if
       // we're not there yet, then seek + play. play() may reject in some
-      // states (e.g. while still loading); we silently ignore — the click
+      // states (e.g. while still loading); we silently ignore, the click
       // counts as a user gesture so the next call usually succeeds.
       const apply = () => {
         try { v.currentTime = sec; } catch {}
@@ -388,7 +388,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
         apply();
       } else {
         v.addEventListener("loadedmetadata", apply, { once: true });
-        // Make sure metadata actually loads — `preload="auto"` does this
+        // Make sure metadata actually loads, `preload="auto"` does this
         // already, but calling load() guards against browsers that paused
         // it after the previous error/seek.
         try { v.load(); } catch {}
@@ -414,7 +414,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
       <MainHeader
         breadcrumb={(
           <>
-            {/* No "Dashboard ›" root crumb — the dashboard is hidden once
+            {/* No "Dashboard ›" root crumb, the dashboard is hidden once
                 recordings exist, so navigating back to it would just show
                 the empty start screen. The breadcrumb is now only the
                 (click-to-rename) meeting title. */}
@@ -438,7 +438,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                 onClick={() => setTitleEdit(detail.title?.trim() ?? "")}
               >
                 {/* `initialTitle` / `initialStartedAt` are the cached
-                    sidebar row — they win for the brief window while
+                    sidebar row, they win for the brief window while
                     the new meeting's detail is still being fetched, so
                     the breadcrumb never shows the previous meeting's
                     title after a sidebar click. Once `detail.id` ==
@@ -496,7 +496,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               // Settings opens from the header (profile menu OR the
               // gear in MainHeader). The strip then shows
               // `← General Settings` + `Advanced Settings` chips. The
-              // chevron lives inside the General chip — clicking it
+              // chevron lives inside the General chip, clicking it
               // when already on General returns to the Recording pane
               // (same back affordance as the old single Settings
               // chip), clicking it from Advanced switches to General.
@@ -508,7 +508,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                 >
                   {t.tab_general_settings ?? "General"}
                 </span>
-                {/* Advanced is cloud-heavy (auto-title/summary/chapters) — hidden
+                {/* Advanced is cloud-heavy (auto-title/summary/chapters), hidden
                     for guests, who only get the local General toggles. */}
                 {signedIn && (
                   <span
@@ -527,14 +527,14 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                 {t.audio_card_title}
               </span>
             )}
-            {/* Integrations tab hidden for now — `IntegrationsPane`
+            {/* Integrations tab hidden for now, `IntegrationsPane`
                 kept around so wiring it back is a one-line toggle. */}
           </div>
         </div>
         <div className="detail-body">
           {/* Transcript and Summary share the left column. Like the
               right-pane panels, both stay MOUNTED across left-tab
-              switches (display toggled, not unmounted) — TranscriptPane
+              switches (display toggled, not unmounted), TranscriptPane
               keeps its scroll position, SummaryPane keeps its
               already-fetched markdown without re-firing /summarize. */}
           <div
@@ -617,7 +617,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
             />
           </div>
           {/* Summary occupies the SAME grid cell as `.transcript-wrap`
-              above — they're siblings inside `.detail-body` but only
+              above, they're siblings inside `.detail-body` but only
               one is `display: flex` at a time. Mount-stable so the
               fetched markdown survives a flip back to Transcript. */}
           <div
@@ -633,7 +633,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
             <ChaptersPane detail={detail} onSeek={onSeek} currentTimeSec={currentTime} onToast={onToast} t={t} />
           </div>
           {/* All three right-pane panels stay MOUNTED across tab
-              switches (display toggled, not unmounted) — RightPanel
+              switches (display toggled, not unmounted), RightPanel
               keeps its <video>/<audio> alive, SettingsPane keeps its
               loaded toggle state (no more "loading" flash on every
               switch back to Settings), Integrations is dirt cheap

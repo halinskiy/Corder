@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-DMG installer background for Corder — wraps the Swift CoreText
+DMG installer background for Corder, wraps the Swift CoreText
 renderer (`make-dmg-background.swift`) so we can produce a HiDPI
 multi-rep TIFF that Finder picks the right scale from.
 
 Why Swift+CoreText (not SVG+rsvg-convert): Finder draws the
 "Corder" / "Applications" captions under the icons with CoreText.
 FreeType (which rsvg-convert uses) paints the same glyphs at the
-same size with subtly different antialiasing — the text on the
+same size with subtly different antialiasing, the text on the
 background always read softer than the captions under it. Driving
 the same CoreText path that Finder uses gives pixel-identical AA.
 
@@ -30,7 +30,7 @@ OUT_TIFF = os.path.join(RES, "dmg-background.tiff")
 
 def build_hidpi_tiff(png_1x: str, png_2x: str, out_tiff: str) -> None:
     if not shutil.which("tiffutil"):
-        raise RuntimeError("tiffutil not found — required for HiDPI DMG background")
+        raise RuntimeError("tiffutil not found, required for HiDPI DMG background")
     subprocess.run(
         ["tiffutil", "-cathidpicheck", png_1x, png_2x, "-out", out_tiff],
         check=True,
@@ -40,7 +40,7 @@ def build_hidpi_tiff(png_1x: str, png_2x: str, out_tiff: str) -> None:
 def main() -> int:
     os.makedirs(RES, exist_ok=True)
     if not shutil.which("swift"):
-        raise RuntimeError("swift not found — install Xcode command-line tools")
+        raise RuntimeError("swift not found, install Xcode command-line tools")
     subprocess.run(
         ["swift", SWIFT_SRC, OUT_1X, OUT_2X],
         check=True,

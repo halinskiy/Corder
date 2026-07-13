@@ -1,4 +1,4 @@
-# Admin Panel — Contract
+# Admin Panel, Contract
 
 Worker is live at `https://corder-api.empqwork.workers.dev` with the
 endpoints below. Frontend (`getcorder.com/admin`) talks to them with the
@@ -19,13 +19,13 @@ non-admin tokens get `403 admin role required`.
        || jsonb_build_object('role', 'admin')
      where email = 'hegona3@gmail.com';
    ```
-   Sign out + back in (or refresh the JWT) — `app_metadata.role` is
+   Sign out + back in (or refresh the JWT), `app_metadata.role` is
    baked into the token at issue time, not read live.
 
 ## Public `/news` (used by Corder app)
 
 Already updated to read from the `news_active` view. No frontend change
-needed — the React `NewsBanner` consumes the same `{ items: NewsItem[] }`
+needed, the React `NewsBanner` consumes the same `{ items: NewsItem[] }`
 shape it always did. Audience filtering happens client-side.
 
 ## Admin endpoints
@@ -39,11 +39,11 @@ All require `Authorization: Bearer <admin JWT>`.
 | GET    | `/admin/users`             | `?page=1&per_page=200`      | GoTrue admin listing (raw passthrough) |
 | POST   | `/admin/users/:id/tier`    | `{"tier":"free\|pro\|max"}` | `{ok:true,user:{…}}`                   |
 | POST   | `/admin/users/:id/role`    | `{"role":"admin"\|null}`    | `{ok:true,user:{…}}`                   |
-| DELETE | `/admin/users/:id`         | —                           | `{ok:true}`                            |
+| DELETE | `/admin/users/:id`         |,                           | `{ok:true}`                            |
 
 User row carries `id`, `email`, `created_at`, `last_sign_in_at`,
 `app_metadata.tier`, `app_metadata.role`. Usage rollup (meetings count,
-total seconds, provider breakdown) — TBD; needs a Supabase RPC that
+total seconds, provider breakdown), TBD; needs a Supabase RPC that
 aggregates the `meetings` / `segments` tables.
 
 `role` is orthogonal to `tier`: granting (`"admin"`) or revoking (`null`)
@@ -70,10 +70,10 @@ providers, not just see the panel.
 
 | Method | Path                | Body                                    | Returns                              |
 |--------|---------------------|-----------------------------------------|--------------------------------------|
-| GET    | `/admin/news`       | —                                       | `{items: NewsItemRow[]}` (incl. drafts) |
+| GET    | `/admin/news`       |,                                       | `{items: NewsItemRow[]}` (incl. drafts) |
 | POST   | `/admin/news`       | partial `NewsItemRow` (no id)           | `{ok:true,item: NewsItemRow}` (201)  |
 | PATCH  | `/admin/news/:id`   | partial `NewsItemRow`                   | `{ok:true,item: NewsItemRow}`        |
-| DELETE | `/admin/news/:id`   | —                                       | `{ok:true}`                          |
+| DELETE | `/admin/news/:id`   |,                                       | `{ok:true}`                          |
 
 `NewsItemRow` columns (mirror `news_items` table):
 
@@ -104,7 +104,7 @@ providers, not just see the panel.
 
 Backed by the `bug_reports` table (migration `20260606_bug_reports.sql`).
 Every 🐞 Send-report from the app still emails + files a GitHub issue, but
-now ALSO stores the report here and — in the background — asks Gemini Flash
+now ALSO stores the report here and, in the background, asks Gemini Flash
 for a short triage summary (`title` / `summary` / `severity`).
 
 The `log_tail` the app ships is now scoped to the last ~3 launch
@@ -121,8 +121,8 @@ error-regex line matched.
 | Method | Path                        | Body | Returns                              |
 |--------|-----------------------------|------|--------------------------------------|
 | GET    | `/admin/logs`               | `?limit=100&archived=true&severity=high&q=text` | `{items: BugReportRow[]}` (newest first, **no** `log_tail`; default = active only, `archived=true` = archived view; `severity` ∈ low\|medium\|high\|critical; `q` = free-text over title+summary+email) |
-| GET    | `/admin/logs/:id`           | —    | `{item: BugReportRow}` (incl. full `log_tail`) |
-| POST   | `/admin/logs/:id/summarize` | —    | `{ok:true,item: BugReportRow}` (re-runs the Gemini summary) |
+| GET    | `/admin/logs/:id`           |,    | `{item: BugReportRow}` (incl. full `log_tail`) |
+| POST   | `/admin/logs/:id/summarize` |,    | `{ok:true,item: BugReportRow}` (re-runs the Gemini summary) |
 | POST   | `/admin/logs/:id/archive`   | `?undo=true` to restore | `{ok:true,item: BugReportRow}` (soft-archive; row stays, leaves active list) |
 | POST   | `/admin/logs/bulk-archive`  | `{ids: string[], undo?: boolean}` | `{ok:true,count,items}` (archive/restore many in one call) |
 
@@ -135,7 +135,7 @@ error-regex line matched.
   email: string;              // reporter, or "anonymous"
   app_version: string | null; // "0.13.x (NNN)"
   macos_version: string | null;
-  log_tail: string;           // raw log — ONLY returned by GET /admin/logs/:id
+  log_tail: string;           // raw log, ONLY returned by GET /admin/logs/:id
   title: string | null;       // ≤ ~8-word AI headline (null until summarized)
   summary: string | null;     // 1-3 sentence AI digest
   severity: "low" | "medium" | "high" | "critical" | null;
@@ -149,15 +149,15 @@ Notes:
 - The summary is async (`ctx.waitUntil`), so a just-submitted row may have
   `title/summary = null` for a few seconds. The list endpoint omits
   `log_tail` (rows can be ~200 KB); fetch the single row for the full log.
-- `severity` is a model guess — render it as a coloured chip, not a hard truth.
+- `severity` is a model guess, render it as a coloured chip, not a hard truth.
 
 ## Suggested admin UI flows
 
 ### Users tab
 - Search + filter by tier
-- Per-row inline tier dropdown (free / pro / max) — POST `/admin/users/:id/tier`
+- Per-row inline tier dropdown (free / pro / max), POST `/admin/users/:id/tier`
 - "..." menu → Delete (with confirm)
-- Usage column placeholders for now ("—") until the aggregate RPC ships
+- Usage columns show a placeholder until the aggregate RPC ships
 
 ### News tab
 - "New" button opens form: title, subtitle, body (textarea), primary CTA
@@ -184,6 +184,6 @@ Notes:
 - Per-user usage rollup endpoint (needs a Supabase RPC over `meetings`
   + `segments`)
 - Audience filter in the worker `/news` (currently the worker returns
-  every active row regardless of tier — the React banner ignores it
+  every active row regardless of tier, the React banner ignores it
   for now)
 - Audit log for admin actions (who promoted whom to Pro, when)

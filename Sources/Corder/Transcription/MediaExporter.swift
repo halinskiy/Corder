@@ -11,7 +11,7 @@ import Foundation
 ///   • video+audio → the SILENT screen `video.mov` (we capture audio as
 ///     separate tracks, the movie has no sound) remuxed WITH the mixed
 ///     audio into one `.mp4`. The video is copied **verbatim**
-///     (passthrough — no re-encode), so a 2.5 h HEVC capture muxes in
+///     (passthrough, no re-encode), so a 2.5 h HEVC capture muxes in
 ///     seconds instead of the many minutes a full transcode would burn.
 ///     Only the audio is (re-)encoded to AAC, which is why we build the
 ///     `.m4a` first and reuse it as the mux's audio source.
@@ -44,7 +44,7 @@ enum MediaExporter {
         return true
     }
 
-    /// Synchronous wrapper around `AVAssetExportSession` — Swifter request
+    /// Synchronous wrapper around `AVAssetExportSession`, Swifter request
     /// handlers are blocking, so we drive the async export to completion
     /// on a semaphore rather than hopping threads.
     private static func runExport(_ session: AVAssetExportSession) -> Bool {
@@ -52,7 +52,7 @@ enum MediaExporter {
         session.exportAsynchronously { sem.signal() }
         sem.wait()
         if session.status != .completed {
-            FileLogger.log("MediaExporter: export failed — \(session.error?.localizedDescription ?? "unknown") (status \(session.status.rawValue))")
+            FileLogger.log("MediaExporter: export failed, \(session.error?.localizedDescription ?? "unknown") (status \(session.status.rawValue))")
         }
         return session.status == .completed
     }
@@ -100,14 +100,14 @@ enum MediaExporter {
         do {
             try vTrack.insertTimeRange(CMTimeRange(start: .zero, duration: vDur), of: vSrc, at: .zero)
             vTrack.preferredTransform = vSrc.preferredTransform
-            // Clamp the audio to the video length — they're recorded
+            // Clamp the audio to the video length, they're recorded
             // together so they should match, but a stop-time race can
             // leave one a few frames longer; trimming avoids a tail of
             // black video or silent audio.
             let useDur = CMTimeMinimum(vDur, aAsset.duration)
             try aTrack.insertTimeRange(CMTimeRange(start: .zero, duration: useDur), of: aSrc, at: .zero)
         } catch {
-            FileLogger.log("MediaExporter: composition insert failed for \(id) — \(error)")
+            FileLogger.log("MediaExporter: composition insert failed for \(id), \(error)")
             return nil
         }
         // Passthrough = copy both tracks as-is. The video stays HEVC (no

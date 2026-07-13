@@ -17,7 +17,7 @@ import AVFoundation
 /// + max-gap. ML-based VAD (Silero, WebRTC) would be more accurate on
 /// borderline frames, but pulling a CoreML model in for a problem this
 /// small is the kind of bloat we just retired (see WhisperKit removal in
-/// 0.7.0). RMS-gating is good enough — Gemini's anti-hallucination
+/// 0.7.0). RMS-gating is good enough, Gemini's anti-hallucination
 /// clause covers the false-positive case (we ship a sub-second of room
 /// tone, model returns no segment).
 enum VoiceActivityDetector {
@@ -25,7 +25,7 @@ enum VoiceActivityDetector {
     /// One contiguous chunk of speech on the original timeline. The
     /// `compressedStartMs` field is filled in only after we lay segments
     /// into the speech-only file (`concatenateSpeech`); for raw detector
-    /// output it stays at -1 — see `Projection` for how the two timelines
+    /// output it stays at -1, see `Projection` for how the two timelines
     /// relate.
     struct SpeechSegment {
         let startMs: Int64
@@ -36,11 +36,11 @@ enum VoiceActivityDetector {
 
     struct Config {
         /// Per-window RMS at or above which a frame is "speech".
-        /// 0.005 ≈ -46 dBFS — quiet conversational levels still register;
+        /// 0.005 ≈ -46 dBFS, quiet conversational levels still register;
         /// HVAC hum / room tone at -55 dBFS does not.
         var rmsThreshold: Float = 0.005
         /// Window size for the RMS computation. 30 ms is the WebRTC/Silero
-        /// default — short enough to catch glottal onsets, long enough
+        /// default, short enough to catch glottal onsets, long enough
         /// that one click doesn't flip the gate.
         var windowMs: Int = 30
         /// Hop size. 10 ms gives 3× overlap; smoother gate transitions.
@@ -118,8 +118,8 @@ enum VoiceActivityDetector {
 
     /// Speech-energy summary used to CHOOSE between the two system
     /// tracks (Core-Audio tap vs ScreenCaptureKit). On a Bluetooth
-    /// output route the tap captures a faint, attenuated bleed — not
-    /// true silence — so the old "tap definitely silent" gate never
+    /// output route the tap captures a faint, attenuated bleed, not
+    /// true silence, so the old "tap definitely silent" gate never
     /// tripped and the good SCK backup was discarded. Comparing voiced
     /// time + mean voiced RMS lets us pick the track that actually has
     /// the remote speech. `nil` on read error; (0, 0) on a silent file.
@@ -235,7 +235,7 @@ enum VoiceActivityDetector {
 
         /// Translate a compressed timestamp back onto the original timeline.
         /// If the timestamp falls in a gap (Gemini interpolated past the
-        /// end of one slot — rare), we snap to the start of the nearest
+        /// end of one slot, rare), we snap to the start of the nearest
         /// following slot rather than refusing the turn.
         func toOriginal(compressedMs: Int64) -> Int64 {
             for slot in slots where compressedMs < slot.compressedEndMs {
@@ -248,13 +248,13 @@ enum VoiceActivityDetector {
             // up near the end of a long file and routinely overshoot the
             // final speech slot, so a whole closing exchange lands here.
             // The old code clamped EVERY such turn onto the single
-            // instant `lastOriginalStart + duration` — the entire goodbye
+            // instant `lastOriginalStart + duration`, the entire goodbye
             // block collapsed onto one timestamp and clicking any of
             // those lines seeked to the very end of the recording.
             // Continue the last slot's 1:1 mapping instead: the tail
             // turns keep their relative order and spacing and stay
             // individually click-seekable. A small overshoot past the
-            // real audio end is harmless — the media element clamps an
+            // real audio end is harmless, the media element clamps an
             // over-long currentTime to its duration.
             if let last = slots.last {
                 return last.originalStartMs + (compressedMs - last.compressedStartMs)
@@ -305,7 +305,7 @@ enum VoiceActivityDetector {
     }
 
     /// Sum of all speech segments in ms. Used by the caller to decide
-    /// whether the savings are worth the extra disk I/O — for a file
+    /// whether the savings are worth the extra disk I/O, for a file
     /// where speech ≈ duration, the concat is a no-op and we just
     /// pass the original through.
     static func totalSpeechMs(_ segments: [SpeechSegment]) -> Int64 {

@@ -30,7 +30,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     /// up. NSPopover's own `.transient` dismissal is unreliable for a
     /// status-bar popover in an LSUIElement app (especially after the app
     /// was activated to present an invite): it sometimes "sticks" and
-    /// ignores outside clicks (Костя's bug — the popover hangs and blocks
+    /// ignores outside clicks (Костя's bug, the popover hangs and blocks
     /// the screen). These monitors guarantee ANY click outside the popover
     /// window closes it. Torn down in `popoverDidClose`.
     private var globalClickMonitor: Any?
@@ -88,7 +88,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         self.onOpenLibrary = onOpenLibrary
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
-        // Explicit isVisible = true — macOS Sequoia auto-hides
+        // Explicit isVisible = true, macOS Sequoia auto-hides
         // menu-bar items it considers overflow; forcing this on
         // (and persisting via `autosaveName`) prevents Corder
         // ending up in the hidden bucket.
@@ -102,7 +102,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             button.action = #selector(togglePopover(_:))
             // Never CLIP the icon: scale any image down to fit the menu-bar
             // height instead. This is the belt-and-suspenders fix for the
-            // "ring periodically shows as ( )" report — when macOS re-lays-out
+            // "ring periodically shows as ( )" report, when macOS re-lays-out
             // the status item (display sleep/wake, external-monitor connect/
             // disconnect, fullscreen transition) an image sitting at the height
             // limit was clipped top+bottom rather than scaled.
@@ -132,7 +132,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
                 // swapped back to `menuHost`, but the behavior can
                 // stick on `.applicationDefined` if `finishLoadingState`
                 // raced this state change. Force `.transient` + restore
-                // menu content unconditionally — same state recording
+                // menu content unconditionally, same state recording
                 // sees on a normal launch. UI is idempotent; nothing
                 // breaks if it was already correct.
                 switch state {
@@ -151,10 +151,10 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         switch state {
         case .idle, .preroll:
-            // FULL outline ring, hand-drawn — NOT the SF `circle` symbol.
+            // FULL outline ring, hand-drawn, NOT the SF `circle` symbol.
             // The SF `circle` at menu-bar size rendered as a too-thin ring
             // whose top/bottom arcs sub-pixelled to nothing, so it read as
-            // "( )" (clipped) — the SAME SF-in-status-bar unreliability that
+            // "( )" (clipped), the SAME SF-in-status-bar unreliability that
             // already forced `makeRedDot` (see that comment). Drawing the ring
             // ourselves with a controlled stroke + inset guarantees a full,
             // crisp ring. Template so it follows the menu bar's light/dark
@@ -216,7 +216,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             // applicationDefined behavior (left over from an
             // interrupted invite/loading path) doesn't reject the
             // close. `popover.close()` (vs `performClose:`) is the
-            // sync, behavior-ignoring variant — guaranteed to land.
+            // sync, behavior-ignoring variant, guaranteed to land.
             popover.behavior = .transient
             popover.close()
         } else {
@@ -244,7 +244,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
     /// Drop the call-record offer down from the menu-bar icon as a real
     /// NSPopover. Note: a status-bar popover is tied to the app, so it
-    /// won't float over a fullscreen call on another Space — the user
+    /// won't float over a fullscreen call on another Space, the user
     /// explicitly chose this native behaviour over the persistent
     /// floating panel. We activate the app so the popover can present
     /// even though Corder is LSUIElement and currently in the
@@ -286,7 +286,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
     }
 
-    /// Public cancel — used when the user starts recording manually
+    /// Public cancel, used when the user starts recording manually
     /// while a call-offer is still up, so a stale offer doesn't linger.
     /// No dismiss callback (the caller already took over).
     func cancelInviteOffer() {
@@ -318,7 +318,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     /// invite popover was just closed by `dismissInvite`; this re-opens
     /// the popover from the same status-item anchor so the user reads
     /// invite → loading → blob as one continuous element. On the manual
-    /// Start path the menu popover may still be open from the click —
+    /// Start path the menu popover may still be open from the click
     /// we just swap its content.
     func showLoadingState() {
         guard let button = statusItem.button else { return }
@@ -377,7 +377,7 @@ private struct LoadingStateView: View {
     }
 }
 
-/// "We noticed a call — record it?" offer. Built from the *exact* same
+/// "We noticed a call, record it?" offer. Built from the *exact* same
 /// pieces as `PopoverContentView`: a bordered status card (mirrors
 /// IdleStatus/RecordingStatus) + `FlatButtonStyle` buttons, same 320 ×
 /// padding-20 × windowBackground shell. So it reads as one more state
@@ -395,7 +395,7 @@ private struct InviteOfferView: View {
         // here.
         VStack(alignment: .leading, spacing: PopoverShell.outerSpacing) {
             VStack(alignment: .leading, spacing: PopoverShell.sectionSpacing) {
-                // Status card — same metrics as IdleStatus
+                // Status card, same metrics as IdleStatus
                 // (h16 / v14, rounded-8, primary.opacity(0.10) border).
                 VStack(alignment: .leading, spacing: 1) {
                     Text(appName)
@@ -413,7 +413,7 @@ private struct InviteOfferView: View {
                         .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
                 )
 
-                // Primary — identical to the menu's idle "Start
+                // Primary, identical to the menu's idle "Start
                 // recording" (red dot + FlatButtonStyle .primary).
                 Button(action: onAccept) {
                     HStack(spacing: 8) {
@@ -424,13 +424,13 @@ private struct InviteOfferView: View {
                 .buttonStyle(FlatButtonStyle(role: .primary))
             }
 
-            // Hairline — same as the menu's primary↔library divider.
+            // Hairline, same as the menu's primary↔library divider.
             Rectangle()
                 .fill(Color.primary.opacity(0.08))
                 .frame(height: 1)
                 .padding(.vertical, 2)
 
-            // Secondary — same treatment as "Open library".
+            // Secondary, same treatment as "Open library".
             Button(action: onDismiss) {
                 Text(L.t("invite_not_now", lang: lang))
             }

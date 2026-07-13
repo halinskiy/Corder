@@ -12,8 +12,8 @@ interface Props {
 /// "Recording …" card pinned to the top of the meeting view. Shares
 /// the EXACT same `.trans-banner.clarify-banner` shell as every other
 /// status banner (Transcribing / Failed / Ready-when-you-are) so the
-/// surface keeps a single voice — same width, same padding, same
-/// typography — no layout pop between states. The blinking red dot
+/// surface keeps a single voice, same width, same padding, same
+/// typography, no layout pop between states. The blinking red dot
 /// lives inline next to the headline; the elapsed timer is the
 /// subtitle; Stop is a single `.clarify-btn.danger` button.
 export function RecordingBanner({ state, onStopped, onToast, t }: Props) {

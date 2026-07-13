@@ -2,7 +2,7 @@ import Foundation
 
 /// Generates a short human headline for a finished transcript via a
 /// cheap text-only Gemini call (one tiny request, ~tens of output
-/// tokens — negligible cost vs. the audio transcription itself).
+/// tokens, negligible cost vs. the audio transcription itself).
 ///
 /// Best-effort: any failure returns nil and the UI falls back to the
 /// date label, so a flaky network never blocks a transcript.
@@ -23,13 +23,13 @@ enum GeminiTitler {
         if jwt.isEmpty && key.isEmpty { return nil }
         let base = await GeminiTranscriber.endpointBaseForProxy()
 
-        // Cap the input — a title only needs the gist, and the opening
+        // Cap the input, a title only needs the gist, and the opening
         // minutes carry the topic. Keeps the call fast and cheap.
         let snippet = String(trimmed.prefix(6000))
 
         let system = """
         You write a short, descriptive title for a meeting transcript.
-        Output ONLY the title — nothing else.
+        Output ONLY the title, nothing else.
 
         Rules:
         - Say WHAT the conversation is about (the concrete topic/subject),
@@ -55,7 +55,7 @@ enum GeminiTitler {
                 // gemini-2.5-flash is a *thinking* model: with a tiny
                 // maxOutputTokens the reasoning pass eats the entire
                 // budget and the response comes back with NO text part
-                // (finishReason MAX_TOKENS) — which is why every title
+                // (finishReason MAX_TOKENS), which is why every title
                 // was silently dropped. Disable thinking for this
                 // trivial task and leave generous room for the title.
                 "thinkingConfig": ["thinkingBudget": 0],
@@ -93,7 +93,7 @@ enum GeminiTitler {
         // to the date label instead of showing a nonsense title.
         let words = cleaned.split(whereSeparator: { $0 == " " || $0 == "\n" })
         // CJK (Chinese / Japanese) write without inter-word spaces, so a
-        // perfectly valid title is one "word" — the space-based word count
+        // perfectly valid title is one "word", the space-based word count
         // would reject EVERY Chinese/Japanese title and fall back to the date
         // label. Detect Han / Hiragana / Katakana and relax the word-count +
         // char-floor rules for those scripts (Korean uses spaces, unaffected).

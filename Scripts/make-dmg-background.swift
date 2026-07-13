@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
 // Render the DMG installer background as PNGs (1× + 2×) via
-// AppKit / CoreText — the same rasteriser Finder uses for the
+// AppKit / CoreText, the same rasteriser Finder uses for the
 // "Corder" / "Applications" captions under the icons.
 //
 // Design (2026-06, Tracer-style, v2 per feedback): white canvas, a small
@@ -31,7 +31,7 @@ let H: CGFloat = 400
 //
 // macOS 26 (Tahoe) Finder FORCES a unified toolbar (search pill + "+") plus a
 // bottom status bar onto the DMG window even though create-dmg's template does
-// `set toolbar visible to false` — the call is a no-op now. That chrome eats
+// `set toolbar visible to false`, the call is a no-op now. That chrome eats
 // ~95pt, so the visible content area of a 400pt window is only ~305pt tall.
 // Finder top-anchors both the background image AND the icons at the content
 // origin, so a row at the old y=195 rendered at ~63% down ("где-то снизу").
@@ -66,7 +66,7 @@ let HEADLINE_COLOR = NSColor(calibratedRed: 0x3a/255, green: 0x3a/255, blue: 0x3
 // MARK: - Soft circle (radial gradient, no blur)
 
 /// A semi-transparent green disc fading from `color` at the centre to fully
-/// transparent at `radius`. No Gaussian blur — the radial falloff is the
+/// transparent at `radius`. No Gaussian blur, the radial falloff is the
 /// soft edge. Centres sit partly off-canvas so only an ambient arc shows.
 func drawSoftCircle(_ cg: CGContext, centerTop: CGPoint, radius: CGFloat, color: CGColor) {
     let center = CGPoint(x: centerTop.x, y: upY(centerTop.y))

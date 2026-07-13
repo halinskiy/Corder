@@ -24,7 +24,7 @@ function GoogleMeetLogo() {
 /// `.dash-recent-card` vocabulary so past + future read as one family.
 /// Until calendar access is granted the pane shows a Connect state; the
 /// live data wiring (Google `calendar.readonly` provider token → events)
-/// lands once the OAuth scope is in place — `getUpcoming` already returns
+/// lands once the OAuth scope is in place, `getUpcoming` already returns
 /// the `{connected, events}` contract this renders against.
 export function UpcomingPane({
   t, lang,
@@ -94,7 +94,7 @@ export function UpcomingPane({
           <div className="dash-sub">
             {connected
               ? (t.upcoming_none_sub ?? "Nothing scheduled in the next 30 days.")
-              : (t.upcoming_connect_sub ?? "Calendar sync is on the way — your upcoming meetings will show up here.")}
+              : (t.upcoming_connect_sub ?? "Calendar sync is on the way, your upcoming meetings will show up here.")}
           </div>
         </div>
         {!connected && (
@@ -116,10 +116,10 @@ export function UpcomingPane({
   }
 
   // Just the future meetings, chronological. No section headers, no
-  // "up next" highlight — a plain ordered list (Kostya's call).
+  // "up next" highlight, a plain ordered list (Kostya's call).
   const sorted = [...events].sort((a, b) => a.start_ms - b.start_ms);
 
-  // Exact date + time (e.g. "Jun 12, 11:00") — not a duration. `formatDate`
+  // Exact date + time (e.g. "Jun 12, 11:00"), not a duration. `formatDate`
   // already folds today/yesterday and appends the clock.
   const metaOf = (ev: UpcomingEvent): string => formatDate(ev.start_ms, lang);
 

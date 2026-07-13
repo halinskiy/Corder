@@ -20,11 +20,11 @@ final class RecordingHUDPanel {
     /// panel is actually orderOut'd.
     private let presentation = HUDPresentation()
     /// Strong ref so the delegate isn't deallocated while the panel
-    /// is on screen — NSPanel.delegate is `weak`.
+    /// is on screen, NSPanel.delegate is `weak`.
     private var delegate: HUDWindowDelegate?
     /// Local event monitor that forces `.pointingHand` whenever the
     /// cursor sits over the floating panel. Required because the panel
-    /// is `.nonactivatingPanel` — macOS reads cursor preference from
+    /// is `.nonactivatingPanel`, macOS reads cursor preference from
     /// the window UNDER the floating panel for non-key windows, which
     /// means our addCursorRect / push() are silently ignored. The
     /// local monitor runs on every mouseMoved event in our process and
@@ -36,8 +36,8 @@ final class RecordingHUDPanel {
     /// demand without re-asking the recording state machine.
     private var wantsVisible: Bool = false
     /// True while the Library window is the key window. In that case the
-    /// floating HUD is redundant — the inline blob in the page covers
-    /// the start/stop affordance — so we hide it. Restored as soon as
+    /// floating HUD is redundant, the inline blob in the page covers
+    /// the start/stop affordance, so we hide it. Restored as soon as
     /// the user switches focus away from the Library.
     private var librarySuppressed: Bool = false
 
@@ -52,7 +52,7 @@ final class RecordingHUDPanel {
     func show() {
         // The floating equalizer HUD is user-toggleable (Settings → General
         // → "Recording equalizer", default ON). When off, never bring the
-        // pill up — and keep `wantsVisible` false so a later Library-suppress
+        // pill up, and keep `wantsVisible` false so a later Library-suppress
         // toggle can't resurrect it either. Recording runs headless; Stop is
         // still reachable from the popover + the in-app button.
         guard AppSettings.hudEnabled else {
@@ -68,7 +68,7 @@ final class RecordingHUDPanel {
 
     private func ensureVisible() {
         if window?.isVisible == true {
-            FileLogger.log("RecordingHUDPanel.ensureVisible: already visible — skip")
+            FileLogger.log("RecordingHUDPanel.ensureVisible: already visible, skip")
             return
         }
         // Reuse a panel that was only ordered OUT (not torn down). The
@@ -78,7 +78,7 @@ final class RecordingHUDPanel {
         // ⌘H, minimize, app-switch, Library close while recording) would
         // build a BRAND-NEW panel and overwrite `window`, orphaning the
         // previous NSPanel + SwiftUI TimelineView tree. The orphans are
-        // never torn down and keep re-rendering off-screen — an unbounded
+        // never torn down and keep re-rendering off-screen, an unbounded
         // memory + power leak that grows with how much the user moves
         // around during a call. Just bring the existing panel back.
         if let existing = window {
@@ -133,7 +133,7 @@ final class RecordingHUDPanel {
         // Float over every Space + persist when the user switches Spaces.
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
-        // Mouse-moved events are off by default on NSPanel — we need them on
+        // Mouse-moved events are off by default on NSPanel, we need them on
         // so HUDHostingView's tracking area actually fires mouseMoved /
         // cursorUpdate. Without this, .nonactivatingPanel silently swallows
         // every mouse-moved event and the pointing-hand cursor never appears.
@@ -142,13 +142,13 @@ final class RecordingHUDPanel {
         // Persisted position from a previous session, falling back to
         // the bottom-right corner of the main screen if there's nothing
         // saved yet (or if the saved point is on a screen that's no
-        // longer attached — happens when the user undocks an external
+        // longer attached, happens when the user undocks an external
         // monitor between sessions).
         let origin = restoredOrigin(for: panel) ?? defaultOrigin(for: panel)
         panel.setFrameOrigin(origin)
 
-        // Hook windowDidMove so dragging the HUD persists immediately
-        // — no need to wait for hide() to flush the new position.
+        // Hook windowDidMove so dragging the HUD persists immediately,
+        // no need to wait for hide() to flush the new position.
         let del = HUDWindowDelegate { [weak self] frame in
             self?.saveOrigin(frame.origin)
         }
@@ -172,7 +172,7 @@ final class RecordingHUDPanel {
         // Reverse the entry spring: tell the view to collapse back to a
         // tiny transparent dot, then tear the panel down once that
         // animation has had time to land (matches the spring-in the
-        // user asked for — "так же уходит когда запись останавливаю").
+        // user asked for, "так же уходит когда запись останавливаю").
         presentation.dismissing = true
         window = nil          // re-entrancy guard; `panel` keeps it alive
         removeCursorMonitor()
@@ -200,11 +200,11 @@ final class RecordingHUDPanel {
 
     /// Called by `LibraryWindow` when its window becomes / resigns key.
     /// While suppressed, the floating HUD is hidden even during a
-    /// recording — the user is looking at the Library, where the inline
+    /// recording, the user is looking at the Library, where the inline
     /// blob covers the same affordance.
     func setLibrarySuppressed(_ suppressed: Bool) {
         // The floating equalizer HUD now stays visible even while the Library
-        // window is focused — the user wants it ALWAYS up during recording, not
+        // window is focused, the user wants it ALWAYS up during recording, not
         // only when Corder is hidden (there's no inline in-window equalizer to
         // fall back on anymore). We keep this hook (many callers: Library
         // key/occlusion/⌘H) but no longer hide the pill; we just make sure it's
@@ -269,7 +269,7 @@ final class RecordingHUDPanel {
 /// over its full bounds via the documented AppKit mechanism
 /// (`resetCursorRects` + `addCursorRect`). This wins against the
 /// background-drag handler installed by `isMovableByWindowBackground`
-/// on the floating panel — push/set-based approaches lose that fight
+/// on the floating panel, push/set-based approaches lose that fight
 /// on .nonactivatingPanel windows.
 ///
 /// Tracking area + cursorUpdate / mouseMoved overrides are kept as a
@@ -278,7 +278,7 @@ final class RecordingHUDPanel {
 final class HUDHostingView<Content: View>: NSHostingView<Content> {
     private var trackingArea: NSTrackingArea?
     /// `true` while we've pushed `.pointingHand` onto AppKit's cursor
-    /// stack. mouseEntered pushes once, mouseExited pops once — both
+    /// stack. mouseEntered pushes once, mouseExited pops once, both
     /// gated by this flag so duplicate events (tracking-area + window-
     /// level forwarding both fire mouseEntered) don't stack up.
     private var pushedPointingHand = false
@@ -325,7 +325,7 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
 
     /// `.push()` instead of `.set()`. WKWebView is a sibling subview
     /// at the same screen coordinates and its CSS-driven cursor
-    /// handler calls `.set()` on every mouseMoved tick — that
+    /// handler calls `.set()` on every mouseMoved tick, that
     /// trampled our `pointingHand.set()` and reverted the cursor to
     /// the system arrow. `push()` adds pointingHand to AppKit's
     /// cursor stack which AppKit treats as authoritative until we
@@ -350,12 +350,12 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
         super.mouseExited(with: event)
     }
     /// Manual drag handover for the floating recording HUD. We do
-    /// nothing on mouseDown except remember where it landed — letting
+    /// nothing on mouseDown except remember where it landed, letting
     /// the click reach SwiftUI's tap gesture cleanly on mouseUp.
     /// `mouseDragged` then kicks AppKit's drag handler once the cursor
     /// has moved past the threshold, which transfers control to AppKit
     /// (consuming the rest of the mouseDragged + mouseUp events). The
-    /// `ScreenClampingPanel` check scopes this to the floating panel —
+    /// `ScreenClampingPanel` check scopes this to the floating panel
     /// the inline blob hosted inside `LibraryWindow` has its own drag
     /// (the page's `.main-header` strip) and shouldn't grab drags here.
     override func mouseDown(with event: NSEvent) {
@@ -372,7 +372,7 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
             let current = NSEvent.mouseLocation
             let dx = current.x - start.x
             let dy = current.y - start.y
-            // 4 px threshold — small enough that "click then nudge"
+            // 4 px threshold, small enough that "click then nudge"
             // doesn't trigger drag, large enough that finger jitter on
             // a trackpad doesn't either.
             if (dx * dx + dy * dy) >= 16 {
@@ -393,7 +393,7 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
     }
     override func mouseUp(with event: NSEvent) {
         mouseDownLocation = nil
-        // dragInitiated stays as-is until next mouseDown — AppKit's
+        // dragInitiated stays as-is until next mouseDown, AppKit's
         // drag handler consumed the mouseUp if drag was active, so
         // this branch only runs on a real click.
         super.mouseUp(with: event)
@@ -404,7 +404,7 @@ final class HUDHostingView<Content: View>: NSHostingView<Content> {
 /// frame of whichever screen the panel currently sits on (closest
 /// screen by centre, when in transition). Without this,
 /// `isMovableByWindowBackground` lets the user drag the HUD past
-/// the screen edge until it's no longer visible — there's no
+/// the screen edge until it's no longer visible, there's no
 /// frameless-window equivalent of AppKit's titlebar clamp.
 final class ScreenClampingPanel: NSPanel {
     /// True only while the user is hand-dragging the HUD (set around
@@ -416,7 +416,7 @@ final class ScreenClampingPanel: NSPanel {
     var isUserDragging = false
     /// True only while `settleOnScreen()`'s spring animation is playing, so
     /// its interpolated frames (which start off-screen at the overshoot spot)
-    /// aren't hard-clamped mid-flight — that would snap the panel to the edge
+    /// aren't hard-clamped mid-flight, that would snap the panel to the edge
     /// instantly and kill the animation.
     private var isSettling = false
 
@@ -455,7 +455,7 @@ final class ScreenClampingPanel: NSPanel {
     }
 
     /// Damped overshoot: the panel can cross the edge, but each pixel past it
-    /// counts for less, asymptotically capped at `maxOver` — so it can never
+    /// counts for less, asymptotically capped at `maxOver`, so it can never
     /// run fully off-screen no matter how hard you drag (the PiP "push-back").
     private func rubberBanded(_ rect: NSRect) -> NSRect {
         guard let visible = visibleFrame(for: rect) else { return rect }
@@ -492,7 +492,7 @@ final class ScreenClampingPanel: NSPanel {
     }
 }
 
-/// NSPanel.delegate hook — fires on every move, lets us persist the
+/// NSPanel.delegate hook, fires on every move, lets us persist the
 /// HUD's last-known origin without the SwiftUI view having to know
 /// about UserDefaults.
 private final class HUDWindowDelegate: NSObject, NSWindowDelegate {
@@ -509,7 +509,7 @@ private final class HUDWindowDelegate: NSObject, NSWindowDelegate {
 /// Shared presentation flag so the panel can ask the SwiftUI view to
 /// play its reverse spring before the host window is torn down. The
 /// inline Library blob creates its own instance and never flips
-/// `dismissing` — it's persistent, so it only ever springs in.
+/// `dismissing`, it's persistent, so it only ever springs in.
 @MainActor
 final class HUDPresentation: ObservableObject {
     @Published var dismissing = false
@@ -527,7 +527,7 @@ struct RecordingHUDView: View {
     @ObservedObject var presentation: HUDPresentation = HUDPresentation()
 
     /// Called when the user clicks the blob. Caller decides what that
-    /// means — the floating HUD wires it to stop-recording; the Library
+    /// means, the floating HUD wires it to stop-recording; the Library
     /// embedding wires it to a state-aware toggle (start when idle,
     /// stop when recording).
     let onTap: () -> Void
@@ -535,22 +535,22 @@ struct RecordingHUDView: View {
     /// When true, the blob renders as if a recording is in flight
     /// (active morph through templates + audio-reactive amplitude)
     /// but **keeps the silent-green palette**. Used by the Welcome
-    /// wizard's hero — "the app introducing itself" — without the
+    /// wizard's hero, "the app introducing itself", without the
     /// red recording-state strobe. Synthetic audio levels are
     /// generated from the TimelineView clock so the morph keeps
     /// moving even though no real audio is flowing.
     var welcomeActive: Bool = false
 
-    /// Three-sine synthetic instantaneous level — gives the morph a
+    /// Three-sine synthetic instantaneous level, gives the morph a
     /// believable "voice" amplitude without real audio. Peaks ~ 0.35
     /// so the shape deforms generously but never spikes into a star.
     /// Number of bars in the equalizer.
     fileprivate static let barCount = 11
-    private static let barBaseH: CGFloat = 5    // resting height — short bars, never dots
+    private static let barBaseH: CGFloat = 5    // resting height, short bars, never dots
     private static let barMaxExtra: CGFloat = 30
 
     /// Per-frame smoother for the equalizer bars. The spectrum DATA arrives
-    /// at the mic-buffer rate (~10 Hz when only the user is speaking —
+    /// at the mic-buffer rate (~10 Hz when only the user is speaking
     /// 4096 frames / 44.1 kHz ≈ 93 ms), far below the 20 fps render. Binding
     /// the bar heights straight to that data (with a per-bar `.easeOut` that
     /// RESTARTS on every ~100 ms step) read as the micro-jerks the user saw.
@@ -565,7 +565,7 @@ struct RecordingHUDView: View {
     @State private var barSmoother = BarSmoother()
 
     /// Displayed bar heights: the per-frame lerp of `barTargets` toward the
-    /// live spectrum. `tau` is the smoothing time constant — small enough
+    /// live spectrum. `tau` is the smoothing time constant, small enough
     /// that syllables still pop, large enough to bridge the ~93 ms data
     /// steps into continuous motion.
     private func barHeights(t: TimeInterval, isRecording: Bool, relax: TimeInterval) -> [CGFloat] {
@@ -588,7 +588,7 @@ struct RecordingHUDView: View {
     /// Per-bar TARGET heights for the REAL spectrum equalizer. Each bar is a
     /// genuine FFT frequency band from `RecordingLevelMeter.spectrum`
     /// (low → high), so lows / mids / highs react independently to the
-    /// actual sound — not one level faked across bars. Folds in the stop
+    /// actual sound, not one level faked across bars. Folds in the stop
     /// ease-out so it settles flat instead of snapping. Welcome mode
     /// synthesises a moving spectrum from the clock. Kept out of the
     /// ViewBuilder for type-check. `barHeights` smooths these per frame.
@@ -621,7 +621,7 @@ struct RecordingHUDView: View {
             // full (0.3→0.47, 0.5→0.66, 0.7→0.81) so normal speech visibly
             // fills the equalizer instead of barely lifting off the floor,
             // and a small gain saturates real peaks. Silence (raw 0) stays
-            // flat — the noise gate already zeroed it upstream.
+            // flat, the noise gate already zeroed it upstream.
             let filled = raw > 0 ? min(1.0, pow(raw, 0.62) * 1.18) : 0
             let v = min(1, CGFloat(filled) * energy)
             return Self.barBaseH + v * Self.barMaxExtra
@@ -631,7 +631,7 @@ struct RecordingHUDView: View {
     /// The live equalizer: a centred row of vertical bars from `heights`.
     /// `heights` is ALREADY per-frame-smoothed by `barHeights` (a time-
     /// constant lerp toward the live spectrum), so the bars need NO SwiftUI
-    /// `.animation(value:)` here — adding one on top restarts a 0.11 s ease
+    /// `.animation(value:)` here, adding one on top restarts a 0.11 s ease
     /// on every ~93 ms data step, which is exactly the micro-jerk we removed.
     private func barsLayer(heights: [CGFloat], palette: MeterPalette) -> some View {
         let color = palette.fillStops.first ?? Color.white
@@ -648,7 +648,7 @@ struct RecordingHUDView: View {
 
 
     @ObservedObject private var meter = RecordingLevelMeter.shared
-    /// Lets the view know when a recording is actually in flight — used
+    /// Lets the view know when a recording is actually in flight, used
     /// to decide whether the blob is in "idle ambient" mode (subtle
     /// baseline morph, palette frozen on green) or in "recording" mode
     /// (audio-reactive shape + level boost + palette flips on speech).
@@ -663,10 +663,10 @@ struct RecordingHUDView: View {
     /// True when the SwiftUI view's host window is on-screen and not
     /// fully occluded. Drives `TimelineView.paused`. We default to
     /// `true` so the first frame paints before the occlusion
-    /// notification arrives — without that, the blob would render as
+    /// notification arrives, without that, the blob would render as
     /// frozen-then-jump on first appearance.
     @State private var visible = true
-    /// Ambient idle motion — gentle position drift + slow hue / brightness
+    /// Ambient idle motion, gentle position drift + slow hue / brightness
     /// shimmer, driven by SwiftUI's animation system (NOT TimelineView)
     /// so the resting blob feels alive without burning a per-frame
     /// view recompute. Four independent periods make the cycle look
@@ -680,7 +680,7 @@ struct RecordingHUDView: View {
     /// 20→12 Hz idle downgrade can't hitch mid-transition.
     @State private var relaxing = false
     var body: some View {
-        // Real audio levels from the level meter — used everywhere
+        // Real audio levels from the level meter, used everywhere
         // EXCEPT the welcome-active path, which synthesises its
         // own gentle wave from the timeline clock further down.
         let liveLevel = max(meter.micLevel, meter.systemLevel)
@@ -697,10 +697,10 @@ struct RecordingHUDView: View {
 
         // Frame-rate is state-driven so the blob doesn't burn CPU
         // when nothing meaningful is changing on screen:
-        //   • Recording:     20 Hz — the bars are per-frame-lerped, so 20
+        //   • Recording:     20 Hz, the bars are per-frame-lerped, so 20
         //                    reads smooth; matches the meter publish gate.
-        //   • Idle, hovered: 20 Hz — gentle "I'm awake" breathe.
-        //   • Idle, resting:  5 Hz — minimum tick rate that still
+        //   • Idle, hovered: 20 Hz, gentle "I'm awake" breathe.
+        //   • Idle, resting:  5 Hz, minimum tick rate that still
         //     reads as "alive" (subtle drift + shape wobble) without
         //     pulling the ~10% background CPU the original 6 Hz path
         //     burned. The reduction comes from the smaller per-tick
@@ -717,25 +717,25 @@ struct RecordingHUDView: View {
         // (drift + hue + brightness) over a perfectly static, perfectly
         // round shape. Net: idle is calm + buttery, deformation is
         // reserved for when there's actual audio to react to.
-        // The blob animates whenever it's actually on screen — idle
+        // The blob animates whenever it's actually on screen, idle
         // included. The earlier "idle = paused, static" version froze
         // the shape (and, with a stale level, froze it mid-bulge). At
         // rest we run a low, near-circular wobble: activity 0 + level 0
         // means BlobShape only applies its 0.15-amplitude baseline
-        // breathing — the blob gently circles and keeps relaxing back
+        // breathing, the blob gently circles and keeps relaxing back
         // toward round, never spiking. 20 Hz keeps it buttery (the
         // choppy reading before was the old 5 Hz tick, not the motion
         // itself). `paused: !visible` still hard-stops it when the host
         // window is occluded, so there's no background CPU burn.
         // The persistent inline blob (Library window) does NOT spring
-        // away on stop the way the floating HUD does — it stays on
+        // away on stop the way the floating HUD does, it stays on
         // screen and transitions recording→idle in place. Hard-cutting
         // level/activity to 0 the instant `recordingState` hit `.idle`
         // snapped the bulged red shape to a round circle in a single
         // frame, which read as the "странно дергается when it shrinks"
-        // the user saw (the floating HUD never showed it — it dismisses
+        // the user saw (the floating HUD never showed it, it dismisses
         // instead). Drive a relax envelope from the TimelineView clock
-        // (NOT a withAnimation @State — a per-frame TimelineView
+        // (NOT a withAnimation @State, a per-frame TimelineView
         // re-render reads the final value and clobbers the interpolation):
         // on stop the audio-reactive energy eases 1→0 over `relax`
         // seconds so the silhouette settles gently into the calm idle
@@ -743,7 +743,7 @@ struct RecordingHUDView: View {
         // 20→12 Hz schedule change can't hitch mid-transition.
         // 20 fps while recording (was 30): the equalizer scroll still reads
         // smooth at 20, and a continuous SwiftUI/Core-Animation re-render of
-        // the floating pill is pure power drawn for the WHOLE recording —
+        // the floating pill is pure power drawn for the WHOLE recording
         // every frame shaved helps the always-on load. Idle drops to 12.
         let relax: TimeInterval = 0.5
         let fps: Double = (isRecording || relaxing) ? 20 : 12
@@ -751,7 +751,7 @@ struct RecordingHUDView: View {
             TimelineView(.animation(minimumInterval: 1.0 / fps,
                                     paused: !visible)) { timeline in
                 // LIVE BARS (equalizer). A row of vertical bars built from
-                // the recent level history — newest on the right, scrolling
+                // the recent level history, newest on the right, scrolling
                 // left as the meter shifts. Each bar IS a real sample, so the
                 // bars jump with every syllable and lie flat in silence:
                 // unmistakable "sound is being captured". Level math lives in
@@ -769,7 +769,7 @@ struct RecordingHUDView: View {
         // is `.contentShape` + `.onTapGesture` further down.
         .background(Color.black.opacity(0.001))
         // Entry animation: blob "leaks out" from a tiny dot in the
-        // centre. Spring keeps it organic — no hard endpoint snap.
+        // centre. Spring keeps it organic, no hard endpoint snap.
         .scaleEffect((appeared ? 1.0 : 0.05) * (hovering ? 1.18 : 1.0))
         .opacity(appeared ? 1.0 : 0.0)
         .animation(.spring(response: 0.55, dampingFraction: 0.72), value: appeared)
@@ -785,7 +785,7 @@ struct RecordingHUDView: View {
         // RECTANGLE around the blob (worse once the glow opacity was
         // raised). A radial vignette whose clear point sits at the
         // inscribed-circle radius guarantees every edge AND corner is
-        // fully transparent — the glow just dissolves like real light
+        // fully transparent, the glow just dissolves like real light
         // instead of hitting a box. Applied after the scale/animation
         // modifiers and at the fixed host size, so hover scale-up can
         // never push the soft edge back out to the rectangular border.
@@ -796,7 +796,7 @@ struct RecordingHUDView: View {
                     // Long concave ease, not "solid then cliff": the
                     // blob body stays fully solid, then the glow's own
                     // light dissolves so gradually it has no perceptible
-                    // boundary — yet it's exactly 0 by every edge/corner
+                    // boundary, yet it's exactly 0 by every edge/corner
                     // (corners sit past endRadius → clamped to the final
                     // clear stop). A short ramp here just swapped the
                     // hard rectangle for an equally hard circle.
@@ -819,7 +819,7 @@ struct RecordingHUDView: View {
             }
         )
         // Panel-driven exit: reuse the very same scale/opacity spring as
-        // the entry, just run backwards — the blob shrinks to a tiny
+        // the entry, just run backwards, the blob shrinks to a tiny
         // transparent dot. The panel waits ~0.45 s (spring settle) before
         // orderOut, so this fully plays before the window disappears.
         .onChange(of: presentation.dismissing) { _, dismissing in
@@ -827,7 +827,7 @@ struct RecordingHUDView: View {
         }
         // Inline-blob relax (see the TimelineView energy envelope above).
         // `.stopping` keeps `isRecording` true, so the edge into the
-        // settle fires exactly once — on the real transition to `.idle`.
+        // settle fires exactly once, on the real transition to `.idle`.
         // The delayed clear releases the active-rate hold and pins energy
         // to a hard 0 once the ease has fully landed.
         .onChange(of: ctx.recordingState) { _, state in
@@ -847,8 +847,8 @@ struct RecordingHUDView: View {
             appeared = true
         }
         // SwiftUI hover drives only the scale-up. The cursor is fully
-        // owned by HUDHostingView's push/pop on AppKit's cursor stack
-        // — pushing wins against WKWebView's per-mouseMoved `.set()`
+        // owned by HUDHostingView's push/pop on AppKit's cursor stack,
+        // pushing wins against WKWebView's per-mouseMoved `.set()`
         // that the SwiftUI-side `.set()` couldn't outpace.
         .onContinuousHover { phase in
             switch phase {
@@ -867,7 +867,7 @@ struct RecordingHUDView: View {
         // full-screen app, Mission Control, Library window
         // minimised), and again when it's exposed. We can't easily
         // get the host window from inside the SwiftUI body so we just
-        // check ALL windows — if the blob's host is among the visible
+        // check ALL windows, if the blob's host is among the visible
         // ones, we animate; otherwise pause. Cheap: NSApp.windows
         // returns a few items, comparison is by reference identity.
         //
@@ -875,7 +875,7 @@ struct RecordingHUDView: View {
         // window transition (Space switch, full-screen app coming forward,
         // the panel itself ordering in/out). Each raw event re-evaluated
         // `visible`, and a single transient `false` PAUSED the TimelineView,
-        // freezing the per-frame bar lerp — read by a tester as the equalizer
+        // freezing the per-frame bar lerp, read by a tester as the equalizer
         // "appears then disappears" repeatedly. Coalescing the burst and
         // applying only the SETTLED state kills that flicker (the LibraryWindow
         // occlusion debounce in 0.14.95 only covered the window-open regime;
@@ -889,7 +889,7 @@ struct RecordingHUDView: View {
     }
 
     /// True if any window currently in `NSApp.windows` is on-screen
-    /// AND not occluded. Used as the gate for blob animation —
+    /// AND not occluded. Used as the gate for blob animation
     /// pausing the TimelineView when both the floating panel and the
     /// Library window are off-screen.
     private static func anyHostWindowVisible() -> Bool {
@@ -910,7 +910,7 @@ private struct MeterPalette {
     let fillStops: [Color]
     let glowOuter: Color
 
-    /// Idle / silent — brand green.
+    /// Idle / silent, brand green.
     static let silentGreen = MeterPalette(
         fillStops: [
             Color(red: 0.18, green: 0.66, blue: 0.40),    // bright leaf
@@ -920,7 +920,7 @@ private struct MeterPalette {
         glowOuter: Color(red: 0.10, green: 0.60, blue: 0.34)
     )
 
-    /// Active speech — bright crimson.
+    /// Active speech, bright crimson.
     static let activeRed = MeterPalette(
         fillStops: [
             Color(red: 0.95, green: 0.30, blue: 0.36),

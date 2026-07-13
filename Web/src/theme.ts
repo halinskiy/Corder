@@ -11,7 +11,7 @@ import { flushSync } from "react-dom";
 /// survive a restart. The choice still persists for the whole
 /// session; a cross-launch store would need a native bridge.
 const KEY = "corder.theme";
-// "Follow system" was removed — everyone defaults to light, and only an
+// "Follow system" was removed, everyone defaults to light, and only an
 // explicit "dark" choice opts into dark. A stale stored "system" value
 // falls through to the light default below.
 export type ThemeMode = "light" | "dark";
@@ -67,7 +67,7 @@ export function useTheme() {
   }, [isDark]);
 
   /// Apply a new mode with the cursor-origin radial reveal. `origin`
-  /// is the click point in viewport coords — pass the event from a
+  /// is the click point in viewport coords, pass the event from a
   /// SettingsSelect option click. Falls back to the centre of the
   /// viewport when the caller has nothing better.
   const setMode = React.useCallback(

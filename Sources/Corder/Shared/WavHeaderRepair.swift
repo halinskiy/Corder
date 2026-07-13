@@ -1,6 +1,6 @@
 import Foundation
 
-/// Repairs a WAV file whose header was never finalized — the case after a
+/// Repairs a WAV file whose header was never finalized, the case after a
 /// hard kill (SIGKILL / power loss / a `terminateOtherInstances` reap during
 /// a deploy) mid-recording.
 ///
@@ -8,8 +8,8 @@ import Foundation
 /// ONLY when the file is closed (on `stop()` / deallocation). A process killed
 /// mid-capture therefore leaves a file that is FULL of valid audio bytes on
 /// disk but whose header still says `data` size = 0 (and a header-only RIFF
-/// size). Every reader — `AVAudioFile(forReading:)`, `afinfo`, the
-/// transcription pipeline — then computes ZERO frames, so the recording looks
+/// size). Every reader, `AVAudioFile(forReading:)`, `afinfo`, the
+/// transcription pipeline, then computes ZERO frames, so the recording looks
 /// empty and `RecordingRecovery` discards it as "unsalvageable" even though
 /// minutes of audio are sitting right there. (Verified: a killed `mic.wav` of
 /// 380 KB reported `estimated duration: 0.000000 sec`.)
@@ -31,8 +31,8 @@ enum WavHeaderRepair {
               sizeAttr > 44 else { return false }
         let fileSize = sizeAttr
 
-        // The audio `data` chunk can sit a few KB in — AVAudioFile pads with a
-        // FLLR filler chunk to block-align the samples — so read a generous
+        // The audio `data` chunk can sit a few KB in, AVAudioFile pads with a
+        // FLLR filler chunk to block-align the samples, so read a generous
         // prefix to walk the chunk list.
         let headerCap = min(fileSize, 64 * 1024)
         guard let raw = try? handle.read(upToCount: headerCap) else { return false }
@@ -73,7 +73,7 @@ enum WavHeaderRepair {
         var realDataSize = fileSize - dataContentStart
         realDataSize -= realDataSize % max(1, blockAlign)
         // Only ever GROW the claimed size (the kill case: stored 0 vs real
-        // bytes present). Never shrink a file the header already describes —
+        // bytes present). Never shrink a file the header already describes
         // that would corrupt a valid recording.
         guard realDataSize > 0, realDataSize > storedDataSize else { return false }
 

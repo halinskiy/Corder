@@ -1,4 +1,4 @@
-// User-visible strings for the Library window. Keep keys stable —
+// User-visible strings for the Library window. Keep keys stable
 // components import them by key, not by text.
 //
 // Localised dates / participant counts live in `format.ts`, not here, so
@@ -357,9 +357,6 @@ interface Strings {
   upgrade_card_title?: string;
   upgrade_card_body?: string;
   upgrade_card_cta?: string;
-  dashboard_stat_total: string;
-  dashboard_stat_time: string;
-  dashboard_stat_thisweek: string;
   dashboard_start: string;
   /// Tooltip/label for the green "+" header button that starts a new recording.
   header_new_recording?: string;
@@ -488,7 +485,7 @@ const en: Strings = {
   settings_list_add_ph: "Bundle ID, e.g. us.zoom.xos",
   settings_list_remove: "Remove",
   settings_list_empty: "Empty",
-  settings_list_detected: "Recently used your mic — tap to add:",
+  settings_list_detected: "Recently used your mic. Tap to add:",
   settings_pick_search: "Search apps…",
   settings_pick_none: "No apps found",
   settings_pick_recent: "used mic",
@@ -497,7 +494,7 @@ const en: Strings = {
   settings_mic_device_system: "Auto",
   settings_mic_device_empty: "No input devices found",
   settings_asr_label: "Transcription model",
-  settings_asr_desc_free: "Local Whisper on your Mac: free, offline. Pro and Max unlock cloud models.",
+  settings_asr_desc_free: "Local Whisper on your Mac: free, offline. Pro and Max add cloud models.",
   settings_asr_desc_paid: "You can pin a different one.",
   settings_language_desc: "Interface language for the app.",
   settings_asr_auto: "Auto (recommended)",
@@ -532,7 +529,7 @@ const en: Strings = {
   settings_sec_api: "Gemini API key",
   settings_key_set: "Key is set",
   settings_key_placeholder: "Paste your Gemini API key",
-  settings_key_hint: "Your own key — transcription is billed to your Google account, not a shared one. Stored locally (~/.config/corder/gemini_key, 0600).",
+  settings_key_hint: "Your own key. Transcription is billed to your Google account, not a shared one. Stored locally (~/.config/corder/gemini_key, 0600).",
   settings_key_hint_set: "Key stored locally. Paste a new one to replace it.",
   settings_save: "Save",
   settings_saved: "Saved",
@@ -710,19 +707,17 @@ const en: Strings = {
   rec_stopping: "Stopping…",
   sidebar_today: "Today",
   ghost_title: "Your first recording",
-  ghost_duration: "—",
+  // A placeholder glyph for "no duration yet", not prose punctuation.
+  ghost_duration: "0:00",
   ghost_preview: "Hit Start to begin.",
   toast_undo_done: (n) => n === 1 ? "Restored" : `Restored ${n}`,
   profile_tier_free: "Free",
   profile_tier_pro: "Pro",
   profile_tier_max: "Max",
   profile_upgrade: "Upgrade to Pro",
-  upgrade_card_title: "Unlock Max",
+  upgrade_card_title: "Get Max",
   upgrade_card_body: "Unlimited recordings, all ASR providers, priority support",
   upgrade_card_cta: "Upgrade",
-  dashboard_stat_total: "Recordings",
-  dashboard_stat_time: "Total recorded",
-  dashboard_stat_thisweek: "This week",
   dashboard_start: "Start recording",
   header_new_recording: "New recording",
   header_stop_recording: "Stop recording",

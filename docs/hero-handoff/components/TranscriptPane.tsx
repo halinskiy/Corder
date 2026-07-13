@@ -76,7 +76,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   // While the active recording is the one we're viewing, replace the empty
   // "Идёт запись…" placeholder with a live status card that includes a Stop
-  // button — same layout as the popover's RecordingStatus block.
+  // button, same layout as the popover's RecordingStatus block.
   const isLiveRecording =
     detail.status === "recording" &&
     recordingState.active &&

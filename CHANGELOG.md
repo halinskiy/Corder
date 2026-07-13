@@ -16,46 +16,46 @@ behaviour, not internal refactors.
 
 ### Fixed
 
-## [0.15.43] — 2026-07-13
+## [0.15.43] - 2026-07-13
 
 ### Fixed
 - A silent or near-silent track no longer produces a phantom speaker saying "자막:" (Korean for "subtitles"). Whisper emits bare caption words over silence, and they were slipping past the hallucination filter and showing up in transcripts as an extra participant. Segments made up of nothing but caption words are now dropped, while genuine speech that happens to contain the word is kept.
 
-## [0.15.42] — 2026-07-12
+## [0.15.42] - 2026-07-12
 
 ### Fixed
 - Starting a recording no longer aborts with a "couldn't start recording (-10868)" error when a Bluetooth headset's mic is in a finicky state (e.g. AirPods mid-connection or with one earbud). Corder now falls back to the built-in mic and records instead of failing outright.
 
-## [0.15.41] — 2026-07-12
+## [0.15.41] - 2026-07-12
 
 ### Changed
 - The floating recording equalizer no longer hard-stops at the screen edge when you drag it. It now resists with an elastic rubber-band the further you push past the edge and springs back fully into view when you let go, like macOS Picture-in-Picture.
 
-## [0.15.40] — 2026-07-11
+## [0.15.40] - 2026-07-11
 
 ### Changed
 - Downloaded files (audio, transcript, bundle) are now named after the meeting title, e.g. "Вакансия и процесс найма.m4a", instead of the internal recording ID. Titles with non-ASCII characters (Cyrillic and others) are preserved.
 
 ### Fixed
-- The Library window could get stuck permanently blank (white) if its content failed to load at launch — e.g. when the Mac was briefly busy. Corder now retries longer, with backoff, and reloads automatically the moment you bring the window back into focus, so a one-off startup hiccup can no longer strand the window blank until a relaunch.
+- The Library window could get stuck permanently blank (white) if its content failed to load at launch, e.g. when the Mac was briefly busy. Corder now retries longer, with backoff, and reloads automatically the moment you bring the window back into focus, so a one-off startup hiccup can no longer strand the window blank until a relaunch.
 
-## [0.15.39] — 2026-07-10
+## [0.15.39] - 2026-07-10
 
 ### Fixed
 - Calls no longer come back with half the transcript translated into English. Each track's language is detected from the speech itself and pinned for the whole call, so a quiet or Bluetooth-routed other side stays in the language it was actually spoken in instead of being silently translated.
 
-## [0.15.38] — 2026-07-08
+## [0.15.38] - 2026-07-08
 
 ### Fixed
 - **Critical: signing in no longer deletes the audio of recordings you made
   while signed out.** The sign-in migration moved recording folders by their old
   id-based name, so it missed the human-readable "<date> <title>" folders (added
-  in 0.15.29), never moved them, and then cleared the guest bucket — deleting the
+  in 0.15.29), never moved them, and then cleared the guest bucket, deleting the
   audio. It now moves folders by their real name, re-bases the stored paths onto
   your account, and **never deletes a recording folder it did not successfully
   move**. Transcripts were unaffected; only already-lost audio can't be recovered.
 
-## [0.15.37] — 2026-07-08
+## [0.15.37] - 2026-07-08
 
 ### Fixed
 - Your own replies no longer go missing or land at the wrong time in the
@@ -66,21 +66,21 @@ behaviour, not internal refactors.
   dropped question came back at the right spot and ~40 more of the speaker's
   turns were preserved.
 
-## [0.15.36] — 2026-07-08
+## [0.15.36] - 2026-07-08
 
 ### Fixed
 - "Launch at login" now survives app updates. If an update ever drops the
   macOS login-item registration, Corder re-registers it on the next launch
-  instead of silently turning the setting off — you no longer have to re-toggle
+  instead of silently turning the setting off, you no longer have to re-toggle
   it after updating.
 
-## [0.15.35] — 2026-07-07
+## [0.15.35] - 2026-07-07
 
 ### Changed
 - The guest sessions-left badge stays a neutral pill even when you're down to
-  your last session — it no longer turns green when running low.
+  your last session, it no longer turns green when running low.
 
-## [0.15.34] — 2026-07-07
+## [0.15.34] - 2026-07-07
 
 ### Fixed
 - Playback no longer stays stuck after you press play while a recording is still
@@ -88,43 +88,43 @@ behaviour, not internal refactors.
   only at stop) and got stuck in an error state; the play button now re-fetches
   the finished audio, so it plays once the recording is done.
 
-## [0.15.33] — 2026-07-07
+## [0.15.33] - 2026-07-07
 
 ### Fixed
 - An audio-only recording no longer lights up the macOS screen-sharing
   indicator (the "Currently Sharing / Stop Sharing" control) when your output is
   Bluetooth. Corder was starting a screen-capture stream to feed a system-audio
-  backup that's been dead since 0.15.22 — so it did nothing but show a scary
+  backup that's been dead since 0.15.22, so it did nothing but show a scary
   "is recording my screen?" indicator and a Stop Sharing button that killed part
   of the capture without stopping the recording. Screen capture now starts only
   when you actually record video.
 
-## [0.15.32] — 2026-07-07
+## [0.15.32] - 2026-07-07
 
 ### Fixed
 - Recording your voice through headphones/AirPods after switching to them
   mid-call no longer plays back sped-up. 0.15.28 fixed one cause but missed the
-  audio resampler, which was being finalised after the first buffer — so all the
+  audio resampler, which was being finalised after the first buffer, so all the
   headphone audio after that collapsed. Verified the resampler now keeps the
   right length across the whole stream.
 
-## [0.15.31] — 2026-07-07
+## [0.15.31] - 2026-07-07
 
 ### Changed
 - The "Send a report" button on the red transcription-error toast is now a solid
   white button with black text (was a hard-to-read transparent white).
 
-## [0.15.30] — 2026-07-07
+## [0.15.30] - 2026-07-07
 
 ### Changed
 - The floating recording equalizer now stays visible the whole time you're
-  recording, including while the Corder window is open — it used to hide
+  recording, including while the Corder window is open, it used to hide
   itself whenever Corder was in the foreground.
 
-## [0.15.29] — 2026-07-07
+## [0.15.29] - 2026-07-07
 
 ### Added
-- Recording folders on disk now have readable names — `2026-07-07_10-19 Sync
+- Recording folders on disk now have readable names, `2026-07-07_10-19 Sync
   with team` instead of a random `a34e3352-…` id. Existing recordings are
   renamed automatically. Recordings without a title yet (or while signed out)
   get a date-and-time name; the title is filled in once it's generated.
@@ -133,7 +133,7 @@ behaviour, not internal refactors.
 - The transcript now collapses a short phrase Whisper sometimes repeats over
   silence ("Bye-bye. Bye-bye. Bye-bye.") down to a single instance.
 
-## [0.15.28] — 2026-07-07
+## [0.15.28] - 2026-07-07
 
 ### Fixed
 - Your voice no longer records sped-up/garbled when your mic switches to a
@@ -145,33 +145,33 @@ behaviour, not internal refactors.
   dropped rather than written at the wrong rate.
 
 ### Changed
-- Auto-title is always on now and no longer has a Settings toggle — every
+- Auto-title is always on now and no longer has a Settings toggle, every
   recording gets a generated title.
 - The bug-report button sends immediately instead of waiting out a 10-second
   countdown.
 - Sign-in copy now reads "unlocks unlimited sessions".
 
-## [0.15.27] — 2026-07-07
+## [0.15.27] - 2026-07-07
 
 ### Fixed
 - Your microphone now follows a mid-recording audio-device change. If you
   switched your input (for example plugged in headphones or AirPods while on a
-  call), mic capture could silently die for the rest of the meeting — the
+  call), mic capture could silently die for the rest of the meeting, the
   equalizer went flat and your side recorded as silence. Corder now detects the
   switch, re-taps the new device, and keeps your voice recording without a gap.
 
-## [0.15.26] — 2026-07-06
+## [0.15.26] - 2026-07-06
 
 ### Fixed
 - The menu-bar icon no longer intermittently clips to "( )". The idle ring was
   an SF Symbol whose rendered size sat at the menu-bar height limit, so macOS
   clipped its top and bottom (instead of scaling) whenever it re-laid-out the
-  status item — on display sleep/wake, external-monitor connect/disconnect, or
+  status item, on display sleep/wake, external-monitor connect/disconnect, or
   fullscreen transitions. It's now a fixed-size ring drawn the same way as the
   recording dot (which never clipped), and the button scales any icon down
   rather than clipping it.
 
-## [0.15.25] — 2026-07-04
+## [0.15.25] - 2026-07-04
 
 ### Added
 - Screen video now records at a small, space-saving resolution (720p) by
@@ -180,7 +180,7 @@ behaviour, not internal refactors.
   at the display's native resolution, up to 4K. Bitrate scales with the chosen
   size.
 
-## [0.15.24] — 2026-07-03
+## [0.15.24] - 2026-07-03
 
 ### Fixed
 - A failed atomic file-swap during audio compaction or the playback-format
@@ -192,26 +192,26 @@ behaviour, not internal refactors.
   merge/reassign and the meeting-list preview on large libraries.
 - Settings cancels a pending debounced save when the panel unmounts.
 
-## [0.15.23] — 2026-07-03
+## [0.15.23] - 2026-07-03
 
 ### Changed
 - Recordings take much less disk. Retained audio (your mic, the far end, and the
-  playback mix) is now stored as 16 kHz mono 16-bit PCM — exactly what
-  transcription and playback use — instead of the far larger 44.1/48 kHz stereo
+  playback mix) is now stored as 16 kHz mono 16-bit PCM, exactly what
+  transcription and playback use, instead of the far larger 44.1/48 kHz stereo
   float32 the capture produced. Existing recordings are compacted in the
   background on launch. Combined with the removed silent backup track, a
   reported ~940 MB meeting drops to roughly ~110 MB with no change to transcript
   or playback quality.
 
-## [0.15.22] — 2026-07-03
+## [0.15.22] - 2026-07-03
 
 ### Changed
-- Recordings take far less disk. The `system_sck.wav` backup track — a second
+- Recordings take far less disk. The `system_sck.wav` backup track, a second
   far-end capture that is always silent (48 kHz stereo, hundreds of MB on a
-  long call) — is no longer written, and any left by older builds are cleaned
+  long call), is no longer written, and any left by older builds are cleaned
   up automatically on launch.
 
-## [0.15.21] — 2026-07-03
+## [0.15.21] - 2026-07-03
 
 ### Fixed
 - Screen video from a recording interrupted by a crash, a forced quit, or an
@@ -220,7 +220,7 @@ behaviour, not internal refactors.
   seconds before the interruption), instead of the interrupted file being
   unplayable. Only relevant when Screen video recording is enabled.
 
-## [0.15.20] — 2026-07-03
+## [0.15.20] - 2026-07-03
 
 ### Fixed
 - The "Capture your screen too" pitch no longer appears when Screen video
@@ -229,7 +229,7 @@ behaviour, not internal refactors.
   video used to be on by default); it now stays hidden unless screen video is
   actually enabled.
 
-## [0.15.19] — 2026-07-03
+## [0.15.19] - 2026-07-03
 
 ### Fixed
 - A recording interrupted by a crash, a forced quit, or an app update is no
@@ -238,7 +238,7 @@ behaviour, not internal refactors.
   file's header was never finalized, so it read as empty (zero length) and got
   discarded even though the audio was sitting on disk.
 
-## [0.15.18] — 2026-07-03
+## [0.15.18] - 2026-07-03
 
 ### Added
 - Settings → General has a new "Recording equalizer" switch (on by default).
@@ -259,14 +259,14 @@ behaviour, not internal refactors.
   cursor. The tilt tracks smoothly now and eases back to flat when the pointer
   leaves.
 
-## [0.15.17] — 2026-07-03
+## [0.15.17] - 2026-07-03
 
 ### Fixed
 - The transcript search Clear (×) button hover is now a full circle. A global
   button padding had inflated the box to a rectangle, so the hover fill looked
   like a rounded rectangle instead of a round button.
 
-## [0.15.16] — 2026-07-02
+## [0.15.16] - 2026-07-02
 
 ### Fixed
 - The Clear (×) button in the transcript search is now actually visible. Its
@@ -274,16 +274,16 @@ behaviour, not internal refactors.
   drew nothing), so searches looked like they had a stray empty gap on the
   right. The counter stays pinned right beside it.
 
-## [0.15.15] — 2026-07-02
+## [0.15.15] - 2026-07-02
 
 ### Fixed
 - The transcript search match counter no longer jumps around. It's now pinned
   to the right of the field in a fixed-width, right-aligned box, so the digits
   stay put as the count changes (1/237 → 1/3 → 0/0). A Clear (×) button is back
-  too — sits right beside the counter. Prev/next now happen with Enter and
+  too, sits right beside the counter. Prev/next now happen with Enter and
   Shift+Enter (no more chevrons crowding the field).
 
-## [0.15.14] — 2026-07-02
+## [0.15.14] - 2026-07-02
 
 ### Fixed
 - The transcript search no longer shows a stray native "×" clear button
@@ -291,18 +291,18 @@ behaviour, not internal refactors.
   clear glyph on every search field; it's now hidden so only the clean
   match-counter + prev/next controls remain.
 
-## [0.15.13] — 2026-07-02
+## [0.15.13] - 2026-07-02
 
 ### Fixed
 - Recordings now actually PLAY in the app. The playback file was written as a
-  32-bit float WAV, which the in-app player (WKWebView) can't decode — so the
+  32-bit float WAV, which the in-app player (WKWebView) can't decode, so the
   Play button clicked but produced no sound, no duration and no timeline
   scrubbing. The mix is now written as 16-bit PCM, and any older float32 file is
   converted to 16-bit the first time you open the recording. (Audio and
   transcripts were always captured fine; this was purely a playback-format
   issue.)
 
-## [0.15.12] — 2026-07-02
+## [0.15.12] - 2026-07-02
 
 ### Fixed
 - The other side of a call can no longer go missing from PLAYBACK. Two cases
@@ -310,19 +310,19 @@ behaviour, not internal refactors.
   time, opening the recording now rebuilds it on demand from the mic + system
   tracks (verified end to end), instead of quietly playing your voice only;
   (2) an untranscribed recording whose far end was quiet no longer drops the
-  system track from the mix — it's kept whenever it was captured. The
+  system track from the mix, it's kept whenever it was captured. The
   transcript was always intact; this is about actually hearing the other side
   on playback.
 
-## [0.15.11] — 2026-07-02
+## [0.15.11] - 2026-07-02
 
 ### Changed
 - Screen video recording is now turned OFF for everyone on this update,
-  including anyone who had it enabled. Video is a niche, opt-in feature — turn
+  including anyone who had it enabled. Video is a niche, opt-in feature, turn
   it back on any time in Settings (that's also where Corder asks for Screen
   Recording permission). Audio recording and transcription are unaffected.
 
-## [0.15.10] — 2026-07-01
+## [0.15.10] - 2026-07-01
 
 ### Fixed
 - Corder no longer installs an update while you're recording. Clicking Install
@@ -331,12 +331,12 @@ behaviour, not internal refactors.
   "glitched" mid-meeting). The update now waits: finish the recording, then
   install.
 - The audio Play button no longer greys out on a finished recording. It used to
-  be disabled whenever the stored duration was 0 — even though the audio file
-  was on disk and perfectly playable — so an in-person / phone-call capture
+  be disabled whenever the stored duration was 0, even though the audio file
+  was on disk and perfectly playable, so an in-person / phone-call capture
   looked unplayable. It now enables whenever a playable file exists, and the
   synced screen video plays again with it.
 
-## [0.15.9] — 2026-07-01
+## [0.15.9] - 2026-07-01
 
 ### Changed
 - Screen video recording is now OFF by default. It's a niche feature, so it's
@@ -351,13 +351,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 - Summary and Chapters now show a clear "Sign in" prompt for signed-out users
-  instead of a generic "didn't work" card — they just need a free account.
+  instead of a generic "didn't work" card, they just need a free account.
 - Searching the transcript no longer shrinks the search box when the match
   counter appears.
 - Clicking a session in the sidebar now closes the Settings pane.
 - Signed-out users no longer generate noisy cloud-sync errors in the log.
 
-## [0.15.8] — 2026-07-01
+## [0.15.8] - 2026-07-01
 
 ### Fixed
 - The other side of a call is no longer lost on slower Macs. On an 8 GB
@@ -370,7 +370,7 @@ behaviour, not internal refactors.
   "Optimizing for your Mac", which wrongly implied a one-time setup was running
   again every session when the model was actually already installed.
 
-## [0.15.7] — 2026-07-01
+## [0.15.7] - 2026-07-01
 
 ### Changed
 - The record button in the header is smaller, so it sits lighter next to the
@@ -380,7 +380,7 @@ behaviour, not internal refactors.
 - Corrected the screen-video card wording: your screen video appears after you
   finish recording, not live while you record.
 
-## [0.15.6] — 2026-07-01
+## [0.15.6] - 2026-07-01
 
 ### Added
 - Settings now has a "Recordings folder" row with an Open button that reveals
@@ -394,64 +394,63 @@ behaviour, not internal refactors.
 ### Removed
 - The "Catch the start of calls" setting.
 
-## [0.15.5] — 2026-06-30
+## [0.15.5] - 2026-06-30
 
 ### Fixed
-- The update card no longer shimmers / ripples while it tilts under the cursor —
-  it's pinned to its own GPU layer so the text stays crisp through the 3D tilt.
+- The update card no longer shimmers / ripples while it tilts under the cursor, it's pinned to its own GPU layer so the text stays crisp through the 3D tilt.
 
-## [0.15.4] — 2026-06-30
+## [0.15.4] - 2026-06-30
 
 ### Changed
 - Starting a recording (the header "+" or the menu bar) now jumps straight into
   that new session, so you land on the live recording instead of staying on the
   previous screen.
 
-## [0.15.3] — 2026-06-30
+## [0.15.3] - 2026-06-30
 
 ### Changed
 - The header record button is 1px smaller on each side, so the filled green
   circle sits level with the outlined toolbar icons next to it.
 
-## [0.15.2] — 2026-06-30
+## [0.15.2] - 2026-06-30
 
 ### Fixed
 - The header record button now keeps its green on hover (it was falling back to
   the neutral grey hover). Green/red hover shades now match the play button.
 
-## [0.15.1] — 2026-06-30
+## [0.15.1] - 2026-06-30
 
 ### Changed
 - The header record button's green now matches the audio play button exactly,
   including its hover shade.
 
-## [0.15.0] — 2026-06-30
+## [0.15.0] - 2026-06-30
 
 ### Changed
 - Tightened the spacing between the header record button and the title.
 
-## [0.14.99] — 2026-06-30
+## [0.14.99] - 2026-06-30
 
 ### Changed
 - The header record button is now a single toggle: a green "+" to start a
   recording, which turns into a red stop button while recording. Tightened its
   spacing and styling to match the other controls.
 
-## [0.14.98] — 2026-06-30
+## [0.14.98] - 2026-06-30
 
 ### Changed
 - Bug reports now carry a compact one-line capture diagnostic (output route,
   whether the other side's audio track came up silent, which transcription path
   ran), so a report alone is enough to pinpoint issues like a 2-person call that
-  transcribed as one speaker — no back-and-forth needed.
+  transcribed as one speaker, no back-and-forth needed.
 
-## [0.14.97] — 2026-06-30
+## [0.14.97] - 2026-06-30
 
 ### Added
 - A green "+" button in the header (left of the title) starts a new recording
-  right from the app — no need to reach for the menu bar.
+  right from the app, no need to reach for the menu bar.
 
-## [0.14.96] — 2026-06-29
+## [0.14.96] - 2026-06-29
 
 ### Fixed
 - The recording HUD equalizer no longer flickers / disappears repeatedly during
@@ -460,7 +459,7 @@ behaviour, not internal refactors.
   bars; those events are now smoothed so the equalizer stays steady. This
   completes the flicker fix started in 0.14.95.
 
-## [0.14.95] — 2026-06-29
+## [0.14.95] - 2026-06-29
 
 ### Fixed
 - The recording HUD equalizer no longer flickers or disappears during a
@@ -473,7 +472,7 @@ behaviour, not internal refactors.
 - Cloud sync of speaker labels no longer fails on a freshly created meeting
   (a background ordering race that left speakers out of the cloud copy).
 
-## [0.14.94] — 2026-06-29
+## [0.14.94] - 2026-06-29
 
 ### Fixed
 - The on-device model now sets up reliably on more Macs. On 8 GB / older Apple
@@ -484,17 +483,17 @@ behaviour, not internal refactors.
   instead of a dead end.
 - You can now Cancel during the one-time model setup (it keeps finishing in the
   background, so next time it's instant).
-- Clearer status while the model downloads or prepares — including when a cloud
-  plan temporarily runs on the on-device model — and a connection-aware message
+- Clearer status while the model downloads or prepares, including when a cloud
+  plan temporarily runs on the on-device model, and a connection-aware message
   (with automatic retry) if the model download drops.
 
-## [0.14.93] — 2026-06-28
+## [0.14.93] - 2026-06-28
 
 ### Changed
 - Sign out is now red (it's a destructive exit), while keeping the full-width
   button shape. Both Sign out and Sign in have slightly squarer corners.
 
-## [0.14.92] — 2026-06-28
+## [0.14.92] - 2026-06-28
 
 ### Changed
 - The Advanced settings tab is now hidden entirely while you're signed out.
@@ -504,7 +503,7 @@ behaviour, not internal refactors.
   bottom full-width button styled like Sign in, and the account email reads a
   touch larger.
 
-## [0.14.91] — 2026-06-28
+## [0.14.91] - 2026-06-28
 
 ### Fixed
 - The on-device model is no longer re-downloaded when you sign in or out. It's now
@@ -512,15 +511,15 @@ behaviour, not internal refactors.
   your account never costs another ~1.5 GB download. Existing installs move their
   copy up automatically and reclaim any duplicate.
 
-## [0.14.90] — 2026-06-28
+## [0.14.90] - 2026-06-28
 
 ### Changed
 - The Welcome screen's right column now shows a proper preview panel
   (Capture-your-screen card + audio scrubber + timeline), styled to match the
-  Home card — same heading and spacing, dashed ghost outline, secondary
+  Home card, same heading and spacing, dashed ghost outline, secondary
   Enable-screen-video button. It no longer drops to the bottom of the page.
 - Screen video recording is ON by default. It only actually captures video once
-  you grant Screen Recording — until then recording stays audio-only with no
+  you grant Screen Recording, until then recording stays audio-only with no
   prompt, and the "Capture your screen too" panel is the one-tap way to enable
   it. Turn the setting off and that panel goes away.
 - The Capture-your-screen panel stays put when you open the Download chooser
@@ -528,13 +527,13 @@ behaviour, not internal refactors.
 - On-device model: while the model finishes preparing after download (the
   one-time Neural-Engine optimization), the status now reads "Preparing model…
   / Optimizing for your Mac" instead of a stuck "Downloading model · 99%". The
-  percentage was never wrong — that phase just has no download left to report.
+  percentage was never wrong, that phase just has no download left to report.
 
 ### Fixed
 - If the other side of a call can't be recorded over Bluetooth (the headset is in
   call/HFP mode, where macOS gives no capturable system audio), Corder now tells
-  you a few seconds in — so you can switch your Mac's output off Bluetooth and
-  re-record — instead of only finding out after you stop.
+  you a few seconds in, so you can switch your Mac's output off Bluetooth and
+  re-record, instead of only finding out after you stop.
 - On-device transcription no longer fails on slower Macs where the first-run
   model compile is unusually long: the compile gets much more headroom and
   rides to completion instead of timing out. (First run can still take several
@@ -545,20 +544,20 @@ behaviour, not internal refactors.
 - The "Enable screen video" button is disabled while a recording is in
   progress (screen access can only be granted between sessions).
 
-## [0.14.89] — 2026-06-27
+## [0.14.89] - 2026-06-27
 
 ### Changed
 - The updater now finishes on a SINGLE Install press: download, install, and
   relaunch happen automatically with no second click (the one-click flow added
   in 0.14.88 is active for updates from 0.14.88 onward).
 
-## [0.14.88] — 2026-06-27
+## [0.14.88] - 2026-06-27
 
 ### Changed
 - The in-app updater no longer needs a second Install click. Press Install once,
   the download runs, and it then installs and relaunches Corder automatically.
 
-## [0.14.87] — 2026-06-27
+## [0.14.87] - 2026-06-27
 
 ### Changed
 - Microphone is the first setting in General now.
@@ -566,7 +565,7 @@ behaviour, not internal refactors.
   isn't room below, so its search box and results are no longer cut off at the
   bottom of the settings panel.
 
-## [0.14.86] — 2026-06-27
+## [0.14.86] - 2026-06-27
 
 ### Added
 - The Welcome screen shows a ghost preview of the session right panel (screen
@@ -577,7 +576,7 @@ behaviour, not internal refactors.
 - The guest recording limit counts only your ACTIVE recordings now. Archiving a
   recording frees a slot (the cap is 5 held at once, not a lifetime count).
 
-## [0.14.85] — 2026-06-27
+## [0.14.85] - 2026-06-27
 
 ### Fixed
 - Recorded screen video now shows in the in-app preview. The video was
@@ -586,7 +585,7 @@ behaviour, not internal refactors.
   like nothing was recorded. New recordings are written faststart so the
   preview plays.
 
-## [0.14.84] — 2026-06-27
+## [0.14.84] - 2026-06-27
 
 ### Changed
 - Ghost screen-video card: bigger subtitle with tighter leading, the title and
@@ -599,32 +598,32 @@ behaviour, not internal refactors.
   amaraorg fragment) plus non-speech captions like [Music], [Applause], and ♪
   no longer leak into transcripts.
 
-## [0.14.83] — 2026-06-27
+## [0.14.83] - 2026-06-27
 
 ### Changed
 - Smaller, tighter subtitle text in the ghost screen-video card, matching the
   profile menu subtitle.
 
-## [0.14.82] — 2026-06-26
+## [0.14.82] - 2026-06-26
 
 ### Changed
 - The model-compile explanation now shows when you hover the Transcribing /
   Downloading headline itself, instead of needing a separate info icon.
 
-## [0.14.81] — 2026-06-26
+## [0.14.81] - 2026-06-26
 
 ### Added
 - An info tooltip next to the Transcribing / Downloading headline briefly
   explains why the first run can take a while (a one-time on-device model
   compile for the Neural Engine; fast afterwards).
 
-## [0.14.80] — 2026-06-26
+## [0.14.80] - 2026-06-26
 
 ### Changed
 - The "Catch the start of calls" toggle in Settings is admin-only now. Regular
   users keep the default behaviour (it stays on) but no longer see the toggle.
 
-## [0.14.79] — 2026-06-26
+## [0.14.79] - 2026-06-26
 
 ### Fixed
 - The "Enable screen video" button in the ghost-video card is no longer
@@ -639,7 +638,7 @@ behaviour, not internal refactors.
 - The "Start a new recording" button has a red record dot now, matching the
   menu-bar Start button.
 
-## [0.14.78] — 2026-06-26
+## [0.14.78] - 2026-06-26
 
 ### Added
 - When Screen Recording is not granted, the recording panel shows a "ghost"
@@ -648,7 +647,7 @@ behaviour, not internal refactors.
   capture stays unavailable until you allow it; audio recording works without
   it.
 
-## [0.14.77] — 2026-06-26
+## [0.14.77] - 2026-06-26
 
 ### Fixed
 - Downloading audio (or video) no longer takes over the whole window with a
@@ -659,7 +658,7 @@ behaviour, not internal refactors.
 - The "Everything as one archive" download option is hidden when there is only
   one thing to save (a zip of a single file just duplicated that option).
 
-## [0.14.76] — 2026-06-26
+## [0.14.76] - 2026-06-26
 
 ### Fixed
 - Recording on Bluetooth no longer pops the macOS Screen Recording prompt. The
@@ -681,7 +680,7 @@ behaviour, not internal refactors.
 - The Download button is disabled when there is nothing to export (a failed or
   empty meeting), instead of showing a live green button.
 
-## [0.14.75] — 2026-06-26
+## [0.14.75] - 2026-06-26
 
 ### Removed
 - The "Allow Corder access" permission wizard is gone. A fresh install now
@@ -690,7 +689,7 @@ behaviour, not internal refactors.
   record (and Screen Recording only when video capture is on). Previously a
   nothing-granted Mac was blocked behind the wizard on launch.
 
-## [0.14.74] — 2026-06-26
+## [0.14.74] - 2026-06-26
 
 ### Fixed
 - The transcribing timer no longer shows a wildly inflated elapsed time (for
@@ -698,7 +697,7 @@ behaviour, not internal refactors.
   counts from the current transcription attempt, not the first-ever one, so a
   re-queued or model-re-downloading meeting starts the timer at 00:00.
 
-## [0.14.73] — 2026-06-26
+## [0.14.73] - 2026-06-26
 
 ### Removed
 - The global record shortcut is gone entirely. Recording starts and stops
@@ -714,7 +713,7 @@ behaviour, not internal refactors.
 - The sign-in card no longer clips on a short window; if it's taller than the
   window it scrolls instead of cutting off the bottom.
 
-## [0.14.72] — 2026-06-26
+## [0.14.72] - 2026-06-26
 
 ### Fixed
 - On-device transcription now self-heals when the local model is incomplete.
@@ -727,20 +726,20 @@ behaviour, not internal refactors.
   and the Get help / Check for updates group gets a little more breathing room
   above and below.
 
-## [0.14.71] — 2026-06-26
+## [0.14.71] - 2026-06-26
 
 ### Fixed
 - The menu-bar popover no longer shows a "Cannot record yet" gate when you
   are signed out. You can record straight away, with no sign-in required (the
   only limit without an account is 5 recordings held at once).
 
-## [0.14.70] — 2026-06-26
+## [0.14.70] - 2026-06-26
 
 ### Changed
 - The Sign in entry in the profile menu is now a green button, like Start
   recording, sized to fit the dropdown.
 
-## [0.14.69] — 2026-06-26
+## [0.14.69] - 2026-06-26
 
 ### Fixed
 - The Home item in the profile menu now reads "Welcome", matching the home
@@ -748,7 +747,7 @@ behaviour, not internal refactors.
 - Tightened the line spacing of the signed-out profile menu subtitle so the
   wrapped text reads as a snug two lines instead of a loose third line.
 
-## [0.14.68] — 2026-06-26
+## [0.14.68] - 2026-06-26
 
 ### Changed
 - On-device transcription uses a single model now, Whisper Turbo. The model
@@ -762,13 +761,13 @@ behaviour, not internal refactors.
 - Trimmed the dead empty space below the last card in Settings (both the
   General and Advanced tabs).
 
-## [0.14.67] — 2026-06-26
+## [0.14.67] - 2026-06-26
 
 ### Changed
 - In the sign-in card, the link that switches between Sign in and Sign up
   now sits below the buttons instead of in the header, for a cleaner top.
 
-## [0.14.66] — 2026-06-25
+## [0.14.66] - 2026-06-25
 
 ### Added
 - A "N left" counter in the header for signed-out users. Without an account
@@ -782,7 +781,7 @@ behaviour, not internal refactors.
   has no hotkey to trigger by accident or clash with another app. Set your own
   in Settings, and a Clear button removes it whenever you want.
 
-## [0.14.65] — 2026-06-25
+## [0.14.65] - 2026-06-25
 
 ### Changed
 - Corder now opens straight to your library. There is no upfront wall of
@@ -804,7 +803,7 @@ behaviour, not internal refactors.
 - The sign-in window no longer appears stretched, and the profile avatar
   reflects your status (it stays neutral while you are signed out).
 
-## [0.14.64] — 2026-06-25
+## [0.14.64] - 2026-06-25
 
 ### Fixed
 - Long recordings no longer make the whole Mac lag or run hot. The disk
@@ -816,7 +815,7 @@ behaviour, not internal refactors.
 - Transcripts no longer invent a line attributed to you over a stretch
   where your microphone was actually silent.
 
-## [0.14.63] — 2026-06-25
+## [0.14.63] - 2026-06-25
 
 ### Fixed
 - Far-end (other speaker) audio could appear shifted earlier in a
@@ -827,7 +826,7 @@ behaviour, not internal refactors.
 - The recording equalizer in the floating pill animates smoothly now
   instead of filling in tiny steps.
 
-## [0.14.62] — 2026-06-25
+## [0.14.62] - 2026-06-25
 
 ### Fixed
 - Installer layout: the app icon, arrow and "Drag to install" caption are
@@ -838,7 +837,7 @@ behaviour, not internal refactors.
   Release notes are generated straight from this changelog for every build,
   so an update is never published with an empty notes panel.
 
-## [0.14.61] — 2026-06-25
+## [0.14.61] - 2026-06-25
 
 ### Changed
 - Settings cleanup: the dark-mode row is now just "Dark theme"; the
@@ -853,7 +852,7 @@ behaviour, not internal refactors.
   while the Library was closed is re-surfaced when you open the Library or
   click the pill, so the click is never a no-op.
 
-## [0.14.60] — 2026-06-25
+## [0.14.60] - 2026-06-25
 
 ### Fixed
 - Transcripts no longer show phantom sign-offs like "Спасибо за внимание"
@@ -861,7 +860,7 @@ behaviour, not internal refactors.
   stretches when nobody said them (0.14.58 had briefly let them through).
   A real sentence that genuinely contains one is still kept.
 
-## [0.14.59] — 2026-06-25
+## [0.14.59] - 2026-06-25
 
 ### Fixed
 - If Corder or your Mac crashes or loses power mid-recording, the saved
@@ -872,7 +871,7 @@ behaviour, not internal refactors.
 - Connecting Google Calendar is now safe even when Google sign-in takes a
   long time: a slow consent flow can no longer attach a different account.
 
-## [0.14.58] — 2026-06-25
+## [0.14.58] - 2026-06-25
 
 ### Fixed
 - The floating recording pill no longer slowly leaks memory and power
@@ -886,7 +885,7 @@ behaviour, not internal refactors.
   after a restart (on-device transcription).
 - Hardened the built-in local server against cross-site requests.
 
-## [0.14.57] — 2026-06-25
+## [0.14.57] - 2026-06-25
 
 ### Changed
 - Corder is now English-only. The interface-language switcher has been
@@ -903,35 +902,35 @@ behaviour, not internal refactors.
 - The "Transcription error. Send a report." notice stays put until you
   send the report or close it, instead of vanishing on a timer.
 
-## [0.14.56] — 2026-06-25
+## [0.14.56] - 2026-06-25
 
 ### Changed
-- Recording without screen video now uses much less power. The app was capturing the whole screen even when video was off (just to throw the frames away), which was the real reason recording heated the Mac — far more than the video encoder. Audio-only recording now skips that entirely on most setups.
+- Recording without screen video now uses much less power. The app was capturing the whole screen even when video was off (just to throw the frames away), which was the real reason recording heated the Mac, far more than the video encoder. Audio-only recording now skips that entirely on most setups.
 
 ### Fixed
-- Unplugging or switching headphones right as a recording starts no longer fails the recording with a coreaudio error — it now retries and recovers.
+- Unplugging or switching headphones right as a recording starts no longer fails the recording with a coreaudio error, it now retries and recovers.
 
-## [0.14.55] — 2026-06-25
+## [0.14.55] - 2026-06-25
 
 ### Changed
-- Screen recording now puts far less load on your Mac. The heat came from the screen compositor doing a color conversion on every captured frame, not from the encoder — recording now captures in the display's native format and encodes with H.264, cutting the recording-time compositor load by roughly two thirds (on par with other recorders). Screen video is also capped at 1080p so a 4K/5K display doesn't blow up the frame size.
+- Screen recording now puts far less load on your Mac. The heat came from the screen compositor doing a color conversion on every captured frame, not from the encoder, recording now captures in the display's native format and encodes with H.264, cutting the recording-time compositor load by roughly two thirds (on par with other recorders). Screen video is also capped at 1080p so a 4K/5K display doesn't blow up the frame size.
 
-## [0.14.54] — 2026-06-24
+## [0.14.54] - 2026-06-24
 
 ### Fixed
 - Chapters no longer show a duplicate first entry at 0:00 with the same title.
 - Chinese and Japanese meeting titles are no longer dropped (the auto-title now accepts space-less scripts).
-- Connecting Google Calendar can no longer change which account you're signed in to — if the browser lands on a different account, the original sign-in is restored.
+- Connecting Google Calendar can no longer change which account you're signed in to, if the browser lands on a different account, the original sign-in is restored.
 - Hardened a few internal edges (segment edits are meeting-scoped, a token endpoint can't hang a worker, no duplicate sign-in taps).
 
-## [0.14.53] — 2026-06-24
+## [0.14.53] - 2026-06-24
 
 ### Fixed
 - Re-generating a transcript from cache no longer counts toward your monthly usage or moves an older meeting into the current month.
 - On Intel Macs, hitting the monthly cloud limit now shows an upgrade message instead of quietly continuing.
 - The update dialog's buttons are now translated.
 
-## [0.14.52] — 2026-06-24
+## [0.14.52] - 2026-06-24
 
 ### Changed
 - Switching between the Turbo and Small on-device models now always re-transcribes with the model you picked (it could previously reuse the other model's result).
@@ -942,7 +941,7 @@ behaviour, not internal refactors.
 - The Library window now recovers on its own if its web view crashes, instead of going blank until restart.
 - Transcripts are less likely to drop a real sentence that happens to contain a common closing phrase.
 
-## [0.14.51] — 2026-06-24
+## [0.14.51] - 2026-06-24
 
 ### Fixed
 - Fixed a crash that could take down the app while transcribing very short recordings (an echo-suppression edge case on the default two-track path).
@@ -951,24 +950,24 @@ behaviour, not internal refactors.
 - "Catch the start of calls" no longer leaves audio capture running across sleep or fast user-switching (no more stuck microphone indicator).
 - A meeting that keeps failing to transcribe no longer retries forever.
 
-## [0.14.50] — 2026-06-23
+## [0.14.50] - 2026-06-23
 
 ### Changed
 - On-device transcription is fast again. The model now runs on the Neural Engine (about 2× faster decode, and once it's prepared it loads in ~2.5s instead of ~50s). The one-time model preparation happens up-front when you download the model; on machines where it would take too long, transcription quietly falls back to the GPU path so it never hangs or waits.
-- On-device model picker is now just Whisper Turbo and Whisper Small. The smaller Base/Tiny models were dropped — they aren't accurate enough on real, noisy, multi-speaker meetings, and Small covers the lightweight case.
+- On-device model picker is now just Whisper Turbo and Whisper Small. The smaller Base/Tiny models were dropped, they aren't accurate enough on real, noisy, multi-speaker meetings, and Small covers the lightweight case.
 
-## [0.14.49] — 2026-06-23
+## [0.14.49] - 2026-06-23
 
 ### Fixed
 - On-device (free) transcription no longer hangs while loading the model. The audio model was being compiled for the Neural Engine, whose first-time compile of the large model is pathologically slow on Apple Silicon (minutes, sometimes an outright hang). It now compiles on the GPU instead, which is fast and reliable for an identical transcript. The model-loading step also shows progress now instead of a frozen button.
 
-## [0.14.48] — 2026-06-23
+## [0.14.48] - 2026-06-23
 
 ### Fixed
-- On-device (free) transcription could get stuck on "transcribing" forever. The model's tokenizer is hosted separately from the model files and was being fetched at load time with no timeout — a stalled fetch wedged the whole load (the model was already on disk, so no progress showed). The tokenizer is now staged up-front under the "Downloading model" progress with a hard timeout, so the load can no longer hang on the network.
-- The "Downloading model" button no longer cancels the download when clicked — it stays inert while the model fetches and only re-arms as "Stop" once transcription actually starts.
+- On-device (free) transcription could get stuck on "transcribing" forever. The model's tokenizer is hosted separately from the model files and was being fetched at load time with no timeout, a stalled fetch wedged the whole load (the model was already on disk, so no progress showed). The tokenizer is now staged up-front under the "Downloading model" progress with a hard timeout, so the load can no longer hang on the network.
+- The "Downloading model" button no longer cancels the download when clicked, it stays inert while the model fetches and only re-arms as "Stop" once transcription actually starts.
 
-## [0.14.47] — 2026-06-23
+## [0.14.47] - 2026-06-23
 
 ### Changed
 - Timeline percentages are now honest: each speaker's share is measured against the whole session, so silent stretches show as the missing remainder and the speakers no longer add up to a forced 100%.
@@ -977,7 +976,7 @@ behaviour, not internal refactors.
 - The "Update available" pill always opens the update dialog when clicked. It could previously do nothing (silent no-op) if an update had already been checked.
 - A transcription can no longer get stuck forever. A wedged transcription (for example a stalled on-device model download) now fails after a watchdog timeout instead of showing "transcribing" indefinitely, and the wait for an in-progress model download is bounded.
 
-## [0.14.46] — 2026-06-23
+## [0.14.46] - 2026-06-23
 
 ### Changed
 - While the on-device model is downloading on first run, the Stop button is now temporarily replaced (same size) by a "Downloading model · X%" progress button, then reverts to "Stop transcription" once the model is ready. This makes the wait clear for everyone, including normal users who have no model picker.
@@ -985,7 +984,7 @@ behaviour, not internal refactors.
 ### Removed
 - The cloud upsell card under the transcription banner is hidden for now (paid plans are not offered yet).
 
-## [0.14.45] — 2026-06-23
+## [0.14.45] - 2026-06-23
 
 ### Added
 - On a fresh install the first transcription shows a clear "Downloading model" state with progress while the on-device model fetches (~1.5 GB), then switches to the normal transcription progress. Previously this looked like a frozen spinner for minutes.
@@ -993,12 +992,12 @@ behaviour, not internal refactors.
 ### Fixed
 - Meetings failed to sync to the cloud while in the silent pre-roll state (a database constraint rejected the row); the pre-roll status now syncs correctly.
 
-## [0.14.44] — 2026-06-23
+## [0.14.44] - 2026-06-23
 
 ### Changed
 - Internal cleanup and stability. No user-facing changes since 0.14.43 (removed the old recording-blob code now that the spectrum equalizer has replaced it).
 
-## [0.14.43] — 2026-06-23
+## [0.14.43] - 2026-06-23
 
 ### Changed
 - The floating recording indicator is now a real-time frequency-spectrum equalizer (FFT of the live audio, per-band auto-levelling) instead of the blob. Each bar is a genuine frequency band, so it reacts to your actual voice. The indicator lives only in the floating pill (when Corder is minimised); there is no recording blob inside the window anymore.
@@ -1009,63 +1008,63 @@ behaviour, not internal refactors.
 - The Statistics settings block.
 - The transcription-model picker is hidden for non-admins (everyone transcribes through Groq cloud or the on-device model; there is nothing to choose).
 
-## [0.14.42] — 2026-06-23
+## [0.14.42] - 2026-06-23
 
 ### Added
-- Speaker-bleed echo suppression. When you record on speakers (no headphones), the other person's voice used to leak into your mic and get transcribed as if you said it — sometimes even translated into your language. Corder now subtracts the far-end from your mic track before transcription, so each speaker stays on their own side. Validated on a real recording: the far end no longer contaminates your turns.
-- Download now offers "Video + audio" (one file with sound) and a compact "Audio" (AAC .m4a) — the old silent video-only download is gone. Audio downloads are ~10× smaller.
+- Speaker-bleed echo suppression. When you record on speakers (no headphones), the other person's voice used to leak into your mic and get transcribed as if you said it, sometimes even translated into your language. Corder now subtracts the far-end from your mic track before transcription, so each speaker stays on their own side. Validated on a real recording: the far end no longer contaminates your turns.
+- Download now offers "Video + audio" (one file with sound) and a compact "Audio" (AAC .m4a), the old silent video-only download is gone. Audio downloads are ~10× smaller.
 
 ### Changed
 - The Stop-transcription progress bar now shows REAL progress for cloud (Groq) transcription, advancing as each chunk finishes (it already did for the on-device model).
 - Recording blob: a clean centred size-pulse that kicks to the beat of incoming sound.
-- Screen video recording is lighter — half resolution and 10 fps (down from full-res/15 fps), cutting CPU and file size with no real quality loss for a meeting.
+- Screen video recording is lighter, half resolution and 10 fps (down from full-res/15 fps), cutting CPU and file size with no real quality loss for a meeting.
 - Cloud transcription is locked to Groq Whisper for everyone (cheapest at equal quality); other cloud models are no longer used.
 - Chapters now have dividers between them.
 
 ### Fixed
-- Bug reports now capture the full transcription/capture log across recent sessions (not just the last few startup lines), and the report button is always available — so transcript issues can actually be diagnosed.
+- Bug reports now capture the full transcription/capture log across recent sessions (not just the last few startup lines), and the report button is always available, so transcript issues can actually be diagnosed.
 
-## [0.14.41] — 2026-06-23
+## [0.14.41] - 2026-06-23
 
 ### Changed
 - The Stop-transcription progress bar is now an honest "working" animation instead of a fake percentage. It no longer animates backwards when a re-transcribe starts, and no longer pretends to be half-done when the work is actually finished. (There is no true per-chunk progress signal from the transcriber, so showing a real percentage would be misleading.)
 
-## [0.14.40] — 2026-06-22
+## [0.14.40] - 2026-06-22
 
 ### Fixed
 - Timeline is accurate now. When the two audio tracks bleed into each other, each speaker was placed across almost the whole recording (one solid bar, overlapping ~50% of the time). Each speaker is now kept only where their own track is the louder one, so the bars show real segments with gaps and the talk split is honest. Measured on a real call: overlap dropped from 50% to 10%.
 
-## [0.14.39] — 2026-06-22
+## [0.14.39] - 2026-06-22
 
 ### Fixed
 - Timeline speaker percentages now show share of talking (they sum to 100%) instead of share of the whole recording, which could read past 100% on calls where both tracks overlap.
 
-## [0.14.38] — 2026-06-22
+## [0.14.38] - 2026-06-22
 
 ### Changed
 - Anonymous reliability diagnostics are now on by default (still opt-out in Settings). They measure how often the other side is lost on Bluetooth, so it can be fixed. Never include recordings, transcripts, or audio. Privacy copy updated to match.
 
-## [0.14.37] — 2026-06-22
+## [0.14.37] - 2026-06-22
 
 ### Fixed
 - The other person is captured more reliably on Bluetooth. Diagnosed from logs: the system-audio tap sometimes started but delivered zero audio when Bluetooth was switching modes at that instant. It now detects "no audio after start" and rebuilds itself automatically (up to a few attempts), which recovers the far end in that case.
 
-## [0.14.36] — 2026-06-22
+## [0.14.36] - 2026-06-22
 
 ### Fixed
-- Reverted a change that made the other person MORE likely to be missed on Bluetooth. The system-audio tap (which does capture the far end when it can) now always runs. On a Bluetooth headset call macOS may still route the audio where it can't be captured — for a guaranteed full transcript, use built-in speakers or wired output. When the far end is missed on Bluetooth you now get a clear in-app notice.
+- Reverted a change that made the other person MORE likely to be missed on Bluetooth. The system-audio tap (which does capture the far end when it can) now always runs. On a Bluetooth headset call macOS may still route the audio where it can't be captured, for a guaranteed full transcript, use built-in speakers or wired output. When the far end is missed on Bluetooth you now get a clear in-app notice.
 
-## [0.14.35] — 2026-06-22
+## [0.14.35] - 2026-06-22
 
 ### Fixed
 - Sign-in window no longer flies off-screen when you move the cursor over a field. The window is now a fixed size.
 
-## [0.14.34] — 2026-06-22
+## [0.14.34] - 2026-06-22
 
 ### Fixed
-- No more Dashboard flash on launch — the app goes straight to your latest recording. The start screen only shows when the library is empty.
+- No more Dashboard flash on launch, the app goes straight to your latest recording. The start screen only shows when the library is empty.
 
-## [0.14.33] — 2026-06-20
+## [0.14.33] - 2026-06-20
 
 ### Fixed
 - The other person is now captured on Bluetooth output. The system-audio backup was recording silence whenever a recording used Bluetooth (AirPods etc.); now the far end is saved so it transcribes.
@@ -1073,7 +1072,7 @@ behaviour, not internal refactors.
 ### Changed
 - Recording blob tentacles are calmer: fewer, longer, and they grow out smoothly instead of popping.
 
-## [0.14.32] — 2026-06-20
+## [0.14.32] - 2026-06-20
 
 ### Changed
 - Recording blob reworked again: the body stays perfectly still and no longer spins. Sound makes thin tentacles lunge out at fixed spots (sharp out, slow back), like a symbiote, exactly in time with your voice.
@@ -1082,25 +1081,25 @@ behaviour, not internal refactors.
 ### Fixed
 - Removed the "Dashboard" breadcrumb that could still navigate back to the now-hidden start screen.
 
-## [0.14.31] — 2026-06-20
+## [0.14.31] - 2026-06-20
 
 ### Fixed
 - Removed the "Dashboard" breadcrumb that could still navigate back to the now-hidden start screen.
 
-## [0.14.30] — 2026-06-20
+## [0.14.30] - 2026-06-20
 
 ### Changed
 - The recording blob now clearly shows it's capturing your voice: it stays completely still in silence, pulses with each sound, and its edges stretch out sharply then ease back. No more constant spinning and morphing.
 
-## [0.14.29] — 2026-06-20
+## [0.14.29] - 2026-06-20
 
 ### Changed
-- The Dashboard is no longer shown once you have recordings — the app opens your most recent session instead. The start screen only appears on a brand-new, empty library.
+- The Dashboard is no longer shown once you have recordings, the app opens your most recent session instead. The start screen only appears on a brand-new, empty library.
 - Settings panel is now the same width on every screen, and dragging its edge resizes it everywhere.
 - The transcription model picker moved into Settings → Advanced (top).
 - Settings → General: Language is now at the top; the theme row reads "Change theme".
 
-## [0.14.28] — 2026-06-19
+## [0.14.28] - 2026-06-19
 
 ### Changed
 - Transcript search now works like Find (cmd+F): it scrolls to each match with prev/next arrows and a match count, instead of hiding everything else.
@@ -1109,28 +1108,28 @@ behaviour, not internal refactors.
 ### Fixed
 - Speaker timeline no longer shows one speaker at ~100%: every speaker's turns are now duration-capped to their text, so the bars reflect who actually spoke (re-transcribe an old meeting to refresh it).
 
-## [0.14.27] — 2026-06-19
+## [0.14.27] - 2026-06-19
 
 ### Fixed
 - Dashboard: no empty right column or divider anymore, and opening Settings slides its panel in without shifting the content. The Settings panel width is still resizable.
 
-## [0.14.26] — 2026-06-19
+## [0.14.26] - 2026-06-19
 
 ### Changed
 - Reverted the hover-only scrollbars (they flickered) back to always visible, and restored resizing the Settings panel width.
 
-## [0.14.25] — 2026-06-19
+## [0.14.25] - 2026-06-19
 
 ### Fixed
 - The Dashboard no longer shows an empty right column or a stray divider. Opening Settings now slides its panel in without shifting the content.
 - Scrollbars stay hidden until you hover the panel (or scroll), instead of a permanent heavy bar.
 
-## [0.14.24] — 2026-06-19
+## [0.14.24] - 2026-06-19
 
 ### Changed
 - Theme is now just Light or Dark (the "Follow system" option was removed). New installs default to Light.
 
-## [0.14.23] — 2026-06-19
+## [0.14.23] - 2026-06-19
 
 ### Changed
 - Faster, lighter cloud transcription on Pro and Max (same accuracy).
@@ -1139,17 +1138,17 @@ behaviour, not internal refactors.
 - The Dashboard no longer jumps its layout and divider when you open Settings.
 - A few more silence hallucinations ("до скорых встреч", "продолжение в следующем видео") are filtered out of transcripts.
 
-## [0.14.22] — 2026-06-18
+## [0.14.22] - 2026-06-18
 
 ### Fixed
 - The "Update available" pill now shows on every screen at once, not just the Dashboard.
 
-## [0.14.21] — 2026-06-18
+## [0.14.21] - 2026-06-18
 
 ### Changed
 - Dashboard is cleaner: the session ranking panel was removed. Your recordings live in the sidebar.
 
-## [0.14.20] — 2026-06-18
+## [0.14.20] - 2026-06-18
 
 ### Added
 - Search in the Archive, with the same header as your recordings list.
@@ -1164,7 +1163,7 @@ behaviour, not internal refactors.
 - Free accounts transcribe reliably again.
 - Faster transcript highlighting during playback and a quicker recordings list.
 
-## [0.14.18] — 2026-06-15
+## [0.14.18] - 2026-06-15
 
 ### Added
 - "Catch the start of calls" (Settings → Advanced, off by default): when a
@@ -1174,21 +1173,21 @@ behaviour, not internal refactors.
 ### Fixed
 - The menu-bar popover now reliably closes when you click outside it.
 
-## [0.14.17] — 2026-06-15
+## [0.14.17] - 2026-06-15
 
 ### Fixed
 - The "Update available" button now shows immediately on every screen
   once an update is found, instead of disappearing and reappearing after
   a delay when you switch pages.
 
-## [0.14.16] — 2026-06-15
+## [0.14.16] - 2026-06-15
 
 ### Changed
 - Summary and Chapters now work on the free plan.
 - The "Send a report" link in an AI error card now confirms with a toast
   the moment you click it.
 
-## [0.14.15] — 2026-06-15
+## [0.14.15] - 2026-06-15
 
 ### Fixed
 - A re-transcribe that is interrupted, cancelled, or fails no longer
@@ -1196,7 +1195,7 @@ behaviour, not internal refactors.
   the previous result stays readable instead of going blank.
 - Removed the green glow ring that pulsed after clicking the update pill.
 
-## [0.14.14] — 2026-06-15
+## [0.14.14] - 2026-06-15
 
 ### Added
 - An in-app upgrade screen with the Pro and Max plans, opened from the
@@ -1211,14 +1210,14 @@ behaviour, not internal refactors.
 ### Fixed
 - Cleaned up stray characters in transcripts and tidied a few labels.
 
-## [0.14.12] — 2026-06-14
+## [0.14.12] - 2026-06-14
 
 ### Changed
 - Update dialog: the Install button stays still until you click it, then
   shows a centered loader (and a real download bar only when there is
   something to download), then relaunches.
 
-## [0.14.11] — 2026-06-14
+## [0.14.11] - 2026-06-14
 
 ### Changed
 - The update dialog no longer animates a progress bar before you click.
@@ -1226,19 +1225,19 @@ behaviour, not internal refactors.
   plus a real download progress bar only when an actual download is
   needed, then installs and relaunches.
 
-## [0.14.10] — 2026-06-14
+## [0.14.10] - 2026-06-14
 
 ### Fixed
 - The in-app updater installs and relaunches on its own, with a progress
   fill inside the Install button and no more getting stuck on "Installing…".
 
-## [0.14.9] — 2026-06-14
+## [0.14.9] - 2026-06-14
 
 ### Fixed
 - The in-app updater installs and relaunches on its own without ever
   getting stuck on "Installing…".
 
-## [0.14.8] — 2026-06-14
+## [0.14.8] - 2026-06-14
 
 ### Fixed
 - The in-app updater no longer hangs on "Installing…". A second, racing
@@ -1250,14 +1249,14 @@ behaviour, not internal refactors.
   fill, like Stop transcription) and keeps the label "Install" instead
   of swapping to "Installing…". Release notes render as clean plain text.
 
-## [0.14.7] — 2026-06-14
+## [0.14.7] - 2026-06-14
 
 ### Changed
 - Update dialog polish: the install button keeps a readable label and
   shows progress inside the button instead of freezing on "Installing…",
   and the release notes render as clean plain text.
 
-## [0.14.6] — 2026-06-14
+## [0.14.6] - 2026-06-14
 
 ### Changed
 - The update button no longer swaps to a frozen "Installing…" label. It
@@ -1266,27 +1265,27 @@ behaviour, not internal refactors.
 - Release notes in the updater render as plain text, dropping the
   duplicated version heading and the stray gap above the notes.
 
-## [0.14.5] — 2026-06-14
+## [0.14.5] - 2026-06-14
 
 ### Fixed
 - In-app updates now install and relaunch on their own, no more getting
   stuck on "Installing...".
 
-## [0.14.4] — 2026-06-14
+## [0.14.4] - 2026-06-14
 
 ### Fixed
 - In-app updates now install and relaunch on their own. The updater could
   hang on "Installing..." because the app never quit for Sparkle's
   installer; it now quits so the swap and relaunch complete.
 
-## [0.14.3] — 2026-06-14
+## [0.14.3] - 2026-06-14
 
 ### Fixed
 - More invented filler lines (English and Ukrainian YouTube-style
   sign-offs like "thanks for watching" or "дякую за перегляд") are
   filtered out of transcripts.
 
-## [0.14.2] — 2026-06-13
+## [0.14.2] - 2026-06-13
 
 ### Fixed
 - In-app updates now finish on their own. The updater used to get stuck
@@ -1294,14 +1293,14 @@ behaviour, not internal refactors.
   relaunches into the new version automatically.
 - Update prompts show their release notes again.
 
-## [0.14.1] — 2026-06-13
+## [0.14.1] - 2026-06-13
 
 ### Fixed
 - Transcripts no longer pick up stray English lines like "Thank you for
   watching" or "I hope you enjoy this video" that the recogniser invented
   over silent stretches. Existing recordings are cleaned up on launch.
 
-## [0.14.0] — 2026-06-10
+## [0.14.0] - 2026-06-10
 
 ### Added
 - New Upcoming tab on the Dashboard: your calendar meetings, listed
@@ -1326,7 +1325,7 @@ behaviour, not internal refactors.
 - Setting the number of speakers is saved without touching anything else
   on the recording.
 
-## [0.13.37] — 2026-06-08
+## [0.13.37] - 2026-06-08
 
 ### Fixed
 - A damaged library database now recovers safely on launch in more cases,
@@ -1341,16 +1340,16 @@ behaviour, not internal refactors.
   just changed.
 
 ### Changed
-- Only one copy of Corder runs at a time — a relaunch or update reaps the
+- Only one copy of Corder runs at a time, a relaunch or update reaps the
   old one (no two copies fighting over the same data).
 
-## [0.13.36] — 2026-06-08
+## [0.13.36] - 2026-06-08
 
 ### Fixed
 - Closed a recording-start race that could leak a capture or, after a
   sleep mid-start, leave the privacy indicator stuck on.
 - Transcriptions no longer fail on a transient server blip (cloud
-  cold-start) — they retry automatically.
+  cold-start), they retry automatically.
 - A relaunch (after sign-in / account change) no longer briefly runs two
   copies racing for the same port and database.
 - Your interface language now persists across restarts for every
@@ -1360,11 +1359,11 @@ behaviour, not internal refactors.
 - Internal hardening from a full security + correctness audit (provider
   rate-limiter, server-side endpoint allowlisting, safer URL handling).
 
-## [0.13.35] — 2026-06-08
+## [0.13.35] - 2026-06-08
 
 ### Fixed
 - A rare launch failure where a damaged library database could stop the
-  app from opening — Corder now recovers and starts instead of crashing.
+  app from opening, Corder now recovers and starts instead of crashing.
 - Closed a local-network exposure: the app's internal server now listens
   on localhost only, never the LAN.
 - Prevented a cache mix-up that could, in rare cases, show one meeting's
@@ -1372,28 +1371,28 @@ behaviour, not internal refactors.
 - Stopped a retry loop that could re-run a failed transcription
   repeatedly when the connection flapped.
 - After a mid-recording network drop, a chunk finished on-device no longer
-  sticks — the cloud re-does it once you're back online.
+  sticks, the cloud re-does it once you're back online.
 
 ### Changed
 - The offline transcription fallback now uses a lighter model so it won't
   bog down lower-RAM Macs.
 
-## [0.13.34] — 2026-06-08
+## [0.13.34] - 2026-06-08
 
 ### Changed
 - Failed transcriptions now retry automatically on the next launch
-  (bounded to 3 attempts) — a network blip or an interrupted run
+  (bounded to 3 attempts), a network blip or an interrupted run
   recovers on its own, no manual Re-transcribe.
 - Recordings now always stay on your Mac: the legacy Dropbox cloud
   backup is off (it was failing on full accounts); local copies are
   never deleted.
 
-## [0.13.33] — 2026-06-07
+## [0.13.33] - 2026-06-07
 
 ### Added
-- **Transcription language** setting — pin the spoken language so Whisper
+- **Transcription language** setting, pin the spoken language so Whisper
   no longer mis-detects Russian as Ukrainian. Auto-detect stays default.
-- **Launch at login** — open Corder automatically when your Mac starts.
+- **Launch at login**, open Corder automatically when your Mac starts.
 - **Chapters** progress: the active chapter's timecode fills as it plays,
   with a green active highlight, and the whole row is clickable.
 - Transcript progress bar on the **Stop** button so a long transcribe
@@ -1403,26 +1402,26 @@ behaviour, not internal refactors.
   it's back; an interrupted run resumes from the chunks it already did.
 
 ### Changed
-- **Download** is its own tab — opening it hides the video + timeline.
+- **Download** is its own tab, opening it hides the video + timeline.
 - Recording video previews now fill the frame uniformly (no random sizes).
 - Softer recording-blob pulse that reacts to every sound.
 
 ### Fixed
 - On-device Whisper failing to start with a missing `tokenizer.json`.
 - Chapter timestamps all showing 0:00.
-- Video kept playing after leaving fullscreen — now pauses.
+- Video kept playing after leaving fullscreen, now pauses.
 
-## [0.13.31] — 2026-06-01
+## [0.13.31] - 2026-06-01
 
 ### Changed
-- **Sparkle update modal moved into WebView.** SwiftUI overlays through child NSWindows fought macOS Sequoia for the full-viewport coverage we wanted — re-implemented as a React component (`UpdateModal`) inside the Library. `position: fixed; inset: 0` guarantees it covers the whole window, inherits theme automatically, and the 3D cursor-tilt + radial sheen feel like the marketing-site hero cards. Click outside the card = Later.
-- **Bug-report button is event-gated.** `SubmitLogsButton` polls `/api/has-bug-events` (filters log lines by error/fail/crash/HTTP-4xx-5xx regex); button stays hidden until something actually breaks. Submitted logs now ship only the matching lines + 2 lines of context — no more 95 %-noise emails.
+- **Sparkle update modal moved into WebView.** SwiftUI overlays through child NSWindows fought macOS Sequoia for the full-viewport coverage we wanted, re-implemented as a React component (`UpdateModal`) inside the Library. `position: fixed; inset: 0` guarantees it covers the whole window, inherits theme automatically, and the 3D cursor-tilt + radial sheen feel like the marketing-site hero cards. Click outside the card = Later.
+- **Bug-report button is event-gated.** `SubmitLogsButton` polls `/api/has-bug-events` (filters log lines by error/fail/crash/HTTP-4xx-5xx regex); button stays hidden until something actually breaks. Submitted logs now ship only the matching lines + 2 lines of context, no more 95 %-noise emails.
 
-## [0.13.30] — 2026-06-01
+## [0.13.30] - 2026-06-01
 
 ### Changed
 - **News item supports a secondary action.** New `cta_action` /
-  `secondary_label` / `secondary_action` fields on `NewsItem` — values
+  `secondary_label` / `secondary_action` fields on `NewsItem`, values
   `open_url` / `open_settings` / `dismiss`. The first live use is the
   telemetry consent prompt: primary `Got it` → dismiss, secondary
   `Settings` → opens Settings → General where the toggle can be
@@ -1432,40 +1431,40 @@ behaviour, not internal refactors.
   keys on user disk, OpenAI / Gemini live exclusively as Cloudflare
   Worker secrets.
 
-## [0.13.29] — 2026-06-01
+## [0.13.29] - 2026-06-01
 
 ### Added
-- **News marquee** in the Stats column — full-width edge-to-edge running bar with shimmer. Tap anywhere on the bar to expand into the full news card; × on the right edge dismisses the item forever (until a new id ships from the Worker `/news` feed).
-- **macOS push-notification on new news** — `NewsPoller` (Swift) polls `/news` every 30 min, posts a `UNUserNotificationCenter` banner the first time it sees an unseen id; tapping the banner opens the item's CTA in the browser. First-launch seeds the set so retroactive announcements don't spam.
-- **Notifications card in the Welcome wizard** — third tile next to Microphone + Screen Recording, marked `Optional` (Continue is not gated on it). Opens the System Settings → Notifications pane when previously denied.
-- **Download is now inline** on the Recording panel — clicking the Download icon on the audio scrubber slides a Download block in between the player and the Timeline (no more full-tab swap). The icon turns into a filled active-state chip while the block is open.
+- **News marquee** in the Stats column, full-width edge-to-edge running bar with shimmer. Tap anywhere on the bar to expand into the full news card; × on the right edge dismisses the item forever (until a new id ships from the Worker `/news` feed).
+- **macOS push-notification on new news**, `NewsPoller` (Swift) polls `/news` every 30 min, posts a `UNUserNotificationCenter` banner the first time it sees an unseen id; tapping the banner opens the item's CTA in the browser. First-launch seeds the set so retroactive announcements don't spam.
+- **Notifications card in the Welcome wizard**, third tile next to Microphone + Screen Recording, marked `Optional` (Continue is not gated on it). Opens the System Settings → Notifications pane when previously denied.
+- **Download is now inline** on the Recording panel, clicking the Download icon on the audio scrubber slides a Download block in between the player and the Timeline (no more full-tab swap). The icon turns into a filled active-state chip while the block is open.
 
 ### Changed
 - **Local provider keys removed from disk.** `~/.config/corder/openai_key` and `gemini_key` are no longer read. All cloud transcription / titles / summaries / chapters go through the Cloudflare Worker (`corder-api.empqwork.workers.dev`) with the user's Supabase JWT; the Worker holds the only OpenAI / Gemini secrets. No more API-secret on user disk, no more "Corder shipped requests with the wrong account" surprises.
 - **Notification action** now carries an optional URL payload so a tapped banner can open a CTA link via `NSWorkspace.shared.open` (used by the news poller).
 
 ### Fixed
-- **× in the news bar permanently dismisses** the item (event-bubble guard via `pointerdown` + preventDefault). **×** in the expanded news card now just **collapses** back to the bar — only the **Skip** button kills the item for good.
-- **Check for Updates** with no update available now surfaces a confirmation modal instead of silently ack'ing — the menu item no longer looks broken on the latest build.
+- **× in the news bar permanently dismisses** the item (event-bubble guard via `pointerdown` + preventDefault). **×** in the expanded news card now just **collapses** back to the bar, only the **Skip** button kills the item for good.
+- **Check for Updates** with no update available now surfaces a confirmation modal instead of silently ack'ing, the menu item no longer looks broken on the latest build.
 
-## [0.13.28] — 2026-05-31
+## [0.13.28] - 2026-05-31
 
 ### Changed
-- **News banner now collapses into a glossy green "New" pill** by default. Tap to expand into the full card (title + body + CTA). Expanded card carries a Skip button alongside the × — both permanently dismiss the news item.
-- **Tester survey page redesigned** to match the OAuth callback look — `#161616` dot-grid, SF / Inter sans-serif, accent-green check. The Worker `/news` feed now points at the GH-Pages mirror (`halinskiy.github.io/3mpq-studio/#/corder-survey`).
+- **News banner now collapses into a glossy green "New" pill** by default. Tap to expand into the full card (title + body + CTA). Expanded card carries a Skip button alongside the ×, both permanently dismiss the news item.
+- **Tester survey page redesigned** to match the OAuth callback look, `#161616` dot-grid, SF / Inter sans-serif, accent-green check. The Worker `/news` feed now points at the GH-Pages mirror (`halinskiy.github.io/3mpq-studio/#/corder-survey`).
 
-## [0.13.27] — 2026-05-31
+## [0.13.27] - 2026-05-31
 
 ### Added
-- **News banner on the Dashboard** — outline card pinned above "Ready when you are." that surfaces in-app announcements (survey invites, release call-outs) without a new build. Dismissible × kills it forever in localStorage. First item ships with the tester survey.
-- **Custom Sparkle update window** — replaces Sparkle's default sheet with a Corder-branded modal (3D spring entrance, animated star backdrop streaming toward centre, single big "Update" CTA → "Downloading…" → "Install and relaunch"). Release notes collapsed by default, expand via "Show details".
-- **Theme picker in General Settings** — same `.hk-block` shell as Microphone, three-option dropdown (Follow system / Light / Dark). The view-transition radial wipe still fires; origin is the trigger pill's centre. "Follow system" auto-switches when macOS appearance changes.
-- **Tier-switch dropdown** in the test Upgrade block — pick Pro or Max, the Upgrade button uses your selection. Downgrade has only one destination so the dropdown hides on paid tiers.
-- **Profile-name inline rename** — click your name in the popover header to edit it. Persists via `/api/settings` (`user_name`) and is auto-substituted wherever a transcript / Timeline used to read "you" or "I".
+- **News banner on the Dashboard**, outline card pinned above "Ready when you are." that surfaces in-app announcements (survey invites, release call-outs) without a new build. Dismissible × kills it forever in localStorage. First item ships with the tester survey.
+- **Custom Sparkle update window**, replaces Sparkle's default sheet with a Corder-branded modal (3D spring entrance, animated star backdrop streaming toward centre, single big "Update" CTA → "Downloading…" → "Install and relaunch"). Release notes collapsed by default, expand via "Show details".
+- **Theme picker in General Settings**, same `.hk-block` shell as Microphone, three-option dropdown (Follow system / Light / Dark). The view-transition radial wipe still fires; origin is the trigger pill's centre. "Follow system" auto-switches when macOS appearance changes.
+- **Tier-switch dropdown** in the test Upgrade block, pick Pro or Max, the Upgrade button uses your selection. Downgrade has only one destination so the dropdown hides on paid tiers.
+- **Profile-name inline rename**, click your name in the popover header to edit it. Persists via `/api/settings` (`user_name`) and is auto-substituted wherever a transcript / Timeline used to read "you" or "I".
 
 ### Changed
 - **Upgrade block copy** simplified: "Upgrade" / "Downgrade" headlines, "Pro Features" / "Max Features" / "Free Features" sublines.
-- **Tab-strip back-chips removed** — General / Advanced no longer carry a `<` glyph; the chip is the click target.
+- **Tab-strip back-chips removed**, General / Advanced no longer carry a `<` glyph; the chip is the click target.
 - **Tier flip spinner** holds for at least 2.5 s so the avatar / picker have time to repaint before the loading state disappears.
 - **Rating-prompt threshold** lowered to 1 ready transcript (was 3) so feedback prompts show up sooner.
 - **Gemini Flash removed from the model picker.** Whisper Cloud is the single cloud option, gated on Pro/Max. Free sees only local models.
@@ -1473,60 +1472,60 @@ behaviour, not internal refactors.
 
 ### Fixed
 - **White-screen on Library load** caused by Rules-of-Hooks violation in SpeakerTimeline (`useState` after early return). Hooks now run before any conditional return.
-- **WhisperPrefetchPill crash** when `cloudChoices` was empty for Free — `cloudChoices[0]!.value` blew up. Falls back to the first local variant.
-- **OAuth callback port rotation** — `LocalServer` now persists the last successful port and tries to re-bind it on launch so Google's redirect doesn't end up on a dead port.
-- **Menu-bar popover used to show the signed-in surface for a signed-out user** — `locked` now also checks `currentUser != nil` from Supabase.
+- **WhisperPrefetchPill crash** when `cloudChoices` was empty for Free, `cloudChoices[0]!.value` blew up. Falls back to the first local variant.
+- **OAuth callback port rotation**, `LocalServer` now persists the last successful port and tries to re-bind it on launch so Google's redirect doesn't end up on a dead port.
+- **Menu-bar popover used to show the signed-in surface for a signed-out user**, `locked` now also checks `currentUser != nil` from Supabase.
 - **`SupabaseTierSync`** treats absent `app_metadata.tier` as Free (instead of "keep local") so server-side downgrades reflect immediately.
-- **Settings persist across Dashboard ↔ Meeting flips** — opening Settings on Dashboard and clicking a session no longer closes it.
+- **Settings persist across Dashboard ↔ Meeting flips**, opening Settings on Dashboard and clicking a session no longer closes it.
 
-## [0.13.26] — 2026-05-31
+## [0.13.26] - 2026-05-31
 
 ### Added
-- **Chapters tab** now renders 1:1 with Summary — h3-sized timestamp pill at the top of each chapter (hover only on the pill, click jumps to that moment), body title below as a paragraph, hairline divider between chapters. On-demand "Generate chapters" / "Regenerate" buttons hit a new `POST /api/meetings/:id/chapters` endpoint that runs `GeminiChapters` and caches the result.
-- **Theme toggle moved into General Settings** as a real switch row (label + desc + switch, same shell as System notifications). The Moon icon in the header is gone — clicking the switch keeps the view-transition wipe whose origin is your click.
-- **Profile-popover inline rename** — click the name in the popover head, edit, Enter to save. Persisted via `/api/settings` (`user_name`). Future transcribes write your real name into the user-speaker row, and existing transcripts/Timeline auto-substitute it wherever `custom_name` was "you" / "I".
-- **Test-mode Upgrade / Downgrade block** at the bottom of General Settings — flips `app_metadata.tier=max ↔ free` via a Worker endpoint that calls Supabase admin. Refreshes the local session so the tier shows up immediately. Interim while billing isn't wired.
-- **Download page redesign** — single bordered card matching the Timeline-card geometry (margin/border/radius), label + desc on top, format dropdown, accent Download CTA. The tab strip shows `← Download` as a back-chip (same family as `← General Settings`).
+- **Chapters tab** now renders 1:1 with Summary, h3-sized timestamp pill at the top of each chapter (hover only on the pill, click jumps to that moment), body title below as a paragraph, hairline divider between chapters. On-demand "Generate chapters" / "Regenerate" buttons hit a new `POST /api/meetings/:id/chapters` endpoint that runs `GeminiChapters` and caches the result.
+- **Theme toggle moved into General Settings** as a real switch row (label + desc + switch, same shell as System notifications). The Moon icon in the header is gone, clicking the switch keeps the view-transition wipe whose origin is your click.
+- **Profile-popover inline rename**, click the name in the popover head, edit, Enter to save. Persisted via `/api/settings` (`user_name`). Future transcribes write your real name into the user-speaker row, and existing transcripts/Timeline auto-substitute it wherever `custom_name` was "you" / "I".
+- **Test-mode Upgrade / Downgrade block** at the bottom of General Settings, flips `app_metadata.tier=max ↔ free` via a Worker endpoint that calls Supabase admin. Refreshes the local session so the tier shows up immediately. Interim while billing isn't wired.
+- **Download page redesign**, single bordered card matching the Timeline-card geometry (margin/border/radius), label + desc on top, format dropdown, accent Download CTA. The tab strip shows `← Download` as a back-chip (same family as `← General Settings`).
 
 ### Changed
 - **Gemini Flash removed from the transcription-model picker.** Whisper Cloud is the single cloud option (Pro/Max default); Free defaults to local Whisper. A legacy `gemini` override in UserDefaults is coerced back to the tier default.
-- **Sessions on dark theme** — text inside the active session in the sidebar now renders white on the accent-green fill (was muted grey on green, unreadable).
+- **Sessions on dark theme**, text inside the active session in the sidebar now renders white on the accent-green fill (was muted grey on green, unreadable).
 - **Breadcrumb in the header updates instantly** on session switch. Previously the old meeting's title lingered for the few hundred ms it took to fetch the new detail; now the cached sidebar title fills in immediately.
 - **Active-state outline** on Settings / Archive header buttons is now a translucent 2-px accent ring around the filled green tile, plus filled-glyph swaps (Heroicons Solid) instead of stroked outlines.
 - **Toast Undo dismisses the toast immediately.** Previously the countdown kept ticking after the user clicked Undo.
-- **Submit-a-bug-report icon disappears the instant you click it** — through the 10-sec undo window AND the full 60-min cooldown after a send.
+- **Submit-a-bug-report icon disappears the instant you click it**, through the 10-sec undo window AND the full 60-min cooldown after a send.
 
 ### Fixed
 - **Welcome wizard re-opens** on launch when mic OR screen-recording permission has been revoked (or `tccutil reset`'d). Sticky permission flags clear so the wizard re-shows the permission step instead of jumping past it to sign-in.
-- **Library no longer pops over the Welcome wizard** during the session-restore Task — `LibraryWindow.show` now runs the same live TCC check and hands off to Welcome if permissions are missing.
+- **Library no longer pops over the Welcome wizard** during the session-restore Task, `LibraryWindow.show` now runs the same live TCC check and hands off to Welcome if permissions are missing.
 - **Whisper Cloud 403 (tier required)** correctly identified as a Free-tier user; flip tier via the new Upgrade block (or upstream billing) to gain access.
 
-## [0.13.25] — 2026-05-31
+## [0.13.25] - 2026-05-31
 
 ### Fixed
-- **App icon depth** — the squircle plate had no outer margin, so on dark Dock backgrounds it read as a flat sticker without shadow. Rebuilt the iconset against the Apple Icon Template (824 px squircle on a 1024 canvas, 100 px outer margin) and baked a soft drop-shadow into the alpha. Looks like a real macOS app on every theme now.
+- **App icon depth**, the squircle plate had no outer margin, so on dark Dock backgrounds it read as a flat sticker without shadow. Rebuilt the iconset against the Apple Icon Template (824 px squircle on a 1024 canvas, 100 px outer margin) and baked a soft drop-shadow into the alpha. Looks like a real macOS app on every theme now.
 
-## [0.13.24] — 2026-05-31
+## [0.13.24] - 2026-05-31
 
 ### Fixed
-- **App icon** had a transparent background, so on macOS < 26 the Dock / Finder / DMG installer rendered only the two black capsule glyphs without the white squircle plate. Regenerated the iconset from the canonical brand SVG (white 22.4 %-rx squircle + black capsules) — looks identical on every macOS now.
+- **App icon** had a transparent background, so on macOS < 26 the Dock / Finder / DMG installer rendered only the two black capsule glyphs without the white squircle plate. Regenerated the iconset from the canonical brand SVG (white 22.4 %-rx squircle + black capsules), looks identical on every macOS now.
 - **Installer DMG is now signed + notarized + stapled** as a container, not just the `.app` inside it. The 0.13.23 DMG itself was unsigned, so Gatekeeper blocked it with "Move to Trash" on a fresh download. Updates via Sparkle were unaffected.
 
 ### Changed
 - **Body text colour** nudged from `#0E0E0D` to `#212121` for a softer, less surgical black against white panels.
 - **Profile avatar outline** is now a circle stroke drawn on top of the glyph, so the half-moon cut-out and diagonal bar variants no longer break the ring.
 
-## [0.13.23] — 2026-05-31
+## [0.13.23] - 2026-05-31
 
 ### Changed
-- **Help-improve-Corder telemetry** is now **ON by default during the test period** so we get real-world signal on transcription failures we can't reproduce locally. Toggle still in Settings — flip it off and nothing leaves your Mac. Will revert to default-off before paid plans ship.
+- **Help-improve-Corder telemetry** is now **ON by default during the test period** so we get real-world signal on transcription failures we can't reproduce locally. Toggle still in Settings, flip it off and nothing leaves your Mac. Will revert to default-off before paid plans ship.
 
-## [0.13.22] — 2026-05-31
+## [0.13.22] - 2026-05-31
 
 ### Added
 - **Help-improve-Corder telemetry** (opt-in, off by default). New toggle in Settings; when on, the app ships a small diagnostic envelope once per 24h with version, macOS version, Mac model, RAM, tier, and aggregate counts (meetings transcribed, ready vs failed, cloud vs local). Email is SHA-256-hashed into an anonymous id before it leaves the Mac; no transcript text, no audio, no raw email. Lands in a Cloudflare D1 database (`corder-telemetry`) the maintainer can query with `wrangler d1 execute`.
 
-## [0.13.21] — 2026-05-31
+## [0.13.21] - 2026-05-31
 
 ### Changed
 - **Theme switch tooltip** now reads the action ("Dark theme" in light mode, "Light theme" in dark mode), not the abstract "Toggle light/dark theme".
@@ -1534,97 +1533,97 @@ behaviour, not internal refactors.
 ### Fixed
 - **Bug-report rate limit**: the Bug icon now refuses to fire more than once per hour. A spammed click surfaces "You can send a new report in ~X min." instead of mailing the maintainer 50 copies of the same log.
 
-## [0.13.20] — 2026-05-31
+## [0.13.20] - 2026-05-31
 
 ### Fixed
-- **Free avatar background**: the toolbar and popover-header avatars hard-coded a CSS `background: var(--accent)`, which won against the tier-aware SVG fill — so a Free user still saw a green chip with a black glyph instead of the intended transparent + outline treatment. Background removed; the SVG paints its own (accent for Pro/Max, transparent for Free).
+- **Free avatar background**: the toolbar and popover-header avatars hard-coded a CSS `background: var(--accent)`, which won against the tier-aware SVG fill, so a Free user still saw a green chip with a black glyph instead of the intended transparent + outline treatment. Background removed; the SVG paints its own (accent for Pro/Max, transparent for Free).
 
-## [0.13.19] — 2026-05-31
+## [0.13.19] - 2026-05-31
 
 ### Added
-- **Failed-transcription toast** in the Library window. When the pipeline can't finish (model load failed, OOM, MIL network read error, etc.), an in-app toast surfaces *why* and what to do — picking a lighter Whisper variant when the cause is the on-device model not fitting. Other failures get the generic "tap Re-transcribe; send a bug report if it persists" hint.
+- **Failed-transcription toast** in the Library window. When the pipeline can't finish (model load failed, OOM, MIL network read error, etc.), an in-app toast surfaces *why* and what to do, picking a lighter Whisper variant when the cause is the on-device model not fitting. Other failures get the generic "tap Re-transcribe; send a bug report if it persists" hint.
 
-## [0.13.18] — 2026-05-31
+## [0.13.18] - 2026-05-31
 
 ### Added
 - **Send-a-bug-report with Undo.** Click the Bug icon → toast at the bottom counts down 10 s with an Undo button (same UX as Archive). The log is only sent when the countdown elapses, so an accidental click never leaves the Mac.
 - **Auto-RAM-aware default Whisper variant.** Fresh installs on Macs with ≤ 8 GB RAM default to `Base` (~150 MB, ~500 MB RAM at inference) instead of `Turbo` (1.5 GB on disk, ~3 GB RAM → swap-thrashes 8 GB M1s). Picker still lets the user upgrade.
-- **Sign-in CTA in the profile popover** when the account is signed out. Previously the popover read as a "logged in" surface even on a fresh install — Sign out was visible, Sign in wasn't.
+- **Sign-in CTA in the profile popover** when the account is signed out. Previously the popover read as a "logged in" surface even on a fresh install, Sign out was visible, Sign in wasn't.
 - **Tier-aware avatar.** Pro / Max gets the canonical accent-green chip with a white glyph; Free gets a transparent surface with a dark glyph and a hairline outline (mirrors the secondary-button treatment).
 
 ### Changed
-- **Update pill** label is now just "Update available" — no version number (the version still shows inside the Sparkle dialog when you click).
-- **Update pill detection is more eager.** The `/api/update-status` poll now nudges Sparkle to do a silent background appcast check whenever the React UI hasn't seen a verdict yet — the pill no longer waits up to a day for Sparkle's scheduled check.
+- **Update pill** label is now just "Update available", no version number (the version still shows inside the Sparkle dialog when you click).
+- **Update pill detection is more eager.** The `/api/update-status` poll now nudges Sparkle to do a silent background appcast check whenever the React UI hasn't seen a verdict yet, the pill no longer waits up to a day for Sparkle's scheduled check.
 
-## [0.13.17] — 2026-05-31
+## [0.13.17] - 2026-05-31
 
 ### Added
 - **Chapters tab** (Loom-style) next to Transcript and Summary in every meeting view. Gemini Flash Lite splits the transcript into 3–8 topical chapters with `[mm:ss]` timestamps; clicking a row seeks the audio scrubber. Generated server-side after each successful transcribe when **Auto-chapters** is on (new toggle in Settings, on by default). Routes through the same Worker proxy as transcribe / title / summary so Pro / Max users don't need a local Google API key.
 
-## [0.13.16] — 2026-05-31
+## [0.13.16] - 2026-05-31
 
 ### Fixed
-- **Whisper Cloud polish (`gpt-4o-mini`) now works for Pro / Max** without a local OpenAI key. `WhisperCleanup` was silently returning unchanged turns whenever the local key file was absent — it now routes through the same Worker proxy (`/transcribe/whisper-cleanup`) with JWT auth and the server-side OpenAI key.
+- **Whisper Cloud polish (`gpt-4o-mini`) now works for Pro / Max** without a local OpenAI key. `WhisperCleanup` was silently returning unchanged turns whenever the local key file was absent, it now routes through the same Worker proxy (`/transcribe/whisper-cleanup`) with JWT auth and the server-side OpenAI key.
 
 ### Changed
 - **Cloud audio backup temporarily disabled.** Supabase Storage Free plan rejects single-shot uploads over 50 MB, so every recording's `system.wav` (~80 MB on a 7-min call) was failing 413 each cycle. Recordings stay local-only; the transcript still syncs to Supabase. Will flip back on the moment we migrate to Cloudflare R2 (no per-file cap, ∞ egress, free 10 GB).
 
-## [0.13.15] — 2026-05-31
+## [0.13.15] - 2026-05-31
 
 ### Fixed
-- **Auto-title and auto-summary now work for Pro / Max** without a local Google API key. Both helpers were checking `GeminiTranscriber.apiKey` and silently returning nil when the file wasn't on disk — they now route through the same Worker proxy as the transcribe path (server-side Google key, JWT auth).
+- **Auto-title and auto-summary now work for Pro / Max** without a local Google API key. Both helpers were checking `GeminiTranscriber.apiKey` and silently returning nil when the file wasn't on disk, they now route through the same Worker proxy as the transcribe path (server-side Google key, JWT auth).
 
-## [0.13.14] — 2026-05-31
+## [0.13.14] - 2026-05-31
 
 ### Fixed
-- **SupabaseSync `segments_speaker_id_fkey` (Postgres 23503)** — actually fixed this time. The 0.13.8 fix bundled speakers + segments into one ordered task but still resolved speaker UUIDs twice (once for the speakers insert, once for the segments map) via `UUID(uuidString: s.id) ?? UUID()` — which yields a fresh random UUID every call when `s.id` isn't a valid UUID string ("user-1", "other-1" etc.). Speakers landed with random A, segments pointed at random B, FK barfed. Now the speaker insert reads the SAME pre-resolved UUID the segments map uses, so the two sides always agree.
+- **SupabaseSync `segments_speaker_id_fkey` (Postgres 23503)**, actually fixed this time. The 0.13.8 fix bundled speakers + segments into one ordered task but still resolved speaker UUIDs twice (once for the speakers insert, once for the segments map) via `UUID(uuidString: s.id) ?? UUID()`, which yields a fresh random UUID every call when `s.id` isn't a valid UUID string ("user-1", "other-1" etc.). Speakers landed with random A, segments pointed at random B, FK barfed. Now the speaker insert reads the SAME pre-resolved UUID the segments map uses, so the two sides always agree.
 
-## [0.13.13] — 2026-05-31
-
-### Added
-- **Gemini cloud transcription now also works without a local API key.** A second catch-all proxy in the Worker (`/transcribe/gemini-proxy/*`) forwards the full Files-API upload chain + `generateContent` to Google with our server key, gated by `app_metadata.tier`. Pro / Max users can now pick either Whisper Cloud or Gemini Flash and have it just work — no local key files in `~/.config/corder/`.
-
-## [0.13.12] — 2026-05-31
+## [0.13.13] - 2026-05-31
 
 ### Added
-- **Cloud Whisper now works out of the box for Pro / Max** — Corder no longer ships its own API keys, and Pro / Max users no longer need to drop an OpenAI key into `~/.config/corder/`. The audio goes through `corder-api.empqwork.workers.dev/transcribe/whisper`, the Cloudflare Worker holds the OpenAI key server-side, and `app_metadata.tier` is the gate. Free-tier users transparently fall back to on-device Whisper as before.
+- **Gemini cloud transcription now also works without a local API key.** A second catch-all proxy in the Worker (`/transcribe/gemini-proxy/*`) forwards the full Files-API upload chain + `generateContent` to Google with our server key, gated by `app_metadata.tier`. Pro / Max users can now pick either Whisper Cloud or Gemini Flash and have it just work, no local key files in `~/.config/corder/`.
 
-## [0.13.11] — 2026-05-31
+## [0.13.12] - 2026-05-31
+
+### Added
+- **Cloud Whisper now works out of the box for Pro / Max**, Corder no longer ships its own API keys, and Pro / Max users no longer need to drop an OpenAI key into `~/.config/corder/`. The audio goes through `corder-api.empqwork.workers.dev/transcribe/whisper`, the Cloudflare Worker holds the OpenAI key server-side, and `app_metadata.tier` is the gate. Free-tier users transparently fall back to on-device Whisper as before.
+
+## [0.13.11] - 2026-05-31
 
 ### Fixed
 - **`noKey` failed transcription** when a cloud provider was picked but its API key wasn't on disk. The pipeline now checks for the key file BEFORE the call and silently falls back to on-device Whisper for the run instead of failing the meeting (same code path as the monthly-cap fallback).
-- **Rating prompt no longer pesters.** Shows at most ONCE per user, pinned to the first meeting it appeared on — closing the X or sending feedback dismisses it for good. Revisiting that meeting later or opening any other meeting never re-surfaces it. Threshold also bumped back from 1 to 3 ready transcripts so the prompt doesn't appear on a test recording.
+- **Rating prompt no longer pesters.** Shows at most ONCE per user, pinned to the first meeting it appeared on, closing the X or sending feedback dismisses it for good. Revisiting that meeting later or opening any other meeting never re-surfaces it. Threshold also bumped back from 1 to 3 ready transcripts so the prompt doesn't appear on a test recording.
 
-## [0.13.10] — 2026-05-31
+## [0.13.10] - 2026-05-31
 
 ### Fixed
-- App icon stays canonical white on macOS Tahoe (26+) in **dark mode**. Tahoe auto-tints legacy `.icns` icons to near-black on dark backgrounds — we now ship an Asset Catalog with explicit dark + light variants pointing at the same canonical white squircle, so the system uses our copy instead of the auto-tinted one.
+- App icon stays canonical white on macOS Tahoe (26+) in **dark mode**. Tahoe auto-tints legacy `.icns` icons to near-black on dark backgrounds, we now ship an Asset Catalog with explicit dark + light variants pointing at the same canonical white squircle, so the system uses our copy instead of the auto-tinted one.
 
-## [0.13.9] — 2026-05-31
+## [0.13.9] - 2026-05-31
 
 ### Changed
-- Monthly usage card hidden for now — re-enabled when paid plans go live and per-tier caps mean something again. The Bug-icon button still ships logs to the maintainer, the model picker still ships under Start; only the usage rollup is gone from the Dashboard for the moment.
+- Monthly usage card hidden for now, re-enabled when paid plans go live and per-tier caps mean something again. The Bug-icon button still ships logs to the maintainer, the model picker still ships under Start; only the usage rollup is gone from the Dashboard for the moment.
 
 ### Fixed
 - Submit-logs reports now also land as a GitHub Issue in a private maintainer inbox (next to the existing Resend email), so triage isn't bottlenecked on inbox scrolling and long logs aren't lost mid-quote.
 
-## [0.13.8] — 2026-05-31
+## [0.13.8] - 2026-05-31
 
 ### Added
-- **Send a bug report** button (Bug icon) in the toolbar, left of the theme toggle. One click posts the tail of `/tmp/corder.log` to the maintainer with your email + Corder version + macOS version attached — no Terminal commands required.
+- **Send a bug report** button (Bug icon) in the toolbar, left of the theme toggle. One click posts the tail of `/tmp/corder.log` to the maintainer with your email + Corder version + macOS version attached, no Terminal commands required.
 - **Remote subscription tier**: at sign-in, Corder reads `app_metadata.tier` from your Supabase user and applies it locally. Pro / Max can now be granted server-side without `defaults write`.
 - **Model picker always visible** under the Start button, listing every cloud provider (Gemini Flash / Whisper Cloud) AND every local Whisper size in one chevron pill. Switch with one click; if the local variant isn't on disk yet, the picker flips to a download progress bar.
 
 ### Changed
-- **Dashboard cold start**: a brand-new install shows only "Ready when you are." + Start + the model picker. Stats and Monthly usage cards reveal themselves after 10 minutes of use, on first relaunch, or when you have at least one recording — and stay revealed forever.
+- **Dashboard cold start**: a brand-new install shows only "Ready when you are." + Start + the model picker. Stats and Monthly usage cards reveal themselves after 10 minutes of use, on first relaunch, or when you have at least one recording, and stay revealed forever.
 - **Avatar**: one click on the avatar in the profile popover now rolls a fresh random glyph (with a Shuffle hover overlay), instead of opening a 9-cell picker grid.
-- Per-tier monthly caps restored — Free 1h / Pro 25h / Max unlimited (the 0.13.6 hard 60-min cap was a test stub).
+- Per-tier monthly caps restored, Free 1h / Pro 25h / Max unlimited (the 0.13.6 hard 60-min cap was a test stub).
 
 ### Fixed
 - **Hard crash on first launch for off-dev testers** ("could not load resource bundle: from /Applications/Corder.app/Corder_Corder.bundle"). SwiftPM's auto-generated `Bundle.module` accessor lives at the .app root, not in `Contents/Resources/`. Routed through our own `Bundle.corderResources` resolver that checks the realistic paths and returns nil instead of fatal-erroring.
 - **SupabaseSync `segments_speaker_id_fkey` (Postgres 23503)** on every transcribe. Speakers and segments now upsert in a single ordered task so segments can never land before their referenced speakers.
 
-## [0.13.7] — 2026-05-30
+## [0.13.7] - 2026-05-30
 
 ### Changed
 - Monthly usage card simplified: drop the progress pills, render `Advanced transcription · 59 min left` and `Local Models · unlimited` as plain `dash-stat-row` lines so the card reads as a continuation of Recordings / Total recorded / This week above.
@@ -1633,30 +1632,30 @@ behaviour, not internal refactors.
 - Dashboard left column was clipping at the wrong height; OverlayScrollbar thumb could extend up to the window header. Column now pins to `height: 100%` so the thumb tracks the actual visible viewport.
 - Stats and Longest columns now share the same 20 px inner padding (Longest was 22 px before).
 
-## [0.13.6] — 2026-05-30
+## [0.13.6] - 2026-05-30
 
 ### Added
-- **Monthly usage card** on the Dashboard: two progress bars — Advanced transcription (cloud, capped per plan) and Local Models (always unlimited). Bars start full and drain as you consume minutes; the right-hand value shows "X left" or "unlimited".
-- **Advanced cap with auto-fallback to on-device Whisper.** When the monthly cloud quota is exhausted, the next recording silently transcribes through the local model — no error, no manual switch. For this release the cap is a flat **60 min for every tier** so the fallback path is testable; tier-specific caps come back with paid plans.
-- **Transcribing timer** now reflects backend start time (when the pipeline first flipped to `.transcribing`), not when you opened the meeting view — no more "00:00" every time you switch to a session.
+- **Monthly usage card** on the Dashboard: two progress bars, Advanced transcription (cloud, capped per plan) and Local Models (always unlimited). Bars start full and drain as you consume minutes; the right-hand value shows "X left" or "unlimited".
+- **Advanced cap with auto-fallback to on-device Whisper.** When the monthly cloud quota is exhausted, the next recording silently transcribes through the local model, no error, no manual switch. For this release the cap is a flat **60 min for every tier** so the fallback path is testable; tier-specific caps come back with paid plans.
+- **Transcribing timer** now reflects backend start time (when the pipeline first flipped to `.transcribing`), not when you opened the meeting view, no more "00:00" every time you switch to a session.
 
 ### Changed
 - Selecting a meeting then returning to the Dashboard clears the sidebar's highlight (was sticking on the last opened row).
-- Rating prompt: email field removed (we use your signed-in email automatically), Skip button removed (close via the X), Send is the single primary CTA — same outlined-card style as every other banner.
+- Rating prompt: email field removed (we use your signed-in email automatically), Skip button removed (close via the X), Send is the single primary CTA, same outlined-card style as every other banner.
 
 ### Fixed
 - Dashboard left column was clipping the new Usage card off the bottom of the window with no way to scroll. Native scrollbar restored.
 
-## [0.13.5] — 2026-05-30
+## [0.13.5] - 2026-05-30
 
 ### Added
-- Sign-in step now detects whether the email belongs to an existing account before you submit and swaps the title between **Sign In** and **Sign Up** with a soft squeeze animation. New accounts get a "Confirm password" field that slides in beneath Password — no more silent account creation.
+- Sign-in step now detects whether the email belongs to an existing account before you submit and swaps the title between **Sign In** and **Sign Up** with a soft squeeze animation. New accounts get a "Confirm password" field that slides in beneath Password, no more silent account creation.
 - The Google sign-in success page (the browser tab that says "You're signed in") now has the dot-grid background from 3mpq.studio and both logos are clickable: 3mpq → studio, Corder → getcorder.com.
 
 ### Changed
-- Welcome-window title for the sign-in step is no longer "Almost there" — it reflects the action you're about to take (Sign In or Sign Up).
+- Welcome-window title for the sign-in step is no longer "Almost there", it reflects the action you're about to take (Sign In or Sign Up).
 
-## [0.13.4] — 2026-05-29
+## [0.13.4] - 2026-05-29
 
 ### Added
 - "Check for updates" row in the profile menu.
@@ -1671,59 +1670,59 @@ behaviour, not internal refactors.
 - On-device Whisper now finds its tokenizer correctly on first run (no more "Tokenizer configuration is missing").
 - `isModelDownloaded` no longer reports ready while the model is still streaming bytes.
 
-## [0.13.3] — 2026-05-28
+## [0.13.3] - 2026-05-28
 
 ### Added
-- On-device Whisper model auto-prefetch on first launch — Free-tier default. No more 3-5 min cold-start wait on the first recording.
+- On-device Whisper model auto-prefetch on first launch, Free-tier default. No more 3-5 min cold-start wait on the first recording.
 - Transcription-model picker pinned under the Dashboard "Ready when you are" Start button. The first time the user presses Start it reveals itself and stays revealed forever. Mode 1: progress pill while the model is downloading; mode 2: chevron picker (Turbo / Small / Base / Tiny) once it's on disk. Picking a different size kicks off its download.
 - Google sign-in landing page: the Welcome wizard's Google OAuth now redirects to a styled in-app `/auth/callback` route (3mpq + Corder marks, green check, "You're signed in", ⌘W hint) instead of leaving the browser hanging on Google's account chooser. (Supabase Dashboard → Redirect URLs needs `http://127.0.0.1:*` for the loopback to pass the allowlist.)
-- `PopoverShell` — single source of truth for menu-bar popover geometry (width, padding, outer / section spacing). PopoverContentView, InviteOfferView, LoadingStateView all read from it so a tweak lands on every surface at once.
+- `PopoverShell`, single source of truth for menu-bar popover geometry (width, padding, outer / section spacing). PopoverContentView, InviteOfferView, LoadingStateView all read from it so a tweak lands on every surface at once.
 
 ### Changed
 - Welcome wizard's "Sign in with email" button is always brand-green active. Bad input lights up per-field inline errors (red border + red caption under the offending capsule) instead of greying out the CTA.
-- Settings → Transcription model card removed. The picker now lives only under the Dashboard primary button — single source of truth, no risk of the two surfaces drifting.
+- Settings → Transcription model card removed. The picker now lives only under the Dashboard primary button, single source of truth, no risk of the two surfaces drifting.
 - Settings → Auto-transcribe / Auto-title / Auto-summary moved above Microphone.
 - API access description trimmed to "Use this token to connect Corder to MCP clients".
 - Delete account description trimmed to "Permanently removes your account. This cannot be undone."
 - Dashboard idle subtitle shortened to "Start a recording in the background."
 - Recording subtitle shortened to "Corder keeps recording in the background."
-- Menu-bar popover layout tightened — 8 pt closer to the divider on both sides so it reads as a single grouped card.
+- Menu-bar popover layout tightened, 8 pt closer to the divider on both sides so it reads as a single grouped card.
 - Settings toolbar gear is a toggle: a second tap returns to Recent/Recording (same affordance as the Archive button).
-- Demo seed rows removed from first launch — new installs land on a clean, empty Library instead of canned "Daily standup" samples.
+- Demo seed rows removed from first launch, new installs land on a clean, empty Library instead of canned "Daily standup" samples.
 
 ### Fixed
 - WhisperKit model-folder path was off by one segment; `isModelDownloaded` reported "ready" the instant WhisperKit created placeholder packages, before the bytes finished streaming. Now it checks the in-flight progress flag, looks for `.incomplete` markers, and requires all `.mlmodelc` packages to be non-empty.
 - `corder-mcp` published to npm. Install: `npx -y corder-mcp` (setup configs in the README).
 
-## [0.13.2] — 2026-05-28
+## [0.13.2] - 2026-05-28
 
 ### Added
-- Tooltips rolled out to more surfaces: transcript-toolbar Clarify (Users), Archive sidebar Restore, video fullscreen Close, and the Update pill — same 350 ms delay + design-system chip as the header toolbar.
+- Tooltips rolled out to more surfaces: transcript-toolbar Clarify (Users), Archive sidebar Restore, video fullscreen Close, and the Update pill, same 350 ms delay + design-system chip as the header toolbar.
 
 ### Fixed
 - Tooltips no longer linger after click: clicking a tooltipped trigger hides the chip instantly and suppresses re-show until the cursor leaves and returns. (Was already partially fixed in 0.13.1; now applied across every Tooltip-wrapped surface.)
 
-## [0.13.1] — 2026-05-28
+## [0.13.1] - 2026-05-28
 
 ### Fixed
-- Header drag is finally rock-solid. Replaced the old hybrid (28 pt native strip + async JS-bridge for the rest) with a single full-coverage native overlay. The page reports the exact bounding rect of every interactive toolbar button via a `headerHits` bridge, and the overlay's hit-test passes events through only over those rects — drag works in every other pixel (between buttons, over breadcrumb text, all the way down to the bottom border) while hover and click on the real buttons remain native.
+- Header drag is finally rock-solid. Replaced the old hybrid (28 pt native strip + async JS-bridge for the rest) with a single full-coverage native overlay. The page reports the exact bounding rect of every interactive toolbar button via a `headerHits` bridge, and the overlay's hit-test passes events through only over those rects, drag works in every other pixel (between buttons, over breadcrumb text, all the way down to the bottom border) while hover and click on the real buttons remain native.
 - Tooltips no longer linger over the button you just clicked. Click on the trigger hides the chip immediately and suppresses re-show until the cursor leaves and re-enters.
 
-## [0.13.0] — 2026-05-28
+## [0.13.0] - 2026-05-28
 
 ### Added
 - API access card in Settings: reveal your personal MCP token, copy it, open the API docs. Lets you plug Corder into any MCP-aware client.
-- `@corder/mcp` MCP server (Node, npm) — exposes `list_meetings`, `get_meeting`, `search_transcripts`, `get_summary`, `list_speakers` tools to any MCP client. Reads scoped to the signed-in user via Supabase row-level security.
-- Tooltips on toolbar buttons (Settings, Archive, Theme, Copy, Refresh, Fullscreen) — fast 350 ms delay, design-system styling.
+- `@corder/mcp` MCP server (Node, npm), exposes `list_meetings`, `get_meeting`, `search_transcripts`, `get_summary`, `list_speakers` tools to any MCP client. Reads scoped to the signed-in user via Supabase row-level security.
+- Tooltips on toolbar buttons (Settings, Archive, Theme, Copy, Refresh, Fullscreen), fast 350 ms delay, design-system styling.
 - Archive button in the toolbar is now disabled when there's nothing archived, with a "Archive is empty" tooltip.
 
 ### Changed
 - Welcome wizard email/password path now uses Supabase Auth (sign-in falls back to sign-up on first attempt) so the cloud account is real from the very first session.
 
 ### Fixed
-- Profile menu no longer carries a duplicate Settings row — the toolbar gear is the only canonical entry.
+- Profile menu no longer carries a duplicate Settings row, the toolbar gear is the only canonical entry.
 
-## [0.12.0] — 2026-05-28
+## [0.12.0] - 2026-05-28
 
 ### Added
 - Cloud sync via Supabase: meetings, speakers, segments, summaries and audio files mirror automatically. Sign in on a second Mac and your library shows up.
@@ -1744,11 +1743,11 @@ behaviour, not internal refactors.
 - Rating banner buttons aligned to the design system; chevron stays visible on hover in custom dropdowns.
 - DMG installer background re-rendered with the same Tahoe-style glass icon the Dock shows.
 
-## [0.11.0] — 2026-05-27
+## [0.11.0] - 2026-05-27
 
 ### Added
 - Pick a Whisper Local model size in Settings: Turbo (1.5 GB), Small (480 MB), Base (150 MB) or Tiny (75 MB). Per-variant download tracking.
-- Inline "Download model" button under the Transcription model picker — primary green CTA that flips into an outlined progress bar with live percent as WhisperKit fetches the bytes.
+- Inline "Download model" button under the Transcription model picker, primary green CTA that flips into an outlined progress bar with live percent as WhisperKit fetches the bytes.
 - Language picker moved into Settings as a third dropdown alongside Microphone and Transcription model.
 - Get help link in the profile menu (opens a mailto handoff to support).
 - Rating banner under finished transcripts (1–5 stars, optional comment when rating ≤ 4, optional email).
@@ -1761,14 +1760,13 @@ behaviour, not internal refactors.
 ### Fixed
 - Download button text now stays readable across the full progress bar (no more pink-on-green from the previous blend-mode attempt).
 
-## [0.10.0] — 2026-05-27
+## [0.10.0] - 2026-05-27
 
 ### Added
-- Local Whisper via WhisperKit (large-v3-turbo, Core ML) as a third ASR provider — Apple Silicon only, $0/час after the one-time ~1.5 GB multilingual model download into `~/Library/Application Support/Corder/models/`. Falls back to Gemini transparently on Intel.
+- Local Whisper via WhisperKit (large-v3-turbo, Core ML) as a third ASR provider, Apple Silicon only, $0/час after the one-time ~1.5 GB multilingual model download into `~/Library/Application Support/Corder/models/`. Falls back to Gemini transparently on Intel.
 - OpenAI gpt-4o-mini-transcribe as optional ASR provider (default remains Gemini).
-- LLM polish step (gpt-4o-mini) for Whisper transcripts — punctuation + typo cleanup, ~$0.005/час additional cost. Toggle in `AppSettings.transcriptCleanup`.
-- **Welcome-wizard на первом запуске**: двухшаговый онбординг —
-  карточки Microphone + Screen Recording (с deep-link в System
+- LLM polish step (gpt-4o-mini) for Whisper transcripts, punctuation + typo cleanup, ~$0.005/час additional cost. Toggle in `AppSettings.transcriptCleanup`.
+- **Welcome-wizard на первом запуске**: двухшаговый онбординг, карточки Microphone + Screen Recording (с deep-link в System
   Settings и passive-preflight, без рекурсивных промптов) → шаг
   Sign in (email + password ИЛИ Continue with Google). Окно
   пинит фиксированный размер 380×516, без мерцания при смене
@@ -1784,10 +1782,10 @@ behaviour, not internal refactors.
   wizard fire-and-forget POST'ит provider/email/name на `/signup`,
   Worker триггерит приветственное письмо через Resend.
 - **Header drag через JS bridge**: WKWebView перестаёт глотать
-  mousedown на пустых местах шапки — JS постит `drag` событие в
+  mousedown на пустых местах шапки, JS постит `drag` событие в
   нативный handler, который вызывает `window.performDrag(with:)`.
   Окно тянется за любую пустую часть header'а.
-- **Brand-mark squircle icon**: канонический иконконтент — белый
+- **Brand-mark squircle icon**: канонический иконконтент, белый
   squircle с двумя чёрными вертикальными капсулами; регенерируется
   из `~/corder-brand/` (исходники + скрипты).
 - **20 языков интерфейса** через `LangPicker`: globe-кнопка в шапке
@@ -1802,10 +1800,10 @@ behaviour, not internal refactors.
   Недавние / Больше спикеров) сохраняется в localStorage.
 - **Auto-summary** (опционально, в Настройках): сразу после
   транскрибации пайплайн вызывает Gemini и кладёт структурированное
-  Granola-style саммари в БД. Тогл — `Setting > Auto-summary`.
+  Granola-style саммари в БД. Тогл, `Setting > Auto-summary`.
 - **Summary tab** с Granola-style structured-markdown рендерером
   (`### разделы`, вложенные буллеты, **жирные** числа/решения) и
-  тулбаром Copy / Refresh / Search — пиксельно совпадает с
+  тулбаром Copy / Refresh / Search, пиксельно совпадает с
   Transcript-тулбаром.
 - **Меню профиля**: 9 SVG-вариантов аватара в 3×3 пикере
   (точка, два круга, полумесяц, ромб, скруглённый квадрат,
@@ -1819,49 +1817,46 @@ behaviour, not internal refactors.
   сессии в статусе `.ready`.
 - **Auto-archive коротких безмолвных записей**: если запись была
   короче 60 секунд и не уловлено ни одного звука выше речевого
-  пола — Corder сразу переносит её в Архив (7-дневное удержание),
+  пола, Corder сразу переносит её в Архив (7-дневное удержание),
   показывает in-window тост через WKWebView-bridge
   (`corder-toast` CustomEvent) и системное уведомление.
 - **Popover silence warning**: если во время записи никто не
-  говорил > 10 минут — в meнюбар-попапе над кнопкой Stop появляется
+  говорил > 10 минут, в meнюбар-попапе над кнопкой Stop появляется
   янтарная карточка «Всё ещё идёт запись / Никто не говорил
   10 минут».
 - Настройки реально работают: тумблеры (уведомления, видео экрана,
   авто-транскрипт, авто-название) сохраняются и читаются на бэкенде.
 - Глобальный шорткат записи (по умолчанию ⌘⇧F). Carbon
-  `RegisterEventHotKey`, без Accessibility. Внутри настроек —
-  «нажмите комбинацию», лейбл и предупреждение о конфликте.
-- Белый / чёрный списки приложений для авто-предложения записи —
-  Corder перестаёт спрашивать про микро в Telegram / Discord /
+  `RegisterEventHotKey`, без Accessibility. Внутри настроек, «нажмите комбинацию», лейбл и предупреждение о конфликте.
+- Белый / чёрный списки приложений для авто-предложения записи, Corder перестаёт спрашивать про микро в Telegram / Discord /
   что угодно, что ты добавил в blacklist; whitelist наоборот
   заставляет предложить.
 - Пикер приложений вместо ручного ввода bundle id: список
   установленных приложений с настоящими иконками,
   поиск, недавние «owners of mic».
 - Категория «Интеграции» в попапе профиля (Google, Apple,
-  Telegram, Slack, Calendar) с реальными лого — вынесено из
+  Telegram, Slack, Calendar) с реальными лого, вынесено из
   «coming soon» в Настройках.
 - Новый дизайн-шелл `.modal-pop` для попапов: контурная карточка
   в стиле inline-баннеров (`This recording isn't transcribed yet`)
   вместо тяжёлой «стоковой» модалки. Применён к Archive и
   Download chooser.
-- Кнопка `Transcribe` в баннере пустого / упавшего транскрипта —
-  можно транскрибировать вручную при выключенном авто-транскрипте.
+- Кнопка `Transcribe` в баннере пустого / упавшего транскрипта, можно транскрибировать вручную при выключенном авто-транскрипте.
 - Стоп-микс: при выключенном авто-транскрипте `audio.wav`
   (микс мик + дальняя сторона) собирается прямо на остановке,
   чтобы запись сразу проигрывалась с собеседником без
   ручного транскрипта.
 
 ### Changed
-- Кнопка Archive в шапке транскрипта — только иконка
+- Кнопка Archive в шапке транскрипта, только иконка
   (консистентно с соседними toolbar-кнопками).
-- `.clarify-btn` стал inline-flex с gap — иконки внутри
+- `.clarify-btn` стал inline-flex с gap, иконки внутри
   кнопок Restore / Delete в Archive стоят ровно рядом
   с текстом, без поломки text-only вызовов.
 - Per-process детектор микрофона: предложение записи
   теперь триггерится конкретным приложением (Discord / Zoom /
   Meet), а не любым включением микро.
-- Дубль-инстанс Corder убивается при запуске — было два процесса.
+- Дубль-инстанс Corder убивается при запуске, было два процесса.
 - Schema v15: `output_bluetooth_at_start` на meeting row.
 
 ### Fixed
@@ -1869,7 +1864,7 @@ behaviour, not internal refactors.
   тапа после `CaptureEngine.stop()` пересоздавал и обнулял
   уже записанный `system.wav` (логи говорили
   «473088 frames captured», а файл 0 байт). Добавлен флаг
-  `tearingDown` — поздние буферы дропаются, а не truncate'ят
+  `tearingDown`, поздние буферы дропаются, а не truncate'ят
   файл.
 - Эхо в dual-track транскрипте: одинаковые реплики
   «своими словами» приписывались собеседнику. Добавлен
@@ -1879,52 +1874,51 @@ behaviour, not internal refactors.
   (`VoiceActivityDetector.voicedEnergy`), а не по факту
   Bluetooth-роута. Cache key bumped to `dual:v10:` /
   `inperson:v10:`. (Сам SCStream-бэкап сейчас пишет тишину
-  в 100% записей — расследуется отдельно; компаратор корректно
+  в 100% записей, расследуется отдельно; компаратор корректно
   его игнорирует, тап продолжает работать.)
 - Стоп-микс на BT: больше не выбирается заведомо тихий
-  `system_sck.wav` — источник системы для микса тоже выбирается
+  `system_sck.wav`, источник системы для микса тоже выбирается
   по голосовой энергии.
 - Мерцание интерфейса при смене темы в WKWebView (scrollbar,
   Timeline, видео): нейтрализованы layer-promoting CSS свойства
   в `html.theme-anim *`, отдельный named-group для видео,
   задержка перерисовки 200 мс.
 - FLIP-анимация видео при сворачивании из fullscreen была
-  кривой: скрабер сидел в потоке и сбивал raster — переведён
+  кривой: скрабер сидел в потоке и сбивал raster, переведён
   в `position: absolute`.
 - Красный блоб в окне библиотеки больше не дёргается при
   переходе recording → idle: добавлена relax-огибающая на
   часах TimelineView (0.5 с easeOut), 30 Гц держится до конца
   оседания, чтобы переход 30 → 20 Гц не икнул.
 - Ховер у toggle-блоков в Настройках (типа Screen video
-  recording) светлее — было слишком тёмно.
+  recording) светлее, было слишком тёмно.
 
-## [0.9.0] — 2026-05-17
+## [0.9.0] - 2026-05-17
 
 ### Added
 - Переименование сессии: ПКМ по сессии → «Переименовать», либо клик
   по заголовку в хлебных крошках. Пустое имя возвращает авто/дату.
 - Скачивание: видео, аудио, транскрипт (TXT / Markdown / JSON) и
-  ZIP-бандл — через системный диалог сохранения.
+  ZIP-бандл, через системный диалог сохранения.
 - Закрепление сессий (ПКМ → «Закрепить»): отдельная группа сверху,
   пометка золотым кружком.
 
 ### Fixed
 - Запись: убрано ложное уведомление «No audio captured». Срабатывало
-  на нормальных записях, сделанных при открытом окне библиотеки —
-  проверка тишины читала метр уже после его сброса. Звук всё это
+  на нормальных записях, сделанных при открытом окне библиотеки, проверка тишины читала метр уже после его сброса. Звук всё это
   время писался корректно.
 - Скачивание реально работает: в WKWebView `<a download>` молча
-  ничего не сохранял (Markdown и остальное) — добавлен нативный
+  ничего не сохранял (Markdown и остальное), добавлен нативный
   download-обработчик.
 - Краш при двойном клике по шапке окна.
 - Скелетон загрузки виден сразу при открытии библиотеки.
-- Сайдбар: убран лишний зазор у скроллбара — один чёткий
+- Сайдбар: убран лишний зазор у скроллбара, один чёткий
   разделитель; видимая точка между длительностью и временем; мета
   больше не переносится на две строки.
 - Окно тянется за любую пустую часть шапки, а не только сверху.
 
 ### Changed
-- Тема по умолчанию — светлая, язык — английский.
+- Тема по умолчанию, светлая, язык, английский.
 - Кнопки языка/темы в шапке унифицированы с кнопками транскрипта
   (одинаковый размер и стиль).
 - Настройки: убран ввод Gemini-ключа (подписочная модель), добавлены
@@ -1932,10 +1926,9 @@ behaviour, not internal refactors.
   «Скоро».
 
 ### Removed
-- Boost (полировка через Gemini 2.5 Pro) и панель приглашения —
-  не вошли в релизную модель продукта.
+- Boost (полировка через Gemini 2.5 Pro) и панель приглашения, не вошли в релизную модель продукта.
 
-## [0.8.8] — 2026-05-14
+## [0.8.8] - 2026-05-14
 
 ### Fixed
 - `video.mov` больше не стирается локально после загрузки в Dropbox.
@@ -1947,26 +1940,26 @@ behaviour, not internal refactors.
   Курсор форсится через override `cursorUpdate(with:)`, hover-scale
   по-прежнему живёт в SwiftUI `.onContinuousHover`.
 
-## [0.8.7] — 2026-05-13
+## [0.8.7] - 2026-05-13
 
 ### Fixed
 - Курсор на плавающем блобе перестал моргать между pointing-hand и
   стрелкой. NSTrackingArea теперь создаётся один раз, а не на каждом
-  layout-цикле — раньше пересоздание синтезировало mouseExited при
+  layout-цикле, раньше пересоздание синтезировало mouseExited при
   каждом тике TimelineView, попирая push'нутый курсор обратно к
   системной стрелке.
 - Видео-превью в Library теперь со скруглёнными углами (`border-radius:
   8px`), совпадает по форме с карточкой Timeline ниже.
 
-## [0.8.6] — 2026-05-13
+## [0.8.6] - 2026-05-13
 
 ### Fixed
 - Если видео для встречи недоступно (файл удалён, нет в Dropbox или
   просто старая запись без видео), плеер больше не показывает чёрный
-  прямоугольник — карточка скрывается полностью, аудио-контролы
+  прямоугольник, карточка скрывается полностью, аудио-контролы
   занимают её место сверху.
 
-## [0.8.5] — 2026-05-13
+## [0.8.5] - 2026-05-13
 
 ### Performance
 - В idle (приложение запущено, никто не пишет, курсор не над блобом)
@@ -1975,14 +1968,14 @@ behaviour, not internal refactors.
   pass, что давало ~10 % фонового CPU. Стало 0 %. Анимация включается
   обратно при ховере (20 Hz) или старте записи (30 Hz).
 
-## [0.8.4] — 2026-05-13
+## [0.8.4] - 2026-05-13
 
 ### Changed
 - Update-pill после клика показывает короткий "busy" pulse (зелёный
   тень-импульс) пока Sparkle открывает свой диалог установки. Раньше
   было непонятно зарегистрировался ли клик.
 
-## [0.8.3] — 2026-05-13
+## [0.8.3] - 2026-05-13
 
 ### Fixed
 - Sparkle теперь делает silent background-check через 2 секунды после
@@ -1993,63 +1986,63 @@ behaviour, not internal refactors.
   hand: NSTrackingArea с mouseEntered/Exited делает push/pop, плюс
   убран конфликтующий `NSCursor.set()` из SwiftUI onContinuousHover.
 
-## [0.8.2] — 2026-05-13
+## [0.8.2] - 2026-05-13
 
 ### Changed
 - Update-pill теперь показывает целевую версию ("Доступен апдейт 0.8.2"),
-  плюс перепроверяет статус при возврате окна в фокус — не нужно ждать
+  плюс перепроверяет статус при возврате окна в фокус, не нужно ждать
   следующего 60-секундного тика чтобы pill появился сразу после релиза.
 
-## [0.8.1] — 2026-05-13
+## [0.8.1] - 2026-05-13
 
 ### Added
 - Зелёный pill «Доступен апдейт» слева от языкового переключателя в
   тулбаре. Появляется когда Sparkle подтянул из appcast более свежую
   версию. Клик запускает стандартную панель обновления Sparkle.
-  Дизайн — sparkle-эффект и периодический shine, повторяющий
+  Дизайн, sparkle-эффект и периодический shine, повторяющий
   pricing-CTA из corder-landing.
 
 ### Fixed
 - Архив выглядел неровно: разная высота строк, мелкие шрифты, метка
   «in 7 days» плавала между строкой заголовка и meta. Сетка строки
-  переразложена, выравнивание справа — по первой строке заголовка,
+  переразложена, выравнивание справа, по первой строке заголовка,
   единый размер шрифта для duration / purge-метки.
 
-## [0.8.0] — 2026-05-13
+## [0.8.0] - 2026-05-13
 
 ### Added
-- **Auto-detect видео-звонков** — когда запускается знакомое meeting-
+- **Auto-detect видео-звонков**, когда запускается знакомое meeting-
   приложение (Zoom, Teams, Meet, Slack, браузеры с веб-звонками) и
   системный микрофон занят ≥3 с, всплывает blurred-капсула с
-  предложением начать запись. Тап — морф в плавающий блоб.
-- **Блоб в Library** — кнопка в правом нижнем углу окна теперь тот же
+  предложением начать запись. Тап, морф в плавающий блоб.
+- **Блоб в Library**, кнопка в правом нижнем углу окна теперь тот же
   морфящийся блоб (а не Buy Me a Coffee). Клик переключает запись.
   Плавающий блоб уходит, пока Library в фокусе.
-- **Видео-запись экрана** — `video.mov` теперь действительно пишется
+- **Видео-запись экрана**, `video.mov` теперь действительно пишется
   (HEVC, 15 fps, ~1.5 Mbps). В UI отображается немое превью над
   плеером; аудио ведёт таймлайн.
-- **Skeleton UI** — список встреч и панель деталей рендерят
+- **Skeleton UI**, список встреч и панель деталей рендерят
   плейсхолдеры на первой загрузке вместо пустоты.
-- **VAD pre-pass** — RMS-gating длинных тишин перед загрузкой в
+- **VAD pre-pass**, RMS-gating длинных тишин перед загрузкой в
   Gemini (см. полный список в diff'е).
 
 ### Changed
-- **Плейбек содержит обоих собеседников** — `audio.wav` (полный
+- **Плейбек содержит обоих собеседников**, `audio.wav` (полный
   mic+system mix) больше не удаляется после Dropbox-загрузки, и
   audio-роут предпочитает его mic.wav-only.
-- **Авто-детект ставит ожидаемых спикеров = 2** — Gemini-диаризация
+- **Авто-детект ставит ожидаемых спикеров = 2**, Gemini-диаризация
   больше не разваливает одного собеседника на 5 «Speaker N» на длинном
   звонке. Группа всегда правится в clarify-баннере.
-- **Блоб упирается в края экрана** — нельзя утащить за visible-frame.
+- **Блоб упирается в края экрана**, нельзя утащить за visible-frame.
 
 ### Performance
-- **TimelineView блоба** — 60 Hz → state-driven 6–30 Hz, плюс пауза
+- **TimelineView блоба**, 60 Hz → state-driven 6–30 Hz, плюс пауза
   пока host-окно скрыто/occluded. Главный источник фоновой нагрузки.
-- **React polling** — `getRecordingState` 1 с → 5 с в idle (1 с во
+- **React polling**, `getRecordingState` 1 с → 5 с в idle (1 с во
   время записи), `listMeetings` 5 с → 15 с в idle (5 с в записи).
-- **MeetingDetector** — тик 2 с → 4 с; CoreAudio-запрос пропускается
+- **MeetingDetector**, тик 2 с → 4 с; CoreAudio-запрос пропускается
   если ни одного meeting-приложения не запущено.
-- **`/api/meetings`** — N+1 (по segments+speakers на каждую встречу)
+- **`/api/meetings`**, N+1 (по segments+speakers на каждую встречу)
   свернут в один SQL запрос с correlated subselects.
 
 ### Removed
@@ -2058,22 +2051,21 @@ behaviour, not internal refactors.
   ключи, лишний CSS (`.video-card`, `.video-fallback`).
 - Старые `.js` файлы в `Web/src/` (tsc теперь с `noEmit`).
 
-## [0.7.0] — 2026-05-09
+## [0.7.0] - 2026-05-09
 
 ### Added
-- **Dual-track transcription** — `mic.wav` and `system.wav` are sent to
+- **Dual-track transcription**, `mic.wav` and `system.wav` are sent to
   Gemini as **two parallel File API calls** (`async let micPart` /
   `async let sysPart`). The mic call uses a single-speaker prompt
   ("Speaker 1 always = you"); the system call uses a diarise prompt
   ("identify each remote participant"). Results are merged by start-ms.
   Eliminates the "your words got attributed to your friend during a
-  silent gap" class of bug that single-stream-with-channel-gate has —
-  Granola/Grain-grade quality on a local pipeline.
-- **Anti-hallucination prompt directive** — Gemini was filling silent
+  silent gap" class of bug that single-stream-with-channel-gate has, Granola/Grain-grade quality on a local pipeline.
+- **Anti-hallucination prompt directive**, Gemini was filling silent
   stretches with poetry / weather / song lyrics. The transcribe prompt
   now has an explicit "if a stretch contains no clearly intelligible
   speech, output NO segment" clause.
-- **Auto-split fallback for truncated chunks** — long meetings (>9 min)
+- **Auto-split fallback for truncated chunks**, long meetings (>9 min)
   are sliced into chunks before upload; if Gemini truncates the JSON
   response (the 65 k token cap on chunk N), the pipeline halves that
   chunk and retries, recursively up to depth 3 (~70 s minimum slice).
@@ -2082,10 +2074,10 @@ behaviour, not internal refactors.
   first successful transcription we persist the raw Gemini turns +
   the audio hash on the meeting row. Re-mapping speakers (clarify
   banner, expected-speakers change) and re-transcribing after a
-  Dropbox archive both reuse the cache — zero extra File API calls.
+  Dropbox archive both reuse the cache, zero extra File API calls.
   Cache key is `dual:{micMD5}:{sysMD5}` for dual-track and
   `mix:{audioMD5}` for the legacy mix path.
-- **Floating recording HUD pill** — Granola-style. NSPanel,
+- **Floating recording HUD pill**, Granola-style. NSPanel,
   `.canJoinAllSpaces`, persists across Space switches, draggable,
   `.nonactivatingPanel` so clicking it doesn't steal focus. Shows a
   pulsing red dot, a 7-bar EQ-style waveform driven by mic + system
@@ -2094,7 +2086,7 @@ behaviour, not internal refactors.
   - `RecordingLevelMeter` singleton fed from CaptureEngine taps,
     publishes at 30 Hz with a fast-attack / slow-release envelope and
     pushes a rolling 7-slot history at 12 Hz.
-- **Archive bin (migration v8 — `archived_at`)** — right-click
+- **Archive bin (migration v8, `archived_at`)**, right-click
   → Archive moves a session out of the main list into a 7-day bin.
   Toolbar Archive button opens the archive panel. Restore or
   delete-forever per row (with `confirm()` guard) or in bulk via
@@ -2106,15 +2098,15 @@ behaviour, not internal refactors.
   `DELETE /api/meetings/:id` retained for the delete-forever path.
 - **`GET /api/archive`** returns archived rows with `archived_at` +
   `purge_at` (= archived_at + 7 d) for the new ArchiveView.
-- **Soft-archive toast with Undo** — same pattern as the old soft-
+- **Soft-archive toast with Undo**, same pattern as the old soft-
   delete: deleting from the row context menu shows a toast with a
   5 s countdown and an `Undo` button; only after the timer expires
   does the row actually move to the bin.
-- **Per-meeting clarify-banner state in localStorage** — `open` /
+- **Per-meeting clarify-banner state in localStorage**, `open` /
   `closed` is remembered so the user's choice survives a reload, but
   the auto-open heuristic (`detected ≥ 2 && expected == null`) still
   applies on first sight.
-- **New app icon** — two glossy 3D pause bars on a warm-white radial
+- **New app icon**, two glossy 3D pause bars on a warm-white radial
   ground. Replaces the previous green-on-white logo. Resolves the icon
   cache invalidation by bumping `CFBundleVersion` (1 → 2). The portfolio
   variant for 3mpq.studio matches.
@@ -2124,20 +2116,20 @@ behaviour, not internal refactors.
   Previously we deleted both as soon as the mix was archived; the
   dual-track re-transcribe path now needs the originals. Added a small
   amount of disk pressure but the cache hit means we rarely re-upload.
-- **Audio capture cleanup** — removed the unused `.microphone` SCStream
+- **Audio capture cleanup**, removed the unused `.microphone` SCStream
   output handler (we use AVAudioEngine on the input device for mic);
   added a `systemFramesWritten` counter + first-buffer log so future
   "no system audio captured" diagnostics are immediate.
 - **MeetingRepository.setRawTurnsCache(meetingId:geminiRawTurns:audioHash:)**
-  — targeted UPDATE that touches only those two columns. Replaces the
+ , targeted UPDATE that touches only those two columns. Replaces the
   earlier "load row → mutate → save row" pattern that re-wrote
   `status` with a stale value and tripped `resetStuckMeetings()` on
   next launch.
-- **Toast Action button styling per variant** — `.toast-success
+- **Toast Action button styling per variant**, `.toast-success
   .toast-action` is now dark-on-light, `.toast-error .toast-action`
   white-on-translucent. The Archive button on the success toast was
   invisible against the white pill.
-- **Archive view spacing reuses `.donate-card` tokens** — same 4 px /
+- **Archive view spacing reuses `.donate-card` tokens**, same 4 px /
   20 px rhythm between title and body as the BMC popup.
 
 ### Removed
@@ -2148,7 +2140,7 @@ behaviour, not internal refactors.
   mixed audio, and the ~1.5 GB CoreML model bloat was disproportionate
   to the value. The app binary shrank from ~19 MB to ~7 MB; build time
   fell from ~25 s to ~8 s. The channel-gate
-  (`Diarizer.userMicDominance`) is preserved — still used by the
+  (`Diarizer.userMicDominance`) is preserved, still used by the
   legacy single-stream Gemini path when only the mix is available
   (post-archive without cached raw turns).
 - `TranscriptionProvider` toggle / setting / DTO field. Cloud is now
@@ -2163,34 +2155,34 @@ behaviour, not internal refactors.
   itself stays on Flash.
 
 ### Added
-- **Cloud transcription via Gemini 2.5 Flash** — now the default
+- **Cloud transcription via Gemini 2.5 Flash**, now the default
   provider. Audio uploaded to the Google File API, transcribed with
   built-in speaker labels, deleted after the call. Existing local
   Whisper path stays available as a fallback (`defaults write
   com.3mpq.Corder Corder.transcriptionProvider whisper`).
-- **Speakers clarification banner** — when the diarizer over-counts,
+- **Speakers clarification banner**, when the diarizer over-counts,
   the user sees a "How many people were on the call?" card with
   `Just me / 2 / 3 / 4+` pills. Clicking re-runs diarisation with that
   count pinned. Dismissible per-meeting via X (persists in localStorage).
-- **Toolbar Users-icon button** — circular pill in the transcript
+- **Toolbar Users-icon button**, circular pill in the transcript
   toolbar; toggles the clarify banner with a soft expand/collapse animation.
-- **Transcribing state UI** — recording-card-style banner with a green
+- **Transcribing state UI**, recording-card-style banner with a green
   spinner, live timer, and Stop transcription button that actually
   cancels the in-flight pipeline.
-- **Soft delete with Undo** — deleting any session shows a red toast
+- **Soft delete with Undo**, deleting any session shows a red toast
   with a 5-second countdown and an `Undo` button. The actual REST
   delete only fires after the timer expires.
-- **Empty / failed-transcript banner** — replaces the "Empty transcript"
+- **Empty / failed-transcript banner**, replaces the "Empty transcript"
   text with a card. Failed variant offers Re-transcribe + Delete; ready
   empty offers just Delete.
-- **Recording placeholder** — race-window between Stop and the pipeline
+- **Recording placeholder**, race-window between Stop and the pipeline
   flipping `status` to `transcribing` no longer flashes plain text;
   the rec-card visual stays put.
-- **`expected_other_speakers` migration (v5)** — pinned cluster count
+- **`expected_other_speakers` migration (v5)**, pinned cluster count
   per meeting, surfaced through the clarify banner.
-- **Audio mix peak normalisation** — replaces the unconditional `/N`
+- **Audio mix peak normalisation**, replaces the unconditional `/N`
   divisor with a peak-targeted gain so quiet recordings stay loud.
-- **Section dividers in the sidebar** — hairline + breathing room
+- **Section dividers in the sidebar**, hairline + breathing room
   between TODAY / YESTERDAY / N DAYS AGO buckets.
 - Per-session `Cancel transcription` HTTP endpoint, `Last error` HTTP
   endpoint, surfaced in the UI as a red toast on Gemini quota /
@@ -2203,25 +2195,25 @@ behaviour, not internal refactors.
   Caught and fixed a `customName == "you"` corner case in the
   formatter on first run.
 - **Streaming Dropbox upload** (`URLSession.upload(for:fromFile:)`)
-  and **streaming download** (`URLSession.download(for:)`) — both
+  and **streaming download** (`URLSession.download(for:)`), both
   paths now stay in constant memory regardless of file size, so
   multi-hour recordings won't OOM.
 
 ### Changed
 - **Default transcription provider is now Gemini Flash**, not local
   Whisper. The repo's "local-first" framing has been softened
-  accordingly — users opt out of cloud, not into it. See `SECURITY.md`
+  accordingly, users opt out of cloud, not into it. See `SECURITY.md`
   for the privacy implications.
 - **AVAssetWriter machinery removed** from `CaptureEngine`. The writer
   was already dormant (`-16122` failures across every config we
   tried), but the orphaned ~80 lines around it are now gone.
 - **Right-panel timeline bar height** is now 20 px (was 10), the per-
   speaker activity reads more clearly.
-- **Toast styling** — success / info toasts are now white with a
+- **Toast styling**, success / info toasts are now white with a
   hairline border (matched to the EN / Copy / Delete header pills).
   Error toasts stay red. All toasts slide in/out from the bottom on
   a 280 ms cubic-bezier easing.
-- **Brand accent confirmed as green** (`#1f7a4f`) — every selected /
+- **Brand accent confirmed as green** (`#1f7a4f`), every selected /
   toggle-on / CTA fill in the app uses the accent token now. Black
   is reserved for text and icons.
 - **Re-transcribe flips status synchronously** before enqueuing the
@@ -2230,7 +2222,7 @@ behaviour, not internal refactors.
 
 ### Fixed
 - 14 stale `.js` build artefacts under `Web/src/` were left behind by
-  earlier `tsc --watch` runs. Cleaned up — the source tree is `.tsx`
+  earlier `tsc --watch` runs. Cleaned up, the source tree is `.tsx`
   only now.
 - `Meeting`, `Speaker`, `Segment` structs now default optional fields
   to `nil`. Adding a new optional column no longer breaks every
@@ -2238,29 +2230,29 @@ behaviour, not internal refactors.
 - 16 unused i18n keys removed (`bucket_today / yesterday / week_ago /
   …`, `date_today_at / yesterday_at`, `transcript_empty_ready`,
   provider toggle copy, etc.). Plus `formatTimestamp` utility and
-  the `.tl-play` CSS class — also unreferenced.
+  the `.tl-play` CSS class, also unreferenced.
 - `boost_text` / `boosted_at` no longer appear in the wire DTO; the
   SQL columns persist on disk for compatibility but aren't read or
   written.
 
 ### Removed
-- `/api/meetings/:id/boost` endpoint — superseded by the auto-boost
+- `/api/meetings/:id/boost` endpoint, superseded by the auto-boost
   inside the transcription pipeline (`BoostMode.isEnabled`).
 - `videoSrc()` and `boostMeeting()` exports from the frontend API
-  layer — neither was called.
+  layer, neither was called.
 - Legacy meeting-level `boosted_text` / `boosted_at` columns dropped
   in migration `v6_drop_legacy_boost_columns`. Per-segment `text_boost`
   (v3) is the only path now.
-- `NSUserNotification` API — replaced by `UserNotifications.framework`
+- `NSUserNotification` API, replaced by `UserNotifications.framework`
   via the new `NotificationsService` helper. Banners now ask for
   permission on first launch and route taps back through a
   `UNUserNotificationCenterDelegate`.
-- `Routes.proxyDropboxFile` per-request proxy — replaced by a
+- `Routes.proxyDropboxFile` per-request proxy, replaced by a
   one-time `hydrateDropboxFile` cache restore. After the cold
   fetch, scrubbing reads straight from local disk and never blocks
   another Swifter worker.
 
-## [0.5.0] — 2026-05-03
+## [0.5.0] - 2026-05-03
 
 Snapshot of the state at the moment the repo was made public.
 
@@ -2270,7 +2262,7 @@ Snapshot of the state at the moment the repo was made public.
   WeSpeaker) clusters only the system-audio side. Replaces the previous
   pitch-based k-means that misassigned the user 80% of the time.
 - ScreenCaptureKit **microphone capture** (macOS 15+ shared mic tap),
-  replacing AVAudioEngine — the latter silently lost samples whenever
+  replacing AVAudioEngine, the latter silently lost samples whenever
   Telegram or Zoom held an exclusive mic claim.
 - Microphone TCC permission flow with explicit `AVCaptureDevice.requestAccess`
   and a temporary `setActivationPolicy(.regular)` so the prompt actually
@@ -2283,7 +2275,7 @@ Snapshot of the state at the moment the repo was made public.
 - Hallucination filter for Whisper YouTube-subtitle artefacts ("Субтитры
   сделал DimaTorzok", "Спасибо за просмотр", "Продолжение следует…").
 - Audio player with green progress, hover-time tooltip, ±click scrub.
-- Adaptive timeline cursor — switches to white when contrast against the
+- Adaptive timeline cursor, switches to white when contrast against the
   underlying speaker tick is below WCAG 2.5.
 
 ### Changed
@@ -2295,9 +2287,8 @@ Snapshot of the state at the moment the repo was made public.
   scrollbar via background gradient (no more z-index gymnastics).
 
 ### Fixed
-- Whisper detected Russian as English when `detectLanguage: true` —
-  pinned to `language: "ru"`.
-- Cmd+C on transcript text inside WKWebView would beep — added a real
+- Whisper detected Russian as English when `detectLanguage: true`, pinned to `language: "ru"`.
+- Cmd+C on transcript text inside WKWebView would beep, added a real
   Edit menu in `AppDelegate.installMainMenu` and `e.preventDefault()`
   on the JS keydown bridge.
 - Stop button visibility in dark mode (used `windowBackgroundColor`
@@ -2311,7 +2302,7 @@ Snapshot of the state at the moment the repo was made public.
   `-16122` on every config tested on this macOS build).
 - Pitch-based k-means clustering + per-meeting "boost prose" view.
 
-## [0.1.0] — 2026-04-XX
+## [0.1.0], 2026-04-XX
 
 Initial walking skeleton: ScreenCaptureKit recording, Whisper-CPP via
 WhisperKit, SQLite via GRDB, Vite/React Library window served by Swifter.

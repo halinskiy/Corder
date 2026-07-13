@@ -7,7 +7,7 @@ struct MeetingRepository {
     func insertMeeting(_ m: Meeting) throws {
         try dbq.write { try m.insert($0) }
         // Mirror to Supabase (fire-and-forget). Skipped while
-        // signed out — the local row stays, next sign-in's
+        // signed out, the local row stays, next sign-in's
         // upsert push will catch it up.
         Task { @MainActor in SupabaseSync.upsertMeeting(m) }
     }
@@ -27,7 +27,7 @@ struct MeetingRepository {
     /// Wipe every meeting (plus its speakers/segments via the
     /// ON DELETE CASCADE foreign keys) from the local cache.
     /// Used when a different Supabase account signs in on the
-    /// same Mac — the cloud pull will rebuild the right rows for
+    /// same Mac, the cloud pull will rebuild the right rows for
     /// the new user immediately after. Does NOT push to Supabase
     /// (server data belongs to whichever user owned it; we're
     /// only clearing the local mirror).
@@ -43,7 +43,7 @@ struct MeetingRepository {
 
     /// Sum of recorded seconds since `sinceMs` for each transcription
     /// class. `nil`-class rows (legacy meetings transcribed before the
-    /// v18 column shipped) are counted under "advanced" — we'd rather
+    /// v18 column shipped) are counted under "advanced", we'd rather
     /// over-credit than silently let billable runs slip through.
     /// `archivedAt` rows still count: archive ≠ refund.
     func usageSecondsByClass(sinceMs: Int64) throws -> [String: Int64] {
@@ -76,7 +76,7 @@ struct MeetingRepository {
         }
     }
 
-    /// Sidebar summary row — everything the meetings list needs in a
+    /// Sidebar summary row, everything the meetings list needs in a
     /// single round trip per column. Replaces the N+1 path that fetched
     /// every meeting and then re-queried segments + speakers per row;
     /// at 50+ meetings that was ≥150 SQLite reads on each
@@ -195,7 +195,7 @@ struct MeetingRepository {
     }
 
     /// Stamp `viewed_at` with the current time, but only if it's still
-    /// null — once seen, the row stays seen. Used by the GET detail
+    /// null, once seen, the row stays seen. Used by the GET detail
     /// route to mark a meeting as opened the first time the user looks
     /// at it.
     func markViewedIfNew(meetingId: String, atMs: Int64) throws {
@@ -218,7 +218,7 @@ struct MeetingRepository {
 
     /// Active (non-archived) meetings transcribed before `cutoffMs` that
     /// already have their raw Gemini turns cached. The originals
-    /// (mic.wav + system.wav) can be deleted from disk for those —
+    /// (mic.wav + system.wav) can be deleted from disk for those
     /// re-transcribe will hit the cache and never need the audio again.
     func transcribedWithCacheOlderThan(_ cutoffMs: Int64) throws -> [String] {
         try dbq.read { db in
@@ -273,14 +273,14 @@ struct MeetingRepository {
         // - status=recording WITH a duration: capture finished but the status
         //   write never made it; flip to failed so the user can re-transcribe.
         //
-        // Meetings stuck in status=transcribing are NOT touched here — the
+        // Meetings stuck in status=transcribing are NOT touched here, the
         // caller (AppDelegate) reads them via `stuckTranscribingMeetingIds()`
         // and re-enqueues each one on launch. mic.wav/system.wav are still on
         // disk (we only delete them on archive), so resume is free.
         let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 1000
         try dbq.write { db in
             // Orphaned silent pre-rolls (app died before the user accepted /
-            // declined) were never meant to persist — drop the rows. The
+            // declined) were never meant to persist, drop the rows. The
             // caller deletes their dirs first (see `prerollMeetingIds`).
             try db.execute(sql: "DELETE FROM meetings WHERE status = 'preroll'")
             try db.execute(sql: """
@@ -315,7 +315,7 @@ struct MeetingRepository {
         }
     }
 
-    /// Rows still marked 'recording' — i.e. the process died mid-capture.
+    /// Rows still marked 'recording', i.e. the process died mid-capture.
     /// `RecordingRecovery` inspects each one's audio on disk and either
     /// salvages it (→ transcribing) or leaves it for `resetStuckMeetings`
     /// to drop.
@@ -341,7 +341,7 @@ struct MeetingRepository {
         }
     }
 
-    /// One-time cleanup for "ghost" speakers — rows in the speakers table
+    /// One-time cleanup for "ghost" speakers, rows in the speakers table
     /// that have no segments referencing them. They came from the older
     /// dual-track code path that unconditionally inserted a "Speaker 1"
     /// row even when the mic was silent, and they skewed the clarify
@@ -353,7 +353,7 @@ struct MeetingRepository {
     func purgeOrphanSpeakers() throws -> Int {
         try dbq.write { db in
             // Terminal meetings only: status = 'ready', OR archived (soft
-            // archive sets `archived_at`, NOT a 'archived' status — the old
+            // archive sets `archived_at`, NOT a 'archived' status, the old
             // `status IN ('ready','archived')` had a dead arm since no row
             // ever has status 'archived'). archived_at IS NOT NULL covers
             // archived rows whatever their status.
@@ -383,7 +383,7 @@ struct MeetingRepository {
     }
 
     /// User-edited transcript text. Overwrites `text` directly (the
-    /// original ASR text isn't kept — a re-transcribe regenerates it
+    /// original ASR text isn't kept, a re-transcribe regenerates it
     /// from scratch). `words_json` per-word timings are dropped so the
     /// in-segment karaoke highlight doesn't point at stale word offsets.
     /// Meeting-scoped (like `reassignSegment`) so a stale/forged segment id
@@ -407,7 +407,7 @@ struct MeetingRepository {
 
     /// Merge speaker `from` into `into`: re-point every segment, then drop
     /// the now-empty source speaker row. The diarizer over-splits one
-    /// person into several "Speaker N" — this is the manual fix
+    /// person into several "Speaker N", this is the manual fix
     /// ("Speaker 2 and Speaker 3 are the same person"). Both speakers must
     /// belong to the same meeting; the caller validates that.
     func mergeSpeaker(meetingId: String, from: String, into: String) throws {
@@ -421,7 +421,7 @@ struct MeetingRepository {
     }
 
     /// Targeted UPDATE for the raw-turns cache. We must NOT use the full
-    /// `updateMeeting(_:)` here — that would write every column from a
+    /// `updateMeeting(_:)` here, that would write every column from a
     /// stale local copy of the row, including `status`, which was just
     /// flipped to `.ready` inside mapTurnsToSpeakers. Round-tripping
     /// through `updateMeeting` would silently revert the row back to
@@ -438,7 +438,7 @@ struct MeetingRepository {
         }
     }
 
-    /// Targeted title write — same reason as setRawTurnsCache: the
+    /// Targeted title write, same reason as setRawTurnsCache: the
     /// pipeline's in-memory `meeting` copy can carry a stale status, so
     /// we never round-trip the whole row just to set the title.
     func setTitle(meetingId: String, title: String?) throws {
@@ -454,7 +454,7 @@ struct MeetingRepository {
     /// Persist a recording folder rename: the new human-readable `dir_name` plus
     /// the re-based absolute `video_path` / `audio_path` (stored paths are read
     /// directly in several places, so they must follow the folder). Targeted
-    /// UPDATE — never touches `status` (mirrors setTitle / setTranscribeFinished).
+    /// UPDATE, never touches `status` (mirrors setTitle / setTranscribeFinished).
     func setDirName(meetingId: String, dirName: String?, videoPath: String, audioPath: String) throws {
         try dbq.write { db in
             try db.execute(sql: """
@@ -476,7 +476,7 @@ struct MeetingRepository {
         }
     }
 
-    /// Meetings whose folder is still the plain `<id>` (dir_name NULL) — the
+    /// Meetings whose folder is still the plain `<id>` (dir_name NULL), the
     /// launch pass that renames folders to "<date> <title>" (or just "<date>"
     /// when there's no title yet, e.g. a signed-out guest whose auto-title
     /// hasn't run). Excludes pre-roll (transient, no lasting folder).
@@ -533,7 +533,7 @@ struct MeetingRepository {
     /// WITHOUT a full `updateMeeting` round-trip. A full-struct write here
     /// would carry the stale `transcribe_attempts` value read before
     /// `incrementTranscribeAttempts` ran and silently revert the just-bumped
-    /// retry counter — defeating the retry budget (a row that always fails
+    /// retry counter, defeating the retry budget (a row that always fails
     /// would re-bill the cloud on every launch). Mirrors `setStatus`'s
     /// surgical-write contract.
     func setTranscribeStart(meetingId: String,
@@ -578,7 +578,7 @@ struct MeetingRepository {
         }
     }
 
-    /// Clear the attempt counter — called on a successful transcribe so a
+    /// Clear the attempt counter, called on a successful transcribe so a
     /// row that later fails gets its full retry budget again.
     func resetTranscribeAttempts(meetingId: String) throws {
         try dbq.write { db in
@@ -587,7 +587,7 @@ struct MeetingRepository {
         }
     }
 
-    /// IDs of `.failed` meetings still under the retry budget — the
+    /// IDs of `.failed` meetings still under the retry budget, the
     /// launch-time auto-retry re-enqueues these so a transient failure
     /// (network blip, killed mid-run) recovers without the user clicking
     /// Re-transcribe. `maxAttempts` bounds it so a permanently-broken row

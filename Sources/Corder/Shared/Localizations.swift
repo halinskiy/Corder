@@ -1,11 +1,11 @@
 import Foundation
 
 /// Shared string table for everything that renders outside the Vite/React
-/// frontend — the menu-bar popover, the meeting-invite panel, and any
+/// frontend, the menu-bar popover, the meeting-invite panel, and any
 /// other native chrome that needs to follow `AppContext.language`.
 ///
-/// Keep keys short and topical (`invite_subtitle`, not `meeting_invite_record_question`)
-/// — the dictionary stays readable that way.
+/// Keep keys short and topical (`invite_subtitle`, not `meeting_invite_record_question`),
+/// the dictionary stays readable that way.
 enum L {
     static func t(_ key: String, lang: String) -> String {
         let dict = lang == "ru" ? ru : en
@@ -28,7 +28,7 @@ enum L {
         "invite_tap_hint": "Tap to start recording",
         "invite_not_now": "Not now",
         // Loading state shown after the user accepts an invite (or
-        // hits manual Start) while the capture engine warms up — gives
+        // hits manual Start) while the capture engine warms up, gives
         // the user feedback that something is happening between click
         // and the floating blob appearing.
         "starting_recording": "Starting recording…",
@@ -40,7 +40,7 @@ enum L {
         "notif_ready_body": "Open the library to view it.",
         "notif_silent_title": "No sound recorded",
         "notif_silent_body": "Mic was silent. Check device and permissions.",
-        // Short by design — it's a passing toast/notification, not a
+        // Short by design, it's a passing toast/notification, not a
         // help article. The library shows the row in Archive; if the
         // user cares why, the Settings panel covers Microphone /
         // device tips. Keep this to one short clause.
@@ -48,7 +48,7 @@ enum L {
         "notif_silent_archived_body": "Nothing was captured.",
         // Surfaced inside the menu-bar popover (not as a system
         // notification) when recording has been going for > 10 min
-        // without any audible speech. Body stays short — the popover
+        // without any audible speech. Body stays short, the popover
         // is 320 pt wide and the warning sits above the Stop button.
         "silence_warning_title": "Still recording",
         "silence_warning_body": "No voice for 10 min. Still recording?",
@@ -62,12 +62,12 @@ enum L {
         "notif_net_lost_title": "No internet",
         "notif_net_lost_body": "Recording without internet. We'll transcribe later.",
         // Pill that appears under Start/Stop in the popover while the
-        // on-device Whisper model is pre-fetching. Just the label —
+        // on-device Whisper model is pre-fetching. Just the label
         // the progress fill is visual, no narration needed.
         "whisper_prefetch_label": "Downloading model",
         // Single, deliberately-plain failure toast for the entire
-        // transcription pipeline. Whatever broke — Whisper local,
-        // Whisper cloud, Gemini, network, auth — the user sees this
+        // transcription pipeline. Whatever broke, Whisper local,
+        // Whisper cloud, Gemini, network, auth, the user sees this
         // exact line. Power users hit the 🐞 button in the toolbar
         // to send logs.
         "transcribe_failed_title": "Transcription error. Send a report.",
@@ -111,8 +111,8 @@ enum L {
     ]
 
     /// Convenience for native notifications: resolves against the
-    /// persisted language (these fire from non-MainActor contexts —
-    /// SleepWatchdog / NetworkMonitor — so we read the thread-safe
+    /// persisted language (these fire from non-MainActor contexts
+    /// SleepWatchdog / NetworkMonitor, so we read the thread-safe
     /// `AppLanguage.current`, not `AppContext.shared.language`).
     static func notif(_ key: String) -> String {
         t(key, lang: AppLanguage.current)

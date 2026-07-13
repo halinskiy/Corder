@@ -2,7 +2,7 @@ import React from "react";
 
 /// One custom scrollbar, shared by the sidebar list and the transcript
 /// pane. WebKit pins a native `::-webkit-scrollbar` inside the scroll
-/// box, so it can NEVER sit centred on the sidebar/main divider — the
+/// box, so it can NEVER sit centred on the sidebar/main divider, the
 /// long-running "scrollbar is left of the line" bug. This draws our own
 /// thin thumb as a `position: fixed` element whose horizontal CENTRE is
 /// placed exactly on the scroll container's right edge (= the divider),
@@ -10,7 +10,7 @@ import React from "react";
 /// is hidden via the `.ovsb-scroll` class on the container.
 ///
 /// Fixed positioning (recomputed on scroll/resize/content-change) means
-/// zero layout restructuring of the existing panes — the only structural
+/// zero layout restructuring of the existing panes, the only structural
 /// requirement is that the container carry `.ovsb-scroll`.
 export function OverlayScrollbar({
   scrollRef,
@@ -23,7 +23,7 @@ export function OverlayScrollbar({
   /// the theme View-Transition snapshots (it would blink at the wipe's
   /// start/end). A name makes WebKit capture it as an independent group
   /// so it rides the transition instead. MUST be unique per mounted
-  /// instance — a duplicate name aborts the entire transition, so the
+  /// instance, a duplicate name aborts the entire transition, so the
   /// shared `.ovsb-thumb` class can't carry it; each call site passes
   /// its own (e.g. "corder-sb-list", "corder-sb-transcript").
   name?: string;
@@ -90,7 +90,7 @@ export function OverlayScrollbar({
     const ro = new ResizeObserver(schedule);
     ro.observe(el);
     // Content height can change without a resize (list filter, transcript
-    // load, banner open) — watch the subtree too.
+    // load, banner open), watch the subtree too.
     const mo = new MutationObserver(schedule);
     mo.observe(el, { childList: true, subtree: true, characterData: true });
     window.addEventListener("resize", schedule);

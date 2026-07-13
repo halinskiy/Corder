@@ -3,7 +3,7 @@ import FluidAudio
 
 /// One speaker-labeled time span produced by on-device diarization.
 /// `speakerId` is FluidAudio's globally-stable label for the whole
-/// recording (e.g. "Speaker 1") — unlike Gemini's per-chunk relabeling,
+/// recording (e.g. "Speaker 1"), unlike Gemini's per-chunk relabeling,
 /// the same physical voice keeps the same id across the entire file.
 struct DiarizedSegment: Sendable {
     let speakerId: String
@@ -18,7 +18,7 @@ struct DiarizedSegment: Sendable {
 /// speakers, drifted labels across long audio, and forced the crude
 /// post-hoc top-N collapse in `mapInPersonTurns`. Here the
 /// "how many people?" answer is fed as a HARD count constraint to the
-/// clustering stage BEFORE it runs — the correct place for it.
+/// clustering stage BEFORE it runs, the correct place for it.
 ///
 /// `OfflineDiarizerManager` is a non-Sendable `final class`; we confine
 /// it to this actor so concurrent meetings can't race its model state.
@@ -37,7 +37,7 @@ actor SpeakerDiarizer {
     /// Diarize a 16 kHz mono WAV. `numSpeakers`, when known from the
     /// clarify banner, is passed as an exact constraint. nil → let VBx
     /// estimate. Returns spans sorted by start time. Throws on missing
-    /// models / no-network-first-run / no speech — callers fall back to
+    /// models / no-network-first-run / no speech, callers fall back to
     /// the legacy Gemini-diarize path so a meeting never hard-fails
     /// worse than before this existed.
     func diarize(wavURL: URL, numSpeakers: Int?) async throws -> [DiarizedSegment] {

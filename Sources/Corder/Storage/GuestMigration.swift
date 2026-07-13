@@ -31,7 +31,7 @@ enum GuestMigration {
     private static let mergedTables = ["meetings", "speakers", "segments"]
 
     /// Drain `_guest` into the account folder for `email`. No-op when the guest
-    /// bucket is absent or empty (the common case after the first drain — the
+    /// bucket is absent or empty (the common case after the first drain, the
     /// guest DB is deleted on success, so steady-state launches pay one
     /// `fileExists` check).
     static func drainIntoAccount(forEmail email: String) {
@@ -44,7 +44,7 @@ enum GuestMigration {
         let guestRoot = accountsRoot.appendingPathComponent("_guest", isDirectory: true)
         let accountRoot = accountsRoot.appendingPathComponent(accountID, isDirectory: true)
 
-        // (The on-device model is no longer migrated here — it's MACHINE-WIDE
+        // (The on-device model is no longer migrated here, it's MACHINE-WIDE
         // now, `supportRoot/models`, shared across guest + every account, so a
         // sign-in/out never re-downloads it. See AppPaths.migrateModelToSharedIfNeeded.)
         let guestDB = guestRoot.appendingPathComponent("corder.db")
@@ -91,7 +91,7 @@ enum GuestMigration {
             // The recording FOLDER name is `meetings.dir_name` ("<date> <title>",
             // 0.15.29), NOT the bare `<id>`. Moving by `<id>` silently found
             // nothing (the folder is named `<date> <title>`), so the audio never
-            // moved and `clearGuestData` then hard-DELETED it — the sign-in
+            // moved and `clearGuestData` then hard-DELETED it, the sign-in
             // data-loss bug. Move by dir_name; fall back to `<id>` for legacy
             // folders that were never renamed.
             let guestDirNames: [String: String] = (try? guestQ.read { db -> [String: String] in
@@ -124,7 +124,7 @@ enum GuestMigration {
                                    arguments: [id])
                     try db.execute(sql: "INSERT OR IGNORE INTO speakers SELECT * FROM guestdb.speakers WHERE meeting_id = ?",
                                    arguments: [id])
-                    // Drop the colliding INTEGER id — let SQLite assign a fresh
+                    // Drop the colliding INTEGER id, let SQLite assign a fresh
                     // rowid; the segments_ai trigger fills segments_fts.
                     try db.execute(sql: """
                         INSERT INTO segments (meeting_id, speaker_id, start_ms, end_ms, text, words_json)
@@ -135,7 +135,7 @@ enum GuestMigration {
             }
 
             // Re-base the stored absolute video/audio paths onto the account
-            // folder — they were copied verbatim still pointing at
+            // folder, they were copied verbatim still pointing at
             // `_guest/recordings/...`, so playback/transcription would 404. The
             // folder NAME is unchanged (moved by dir_name above), so a plain
             // prefix swap of the recordings root is exact.
@@ -154,11 +154,11 @@ enum GuestMigration {
             FileLogger.log("GuestMigration: drained \(toMerge.count) guest meeting(s) into accounts/\(accountID)/ for \(email)")
             clearGuestData(fm: fm, guestDB: guestDB, guestRoot: guestRoot, guestRecordings: guestRecordings)
         } catch {
-            FileLogger.log("GuestMigration: drain failed for \(email): \(error) — guest bucket left intact for retry")
+            FileLogger.log("GuestMigration: drain failed for \(email): \(error), guest bucket left intact for retry")
         }
     }
 
-    /// Clear the guest bucket AFTER a successful drain — but SAFELY. The old
+    /// Clear the guest bucket AFTER a successful drain, but SAFELY. The old
     /// version force-removed the whole recordings dir, which is exactly how a
     /// folder that failed to move (or was looked up by the wrong name) got its
     /// audio hard-DELETED. Now: if ANY recording folder is still present, DELETE
@@ -170,7 +170,7 @@ enum GuestMigration {
             let remaining = ((try? fm.contentsOfDirectory(atPath: guestRecordings.path)) ?? [])
                 .filter { $0 != ".DS_Store" }
             if !remaining.isEmpty {
-                FileLogger.log("GuestMigration: \(remaining.count) guest recording folder(s) still present — NOT deleting anything (audio kept for recovery)")
+                FileLogger.log("GuestMigration: \(remaining.count) guest recording folder(s) still present, NOT deleting anything (audio kept for recovery)")
                 return
             }
             try? fm.removeItem(at: guestRecordings)

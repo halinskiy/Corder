@@ -8,8 +8,8 @@ import Foundation
 /// their library. Sign-in `pullAll` reconciles the other way.
 ///
 /// Why hybrid instead of a full repository swap:
-/// `MeetingRepository` has 30+ specialised methods — `setTitle`,
-/// `setSummary`, `setRawTurnsCache`, `setSegmentBoost`, etc. — and
+/// `MeetingRepository` has 30+ specialised methods, `setTitle`,
+/// `setSummary`, `setRawTurnsCache`, `setSegmentBoost`, etc., and
 /// rewriting them all on a network round-trip would hurt UX
 /// (every typed letter would await Postgres) and lose offline
 /// support. Hybrid keeps local reads instant and only pays the
@@ -18,12 +18,12 @@ import Foundation
 ///
 /// What's NOT synced (intentional, for now):
 /// - `videoPath` / `audioPath` (local filesystem paths). The cloud
-///   replacement is `recordings_meta` rows + Storage object keys —
+///   replacement is `recordings_meta` rows + Storage object keys
 ///   different shape, mapped at upload time.
 /// - `dropbox_*` columns. Dropbox path was the legacy archive sink;
 ///   the Storage bucket replaces it. Nothing reads dropbox_* in the
 ///   new flow.
-/// - `gemini_raw_turns` / `audio_hash`. Cache fields — they exist
+/// - `gemini_raw_turns` / `audio_hash`. Cache fields, they exist
 ///   to avoid re-transcribing the SAME audio on the same Mac. After
 ///   a cross-device install the audio file isn't present locally
 ///   anyway, so the cache wouldn't help.
@@ -35,14 +35,14 @@ enum SupabaseSync {
     static func push(_ work: @escaping () async throws -> Void) {
         // SKIP entirely when signed out. A guest has no Supabase session, so
         // every write lands as `anon` and the RLS policy rejects it with 42501
-        // ("new row violates row-level security policy for table speakers") —
+        // ("new row violates row-level security policy for table speakers")
         // pure log noise that made testers think their recording failed to
         // save (it didn't; local GRDB is the source of truth and is untouched).
         // Cloud mirroring only makes sense once there's an authenticated user.
         guard userId() != nil else { return }
         Task.detached {
             do { try await work() }
-            catch { FileLogger.log("SupabaseSync: push failed — \(error)") }
+            catch { FileLogger.log("SupabaseSync: push failed, \(error)") }
         }
     }
 
@@ -146,7 +146,7 @@ enum SupabaseSync {
 
     // MARK: - Mutations (write-through)
 
-    /// Insert OR update a meeting on the server. Idempotent — uses
+    /// Insert OR update a meeting on the server. Idempotent, uses
     /// Postgres `on conflict (id) do update`. Safe to call repeatedly.
     static func upsertMeeting(_ m: Meeting) {
         guard let row = toRow(m) else { return }
@@ -204,7 +204,7 @@ enum SupabaseSync {
     }
 
     /// Replace the segments list for a meeting. Same wholesale
-    /// pattern as `replaceSpeakers` — the local pipeline writes the
+    /// pattern as `replaceSpeakers`, the local pipeline writes the
     /// entire transcript at once after each run.
     static func replaceSegments(_ segments: [Segment], meetingId: String,
                                 speakerIdByLocalId: [String: UUID]) {
@@ -244,7 +244,7 @@ enum SupabaseSync {
     /// land before their referenced speakers (which is exactly the
     /// foreign-key violation 23503 we kept seeing on every successful
     /// transcribe: `segments_speaker_id_fkey`). The two helpers were
-    /// independent `push` calls before — fire-and-forget, no
+    /// independent `push` calls before, fire-and-forget, no
     /// ordering guarantee.
     static func replaceSpeakersAndSegments(
         speakers: [Speaker],
@@ -352,13 +352,13 @@ enum SupabaseSync {
         // from the cloud mirror).
         let cloudAudioEnabled = UserDefaults.standard.object(forKey: "Corder.set.cloudAudioBackup") as? Bool ?? false
         if !cloudAudioEnabled {
-            FileLogger.log("SupabaseSync.uploadRecording(\(kind)) skipped — cloud audio backup disabled pending R2 migration")
+            FileLogger.log("SupabaseSync.uploadRecording(\(kind)) skipped, cloud audio backup disabled pending R2 migration")
             return nil
         }
         guard let uid = userId() else { return nil }
         let ext = fileURL.pathExtension
         // RLS on `storage.objects` compares the first path segment to
-        // `auth.uid()::text` — Postgres renders UUIDs LOWERCASE. Swift
+        // `auth.uid()::text`, Postgres renders UUIDs LOWERCASE. Swift
         // `UUID.uuidString` returns UPPERCASE-HYPHENED, which made
         // every upload fail with "new row violates row-level security
         // policy" until we matched the case here.
@@ -394,7 +394,7 @@ enum SupabaseSync {
     /// (meetings cascade-clear speakers / segments / summaries /
     /// recordings_meta via FK; profile row goes too) plus every
     /// audio/video object under `recordings/<uid>/`. The
-    /// `auth.users` row itself stays — Supabase Free doesn't let a
+    /// `auth.users` row itself stays, Supabase Free doesn't let a
     /// regular client delete its own auth row, only the
     /// service-role key can. The user's PII is gone either way;
     /// the dangling auth row carries only the email + sub claim
@@ -419,7 +419,7 @@ enum SupabaseSync {
                       options: SearchOptions(limit: 1000, offset: 0))
             // The Supabase list() returns FILE entries under that
             // prefix. We need to recurse into subfolders (one per
-            // meeting). Cheap recursion — list each subfolder and
+            // meeting). Cheap recursion, list each subfolder and
             // batch-remove the leaves.
             var paths: [String] = []
             for entry in listed {
@@ -441,7 +441,7 @@ enum SupabaseSync {
                 FileLogger.log("SupabaseSync.deleteEverything: removed \(paths.count) storage objects")
             }
         } catch {
-            FileLogger.log("SupabaseSync.deleteEverything: storage cleanup failed — \(error)")
+            FileLogger.log("SupabaseSync.deleteEverything: storage cleanup failed, \(error)")
         }
 
         // Local clear: forget the sticky flags so a re-sign-in
@@ -470,17 +470,17 @@ enum SupabaseSync {
         // Backfill is GATED behind an explicit user opt-in. On a
         // dev box where several Google accounts share one local
         // SQLite, the first sign-in shouldn't silently claim every
-        // historical recording as that account's — the user has to
+        // historical recording as that account's, the user has to
         // say "yes, these are mine". One-user-one-Mac users hit
         // the toggle once and forget.
         guard AppSettings.cloudBackfillOptedIn else {
-            FileLogger.log("SupabaseSync.backfill: skipped — user has not opted in (set Corder.user.cloudBackfillOptIn to true)")
+            FileLogger.log("SupabaseSync.backfill: skipped, user has not opted in (set Corder.user.cloudBackfillOptIn to true)")
             return
         }
         FileLogger.log("SupabaseSync.backfill: pushing \(meetings.count) local meetings to cloud")
         // 50 MB ceiling: Free-tier Supabase Storage caps single-shot
         // REST uploads around there. Bigger files need resumable
-        // upload (TUS) — out of scope for backfill, skipped with a
+        // upload (TUS), out of scope for backfill, skipped with a
         // log line so we know which files to chase later.
         let uploadCeilingBytes: Int64 = 40 * 1024 * 1024
         for m in meetings {
@@ -497,7 +497,7 @@ enum SupabaseSync {
                     .upsert(row, onConflict: "id")
                     .execute()
             } catch {
-                FileLogger.log("SupabaseSync.backfill: meeting \(m.id) upsert failed — \(error)")
+                FileLogger.log("SupabaseSync.backfill: meeting \(m.id) upsert failed, \(error)")
                 continue
             }
             let speakers = (try? repo.speakers(forMeeting: m.id)) ?? []
@@ -526,7 +526,7 @@ enum SupabaseSync {
                         .execute()
                 }
             } catch {
-                FileLogger.log("SupabaseSync.backfill: speakers for \(m.id) failed — \(error)")
+                FileLogger.log("SupabaseSync.backfill: speakers for \(m.id) failed, \(error)")
                 continue
             }
             do {
@@ -555,9 +555,9 @@ enum SupabaseSync {
                     }
                 }
             } catch {
-                FileLogger.log("SupabaseSync.backfill: segments for \(m.id) failed — \(error)")
+                FileLogger.log("SupabaseSync.backfill: segments for \(m.id) failed, \(error)")
             }
-            // Audio files — skip huge ones (Free-tier REST upload cap).
+            // Audio files, skip huge ones (Free-tier REST upload cap).
             let dir = AppPaths.recordingDir(for: m.id)
             let fm = FileManager.default
             for (kind, name) in [("mix", "audio.wav"),
@@ -567,7 +567,7 @@ enum SupabaseSync {
                 guard fm.fileExists(atPath: file.path) else { continue }
                 let size = (try? fm.attributesOfItem(atPath: file.path)[.size] as? Int64) ?? 0
                 if size > uploadCeilingBytes {
-                    FileLogger.log("SupabaseSync.backfill: skipping \(m.id)/\(kind) — \(size) bytes > 40MB ceiling (needs resumable upload)")
+                    FileLogger.log("SupabaseSync.backfill: skipping \(m.id)/\(kind), \(size) bytes > 40MB ceiling (needs resumable upload)")
                     continue
                 }
                 await uploadRecording(meetingId: m.id, kind: kind,
@@ -585,14 +585,14 @@ enum SupabaseSync {
     /// path. Local-only fields (videoPath/audioPath, dropbox_*,
     /// gemini_raw_turns) are left alone for existing rows; brand-new
     /// rows from the cloud get empty paths (they live in Storage
-    /// only — playback will hit the Storage signed-URL path).
+    /// only, playback will hit the Storage signed-URL path).
     static func pullAll(repo: MeetingRepository) async {
         guard let uid = userId() else { return }
 
         // NOTE: we used to wipe the local cache on account-switch
         // to keep account A's recordings invisible after B signs
         // in on the same Mac. Rolled back because the wipe is
-        // DESTRUCTIVE — the local SQLite is the only home for
+        // DESTRUCTIVE, the local SQLite is the only home for
         // pre-Supabase recordings, and account-switch is a normal
         // dev/test workflow on a shared Mac. Cross-user isolation
         // for the typical "one user per Mac" case is enforced
@@ -602,7 +602,7 @@ enum SupabaseSync {
         // can come back later if it's actually needed.
         let uidString = uid.uuidString
         if AppSettings.lastSyncedUserId != uidString {
-            FileLogger.log("SupabaseSync.pullAll: user changed (\(AppSettings.lastSyncedUserId ?? "nil") → \(uidString)) — keeping local cache, resetting backfill flag")
+            FileLogger.log("SupabaseSync.pullAll: user changed (\(AppSettings.lastSyncedUserId ?? "nil") → \(uidString)), keeping local cache, resetting backfill flag")
             AppSettings.setCloudBackfillDone(false)
             AppSettings.setLastSyncedUserId(uidString)
         }
@@ -648,7 +648,7 @@ enum SupabaseSync {
                 }
             }
         } catch {
-            FileLogger.log("SupabaseSync.pullAll: fetch failed — \(error)")
+            FileLogger.log("SupabaseSync.pullAll: fetch failed, \(error)")
         }
     }
 }

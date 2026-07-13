@@ -7,7 +7,7 @@ import Foundation
 /// When the user is on SPEAKERS, the far-end voice plays out loud and
 /// bleeds back into `mic.wav`. The dual-track pipeline then transcribes
 /// that bleed as if the USER said it (and, cross-language, the local
-/// Whisper even renders the bleed in the user's language — the
+/// Whisper even renders the bleed in the user's language, the
 /// "your friend's English shows up as your Russian" bug). The dominance
 /// gate is a post-hoc band-aid that misses loud bleed.
 ///
@@ -28,14 +28,14 @@ import Foundation
 /// in user-only regions.
 ///
 /// NOT a live-capture change: this runs in the pipeline before
-/// transcription and never touches the audio route — sidestepping the
+/// transcription and never touches the audio route, sidestepping the
 /// VoIP-mode / Bluetooth-HFP / bogus-channel-format problems that got the
 /// macOS Voice-Processing (VPIO) capture path reverted (see CaptureEngine).
 enum EchoSuppressor {
     private static let sampleRate: Double = 16000
     private static let fftSize = 512
     private static let hop = 128
-    // Suppression tuning — validated on a real speaker recording.
+    // Suppression tuning, validated on a real speaker recording.
     private static let lambda: Float = 0.92    // coupling-estimate smoothing
     private static let overSub: Float = 1.7    // spectral over-subtraction
     private static let gainFloor: Float = 0.08 // keep a little signal (no holes)
@@ -46,7 +46,7 @@ enum EchoSuppressor {
     /// Produce a bleed-suppressed copy of `micURL` (16 kHz mono WAV) using
     /// `systemURL` as the far-end reference. Returns the cleaned file URL,
     /// or nil when there's nothing to do (missing input, no measurable
-    /// coupling, or a processing failure — the caller then uses the raw
+    /// coupling, or a processing failure, the caller then uses the raw
     /// mic). `outURL` is where the cleaned WAV is written.
     static func suppress(micURL: URL, systemURL: URL, outURL: URL) -> URL? {
         guard let mic = loadMono16k(micURL), !mic.isEmpty,
@@ -59,10 +59,10 @@ enum EchoSuppressor {
         // 1. Bulk delay + coupling strength via normalised FFT cross-correlation.
         guard let (delay, corr) = bulkDelay(mic: micA, ref: ref) else { return nil }
         if corr < minCorrelation {
-            FileLogger.log("EchoSuppressor: corr=\(String(format: "%.3f", corr)) < \(minCorrelation) — no bleed (headphones/BT), skipping")
+            FileLogger.log("EchoSuppressor: corr=\(String(format: "%.3f", corr)) < \(minCorrelation), no bleed (headphones/BT), skipping")
             return nil
         }
-        FileLogger.log("EchoSuppressor: delay=\(delay) (\(String(format: "%.0f", Double(delay)/sampleRate*1000))ms) corr=\(String(format: "%.3f", corr)) — suppressing")
+        FileLogger.log("EchoSuppressor: delay=\(delay) (\(String(format: "%.0f", Double(delay)/sampleRate*1000))ms) corr=\(String(format: "%.3f", corr)), suppressing")
         // Delay-align the reference. Clamp `delay` to < n: on a very short
         // recording (quick start/stop) the cross-correlation lag can exceed
         // the sample count, and an unclamped `ref[0..<(n - delay)]` is a
@@ -120,7 +120,7 @@ enum EchoSuppressor {
             var yr = [Float](repeating: 0, count: nb)
             var yi = [Float](repeating: 0, count: nb)
             // Bin 0 carries DC in .re and Nyquist in .im (vDSP packing); we
-            // treat it as one complex bin — both carry negligible speech
+            // treat it as one complex bin, both carry negligible speech
             // energy, so the approximation is inaudible and it keeps the
             // round-trip exact.
             for k in 0..<nb {
@@ -210,7 +210,7 @@ enum EchoSuppressor {
         vDSP_measqv(Array(mic[0..<chunk]), 1, &em, vDSP_Length(chunk))
         vDSP_measqv(Array(ref[0..<chunk]), 1, &er, vDSP_Length(chunk))
         let denom = sqrtf(em * Float(chunk)) * sqrtf(er * Float(chunk)) * Float(2 * nfft) + 1e-9
-        // Cap the lag by the actual chunk length too — on a short recording
+        // Cap the lag by the actual chunk length too, on a short recording
         // nfft (next pow2 of 2*chunk) can exceed the sample count, and a lag
         // bigger than `n` would make the caller's delay-align slice crash.
         let maxLag = min(nfft - 1, chunk - 1, Int(maxLagMs / 1000 * sampleRate))

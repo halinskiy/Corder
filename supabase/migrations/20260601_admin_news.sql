@@ -1,4 +1,4 @@
--- Admin + News rollout — June 2026.
+-- Admin + News rollout, June 2026.
 --
 -- 1. `news_items` table backs the Library top-banner. Each row carries
 --    enough fields to drive the `NewsBanner` React component
@@ -6,7 +6,7 @@
 --    dismissible). `starts_at` / `ends_at` is the live-window, used by
 --    the active-news view so the worker just returns rows that are
 --    currently in window AND not drafts.
--- 2. `news_active` view is the public read surface — any authenticated
+-- 2. `news_active` view is the public read surface, any authenticated
 --    user can SELECT from it. INSERT / UPDATE / DELETE on `news_items`
 --    itself is gated to admins via RLS.
 -- 3. `is_admin()` helper reads `auth.jwt() -> 'app_metadata' -> 'role'`
@@ -37,7 +37,7 @@ comment on function public.is_admin() is
   'True when the requesting JWT has app_metadata.role = "admin". Used by RLS policies on admin-only tables.';
 
 -- ---------------------------------------------------------------------
--- 2) news_items — single table for both live banners + drafts + history.
+-- 2) news_items, single table for both live banners + drafts + history.
 -- ---------------------------------------------------------------------
 create table if not exists public.news_items (
   id                uuid primary key default gen_random_uuid(),
@@ -57,7 +57,7 @@ create table if not exists public.news_items (
   -- A row is "active" iff now() is between starts_at and ends_at.
   starts_at         timestamptz not null default now(),
   ends_at           timestamptz not null default (now() + interval '7 days'),
-  -- "all" | "free" | "pro" | "max" — wire visibility per tier later.
+  -- "all" | "free" | "pro" | "max", wire visibility per tier later.
   audience          text not null default 'all'
                        check (audience in ('all', 'free', 'pro', 'max')),
   dismissible       boolean not null default true,
@@ -102,7 +102,7 @@ create index if not exists news_items_created_at_idx
   on public.news_items (created_at desc);
 
 -- ---------------------------------------------------------------------
--- 4) RLS — table is admin-write, public-read filtered through a view.
+-- 4) RLS, table is admin-write, public-read filtered through a view.
 -- ---------------------------------------------------------------------
 alter table public.news_items enable row level security;
 
@@ -116,8 +116,7 @@ create policy news_items_admin_all
 
 -- Read access for everyone goes through the `news_active` view below.
 -- We still grant SELECT on the raw table to anon/authenticated so the
--- view's underlying query works even when called by a non-admin —
--- the view itself adds the "in window AND not draft" filter.
+-- view's underlying query works even when called by a non-admin, -- the view itself adds the "in window AND not draft" filter.
 drop policy if exists news_items_authenticated_read on public.news_items;
 create policy news_items_authenticated_read
   on public.news_items

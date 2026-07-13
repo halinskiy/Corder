@@ -2,7 +2,7 @@
 
 > Live source-of-truth. Update when adding modules / endpoints / pipeline
 > stages. The high-level shape changes rarely; flip from "what" to "why"
-> when in doubt — the code already shows "what".
+> when in doubt, the code already shows "what".
 
 ## Process model
 
@@ -13,13 +13,13 @@ flips temporarily for permission prompts and the Library window).
 Inside the process there are four independent runtime concerns that
 communicate via shared state in `AppContext`:
 
-1. **Capture loop** — `CaptureEngine` driven by ScreenCaptureKit
+1. **Capture loop**, `CaptureEngine` driven by ScreenCaptureKit
    callbacks (system audio) + AVAudioEngine input tap (microphone).
-2. **HUD pill** — `RecordingHUDPanel` (NSPanel, all Spaces). Renders a
+2. **HUD pill**, `RecordingHUDPanel` (NSPanel, all Spaces). Renders a
    real-time frequency-spectrum equalizer fed by `RecordingLevelMeter`.
-3. **HTTP server** — Swifter, serves the React frontend + JSON API on
+3. **HTTP server**, Swifter, serves the React frontend + JSON API on
    `http://127.0.0.1:<random-port>/`.
-4. **UI** — SwiftUI popover (status-bar) + AppKit `NSWindow` hosting a
+4. **UI**, SwiftUI popover (status-bar) + AppKit `NSWindow` hosting a
    WKWebView that loads the local server URL.
 
 ```
@@ -118,7 +118,7 @@ App/                Entry point, app delegate, recording state machine
 └ UpdateController.swift    Sparkle 2 wrapper (hand-built SPUUpdater)
 
 Update/
-├ CorderUpdateDriver.swift  custom SPUUserDriver — drives the React
+├ CorderUpdateDriver.swift  custom SPUUserDriver, drives the React
 │                           update modal via UpdateBridge; terminates
 │                           the host in ONE place (showInstallingUpdate)
 │                           so the install never double-terminates.
@@ -130,7 +130,7 @@ Capture/
 │                           32BGRA input, height-capped at 720p by
 │                           default / 4K for signed-in high-res, bitrate
 │                           scaled with height; the .audio → system_sck.wav
-│                           BT backup was DROPPED in 0.15.22 — dead silence),
+│                           BT backup was DROPPED in 0.15.22, dead silence),
 │                           AVAudioEngine.installTap on default input
 │                           for mic (4-attempt init retry around the
 │                           -10868 audio-device-change failure),
@@ -287,7 +287,7 @@ Recording active:
 Stop pressed → TranscriptionPipeline.enqueue:
 
   1. AudioMixer.produceMixIfNeeded(system.wav, mic.wav) → mix.wav
-     (peak-normalised to 0.98, not /N — preserves dynamic range).
+     (peak-normalised to 0.98, not /N, preserves dynamic range).
      Used for playback + as the legacy single-stream fallback.
 
   2. Cache lookup:
@@ -353,7 +353,7 @@ Stop pressed → TranscriptionPipeline.enqueue:
      YouTube outros.
 
   6. setRawTurnsCache(meetingId, gemini_raw_turns, audio_hash)
-     (targeted UPDATE — does NOT touch status).
+     (targeted UPDATE, does NOT touch status).
      Then INSERT/UPDATE segments/speakers; the mappers finalize the row
      via setTranscribeFinished (targeted UPDATE of status → .ready +
      transcribed_at only), NOT a full updateMeeting() from a stale
@@ -365,7 +365,7 @@ Optional, fire-and-forget after step 6:
      (only if BoostMode.isEnabled)
   8. DropboxService.upload(mix.wav + mic.wav + system.wav) →
      meetings.dropbox_audio_path; local copies deleted only on
-     hard-delete (the archive bin's "Delete forever") — re-transcribe
+     hard-delete (the archive bin's "Delete forever"), re-transcribe
      needs the originals.
 ```
 
@@ -426,32 +426,32 @@ meeting-level prose dump but were replaced in v3 by per-segment
 `text_boost` (the prose-dump UI couldn't reuse the timeline, speaker
 grouping, or scrub-to-segment). v6 removes them.
 
-`expected_other_speakers` (v5) — user-provided hint from the clarify
+`expected_other_speakers` (v5), user-provided hint from the clarify
 banner. `null` = auto-detect, `0` = "just me, skip diarisation", positive
 N = pin Gemini's prompt to N other speakers.
 
-`gemini_raw_turns` + `audio_hash` (v7) — raw transcription cache. The
+`gemini_raw_turns` + `audio_hash` (v7), raw transcription cache. The
 hash format encodes which file(s) were sent so re-transcribing the
 same audio (post-archive, post-clarify-banner) costs zero File API calls.
 
-`archived_at` (v8) — soft-archive timestamp. `listMeetings()` filters
+`archived_at` (v8), soft-archive timestamp. `listMeetings()` filters
 `archived_at IS NULL`. `purgeExpiredArchive()` runs on launch and
 hard-deletes rows where `archived_at < now − 7 d`.
 
-`viewed_at` (v16) — ms epoch when the user first fetched the
+`viewed_at` (v16), ms epoch when the user first fetched the
 `/api/meetings/:id` endpoint with the row already in `.ready` state.
 `MeetingRepository.markViewedIfNew(meetingId:atMs:)` stamps it; the
 detail route is the only caller. The sidebar + Dashboard Recent
 render the title in `--accent-gold` while `viewed_at IS NULL` for a
-ready meeting — that's the "unseen new transcript" affordance. The
+ready meeting, that's the "unseen new transcript" affordance. The
 v16 migration seeds existing rows with `ended_at` so nothing pre-existing
 shows up as "unseen" on first launch after upgrade.
 
 ## Cancellation model
 
 `TranscriptionPipeline` keeps `activeTasks: [meetingId: Task<Void, Never>]`.
-- `enqueue(meetingId:)` — wraps `transcribe` in a tracked Task.
-- `cancel(meetingId:)` — `task.cancel()` + flips meeting to `.failed`
+- `enqueue(meetingId:)`, wraps `transcribe` in a tracked Task.
+- `cancel(meetingId:)`, `task.cancel()` + flips meeting to `.failed`
   in the DB **synchronously**, so the UI flips to the failed banner
   immediately. The underlying Gemini call may keep running briefly;
   we ignore its eventual result via the `catch is CancellationError`
@@ -465,11 +465,11 @@ There are two paths now. Dual-track is the default; the legacy path
 exists for archived rows whose original mic/system tracks were already
 deleted before the cache was introduced.
 
-### Dual-track (default — when both `mic.wav` and `system.wav` are present)
+### Dual-track (default, when both `mic.wav` and `system.wav` are present)
 
 ```
 mic.wav   → Gemini, mode=.single
-              prompt: "This audio is one person speaking — always
+              prompt: "This audio is one person speaking, always
               label them 'Speaker 1'. Never invent additional speakers."
               all turns → userSpeakerId
 
@@ -486,7 +486,7 @@ path:
 
 1. **Silence-misattribution.** When the user is quiet but the remote
    side is talking, mixing both tracks asked Gemini to guess from
-   prosody alone — and on Russian / English mixed audio it would
+   prosody alone, and on Russian / English mixed audio it would
    often paste your conversational filler into the friend's column.
 2. **Speaker-label drift between chunks.** The single-stream path
    would sometimes reassign labels mid-chunk after a long pause,
@@ -541,7 +541,7 @@ capped at **4K**, and the bitrate scales with height (~1.4 Mbps at 720p,
 ~5 Mbps at 4K). Gate: `captureVideoHiresEffective = captureVideoHires &&
 isSignedIn`. It is gated by the **Screen video recording** setting; when off,
 the SCStream is SKIPPED entirely (`needSCStream = screenGranted && captureVideo`,
-0.15.33 — it no longer arms on a Bluetooth output, which only lit the macOS
+0.15.33, it no longer arms on a Bluetooth output, which only lit the macOS
 screen-share indicator for a dead audio backup). Registering `.screen` just to
 keep the audio clock pacing was the real always-on recording-heat source; the
 far end comes from the Core Audio process tap regardless. The frontend renders
@@ -560,8 +560,8 @@ atomic swap). This gets crash-safety AND WKWebView playback.
 ## Concurrency model
 
 - `CaptureEngine`, `RecordingController`, `TranscriptionPipeline`,
-  `AppContext`, `RecordingLevelMeter` — all `@MainActor`.
-- `DropboxService` — `actor`.
+  `AppContext`, `RecordingLevelMeter`, all `@MainActor`.
+- `DropboxService`, `actor`.
 - Swifter request handlers run on a Swifter-managed background pool;
   any access to MainActor state hops via `Task { @MainActor in ... }`
   or reads through `RecordingStateSnapshot` (NSLock-protected mirror).
@@ -578,7 +578,7 @@ atomic swap). This gets crash-safety AND WKWebView playback.
   to disk via `URLSession.download(for:)` (constant memory), but the
   Swifter handler still waits for the full file before serving the
   first byte of the response. This happens at most once per archived
-  meeting — subsequent Range requests are served straight from local
+  meeting, subsequent Range requests are served straight from local
   disk without blocking.
 
 - **VAD overshoot on whispered audio.** The RMS gate at -46 dBFS

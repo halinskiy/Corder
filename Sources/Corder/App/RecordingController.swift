@@ -18,7 +18,7 @@ final class RecordingController {
     /// `expectedOtherSpeakers` lets the caller seed the meeting with a
     /// known speaker count *before* transcription runs. The auto-detect
     /// path (MeetingDetector → `MenuBarController.showInviteOffer`) passes
-    /// 1 because the vast majority of calls it catches are 1:1 — that
+    /// 1 because the vast majority of calls it catches are 1:1, that
     /// keeps Gemini's over-counting (12-min audio sometimes diarized
     /// into 5 buckets for a single interlocutor) from showing up as a
     /// bogus "6 speakers" pill. The user can still flip to "3" or "4+"
@@ -28,7 +28,7 @@ final class RecordingController {
     func startRecording(source: CaptureSource, expectedOtherSpeakers: Int? = nil) async {
         // If a silent pre-roll is already capturing this call, PROMOTE it
         // (keeps audio/video from the start) instead of opening a second
-        // capture — covers a "Start recording" from the menu/hotkey while
+        // capture, covers a "Start recording" from the menu/hotkey while
         // the detector's offer (and its pre-roll) is up.
         if case .preroll = AppContext.shared.recordingState {
             await commitPreroll()
@@ -36,21 +36,21 @@ final class RecordingController {
         }
         // Never open a second capture over a live recording / teardown.
         guard AppContext.shared.recordingState == .idle else {
-            FileLogger.log("startRecording: ignored — state is not idle")
+            FileLogger.log("startRecording: ignored, state is not idle")
             return
         }
         // Guest session cap. A signed-out user may HOLD at most
         // `guestSessionLimit` sessions at once; at the cap, Start always
         // offers sign-in instead of recording. This funnels every entry
-        // point — menu-bar Start, the in-app button, AND the hotkey — through
+        // point, menu-bar Start, the in-app button, AND the hotkey, through
         // one gate (they all land here). Deleting a session frees a slot.
         if Self.guestAtSessionCap() {
-            FileLogger.log("startRecording: guest at \(Self.guestSessionLimit)-session cap — offering sign-in instead of recording")
+            FileLogger.log("startRecording: guest at \(Self.guestSessionLimit)-session cap, offering sign-in instead of recording")
             AuthController.shared.present()
             return
         }
         // Permissions are requested ON DEMAND, only for what THIS recording
-        // actually needs — there is no up-front permission gate, and no modal
+        // actually needs, there is no up-front permission gate, and no modal
         // wall even though screen video defaults ON. Audio runs entirely off the
         // Core Audio process tap + the mic, neither of which needs Screen
         // Recording. When screen video is ON but Screen Recording isn't granted,
@@ -59,10 +59,10 @@ final class RecordingController {
         // the Library's "Capture your screen too" ghost panel is the grant path.
         // So a brand-new user records the instant they hit Start, video or not.
         if AppSettings.captureVideo, await PermissionsChecker.checkScreenRecording() != .granted {
-            FileLogger.log("RecordingController: screen video on but Screen Recording not granted — recording audio-only (ghost panel handles the grant)")
+            FileLogger.log("RecordingController: screen video on but Screen Recording not granted, recording audio-only (ghost panel handles the grant)")
         }
         // Microphone permission: only block on explicit .denied. For .notDetermined
-        // we let AVAudioEngine.start() in CaptureEngine trigger the real TCC prompt —
+        // we let AVAudioEngine.start() in CaptureEngine trigger the real TCC prompt
         // that path reliably registers the app in System Settings → Microphone,
         // whereas AVCaptureDevice.requestAccess can silently fail to surface a prompt.
         if PermissionsChecker.checkMicrophone() == .denied {
@@ -76,7 +76,7 @@ final class RecordingController {
         // start under ~500 MB free instead of recording into a wall.
         if let free = Self.freeDiskBytes(), free < 500 * 1024 * 1024 {
             let mb = free / (1024 * 1024)
-            present(error: "Мало места на диске (\(mb) МБ). Освободи место — запись не начата, чтобы не потерять её при заполнении диска.")
+            present(error: "Мало места на диске (\(mb) МБ). Освободи место, запись не начата, чтобы не потерять её при заполнении диска.")
             return
         }
 
@@ -109,7 +109,7 @@ final class RecordingController {
             // races between that swap and `RecordingController`'s
             // state transitions left the popover sticky (refusing
             // to dismiss on outside clicks). The floating HUD pill
-            // is already the canonical "capture is alive" signal —
+            // is already the canonical "capture is alive" signal
             // 400 ms with no menu-bar feedback is fine, the HUD
             // pops in right after. No spinner == no sticky popover.
             try await AppContext.shared.capture.start(meetingId: id, source: source)
@@ -132,7 +132,7 @@ final class RecordingController {
     /// Begin a SILENT pre-roll capture (no HUD, hidden row) the instant a
     /// call is detected, so accepting the offer keeps audio/video from the
     /// very start. Returns the pre-roll meeting id, or nil if it couldn't
-    /// start (permissions not already granted, disk low, or not idle) — the
+    /// start (permissions not already granted, disk low, or not idle), the
     /// caller then falls back to the normal record-on-accept flow. Never
     /// prompts and never shows an error: pre-roll must be invisible.
     @discardableResult
@@ -210,7 +210,7 @@ final class RecordingController {
         guard case .recording(let id, let startedAt) = AppContext.shared.recordingState else { return }
         AppContext.shared.recordingState = .stopping
         // Snapshot the silence verdict BEFORE hide(): when the floating
-        // HUD is suppressed (Library window open — the normal "record a
+        // HUD is suppressed (Library window open, the normal "record a
         // call I'm watching" case) `hide()` takes its `window == nil`
         // branch and SYNCHRONOUSLY calls `RecordingLevelMeter.reset()`,
         // which zeroes sessionMax. Reading `capturedSilence` after that
@@ -226,7 +226,7 @@ final class RecordingController {
 
         // Reliability telemetry (anonymous counts only). `farEndLost` =
         // we DID record (mic had audio) but the system track came out
-        // silent, i.e. the other person was lost — the exact failure we
+        // silent, i.e. the other person was lost, the exact failure we
         // need real-world numbers on, split by Bluetooth.
         TelemetryService.bump(.recordings)
         if btAtStart { TelemetryService.bump(.btRecordings) }
@@ -237,7 +237,7 @@ final class RecordingController {
 
         // Tell the user *now* if nothing was actually captured (mic muted,
         // wrong input, permission silently lost). The silent-recording
-        // notification is fired in the meeting-save block below — kept
+        // notification is fired in the meeting-save block below, kept
         // there so it goes out only AFTER the row is actually marked as
         // archived (we don't want to say "moved to Archive" and then
         // have the save fail).
@@ -246,19 +246,19 @@ final class RecordingController {
         } else if maxSys < 0.004 && AppContext.shared.capture.outputBluetoothAtStart && !farEndWarnedThisSession {
             // We DID record audio (not the total-silence case above), but
             // the system track is empty while the output route was
-            // Bluetooth — the exact signature of the process-tap-on-BT
+            // Bluetooth, the exact signature of the process-tap-on-BT
             // failure. The user's own voice is fine; the remote side was
-            // silently lost. Tell them why and how to fix it — UNLESS the
+            // silently lost. Tell them why and how to fix it, UNLESS the
             // mid-recording warning already fired for this session (the tap
             // watchdog gave up early), so we don't double up.
-            FileLogger.log("stopRecording: \(id) system track silent on Bluetooth output — remote side not captured (maxMic=\(maxMic) maxSys=\(maxSys))")
+            FileLogger.log("stopRecording: \(id) system track silent on Bluetooth output, remote side not captured (maxMic=\(maxMic) maxSys=\(maxSys))")
             if AppSettings.notificationsEnabled {
                 NotificationsService.post(
                     title: L.notif("notif_bt_title"),
                     body: L.notif("notif_bt_body"))
             }
             // Always surface it in-window too (not gated by the
-            // notifications toggle) — losing the far end is important
+            // notifications toggle), losing the far end is important
             // enough that the user must see it even if they record with a
             // BT headset on a call (HFP), where macOS gives us no reliable
             // way to capture the remote side.
@@ -272,10 +272,10 @@ final class RecordingController {
         let durationMs = Int64(Date().timeIntervalSince(startedAt) * 1000)
 
         // Auto-archive in two cases:
-        //   1. Under 5 seconds — almost always a misclick (Start →
+        //   1. Under 5 seconds, almost always a misclick (Start →
         //      immediate Stop, Discord toast vanished, etc). User
         //      asked to bin those without thinking.
-        //   2. Silent recording under a minute — setup mistake
+        //   2. Silent recording under a minute, setup mistake
         //      (muted mic, wrong input, forgot the call). Long
         //      silent runs are intentional (timer, leaving the
         //      room) and stay in the main library.
@@ -286,7 +286,7 @@ final class RecordingController {
         // Auto-transcribe OFF: keep the recording but DON'T enqueue and
         // DON'T mark it .transcribing (that would hang forever and
         // resetStuckMeetings() would flip it to .failed next launch).
-        // Land it .ready with no segments — it's browsable and the user
+        // Land it .ready with no segments, it's browsable and the user
         // can produce a transcript on demand via the existing
         // right-click → Re-transcribe (the manual affordance).
         // Silent recordings skip transcription regardless of length
@@ -302,7 +302,7 @@ final class RecordingController {
                 meeting.durationMs = durationMs
                 meeting.status = autoTx ? .transcribing : .ready
                 if shouldAutoArchive { meeting.archivedAt = endedAtMs }
-                // Snapshot the OUTPUT route now — the pipeline's
+                // Snapshot the OUTPUT route now, the pipeline's
                 // system-track chooser needs to know this recording was
                 // on Bluetooth (faint tap) even if it transcribes later.
                 meeting.outputBluetoothAtStart =
@@ -315,7 +315,7 @@ final class RecordingController {
                         title: L.notif("notif_silent_archived_title"),
                         body: L.notif("notif_silent_archived_body"))
                 } else if capturedSilence {
-                    // Long silent recording — kept, but flag that
+                    // Long silent recording, kept, but flag that
                     // nothing was captured so the user isn't surprised
                     // when the transcript stays empty.
                     NotificationsService.post(
@@ -344,7 +344,7 @@ final class RecordingController {
 
         AppContext.shared.recordingState = .idle
 
-        // Silent + auto-archived: nothing left to do — no transcription,
+        // Silent + auto-archived: nothing left to do, no transcription,
         // no playback mix needed (the row is in Archive). The user can
         // restore + manually re-transcribe from the bin if they really
         // want to keep an empty row around.
@@ -354,7 +354,7 @@ final class RecordingController {
         }
 
         guard autoTx else {
-            FileLogger.log("stopRecording: auto-transcribe OFF — \(id) saved un-transcribed (manual re-transcribe available)")
+            FileLogger.log("stopRecording: auto-transcribe OFF, \(id) saved un-transcribed (manual re-transcribe available)")
             // The playback mix (audio.wav = mic + far end) is normally
             // produced inside transcribe(). With auto-transcribe off
             // that never runs, so the audio route falls back to
@@ -362,7 +362,7 @@ final class RecordingController {
             // even though system.wav captured it fine. Produce the mix
             // now so an untranscribed recording is fully playable.
             // On a Bluetooth route the tap (system.wav) is faint, so
-            // prefer the SCStream backup for an audible far end —
+            // prefer the SCStream backup for an audible far end
             // mirrors the transcription chooser's intent.
             let dir = AppPaths.recordingDir(for: id)
             let micURL = dir.appendingPathComponent("mic.wav")
@@ -373,7 +373,7 @@ final class RecordingController {
             if fm.fileExists(atPath: micURL.path),
                !fm.fileExists(atPath: mixURL.path) {
                 // Pick the system track that ACTUALLY carries the far
-                // end by voiced energy — never the BT flag and never
+                // end by voiced energy, never the BT flag and never
                 // file size (system_sck.wav is 11 MB of pure zeros in
                 // every observed run; the Core-Audio tap is the track
                 // that really records, even on Bluetooth). Mirrors the
@@ -390,7 +390,7 @@ final class RecordingController {
                         : -1
                     // If VAD detected NO voiced speech in either system track,
                     // still fold in the tap's system.wav for playback when it
-                    // exists — VAD can miss a quiet / sub-threshold far end, and
+                    // exists, VAD can miss a quiet / sub-threshold far end, and
                     // a silent system track is harmless in the mix whereas
                     // DROPPING it makes a soft-spoken remote side vanish from
                     // playback. Mirrors the transcribe() chooser, which always
@@ -406,13 +406,13 @@ final class RecordingController {
                         systemURL: chosen, micURL: micURL, outputURL: mixURL)
                     FileLogger.log("stopRecording: produced playback mix audio.wav (mic\(chosen.map { "+\($0.lastPathComponent)" } ?? " only")) for un-transcribed \(id)")
                 } catch {
-                    FileLogger.log("stopRecording: playback mix failed (\(error)) for \(id) — playback falls back to mic.wav")
+                    FileLogger.log("stopRecording: playback mix failed (\(error)) for \(id), playback falls back to mic.wav")
                 }
             }
             return
         }
 
-        // Kick off transcription. TranscriptionPipeline is @MainActor — running it
+        // Kick off transcription. TranscriptionPipeline is @MainActor, running it
         // on the main actor (instead of a detached Task) keeps NSLog/FileLogger
         // emission consistent and prevents the in-flight task from being silently
         // dropped if the dispatch queue gets cleaned up under memory pressure.
@@ -477,7 +477,7 @@ extension RecordingController: CaptureEngineDelegate {
     func captureEngine(_ engine: CaptureEngine, didStartMeeting id: String) {}
     func captureEngine(_ engine: CaptureEngine, didStopMeeting id: String) {}
 
-    /// The process tap gave up on a Bluetooth route (HFP/SCO) — the far end is
+    /// The process tap gave up on a Bluetooth route (HFP/SCO), the far end is
     /// being lost right now. Warn the user mid-recording (≈8 s in) so they can
     /// switch their Mac's output off Bluetooth and re-record, instead of only
     /// discovering it at stop. Same copy as the stop-time warning; a guard stops
@@ -486,13 +486,13 @@ extension RecordingController: CaptureEngineDelegate {
         guard !farEndWarnedThisSession else { return }
         guard case .recording = AppContext.shared.recordingState else { return }
         farEndWarnedThisSession = true
-        FileLogger.log("RecordingController: far end uncapturable (tap watchdog gave up after warm-up grace; BT HFP/SCO or a Mac that never brought the aggregate up) — warning mid-recording")
+        FileLogger.log("RecordingController: far end uncapturable (tap watchdog gave up after warm-up grace; BT HFP/SCO or a Mac that never brought the aggregate up), warning mid-recording")
         if AppSettings.notificationsEnabled {
             NotificationsService.post(
                 title: L.notif("notif_bt_title"),
                 body: L.notif("notif_bt_body"))
         }
-        // Always surface in-window too (not gated by the notifications toggle) —
+        // Always surface in-window too (not gated by the notifications toggle)
         // losing the far end is important enough to show regardless.
         LibraryWindow.shared.postToast(
             title: L.notif("notif_bt_title"),
@@ -501,7 +501,7 @@ extension RecordingController: CaptureEngineDelegate {
     }
     func captureEngine(_ engine: CaptureEngine, didFailWithError error: Error) {
         FileLogger.log("RecordingController: capture failed: \(error)")
-        // Whatever meeting was being recorded is now toast — flip its DB
+        // Whatever meeting was being recorded is now toast, flip its DB
         // row to .failed so the UI never gets stuck on a green dot. The
         // app crash recovery (`resetStuckMeetings` on launch) covers the
         // scenario where the process dies before this delegate fires; this

@@ -19,20 +19,20 @@ two distinct security claims, and they should be evaluated separately:
 
 Things explicitly outside the threat model:
 - Other apps on your Mac with Screen Recording / Microphone permission
-  can also tap the same buses Corder records — Corder doesn't sandbox
+  can also tap the same buses Corder records, Corder doesn't sandbox
   those.
 - A compromised macOS account is game over: the audio files are stored
   unencrypted under `~/Library/Application Support/Corder/`. We rely on
   macOS filesystem permissions and FileVault.
 - Dropbox is treated as trusted under the user's own account.
-- Sparkle update integrity rests on EdDSA signature verification — see
+- Sparkle update integrity rests on EdDSA signature verification, see
   "Update channel" below.
 
 ## Provider privacy
 
 The transcription provider depends on tier:
 
-- **Free tier** — on-device WhisperKit (`large-v3-turbo` Core ML, ≈1.5 GB
+- **Free tier**, on-device WhisperKit (`large-v3-turbo` Core ML, ≈1.5 GB
   one-time download). Audio never leaves the Mac.
 - **Pro / Max** : Groq Whisper (`whisper-large-v3-turbo`) **via the
   Cloudflare Worker proxy** (`/transcribe/groq`). The user sends the
@@ -76,7 +76,7 @@ were closed:
 
 The app **never** reads an OpenAI or Gemini key from disk and never
 ships one inside the binary. There is no `~/.config/corder/openai_key`
-or `gemini_key` path any more — removed in 0.13.29.
+or `gemini_key` path any more, removed in 0.13.29.
 
 Dropbox archival, when configured, uploads `audio.wav` to a folder
 under the user's own Dropbox app token. Local copies are deleted
@@ -129,21 +129,21 @@ those never leave the Worker.
 
 ### What's NOT a secret (committed on purpose)
 
-- `Corder.entitlements` — public manifest of code-signing capabilities
+- `Corder.entitlements`, public manifest of code-signing capabilities
   (`com.apple.security.device.audio-input`, etc.). No secret material.
-- `Info.plist` — `SUPublicEDKey` (Sparkle update verification public
+- `Info.plist`, `SUPublicEDKey` (Sparkle update verification public
   half) goes here. **Public** half only. Also `SUFeedURL`, which is a
   public URL.
-- Supabase **anon key** is treated as public — it identifies the
+- Supabase **anon key** is treated as public, it identifies the
   Supabase project on the client; gates beyond it (tier check) live
   server-side on the Worker.
-- Dropbox **app key** is treated as semi-public — it identifies the
+- Dropbox **app key** is treated as semi-public, it identifies the
   app in OAuth, but is paired with the user's refresh token to do
   anything. Do not commit the **app secret**.
 
 ### Three layers of defence
 
-**1. `.gitignore`** — hard list of patterns: `dropbox.json`, `*.pem`,
+**1. `.gitignore`**, hard list of patterns: `dropbox.json`, `*.pem`,
 `*.p12`, `secrets/`, `.env*`, `sparkle_eddsa_priv*`, `*.key`.
 
 **2. `gitleaks` pre-commit hook**:
@@ -162,7 +162,7 @@ Run manually: `gitleaks detect --source . --log-opts="--all"`.
 **3. GitHub Actions secret scan**:
 
 ```
-.github/workflows/secret-scan.yml — runs gitleaks on every push & PR.
+.github/workflows/secret-scan.yml, runs gitleaks on every push & PR.
 ```
 
 If this ever fails red, the alert is real.
@@ -173,7 +173,7 @@ Push Protection at the account level should be ON:
 github.com → Settings → Code security → "Push protection for yourself" → ON.
 
 This blocks pushes containing GitHub's own catalogue of recognised
-secret formats at the protocol layer — strictly stronger than
+secret formats at the protocol layer, strictly stronger than
 gitleaks because GitHub maintains the patterns.
 
 ### Onboarding without committing keys
@@ -247,7 +247,7 @@ Sparkle 2 with EdDSA-signed appcast at
 key is pinned in `Info.plist`; updates that don't verify against it
 are rejected by Sparkle before installation. Private signing key
 lives in the developer's macOS Keychain, never in the repo. The
-DMG itself is Developer-ID-signed, notarized, and stapled — Gatekeeper
+DMG itself is Developer-ID-signed, notarized, and stapled, Gatekeeper
 verifies offline against the stapled ticket.
 
 The auto-update flow is driven by Corder's own `SPUUserDriver`
@@ -301,22 +301,22 @@ advisory rather than a public issue.
 
 Compromise drill, in order:
 
-1. **OpenAI / Gemini** — go to the provider console, revoke + create
+1. **OpenAI / Gemini**, go to the provider console, revoke + create
    a new key. `wrangler secret put OPENAI_API_KEY` (or `GEMINI_API_KEY`),
-   then `wrangler deploy`. No client release needed — the new key
+   then `wrangler deploy`. No client release needed, the new key
    takes effect on the next Worker invocation.
-2. **Supabase service role** — Supabase Dashboard → Settings → API →
+2. **Supabase service role**, Supabase Dashboard → Settings → API →
    "Reset service_role key". `wrangler secret put SUPABASE_SERVICE_ROLE`,
    deploy.
-3. **Dropbox** — go to `https://www.dropbox.com/developers/apps/info/<app_key>`
+3. **Dropbox**, go to `https://www.dropbox.com/developers/apps/info/<app_key>`
    → "Generated access token" reset & remove app authorizations.
    Reissue refresh token via the OAuth flow described in
    `docs/ARCHITECTURE.md`.
-4. **Sparkle EdDSA private key** — only relevant if a malicious
+4. **Sparkle EdDSA private key**, only relevant if a malicious
    update was published. Replace via Sparkle's `generate_keys`, push
    the new public half in a release that older versions trust under
    the *old* key, then sunset the old key.
-5. **Developer ID** — re-issue from developer.apple.com, update the
+5. **Developer ID**, re-issue from developer.apple.com, update the
    `CORDER_SIGN_IDENTITY` env var for the release scripts. Note: every
    TCC permission grant resets when the signing identity changes.
 
@@ -329,10 +329,10 @@ Compromise drill, in order:
 - **The local SQLite is not encrypted at rest.** FileVault is the only
   protection. If you need stronger guarantees, encrypt the macOS
   account itself, or use SQLCipher (not currently integrated).
-- **OpenAI Whisper retention** — we pass `store=false` on every
+- **OpenAI Whisper retention**, we pass `store=false` on every
   request through the Worker; the audio is processed and discarded
   within the request lifetime.
-- **Gemini File API retention** — files uploaded via
+- **Gemini File API retention**, files uploaded via
   `/transcribe/gemini-proxy/upload/v1beta/files` expire automatically
   after 48 h, and the pipeline explicitly deletes them after the
   transcript is back. If the request errors before the delete fires,

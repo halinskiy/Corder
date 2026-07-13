@@ -24,7 +24,7 @@ copy_if_missing "$ROOT/config-templates/dropbox.json.example" "$CFG/dropbox.json
 # Gemini 400; with NO file the app shows the clean "configure your key"
 # path (and the Library UI can set it). Create it with your real key.
 if [ ! -e "$CFG/gemini_key" ]; then
-  echo "· $CFG/gemini_key (NOT created — add your real Gemini key here)"
+  echo "· $CFG/gemini_key (NOT created, add your real Gemini key here)"
 else
   echo "✓ $CFG/gemini_key (kept)"
 fi

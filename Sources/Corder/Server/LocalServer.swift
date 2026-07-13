@@ -9,8 +9,8 @@ final class LocalServer {
         routes(server)
         // Bind to LOOPBACK ONLY. Swifter defaults to INADDR_ANY (0.0.0.0)
         // when no listen address is set, which would expose the entire
-        // unauthenticated /api/* surface — every recording, transcript and
-        // settings write — to anyone on the same LAN. The
+        // unauthenticated /api/* surface, every recording, transcript and
+        // settings write, to anyone on the same LAN. The
         // app only ever connects to itself via 127.0.0.1, so loopback is
         // the correct and sufficient bind.
         server.listenAddressIPv4 = "127.0.0.1"

@@ -14,7 +14,7 @@ enum NewsPoller {
     private static let endpoint = URL(string: "https://corder-api.empqwork.workers.dev/news")!
     private static let kSeenKey = "Corder.news.seenIds"
     private static let kSeededKey = "Corder.news.seeded"
-    /// 30 min — same cadence as the frontend `NewsBanner` falls back
+    /// 30 min, same cadence as the frontend `NewsBanner` falls back
     /// to. Cheap GET, single Worker round-trip.
     private static let interval: TimeInterval = 30 * 60
 
@@ -36,12 +36,12 @@ enum NewsPoller {
         let seeded = UserDefaults.standard.bool(forKey: kSeededKey)
         let currentIds = items.compactMap { $0.id }
 
-        // First-ever poll: mark everything as seen, no banners — we
+        // First-ever poll: mark everything as seen, no banners, we
         // don't want a fresh install to surface every old announcement.
         guard seeded else {
             UserDefaults.standard.set(currentIds, forKey: kSeenKey)
             UserDefaults.standard.set(true, forKey: kSeededKey)
-            FileLogger.log("NewsPoller: seeded \(currentIds.count) ids — banners armed for future items")
+            FileLogger.log("NewsPoller: seeded \(currentIds.count) ids, banners armed for future items")
             return
         }
 

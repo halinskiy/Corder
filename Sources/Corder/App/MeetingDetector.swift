@@ -10,7 +10,7 @@ import Foundation
 ///   1. A known meeting app is running (Zoom / Teams / Meet / Slack / …).
 ///   2. *Some other process* has just opened the default input device.
 ///
-/// Either alone is too noisy — Zoom running with no call open, or any
+/// Either alone is too noisy, Zoom running with no call open, or any
 /// app casually touching the mic for a UI sound. Together they map
 /// reliably onto "someone just joined a call".
 ///
@@ -45,7 +45,7 @@ final class MeetingDetector {
     /// Bundle id → human-readable app name shown in the invite, in
     /// priority order. The first matching running app wins when
     /// multiple meeting apps are open at once (Slack and Zoom both
-    /// running ⇒ pick Zoom — more likely the actual call host).
+    /// running ⇒ pick Zoom, more likely the actual call host).
     private static let knownApps: [(bundle: String, name: String)] = [
         ("us.zoom.xos",                  "Zoom"),
         ("com.microsoft.teams2",         "Teams"),
@@ -64,12 +64,12 @@ final class MeetingDetector {
         ("org.telegram.desktop",         "Telegram"),
         ("ph.telegra.Telegraph",         "Telegram"),
         ("ru.yandex.desktop.yatelemost", "Я.Телемост"),
-        // Browsers — sit at the bottom of the priority list. A dedicated
+        // Browsers, sit at the bottom of the priority list. A dedicated
         // meeting app holding the mic always wins; the browser branch
         // catches web-hosted calls (Meet in a tab, Whereby, Around,
         // Tuple, Discord web, Telegram web, Slack huddle in browser).
         // False-positive risk is low because we gate on the system
-        // input device being actively claimed for ≥3 s — a browser
+        // input device being actively claimed for ≥3 s, a browser
         // sitting open with no call doesn't trip the detector.
         ("ai.perplexity.comet",          "Comet"),
         ("com.google.Chrome",            "Chrome"),
@@ -84,7 +84,7 @@ final class MeetingDetector {
 
     func start() {
         stop()
-        // 4 s tick (was 2 s) — meetings don't appear in single-digit
+        // 4 s tick (was 2 s), meetings don't appear in single-digit
         // milliseconds, and each tick pulls the full running-apps list
         // from AppKit, which is not free. `tolerance` lets macOS coalesce
         // ticks with other timers to save battery.
@@ -114,12 +114,11 @@ final class MeetingDetector {
     private func tick() {
         // Skip the entire detector while the Welcome wizard is
         // unfinished. Offering a recording before setup is locked
-        // would be misleading — the user can't accept (popover Start
+        // would be misleading, the user can't accept (popover Start
         // is gated) and the prompt would just nag.
         guard AppSettings.onboardingCompleted else { return }
 
-        // Don't poll during our own recording or the stopping handoff —
-        // CaptureEngine is the process holding the mic right now, and we
+        // Don't poll during our own recording or the stopping handoff, // CaptureEngine is the process holding the mic right now, and we
         // already know about the meeting.
         switch AppContext.shared.recordingState {
         // `.preroll` too: Corder is already silently capturing this call and
@@ -128,7 +127,7 @@ final class MeetingDetector {
         case .idle: break
         }
 
-        // Gate on a meeting app being running FIRST — if nothing of
+        // Gate on a meeting app being running FIRST, if nothing of
         // interest is open, skip the CoreAudio device query entirely.
         // The mic check is the only part of the tick that touches
         // hardware and it's wasted work when there's no candidate
@@ -145,8 +144,7 @@ final class MeetingDetector {
         // white/blacklist an app by tapping it (no bundle-id typing).
         if let owners = micOwners { MicAppsSnapshot.update(Array(owners)) }
         // One-shot diagnostic: log when the mic-owners set CHANGES so we
-        // can see what bundle ids the CoreAudio process list reports —
-        // Electron / Chromium apps (Discord, Telegram, Comet) own the
+        // can see what bundle ids the CoreAudio process list reports, // Electron / Chromium apps (Discord, Telegram, Comet) own the
         // mic via helper processes with bundle ids like
         // `com.hnc.Discord.helper.Renderer`, NOT the main bundle, which
         // breaks `owners.contains(app.bundle)` exact matching below.
@@ -158,7 +156,7 @@ final class MeetingDetector {
 
         // Effective offer set = built-in known apps + the user's
         // whitelist, minus anything the user blacklisted. Blacklist wins
-        // over everything — even a known app actively on the mic.
+        // over everything, even a known app actively on the mic.
         let blacklist = Set(AppSettings.meetingBlacklist)
         var effectiveApps: [(bundle: String, name: String)] =
             Self.knownApps.filter { !blacklist.contains($0.bundle) }
@@ -174,7 +172,7 @@ final class MeetingDetector {
         // process holding the mic. Loom/OBS/QuickTime/Terminal recording
         // while Zoom merely sits open in the background no longer trips
         // an offer. Fallback path keeps the original device-global gate.
-        // Match rule: exact bundle id OR `<bundle>.<suffix>` — Electron
+        // Match rule: exact bundle id OR `<bundle>.<suffix>`, Electron
         // and Chromium apps (Discord, Telegram, Comet, Chrome) hold the
         // mic via helper processes whose bundle ids extend the main app
         // bundle (`com.hnc.Discord.helper.Renderer` etc.). Exact-match
@@ -196,7 +194,7 @@ final class MeetingDetector {
         } else {
             // Mic just went idle → this voice session ended. Clear the
             // "already offered" set so the NEXT session (mic released
-            // then re-claimed — e.g. the user dismissed with "Not now",
+            // then re-claimed, e.g. the user dismissed with "Not now",
             // stopped talking, then started a new call/recording) gets
             // a fresh offer. Previously `offeredFor` only cleared when
             // the app fully quit, so a second session in the same app
@@ -207,7 +205,7 @@ final class MeetingDetector {
 
         if pendingInviteFor != nil { return }
 
-        // Need a sustained mic-busy state (3 s) — filters "checking
+        // Need a sustained mic-busy state (3 s), filters "checking
         // my mic" + UI alert sounds that briefly open the device.
         guard let since = inputBusySince,
               now.timeIntervalSince(since) >= 3,
@@ -225,7 +223,7 @@ final class MeetingDetector {
               !offeredFor.contains(match.bundle)
         else {
             // No interesting candidate this edge. Mark the edge consumed
-            // so we don't re-check the same busy span every tick — a
+            // so we don't re-check the same busy span every tick, a
             // genuinely-new edge needs the mic to go idle first.
             lastTriggerMicBusyEdge = since
             return
@@ -237,7 +235,7 @@ final class MeetingDetector {
         FileLogger.log("MeetingDetector: offering record for \(match.name)")
         // expectedOtherSpeakers = nil (auto-estimate) for auto-detected calls.
         // It used to be hardcoded to 1 to stop the OLD Gemini single-mic
-        // diarization fanning one interlocutor into 4-5 phantom speakers — but
+        // diarization fanning one interlocutor into 4-5 phantom speakers, but
         // diarization is now FluidAudio VBx on the SYSTEM (far-end) track, and
         // forcing exactly 1 remote speaker COLLAPSES every 3+-person call into
         // a single "other" (the user's main complaint). nil lets VBx estimate
@@ -282,7 +280,7 @@ final class MeetingDetector {
     }
 
     /// True iff some process has the default input device live. We don't
-    /// distinguish processes here — the caller gates on `recordingState`
+    /// distinguish processes here, the caller gates on `recordingState`
     /// to make sure Corder itself isn't the one holding the device.
     private static func isInputDeviceClaimedByOtherProcess() -> Bool {
         var device: AudioDeviceID = kAudioObjectUnknown
@@ -309,7 +307,7 @@ final class MeetingDetector {
 
     /// Bundle ids of every process Core Audio reports as actively
     /// running INPUT (microphone) right now. `nil` means the
-    /// per-process API is unavailable or errored — the caller then
+    /// per-process API is unavailable or errored, the caller then
     /// falls back to the coarse device-global check + "any meeting app
     /// running" heuristic. macOS 14.4+ matches the process-tap path we
     /// already depend on for system-audio capture (`SystemAudioTap`).

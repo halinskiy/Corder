@@ -8,7 +8,7 @@ import Foundation
 /// Why both forms exist: a faststart writer buffers the whole movie and flushes
 /// the `moov`+`mdat` only on `finishWriting`, so a recording interrupted by a
 /// hard kill (an app update, the `terminateOtherInstances` deploy reap, power
-/// loss) leaves a ZERO-byte video.mov — total video loss (measured). Fragmented
+/// loss) leaves a ZERO-byte video.mov, total video loss (measured). Fragmented
 /// writing flushes a self-describing chunk to disk every few seconds, so the
 /// file stays valid up to the last flush. But a fragmented QuickTime MOV can't
 /// be progressively loaded by WKWebView (its `moov` isn't at the front), which
@@ -25,7 +25,7 @@ import Foundation
 enum VideoRemux {
     /// If `url` is a non-faststart (fragmented) MP4/MOV, remux it to a faststart
     /// file in place. No-op on an already-faststart file (idempotent, safe to
-    /// call before every serve). Blocking — call off the main thread (a Swifter
+    /// call before every serve). Blocking, call off the main thread (a Swifter
     /// worker). Returns true if it remuxed.
     @discardableResult
     static func faststartIfNeeded(at url: URL) -> Bool {
@@ -93,7 +93,7 @@ enum VideoRemux {
                 size = 0
                 for i in 0..<8 { size = (size << 8) | UInt64(e[i]) }
             }
-            if size < 8 { return false }   // to-EOF (0) or malformed — stop probing
+            if size < 8 { return false }   // to-EOF (0) or malformed, stop probing
             offset += size
         }
         return false

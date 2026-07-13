@@ -3,7 +3,7 @@ import Foundation
 extension Bundle {
     /// Locator for `Corder_Corder.bundle` (the SwiftPM resource bundle
     /// that carries the Web frontend + bundled icons). DO NOT replace
-    /// callers with `Bundle.module` — SwiftPM auto-generates
+    /// callers with `Bundle.module`, SwiftPM auto-generates
     /// `Bundle.module`'s accessor as
     ///   `Bundle.main.bundleURL.appendingPathComponent("Corder_Corder.bundle")`
     /// which for a .app bundle resolves to the .app ROOT, NOT to

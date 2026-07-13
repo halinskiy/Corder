@@ -6,7 +6,7 @@ import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug, Plus, Square } f
 /// `fill="currentColor"` over the outline produced a busy "double
 /// stroke" look (the inner outline strokes painted on top of the
 /// fill), so the active variants are inline solid copies of the same
-/// glyph silhouette — Heroicons Solid v2 paths re-traced to the
+/// glyph silhouette, Heroicons Solid v2 paths re-traced to the
 /// Lucide 24×24 grid. No extra dependency; only used in two places.
 function SettingsFilled({ size = 16 }: { size?: number }) {
   return (
@@ -43,7 +43,7 @@ import { Tooltip } from "./Tooltip";
 import { submitLogs, hasBugEvents, getAccountUsage, openWelcome, startRecordingNow, stopRecordingNow, getRecordingState } from "../api";
 import type { T } from "../i18n";
 
-/// Single source of truth for the main pane's top strip — breadcrumb
+/// Single source of truth for the main pane's top strip, breadcrumb
 /// on the left, global controls on the right. Used by both the
 /// Dashboard (`activeId === null`) and MeetingView slots so the
 /// header is pixel-identical (same height, same buttons, same order)
@@ -67,12 +67,12 @@ export function MainHeader({
 }: {
   breadcrumb: React.ReactNode;
   onOpenArchive: () => void;
-  /// True when the Archive surface is currently shown — the Archive
+  /// True when the Archive surface is currently shown, the Archive
   /// toolbar button lights up as `.active` and a second click leaves
   /// Archive (the button itself is the toggle, replaces the old
   /// "< Library" back affordance).
   archiveOpen?: boolean;
-  /// True when the user's archive is empty — disables the Archive
+  /// True when the user's archive is empty, disables the Archive
   /// toolbar button so it can't open a panel with nothing in it.
   archiveEmpty?: boolean;
   /// Fires when the user clicks "Settings" in the profile popover.
@@ -83,7 +83,7 @@ export function MainHeader({
   /// up the Settings toolbar icon as `.active`, mirroring how
   /// `archiveOpen` lights up the Archive icon.
   settingsOpen?: boolean;
-  /// Fires when the user clicks "Dashboard" in the profile popover —
+  /// Fires when the user clicks "Dashboard" in the profile popover
   /// always returns to the landing surface (parent clears activeId).
   onOpenDashboard: () => void;
   onToast: (
@@ -91,7 +91,7 @@ export function MainHeader({
     kind?: "success" | "error",
     opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }
   ) => void;
-  /// Hide the record "+" button — used on the empty Welcome, which has its
+  /// Hide the record "+" button, used on the empty Welcome, which has its
   /// own Start CTA, so the toolbar "+" is redundant there. Defaults to shown.
   hideRecordButton?: boolean;
   t: T;
@@ -109,7 +109,7 @@ export function MainHeader({
             row; the toolbar slot was visual noise next to controls the
             user touches once a year. */}
         {/* Settings now sits in the toolbar where the LangPicker used
-            to live — the language switcher moved into the profile
+            to live, the language switcher moved into the profile
             popover (rare action, not worth a top-bar slot). The two
             shortcuts share the same icon-button shell. */}
         <Tooltip label={t.profile_account}>
@@ -237,7 +237,7 @@ function GuestSessionCounter() {
   }, []);
 
   if (!isGuest || left == null) return null;
-  // Always the neutral pill — never the green "is-low" treatment when running
+  // Always the neutral pill, never the green "is-low" treatment when running
   // out (Kostya: "1 left" should look like "5 left", white, not green).
   return (
     <Tooltip label="Sign in to unlock more">
@@ -283,10 +283,10 @@ function SubmitLogsButton({
   };
   // 10-second send-with-undo, same UX as the archive flow. The
   // actual `submitLogs()` POST fires when the countdown elapses,
-  // not when the button is clicked — so an accidental click never
+  // not when the button is clicked, so an accidental click never
   // ships the log. Undo cancels the timer and nothing leaves the Mac.
   const pendingRef = React.useRef<number | null>(null);
-  // `now` is the only state driving visibility — bumped every 30 s and
+  // `now` is the only state driving visibility, bumped every 30 s and
   // on every send/undo. The button stays unmounted whenever
   //   `now < cooldownEnd` (post-send rate-limit) OR a send is in flight
   //   (`pendingRef !== null`).
@@ -294,7 +294,7 @@ function SubmitLogsButton({
   const [pending, setPending] = React.useState(false);
   // Whether the current log has any bug-flagged event lines. We poll
   // the backend so the button only appears when there's actually
-  // something worth shipping — fewer noise emails for the maintainer.
+  // something worth shipping, fewer noise emails for the maintainer.
   const [hasEvents, setHasEvents] = React.useState(false);
   React.useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -316,12 +316,12 @@ function SubmitLogsButton({
   // 10-s undo window is open, while the POST is in flight, and for the
   // full 60-min cooldown after a successful send. `hasEvents` is now
   // true whenever there's ANY log to send (the backend stopped gating
-  // on error lines) — a transcription-QUALITY bug throws no error, so
+  // on error lines), a transcription-QUALITY bug throws no error, so
   // gating here hid the report button exactly when we needed it.
   if (pending || inCooldown || !hasEvents) return null;
 
   const onClick = async () => {
-    // Send immediately — no 10s countdown / Undo window. The button unmounts
+    // Send immediately, no 10s countdown / Undo window. The button unmounts
     // while `pending` (see the gate above) and pendingRef guards a double-fire.
     if (pendingRef.current !== null) return;
     pendingRef.current = 1;
@@ -336,7 +336,7 @@ function SubmitLogsButton({
       try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
       onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
     } finally {
-      // Re-render to flip from `pending` to `inCooldown` (button stays hidden —
+      // Re-render to flip from `pending` to `inCooldown` (button stays hidden
       // only the gating reason changes).
       pendingRef.current = null;
       setPending(false);

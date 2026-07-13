@@ -8,10 +8,10 @@ import Sparkle
 /// green pill in the toolbar.
 ///
 /// Configuration lives in `Info.plist`:
-///   • `SUFeedURL`   — `https://halinskiy.github.io/corder-updates/appcast.xml`
-///   • `SUPublicEDKey` — EdDSA public key, paired with the Keychain-stored
+///   • `SUFeedURL`  , `https://halinskiy.github.io/corder-updates/appcast.xml`
+///   • `SUPublicEDKey`, EdDSA public key, paired with the Keychain-stored
 ///                       private half used by `sign_update` at release time.
-///   • `SUEnableInstallerLauncherService` — required on hardened runtime.
+///   • `SUEnableInstallerLauncherService`, required on hardened runtime.
 ///
 /// Sparkle silently checks for updates in the background using its
 /// default schedule (24h). The pill click and the legacy "Check for
@@ -45,7 +45,7 @@ final class UpdateController: NSObject {
             FileLogger.log("UpdateController: SPUUpdater.start failed: \(error.localizedDescription)")
         }
         // Sparkle's scheduled check fires only after the configured
-        // interval (24h) has elapsed since the last successful check —
+        // interval (24h) has elapsed since the last successful check
         // which means a freshly installed copy doesn't hit the appcast
         // until tomorrow. Force a silent check ~2 s after launch so the
         // pill can light up right away on a meaningful release cadence.
@@ -60,7 +60,7 @@ final class UpdateController: NSObject {
         updater.checkForUpdates()
     }
 
-    /// Silent re-check on demand (no "you're up to date" dialog) — used
+    /// Silent re-check on demand (no "you're up to date" dialog), used
     /// by the React UI before deciding whether to render the pill.
     func checkInBackground() {
         updater.checkForUpdatesInBackground()

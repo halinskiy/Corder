@@ -5,7 +5,7 @@ import Foundation
 ///
 /// A row left in `.recording` means the stop path never ran. The audio is
 /// written incrementally (AVAudioFile, per-buffer), so the SAMPLES up to the
-/// crash are all on disk — but the WAV HEADER is not: `AVAudioFile` only
+/// crash are all on disk, but the WAV HEADER is not: `AVAudioFile` only
 /// writes the `data`/RIFF chunk sizes on close, so a hard-killed file reports
 /// ZERO frames to every reader and looks empty. `WavHeaderRepair` patches the
 /// header from the real file length first, THEN we reconstruct
@@ -21,7 +21,7 @@ import Foundation
 /// be dropped.
 enum RecordingRecovery {
     /// Below this the file is just a WAV header / a fraction of a second
-    /// of noise — not worth resurrecting.
+    /// of noise, not worth resurrecting.
     private static let minSalvageMs: Int64 = 1500
 
     static func run(repo: MeetingRepository) {
@@ -36,14 +36,14 @@ enum RecordingRecovery {
             var bestMs: Int64 = 0
             for url in candidates where FileManager.default.fileExists(atPath: url.path) {
                 // Fix the never-finalized WAV header (data/RIFF size = 0 after a
-                // hard kill) BEFORE measuring — otherwise every file reads as
+                // hard kill) BEFORE measuring, otherwise every file reads as
                 // 0 ms and a real recording is wrongly dropped as unsalvageable.
                 WavHeaderRepair.repairIfTruncated(at: url)
                 bestMs = max(bestMs, durationMs(of: url))
             }
 
             guard bestMs >= minSalvageMs else {
-                // Nothing usable — leave it for resetStuckMeetings() to drop.
+                // Nothing usable, leave it for resetStuckMeetings() to drop.
                 FileLogger.log("RecordingRecovery: \(m.id) unsalvageable (\(bestMs)ms), leaving for cleanup")
                 continue
             }

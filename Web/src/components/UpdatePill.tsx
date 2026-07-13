@@ -18,7 +18,7 @@ interface Props {
 // this pill) is re-mounted whenever the user navigates between surfaces
 // (Dashboard ↔ MeetingView), so without a shared cache each new pill
 // would start at `available=false` and flash empty until its own poll
-// returned — the pill "disappears and needs time again" on every page.
+// returned, the pill "disappears and needs time again" on every page.
 // Seeding state from this cache makes the pill appear instantly on every
 // surface once ANY instance has resolved the status at least once.
 let cachedStatus: { available: boolean; version?: string } = { available: false };
@@ -26,7 +26,7 @@ let cachedStatus: { available: boolean; version?: string } = { available: false 
 // The header renders on more than one surface at once (the MeetingView
 // header stays mounted while the Dashboard is showing, etc.), so there
 // can be several UpdatePill instances live at the same time. Each polls
-// independently every 60 s — without a broadcast, the instance that
+// independently every 60 s, without a broadcast, the instance that
 // resolved `available` first shows the pill while the others stay blank
 // until their own next poll (the "pill only on Dashboard" report). When
 // any instance learns a new status it dispatches this event so EVERY
@@ -39,7 +39,7 @@ export function UpdatePill({ t, onToast }: Props) {
   const [busy, setBusy] = React.useState(false);
   const pillRef = React.useRef<HTMLButtonElement | null>(null);
 
-  // 3D cursor-tilt — the same parallax vocabulary as the update modal
+  // 3D cursor-tilt, the same parallax vocabulary as the update modal
   // card. Listener lives on the pill itself; the rotation amounts are
   // smaller (max 6° vs the modal's 11°) because the pill is tiny and
   // a strong tilt feels exaggerated on a 30 px element. The sheen
@@ -126,13 +126,13 @@ export function UpdatePill({ t, onToast }: Props) {
     } catch {
       onToast(t.toast_settings_failed, "error");
     }
-    // Release busy after a short delay — long enough that the user
+    // Release busy after a short delay, long enough that the user
     // sees the pulse, short enough not to lock the button if Sparkle's
     // dialog never appears (e.g. it was already on screen).
     window.setTimeout(() => setBusy(false), 2200);
   };
 
-  // Just "Update available" — no specific version number per
+  // Just "Update available", no specific version number per
   // Kostya's call. Two appcast bumps in a day still surface as a
   // single pill that re-fires the dialog on click; the dialog
   // itself shows the version.

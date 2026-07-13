@@ -11,7 +11,7 @@ const AVATAR_EVENT = "corder-avatar-changed";
 
 /// Returns one of the 9 abstract glyph indices, persisted across
 /// launches. Falls back to a deterministic hash of `seed` if the
-/// user hasn't picked yet — so the first run always shows a stable
+/// user hasn't picked yet, so the first run always shows a stable
 /// glyph rather than a default placeholder.
 function readStoredVariant(seed: string): number {
   try {
@@ -43,7 +43,7 @@ function AvatarGlyph({
   /// + white glyph so the operator can confirm the server-side admin
   /// grant landed in their session. Otherwise: paid (Pro / Max) gets
   /// the canonical accent-green fill with a white glyph; Free gets a
-  /// transparent surface with a dark glyph and a hairline outline —
+  /// transparent surface with a dark glyph and a hairline outline
   /// mirrors the secondary button treatment so a Free avatar reads as
   /// "outlined / not upgraded yet". `var(--avatar-cutout)` is what the
   /// half-moon case (variant 2) paints over its overlapping rect, so it
@@ -71,7 +71,7 @@ function AvatarGlyph({
       <circle cx="20" cy="20" r="20" fill={fillBg} />
       <g fill={fillGlyph}>{glyphShape(variant, fillGlyph)}</g>
       {/* Ring drawn LAST so glyphs (half-moon cut-out, diagonal bar)
-          can't paint over it. Circle, not rect — the avatar frame is
+          can't paint over it. Circle, not rect, the avatar frame is
           round, a rectangular stroke gets clipped by border-radius. */}
       <circle
         cx="20"
@@ -92,7 +92,7 @@ function glyphShape(variant: number, glyphFill: string): React.ReactNode {
       // Single bold dot
       return <circle cx="20" cy="20" r="10" />;
     case 1:
-      // Two stacked dots — friend / dialogue glyph
+      // Two stacked dots, friend / dialogue glyph
       return (
         <>
           <circle cx="20" cy="13" r="5.5" />
@@ -111,7 +111,7 @@ function glyphShape(variant: number, glyphFill: string): React.ReactNode {
         </>
       );
     case 3:
-      // Square — rotated 45° for a diamond. SVG transform = stable.
+      // Square, rotated 45° for a diamond. SVG transform = stable.
       return <rect x="11" y="11" width="18" height="18" rx="2" transform="rotate(45 20 20)" />;
     case 4:
       // Soft rounded square
@@ -120,7 +120,7 @@ function glyphShape(variant: number, glyphFill: string): React.ReactNode {
       // Triangle (equilateral, pointing up)
       return <polygon points="20,8 31,30 9,30" />;
     case 6:
-      // Bold diagonal bar — a single rounded rect rotated 45°. The
+      // Bold diagonal bar, a single rounded rect rotated 45°. The
       // rect is sized so that after rotation its endpoints stay well
       // inside the 19-radius clip circle (overflow:hidden + 50%
       // border-radius). Earlier length=34 put the corners ~17 px
@@ -129,7 +129,7 @@ function glyphShape(variant: number, glyphFill: string): React.ReactNode {
       // leaves ~4 px breathing room from the circle's edge.
       return <rect x="17" y="9" width="6" height="22" rx="2" transform="rotate(45 20 20)" />;
     case 7:
-      // Outer ring + inner dot — drawn as two concentric paths via
+      // Outer ring + inner dot, drawn as two concentric paths via
       // a `stroke` ring (not even-odd, which is flaky in WebKit).
       // Ring colour follows the glyph (white on paid, dark on free).
       return (
@@ -140,7 +140,7 @@ function glyphShape(variant: number, glyphFill: string): React.ReactNode {
       );
     case 8:
     default:
-      // Four-petal flower / quatrefoil — four overlapping circles
+      // Four-petal flower / quatrefoil, four overlapping circles
       return (
         <>
           <circle cx="20" cy="12" r="6" />
@@ -164,7 +164,7 @@ export function ProfileMenu({
 }: {
   /// Kept in the signature for the parent's existing call site even
   /// though we don't surface toasts here anymore (Sign-out used to
-  /// emit a "Soon" toast — gone with the Upgrade-to-Pro CTA). The
+  /// emit a "Soon" toast, gone with the Upgrade-to-Pro CTA). The
   /// `_onToast` param-name silences `noUnusedParameters`.
   onToast?: (msg: string, kind?: "success" | "error") => void;
   onOpenSettings: () => void;
@@ -193,7 +193,7 @@ export function ProfileMenu({
     const v = nameEdit.trim();
     setNameEdit(null);
     if (v === (userName ?? "")) return;
-    // Optimistic — POST then trust the server-echoed value on the
+    // Optimistic, POST then trust the server-echoed value on the
     // next /api/settings poll to reconcile.
     setUserName(v.length > 0 ? v : null);
     try {
@@ -225,7 +225,7 @@ export function ProfileMenu({
     };
     tick();
     // 1 s cadence so the avatar repaints during the spinner-window
-    // floor inside `TierTestRow` — at 3 s the spinner could
+    // floor inside `TierTestRow`, at 3 s the spinner could
     // disappear before the avatar refreshed.
     const id = window.setInterval(tick, 1000);
     return () => { alive = false; window.clearInterval(id); };
@@ -234,7 +234,7 @@ export function ProfileMenu({
   const [pos, setPos] = React.useState<{ top: number; right: number } | null>(null);
 
   /// Pull the signed-in identity (name + email) from the backend each
-  /// time the popover opens. Header reads these directly — no more
+  /// time the popover opens. Header reads these directly, no more
   /// hard-coded "Kostiantyn Halynskyi" inside `i18n.ts`. The tier
   /// chip moved out of this header (Kostya's feedback: visual noise
   /// while we don't have a real paid surface yet).
@@ -276,7 +276,7 @@ export function ProfileMenu({
     };
   }, [open, place]);
 
-  /// Cycle to a fresh random variant on every click — never repeats
+  /// Cycle to a fresh random variant on every click, never repeats
   /// the current one (otherwise rolling the same index does nothing
   /// visible and feels broken). Persists via the same localStorage
   /// key so the choice survives a relaunch. Replaces the old 3×3
@@ -290,7 +290,7 @@ export function ProfileMenu({
     // The header is rendered on TWO surfaces (Dashboard + MeetingView),
     // so there are two ProfileMenu instances each holding its own
     // `variant` state. Broadcast the change so the OTHER instance updates
-    // too — otherwise the avatar looked different per page (the choice
+    // too, otherwise the avatar looked different per page (the choice
     // only stuck on the surface where it was made).
     try { window.dispatchEvent(new CustomEvent(AVATAR_EVENT, { detail: next })); } catch {}
   };
@@ -298,7 +298,7 @@ export function ProfileMenu({
   // `onOpenSettings` / `onOpenDashboard` are no longer wired to popover
   // rows (the header has its own gear icon, and the Welcome/Home item was
   // removed). Reference them once so TS's noUnusedParameters check doesn't
-  // complain — the props stay on the type to avoid cascading the rename
+  // complain, the props stay on the type to avoid cascading the rename
   // through MainHeader / main.tsx call sites.
   void onOpenSettings;
   void onOpenDashboard;
@@ -307,7 +307,7 @@ export function ProfileMenu({
   /// The page on getcorder.com carries the support form + the
   /// right contact email, so the client doesn't have to ship its
   /// own copy. `corderOpenExternal` hands the URL to
-  /// `NSWorkspace.shared.open` on the Swift side — WKWebView's
+  /// `NSWorkspace.shared.open` on the Swift side, WKWebView's
   /// own link handler can't open external HTTP URLs without
   /// extra plumbing.
   const goHelp = () => {
@@ -321,7 +321,7 @@ export function ProfileMenu({
 
   /// Force Sparkle to refetch the appcast right now. Useful when
   /// the user just installed an old build and doesn't want to wait
-  /// for Sparkle's lazy ~24 h schedule — or when the previous
+  /// for Sparkle's lazy ~24 h schedule, or when the previous
   /// background check ran before the new release was published.
   /// The Swift route triggers the same `checkForUpdates` Sparkle
   /// path the UpdatePill uses internally; if a newer version is
@@ -366,7 +366,7 @@ export function ProfileMenu({
             <div className="profile-pop-id">
               {/* Signed-in identity, or a sign-in CTA when the
                   account is empty. The previous placeholder text
-                  was getting served as a real "account" — the
+                  was getting served as a real "account", the
                   popover even surfaced Sign-out on a signed-out
                   build, which made no sense. */}
               {userEmail ? (
@@ -407,13 +407,13 @@ export function ProfileMenu({
 
 
           {/* Top group: navigation + support. Settings is gone
-              from here — there's already a Settings icon in the
+              from here, there's already a Settings icon in the
               MainHeader toolbar that fires the same handler, no
               need to surface it twice. Get help took its slot,
               filling out the navigation pair. */}
           <div className="profile-pop-sep" />
           {/* Foot group: Get help / Check for updates (+ admin shortcut).
-              The Welcome/Home item was removed — there's already a Home
+              The Welcome/Home item was removed, there's already a Home
               affordance on the surface and it cluttered the menu. */}
           <div className="profile-pop-foot">
             <button className="profile-pop-item" onClick={goHelp} role="menuitem">
@@ -424,7 +424,7 @@ export function ProfileMenu({
             </button>
             {isAdmin && (
               // Operator-only shortcut. Doesn't ship admin UI inside the
-              // app — just opens getcorder.com/admin in the default
+              // app, just opens getcorder.com/admin in the default
               // browser, where the static admin panel handles auth itself
               // via the same Supabase session (cookies on the public site).
               <button
@@ -456,8 +456,7 @@ export function ProfileMenu({
             </>
           )}
 
-          {/* Auxiliary group: Sign out as the bottom full-width action —
-              same shape as the guest Sign-in CTA (`.profile-pop-signin`) so
+          {/* Auxiliary group: Sign out as the bottom full-width action, same shape as the guest Sign-in CTA (`.profile-pop-signin`) so
               the menu's last action is visually symmetric across states, but
               RED (`.profile-pop-signout`) because it's a destructive exit. */}
           {userEmail && (
@@ -470,7 +469,7 @@ export function ProfileMenu({
                   try { await signOut(); } catch {}
                   // The Swift sign-out path triggers a process relaunch
                   // (per-account on-disk paths can't be swapped live),
-                  // so there's no point reloading here — the new
+                  // so there's no point reloading here, the new
                   // process boots straight into the Welcome wizard.
                 }}
                 role="menuitem"

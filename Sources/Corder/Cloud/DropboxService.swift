@@ -139,7 +139,7 @@ actor DropboxService {
         let attrs = try FileManager.default.attributesOfItem(atPath: localFile.path)
         let totalSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
 
-        // 1. Start session — first chunk is sent in the start request.
+        // 1. Start session, first chunk is sent in the start request.
         let first = handle.readData(ofLength: chunkSize)
         if first.isEmpty { throw DropboxError.decode("empty file") }
 
@@ -248,7 +248,7 @@ actor DropboxService {
 
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            // download(for:) writes the error body to the temp file too —
+            // download(for:) writes the error body to the temp file too
             // surface it for diagnosis.
             let body = (try? String(contentsOf: tempURL, encoding: .utf8)) ?? ""
             throw DropboxError.http(status, body)
@@ -256,7 +256,7 @@ actor DropboxService {
 
         let dir = localURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // `move` won't overwrite — make sure the destination is clear first.
+        // `move` won't overwrite, make sure the destination is clear first.
         try? FileManager.default.removeItem(at: localURL)
         try FileManager.default.moveItem(at: tempURL, to: localURL)
     }

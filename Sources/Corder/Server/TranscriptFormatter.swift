@@ -4,7 +4,7 @@ enum TranscriptFormatter {
     /// Human-friendly clipboard format: speaker header on its own line,
     /// then the speaker's turn as a paragraph. Consecutive segments by the
     /// same speaker collapse into one paragraph. Blank line between turns.
-    /// No per-segment timestamps — they make the pasted text unreadable in
+    /// No per-segment timestamps, they make the pasted text unreadable in
     /// docs/chats; users wanting timing can use the audio scrubber.
     static func clipboardText(segments: [Segment], speakers: [Speaker]) -> String {
         let byId = Dictionary(uniqueKeysWithValues: speakers.map { ($0.id, $0) })

@@ -3,22 +3,22 @@ import { Loader2 } from "lucide-react";
 import { Lang } from "../i18n";
 
 /// In-app sign-in modal rendered inside the Library WKWebView. Mirrors the
-/// UpdateModal's look — the same `.update-card` with the cursor-tilt 3D
-/// parallax + sheen — but WITHOUT the StarsCanvas (stars belong to the
+/// UpdateModal's look, the same `.update-card` with the cursor-tilt 3D
+/// parallax + sheen, but WITHOUT the StarsCanvas (stars belong to the
 /// update flow, not sign-in). State is pushed in by the Swift side via
 /// `window.corderAuthState(...)`; actions go back through
 /// `window.webkit.messageHandlers.authAction`. Auth itself stays native
 /// (the Supabase SDK owns the session + the account-folder relaunch); this
 /// is purely the surface, so the user never sees a separate window.
 ///
-/// The card is WHITE (`var(--bg)`) — the "guest" treatment — by design:
+/// The card is WHITE (`var(--bg)`), the "guest" treatment, by design:
 /// only signed-in users get the green/blue accent, a not-signed-in user
 /// stays neutral.
 
 export interface AuthModalState {
   visible: boolean;
   /// True while a native auth round-trip (sign-in / sign-up / Google) is in
-  /// flight — disables the form + shows a spinner.
+  /// flight, disables the form + shows a spinner.
   busy: boolean;
   /// Inline error beneath the form (wrong password, network, etc.).
   error?: string | null;
@@ -88,7 +88,7 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
   // so this shares the jank fix): map the pointer over the overlay into a
   // small rotateX/rotateY pair + a sheen position, written onto CSS variables
   // the shared `.update-card` rules read. The rects are CACHED (recomputed on
-  // resize only) — reading getBoundingClientRect on every mousemove forced two
+  // resize only), reading getBoundingClientRect on every mousemove forced two
   // synchronous reflows per event, the tilt-stutter root cause; the writes are
   // coalesced into ONE per frame via requestAnimationFrame; and the
   // `tilt-snap-back` class eases the card back to flat only on cursor-leave.
@@ -101,7 +101,7 @@ export function SignInModalHost({ lang }: { lang: Lang }) {
     const remeasure = () => { oRect = overlay.getBoundingClientRect(); cRect = card.getBoundingClientRect(); };
     let raf = 0;
     let px = 0, py = 0;
-    const max = 4;   // gentle tilt — subtler than the update modal
+    const max = 4;   // gentle tilt, subtler than the update modal
     const apply = () => {
       raf = 0;
       const nx = ((px - oRect.left) / oRect.width) * 2 - 1;

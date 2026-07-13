@@ -13,7 +13,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "meetings"
     // Optional fields default to nil so the synthesised memberwise init can
     // be called with only the required arguments (id / startedAt / paths /
-    // status) — keeps callers from having to pass `nil` for every metadata
+    // status), keeps callers from having to pass `nil` for every metadata
     // field they don't care about, and adding new optional columns won't
     // break the call sites.
     var id: String
@@ -42,7 +42,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     var pinnedAt: Int64? = nil
     /// Whether the default OUTPUT route was Bluetooth when recording
     /// started. Persisted (not read live) because the capture engine is
-    /// a singleton — a deferred / re-transcribe run would otherwise see
+    /// a singleton, a deferred / re-transcribe run would otherwise see
     /// the *current* route. Drives the system-track chooser: on BT the
     /// Core-Audio tap is faint, so the SCStream backup is authoritative.
     var outputBluetoothAtStart: Bool? = nil

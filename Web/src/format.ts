@@ -3,8 +3,8 @@ import type { Lang } from "./i18n";
 /// First-person speaker placeholders the Swift pipeline writes into
 /// `speakers.custom_name` ("you" by default). We replace them with
 /// the signed-in user's display name everywhere the UI surfaces a
-/// speaker label — Transcript, Timeline, anywhere a transcript-row
-/// shows who said what — so the user reads their actual name, not a
+/// speaker label, Transcript, Timeline, anywhere a transcript-row
+/// shows who said what, so the user reads their actual name, not a
 /// placeholder. Case-insensitive list covers historical variants.
 const FIRST_PERSON_PLACEHOLDERS = new Set(["you", "i", "me"]);
 
@@ -36,7 +36,7 @@ function pad(n: number) { return n.toString().padStart(2, "0"); }
 // aware helpers so the ~13 call sites (and a future locale) stay intact
 // without a signature churn; it's intentionally unused for now.
 export function formatDuration(ms?: number, _lang: Lang = "en"): string {
-  if (!ms || ms < 0) return "—";
+  if (!ms || ms < 0) return "0:00";
   const sec = Math.round(ms / 1000);
   const m = Math.floor(sec / 60);
   const s = sec % 60;

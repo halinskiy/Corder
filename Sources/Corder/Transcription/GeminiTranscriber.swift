@@ -11,7 +11,7 @@ import AVFoundation
 ///      structured JSON: speaker label + millisecond timestamps + text.
 ///   4. Decode and return.
 ///
-/// We do NOT do diarization separately — Gemini already labels speakers in
+/// We do NOT do diarization separately, Gemini already labels speakers in
 /// arrival order (Speaker 1, Speaker 2…). The pipeline maps "is this user
 /// or the remote side?" with our existing channel-gate (mic RMS vs system
 /// RMS per segment), reusing logic from `Diarizer`.
@@ -29,7 +29,7 @@ enum GeminiTranscriber {
             switch self {
             case .missingAPIKey:           return "Gemini API key is not configured."
             case .http(let s, let body):   return "Gemini API \(s): \(body.prefix(220))"
-            // The raw JSON returned by Gemini can be tens of KB — never
+            // The raw JSON returned by Gemini can be tens of KB, never
             // dump it into a UI toast. The user only needs the headline;
             // the full body is in /tmp/corder.log.
             case .parse:                   return "Could not parse Gemini response."
@@ -71,7 +71,7 @@ enum GeminiTranscriber {
     }
     /// Same routing decision as the transcribe path. Exposed
     /// (internal) so the text-only Gemini helpers (`GeminiTitler`,
-    /// `GeminiSummarizer`) can hit the Worker too — otherwise
+    /// `GeminiSummarizer`) can hit the Worker too, otherwise
     /// auto-title / auto-summary silently no-op for every Pro / Max
     /// user (no local key on disk).
     static func endpointBaseForProxy() async -> String {
@@ -86,7 +86,7 @@ enum GeminiTranscriber {
         SupabaseClientHolder.shared.auth.currentSession?.accessToken ?? ""
     }
     /// Authorization header to attach to proxy requests. Returns
-    /// `nil` for direct (signed-out) traffic — Google reads the
+    /// `nil` for direct (signed-out) traffic, Google reads the
     /// key from the query string and rejects unexpected Auth
     /// headers on the resumable-upload start path.
     private static func proxyAuthHeader() async -> String? {
@@ -95,8 +95,8 @@ enum GeminiTranscriber {
     }
 
     /// Tells the prompt builder how to label speakers in the output.
-    /// `single` — there's exactly one speaker (mic.wav of the local user).
-    /// `diarize` — multiple speakers possible, label them in arrival order
+    /// `single`, there's exactly one speaker (mic.wav of the local user).
+    /// `diarize`, multiple speakers possible, label them in arrival order
     /// (system.wav of the remote side, where there might be 1, 2 or 5 people).
     enum TranscribeMode {
         case single
@@ -113,19 +113,19 @@ enum GeminiTranscriber {
     // 23-min call hit MAX_TOKENS on a middle chunk and salvage dropped
     // ~50 segments, corrupting the time projection). Truncation now
     // forces a split rather than salvaging a partial, so a too-large
-    // chunk no longer loses speech — but starting at 3 min keeps the
+    // chunk no longer loses speech, but starting at 3 min keeps the
     // common case to one round-trip instead of paying 2-3 split
     // retries on most calls.
     private static let maxSecondsPerChunk: Double = 3 * 60
 
     /// Below this savings ratio (compressed/original) the VAD pre-pass
-    /// is a wash — extra disk I/O without meaningful API savings — and
+    /// is a wash, extra disk I/O without meaningful API savings, and
     /// we just send the original. Tuned so that talk-heavy meetings
     /// fall through unchanged while idle mic tracks (lots of "I'm
     /// listening to my friend") get squeezed.
     private static let vadMinSavings: Double = 0.10
     /// If a file's total speech duration is below this, we don't even
-    /// upload — just return zero turns. Catches "I forgot to talk into
+    /// upload, just return zero turns. Catches "I forgot to talk into
     /// the mic" and "the system stream had no audible app".
     private static let vadEmptyFloorMs: Int64 = 500
 
@@ -145,7 +145,7 @@ enum GeminiTranscriber {
     /// of a single mic: the same person flips between Speaker 1/2/3
     /// across chunk boundaries. One pass = one globally-consistent label
     /// space. The cost is exposure to output-token truncation on very
-    /// long meetings — mitigated by `salvageSegments` recovering every
+    /// long meetings, mitigated by `salvageSegments` recovering every
     /// complete segment from a truncated array.
     static func transcribe(audioURL: URL,
                             mode: TranscribeMode = .diarize,
@@ -166,7 +166,7 @@ enum GeminiTranscriber {
         FileLogger.log("GeminiTranscriber: \(audioURL.lastPathComponent) duration ≈ \(Int(durationSec))s, mode=\(mode)")
 
         // VAD pre-pass. On read failure we fall through to "transcribe the
-        // original" rather than failing the meeting — VAD is an
+        // original" rather than failing the meeting, VAD is an
         // optimisation, not a correctness requirement.
         let segments = VoiceActivityDetector.detect(audioURL: audioURL)
         let speechMs = segments.map { VoiceActivityDetector.totalSpeechMs($0) } ?? durationMs
@@ -178,7 +178,7 @@ enum GeminiTranscriber {
 
         // Decide whether to actually use VAD output. If the savings are
         // tiny (talk-heavy meeting), we'd be paying disk I/O for ~0% API
-        // benefit — pass the original through.
+        // benefit, pass the original through.
         let savingsRatio = durationMs > 0 ? 1.0 - Double(speechMs) / Double(durationMs) : 0.0
         let useVad = (segments != nil) && savingsRatio >= vadMinSavings
 
@@ -199,10 +199,10 @@ enum GeminiTranscriber {
                 FileLogger.log(String(format: "GeminiTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments)",
                                       Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count))
             } catch {
-                // Concatenation failed — bail out of VAD, transcribe the
+                // Concatenation failed, bail out of VAD, transcribe the
                 // original. Disk full / quota race / corrupt frame read.
                 try? FileManager.default.removeItem(at: dir)
-                FileLogger.log("GeminiTranscriber: VAD concat failed (\(error)) — falling back to original")
+                FileLogger.log("GeminiTranscriber: VAD concat failed (\(error)), falling back to original")
                 workURL = audioURL
                 projection = nil
                 tmpDir = nil
@@ -230,14 +230,14 @@ enum GeminiTranscriber {
         do {
             if singlePass || workDuration <= maxSecondsPerChunk {
                 if singlePass && workDuration > maxSecondsPerChunk {
-                    FileLogger.log("GeminiTranscriber: singlePass — sending \(Int(workDuration))s in ONE call (consistent diarization labels)")
+                    FileLogger.log("GeminiTranscriber: singlePass, sending \(Int(workDuration))s in ONE call (consistent diarization labels)")
                 }
                 rawTurns = try await transcribeSingle(audioURL: workURL, apiKey: key, offsetMs: 0, mode: mode, expectedSpeakers: expectedSpeakers)
             } else {
                 rawTurns = try await transcribeChunked(audioURL: workURL, durationSec: workDuration, apiKey: key, mode: mode, expectedSpeakers: expectedSpeakers)
             }
         } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
-            throw GError.network("No internet — try again when you're online.")
+            throw GError.network("No internet, try again when you're online.")
         }
 
         // No projection needed when we sent the original through.
@@ -256,7 +256,7 @@ enum GeminiTranscriber {
         // (the user's "clicking any tail line jumps to the very end").
         // Fix: clamp to the real duration, then walk backwards keeping
         // each start STRICTLY less than the next. The overshooting tail
-        // gets compacted into the final seconds in its original order —
+        // gets compacted into the final seconds in its original order
         // every line lands on a distinct, monotonic, in-bounds time, so
         // clicking it seeks near where it was actually said. Turns that
         // were already in range are untouched (their start is already
@@ -275,7 +275,7 @@ enum GeminiTranscriber {
     }
 
     /// Single upload + generate pass. `offsetMs` is added to every turn's
-    /// timestamps — used by the chunked path to shift sub-recordings back
+    /// timestamps, used by the chunked path to shift sub-recordings back
     /// onto the original timeline.
     private static func transcribeSingle(audioURL: URL, apiKey: String, offsetMs: Int64, mode: TranscribeMode, expectedSpeakers: Int? = nil, salvageOnTruncation: Bool = true) async throws -> [Turn] {
         FileLogger.log("GeminiTranscriber: uploading \(audioURL.lastPathComponent)…")
@@ -303,7 +303,7 @@ enum GeminiTranscriber {
 
     /// Long-audio path: slice into ≤`maxSecondsPerChunk`-pieces,
     /// transcribe each, concatenate. Speaker labels stay per-Gemini-chunk
-    /// ("Speaker 1", "Speaker 2") — we keep them as-is and rely on the
+    /// ("Speaker 1", "Speaker 2"), we keep them as-is and rely on the
     /// upstream channel-gate (mic vs system RMS) per-segment to decide
     /// which label belongs to the local user. That heuristic is
     /// per-turn, so it doesn't matter whether two chunks both call the
@@ -311,10 +311,10 @@ enum GeminiTranscriber {
     /// "Speaker 2".
     ///
     /// If a single chunk's response gets JSON-truncated (very dense
-    /// speech, multiple speakers in 9 minutes — output blows past
+    /// speech, multiple speakers in 9 minutes, output blows past
     /// Gemini's 65 k-token cap mid-segment), we transparently split
     /// THAT chunk in half and retry. Recursion keeps halving until
-    /// either success or `minSecondsPerChunk` — at which point we
+    /// either success or `minSecondsPerChunk`, at which point we
     /// surface the parse error to the pipeline.
     private static func transcribeChunked(audioURL: URL, durationSec: Double, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil) async throws -> [Turn] {
         let chunkDir = FileManager.default.temporaryDirectory
@@ -355,9 +355,9 @@ enum GeminiTranscriber {
             guard case .parse = err else { throw err }
             let dur = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
             guard depth < maxSplitDepth, dur > minSecondsPerSplit * 2 else {
-                // Can't split any further — accept a salvaged partial
+                // Can't split any further, accept a salvaged partial
                 // for this floor slice (better than dropping it whole).
-                FileLogger.log("GeminiTranscriber: split floor (\(Int(dur))s, depth \(depth)) — retrying with salvage")
+                FileLogger.log("GeminiTranscriber: split floor (\(Int(dur))s, depth \(depth)), retrying with salvage")
                 return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey, offsetMs: offsetMs, mode: mode, expectedSpeakers: expectedSpeakers, salvageOnTruncation: true)
             }
 
@@ -436,7 +436,7 @@ enum GeminiTranscriber {
     }
 
     /// Legacy `~/.config/corder/gemini_key` and `$GEMINI_API_KEY`
-    /// reads are gone — production goes through the Cloudflare
+    /// reads are gone, production goes through the Cloudflare
     /// Worker proxy (`/transcribe/gemini-proxy/*`) with the user's
     /// Supabase JWT, and the title/summary/chapters paths share the
     /// same proxy. Returning nil keeps the property's call-sites
@@ -456,7 +456,7 @@ enum GeminiTranscriber {
         // NOT `/v1beta/files`. Without the `/upload/` prefix and the
         // `Protocol: resumable` + `Command: start` header pair, Google
         // happily returns 200 with an empty body and no `X-Goog-Upload-URL`
-        // header — the previous code path was failing here every time.
+        // header, the previous code path was failing here every time.
         let base = await Self.endpointBase()
         let startURL = URL(string: "\(base.replacingOccurrences(of: "/v1beta", with: "/upload/v1beta"))/files?key=\(apiKey)")!
         var startReq = URLRequest(url: startURL)
@@ -479,12 +479,12 @@ enum GeminiTranscriber {
               let uploadURL = httpStart.value(forHTTPHeaderField: "X-Goog-Upload-URL") else {
             let bodyPreview = String(data: startData, encoding: .utf8) ?? ""
             throw GError.http((startResp as? HTTPURLResponse)?.statusCode ?? 0,
-                              "no X-Goog-Upload-URL — \(bodyPreview)")
+                              "no X-Goog-Upload-URL, \(bodyPreview)")
         }
 
         // Step 2: upload bytes and finalize in one shot.
         let bytes = try Data(contentsOf: audioURL)
-        // `uploadURL` is a server-supplied response header — guard the
+        // `uploadURL` is a server-supplied response header, guard the
         // parse instead of force-unwrapping (a malformed header would
         // otherwise crash the app rather than fail the transcribe cleanly).
         guard let uploadURLParsed = URL(string: uploadURL) else {
@@ -517,7 +517,7 @@ enum GeminiTranscriber {
 
     private static func waitForActive(fileURI: String, apiKey: String) async throws {
         // Poll the file resource. The fileURI we got back is the public download
-        // URL, but the file resource for status lives under /files/{name} —
+        // URL, but the file resource for status lives under /files/{name}
         // strip and rebuild.
         let name = (fileURI as NSString).lastPathComponent  // "abc123"
         let base = await Self.endpointBase()
@@ -548,7 +548,7 @@ enum GeminiTranscriber {
     /// `salvageOnTruncation`: when false, a truncated / non-STOP
     /// response throws `.parse` instead of returning the few segments
     /// that arrived before the cut-off. The caller (`transcribeChunkWithSplit`)
-    /// uses that to trigger a halve-and-retry — a smaller slice fits
+    /// uses that to trigger a halve-and-retry, a smaller slice fits
     /// under the output-token budget and recovers the speech that
     /// salvage would otherwise drop (which also corrupts the VAD→original
     /// time projection, since the missing middle shifts every surviving
@@ -565,14 +565,14 @@ enum GeminiTranscriber {
         req.timeoutInterval = 600
 
         // Two prompt variants. The single-speaker one (mic.wav) is much
-        // stricter about silence handling — it's the path that used to
+        // stricter about silence handling, it's the path that used to
         // hallucinate viticulture monologues during the user's quiet
         // moments. The diarize one is for the remote-side feed.
         let speakerRule: String
         switch mode {
         case .single:
             speakerRule = """
-            - This audio is one person speaking — always label them "Speaker 1". Never invent additional speakers.
+            - This audio is one person speaking, always label them "Speaker 1". Never invent additional speakers.
             """
         case .diarize:
             var rule = """
@@ -586,7 +586,7 @@ enum GeminiTranscriber {
             if let n = expectedSpeakers, n >= 1 {
                 rule += """
 
-            - This recording has approximately \(n) distinct speaker\(n == 1 ? "" : "s"). Listen carefully for voice, cadence and vocabulary differences and try to distinguish all \(n); do not collapse two different people into one label just because they sound similar. If you are certain there are fewer, use fewer — but actively look for the \(n).
+            - This recording has approximately \(n) distinct speaker\(n == 1 ? "" : "s"). Listen carefully for voice, cadence and vocabulary differences and try to distinguish all \(n); do not collapse two different people into one label just because they sound similar. If you are certain there are fewer, use fewer, but actively look for the \(n).
             """
             }
             speakerRule = rule
@@ -598,8 +598,8 @@ enum GeminiTranscriber {
         - Restore correct punctuation and capitalisation.
         - Drop only obvious filler / stutters (uh, um, ну, э-э) when they carry no meaning.
         - One segment per natural speech turn. Aim for 3-15 seconds per segment.
-        - CRITICAL: If a stretch of audio contains no clearly intelligible speech — silence, breathing, mouse clicks, keyboard, music, traffic noise, fan hum, microphone bumps — output NO segment for that stretch. Do NOT invent text. Do NOT fill silence with poetry, weather, geography, viticulture, song lyrics, or anything else. Better to output an empty segments array than to hallucinate.
-        - Output STRICT minified JSON only — a single line, no markdown, no prose, no extra whitespace or newlines around or inside it.
+        - CRITICAL: If a stretch of audio contains no clearly intelligible speech, silence, breathing, mouse clicks, keyboard, music, traffic noise, fan hum, microphone bumps, output NO segment for that stretch. Do NOT invent text. Do NOT fill silence with poetry, weather, geography, viticulture, song lyrics, or anything else. Better to output an empty segments array than to hallucinate.
+        - Output STRICT minified JSON only, a single line, no markdown, no prose, no extra whitespace or newlines around or inside it.
 
         Use these SHORT keys exactly (this keeps the response compact so
         long meetings don't get truncated):
@@ -610,14 +610,14 @@ enum GeminiTranscriber {
         """
 
         // User-supplied domain terms (names, product names, acronyms,
-        // jargon). The single biggest accuracy lever for technical calls —
+        // jargon). The single biggest accuracy lever for technical calls
         // spell these exactly when heard. Appended only when non-empty so
         // the cache key / output is unchanged for users who don't set it.
         let vocab = AppVocabulary.current
         let systemFull = vocab.isEmpty ? system : system + """
 
 
-        Domain vocabulary — these terms appear in this conversation;
+        Domain vocabulary, these terms appear in this conversation;
         transcribe them with exactly this spelling/capitalisation when you
         hear them (do not invent them when you don't):
         \(vocab)
@@ -642,7 +642,7 @@ enum GeminiTranscriber {
                 // Transcription is schema-constrained extraction, not a
                 // reasoning task. Gemini 2.5 Flash bills thinking tokens
                 // at the output rate ($2.50/1M) and on a long meeting the
-                // reasoning pass can dwarf the actual transcript — pure
+                // reasoning pass can dwarf the actual transcript, pure
                 // cost with no accuracy gain. Off = cheaper and faster,
                 // same output. (Same fix as GeminiTitler.)
                 "thinkingConfig": ["thinkingBudget": 0],
@@ -677,7 +677,7 @@ enum GeminiTranscriber {
         // MAX_TOKENS is visibly the signal to shrink the chunk further.
         let truncated = (first["finishReason"] as? String).map { $0 != "STOP" } ?? false
         if truncated {
-            FileLogger.log("GeminiTranscriber: finishReason=\(first["finishReason"] as? String ?? "?") (non-STOP — truncated/partial JSON)")
+            FileLogger.log("GeminiTranscriber: finishReason=\(first["finishReason"] as? String ?? "?") (non-STOP, truncated/partial JSON)")
         }
         let raw = parts.compactMap { $0["text"] as? String }.joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -689,24 +689,24 @@ enum GeminiTranscriber {
            let payloadData = raw.data(using: .utf8),
            let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
            let parsed = payload["segments"] as? [[String: Any]] {
-            // Happy path — STOP + well-formed JSON.
+            // Happy path, STOP + well-formed JSON.
             segs = parsed
         } else if !salvageOnTruncation {
             // We can still split this slice smaller. Throwing .parse
             // makes transcribeChunkWithSplit halve-and-retry: a shorter
             // slice fits under the output-token budget, so we recover
             // the speech salvage would silently drop. Dropping the
-            // middle of a chunk doesn't just lose words — it shifts
+            // middle of a chunk doesn't just lose words, it shifts
             // every surviving turn off the VAD→original projection, so
             // the transcript ends up both incomplete AND time-misaligned
             // with the audio. Splitting fixes both.
-            throw GError.parse("truncated (finishReason non-STOP) — forcing split")
+            throw GError.parse("truncated (finishReason non-STOP), forcing split")
         } else if let salvaged = Self.salvageSegments(from: raw), !salvaged.isEmpty {
             // Last resort: we've split as far as we can (recursion floor)
             // and the slice STILL overflows. Recover every *complete*
-            // segment object that made it through — partial transcript
+            // segment object that made it through, partial transcript
             // beats none. Only reached when salvageOnTruncation is true.
-            FileLogger.log("GeminiTranscriber: JSON truncated at split floor — salvaged \(salvaged.count) complete segments")
+            FileLogger.log("GeminiTranscriber: JSON truncated at split floor, salvaged \(salvaged.count) complete segments")
             segs = salvaged
         } else {
             throw GError.parse("no segments in JSON: \(raw.prefix(220))")
@@ -732,8 +732,8 @@ enum GeminiTranscriber {
 
     /// Recover complete segment objects from a truncated / malformed
     /// `{"segments":[ … ]}` blob. Gemini, when it runs out of output
-    /// budget, stops mid-array — sometimes mid-object, sometimes mid-
-    /// string — so `JSONSerialization` rejects the whole thing. We walk
+    /// budget, stops mid-array, sometimes mid-object, sometimes mid-
+    /// string, so `JSONSerialization` rejects the whole thing. We walk
     /// the array brace-by-brace (string-state aware so braces inside
     /// `"text"` don't fool us) and individually parse each balanced
     /// `{ … }`. The first object that doesn't balance is where the
@@ -777,7 +777,7 @@ enum GeminiTranscriber {
                         objStart = nil
                     }
                 case "]":
-                    // Clean end of the array — stop here.
+                    // Clean end of the array, stop here.
                     if depth == 0 { return objects.isEmpty ? nil : objects }
                 default:
                     break
@@ -785,7 +785,7 @@ enum GeminiTranscriber {
             }
             i = raw.index(after: i)
         }
-        // Ran off the end (truncated) — return whatever balanced.
+        // Ran off the end (truncated), return whatever balanced.
         return objects.isEmpty ? nil : objects
     }
 

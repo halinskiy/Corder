@@ -21,12 +21,11 @@ let package = Package(
         // ~/Library/Application Support/FluidAudio/Models/.
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.14.5"),
         // Local Whisper (Apple-Silicon-native, Core ML under the hood).
-        // Third ASR provider — $0/hour after the one-time multilingual
+        // Third ASR provider, $0/hour after the one-time multilingual
         // model download (~1.5 GB) cached under AppPaths.modelsDir. Adds
         // ~50-100 MB of Core ML runtime to the bundle; the model itself
         // is fetched on-demand the first time the user flips to the
-        // `whisperLocal` provider, not bundled. Apple Silicon only —
-        // Intel callers fall back to Gemini at the pipeline level.
+        // `whisperLocal` provider, not bundled. Apple Silicon only, // Intel callers fall back to Gemini at the pipeline level.
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
         // Supabase backend client (Auth + PostgREST + Storage + Realtime).
         // Replaces the GRDB local DB / loopback Google OAuth /

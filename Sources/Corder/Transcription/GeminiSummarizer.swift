@@ -1,7 +1,7 @@
 import Foundation
 
 /// Thrown by a paid-feature generator (Summary / Chapters) when the Worker
-/// returns HTTP 403 — a tier gate, NOT a generic failure. The route maps it
+/// returns HTTP 403, a tier gate, NOT a generic failure. The route maps it
 /// to a real 403 so the frontend shows the Upgrade upsell instead of the
 /// "didn't work, send a report" error card. A 403 is an upsell, never a
 /// failure card.
@@ -9,8 +9,8 @@ enum PaidFeatureError: Error { case tierRequired }
 
 /// Generates a Markdown meeting summary from a finished transcript via
 /// a text-only Gemini call. Heavier than the title (longer input +
-/// output) so it runs on demand — only when the user opens the Summary
-/// tab — and the result is cached on the meeting row.
+/// output) so it runs on demand, only when the user opens the Summary
+/// tab, and the result is cached on the meeting row.
 ///
 /// Best-effort: any failure returns nil and the UI shows a retry state.
 enum GeminiSummarizer {
@@ -21,7 +21,7 @@ enum GeminiSummarizer {
     static func generate(transcript: String) async throws -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        // Same routing as GeminiTranscriber / GeminiTitler — go
+        // Same routing as GeminiTranscriber / GeminiTitler, go
         // through the Worker proxy when signed in so Pro / Max users
         // get auto-summary without needing a local Google API key.
         let jwt = await GeminiTranscriber.jwtForProxy()
@@ -47,7 +47,7 @@ enum GeminiSummarizer {
         mattered.
 
         Language: write in the SAME language as the transcript
-        (Russian → Russian, English → English). Headings too — never
+        (Russian → Russian, English → English). Headings too, never
         English headings under a Russian transcript.
 
         Output format (STRICT):
@@ -68,7 +68,7 @@ enum GeminiSummarizer {
 
         Content rules:
         - Be specific. Numbers, names, dates, deadlines, percentages,
-          counts — keep them inline in the prose, never paraphrase
+          counts, keep them inline in the prose, never paraphrase
           them away ("обсуждали зарплаты" ❌ → "сошлись на зарплате
           **£35k фикс**" ✅).
         - Synthesise, do not transcribe. Capture each side's POSITION
@@ -76,9 +76,9 @@ enum GeminiSummarizer {
           2 сказал…" / "Speaker 1 ответил…". If both sides agree,
           state the agreement; if they disagreed, state the split in
           one sentence ("Стороны разошлись в оценке X: один считал
-          A, другой — B").
+          A, другой, B").
         - Never invent anything not said. If unclear, omit it. Do not
-          hedge ("вероятно", "возможно") — either it was said or it
+          hedge ("вероятно", "возможно"), either it was said or it
           wasn't.
         - Quotes only when exact wording matters. Russian guillemets
           «…» for Russian.
@@ -114,7 +114,7 @@ enum GeminiSummarizer {
             "generationConfig": [
                 "temperature": 0.35,
                 // Structured Markdown is a one-shot rewrite, not a chain
-                // of reasoning — thinking budget burns output tokens for
+                // of reasoning, thinking budget burns output tokens for
                 // no quality gain on this kind of task. Output budget is
                 // generous (was 600) because a real structured recap of a
                 // 30-minute call needs ~1200–2000 tokens.
