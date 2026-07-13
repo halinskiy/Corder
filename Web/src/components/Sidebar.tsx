@@ -35,12 +35,12 @@ function PlayingIcon() {
 
 interface Props {
   meetings: MeetingSummary[];
-  /// False during the very first /api/meetings fetch — drives the
+  /// False during the very first /api/meetings fetch, drives the
   /// shimmer skeleton so the empty-list state doesn't flash before the
   /// first response arrives.
   loaded: boolean;
   activeId: string | null;
-  /// Meeting whose audio is currently playing — gets a red play glyph
+  /// Meeting whose audio is currently playing, gets a red play glyph
   /// next to its title so it's obvious where the sound comes from.
   playingId?: string | null;
   query: string;
@@ -57,7 +57,7 @@ interface Props {
   t: T;
   lang: Lang;
   /// Current paid-tier rung. Kept on the props for future use even
-  /// though the upgrade card is gone — callers in main.tsx already
+  /// though the upgrade card is gone, callers in main.tsx already
   /// pass it through, removing it here would cascade through other
   /// files for no benefit.
   /// Plumbed from main.tsx; consumed by no surface right now (the
@@ -77,7 +77,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
 
   // Multi-select: plain click → set of {id}, anchor = id. Cmd-click
   // toggles. Shift-click extends from anchor to the clicked row using
-  // the currently-visible (filtered + grouped) order. No checkboxes —
+  // the currently-visible (filtered + grouped) order. No checkboxes
   // visual selection is just the existing `.meeting-item.active` style
   // applied to every member. Right-click on a row that's part of a
   // multi-selection swaps the context menu for an Archive-all variant.
@@ -86,10 +86,10 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
 
   // A single click on a row stores its id in `selectedIds` so the row
   // wears the active style. When the user navigates back to the
-  // Dashboard (activeId becomes null) that selection should clear too —
+  // Dashboard (activeId becomes null) that selection should clear too
   // otherwise the sidebar keeps the old row highlighted even though
   // nothing is open. Multi-select (Cmd/Shift) is a separate code path
-  // and survives — only the implicit single-row selection is wiped.
+  // and survives, only the implicit single-row selection is wiped.
   React.useEffect(() => {
     if (activeId === null) {
       setSelectedIds((cur) => (cur.size === 0 ? cur : new Set()));
@@ -172,7 +172,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
     if (e.metaKey || e.ctrlKey) {
       const next = new Set(selectedIds);
       if (next.has(id)) next.delete(id); else next.add(id);
-      // Anchor moves to the most recently clicked id even on toggle —
+      // Anchor moves to the most recently clicked id even on toggle
       // matches Finder's behaviour.
       setSelectedIds(next);
       setAnchorId(id);
@@ -185,7 +185,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
   };
 
   // When the user opens a context menu on a row that ISN'T part of the
-  // current multi-selection, the menu acts on JUST that row — same as
+  // current multi-selection, the menu acts on JUST that row, same as
   // before. When the right-clicked row IS in a multi-selection, we
   // collapse the menu to a single "Archive N selected" action.
   const menuIds: string[] = menu
@@ -249,7 +249,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
                 </div>
                 <div className="meeting-meta">
                   <span className="status-dot ready" />
-                  <span>{t.ghost_duration ?? "—"}</span>
+                  <span>{t.ghost_duration ?? "0:00"}</span>
                 </div>
                 <div className="meeting-preview">{t.ghost_preview ?? "Hit Start to begin."}</div>
               </div>
@@ -302,7 +302,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
                 <div className="meeting-meta">
                   <span className={`status-dot ${m.status}`} />
                   {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
-                  {/* Drop the "transcribing" word from the meta — the
+                  {/* Drop the "transcribing" word from the meta, the
                       hollow status dot already tells the user there's
                       no transcript yet, and the literal word kept
                       reading as "work in progress" even after the
@@ -328,7 +328,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
         ))}
         <div className="sidebar-list-spacer" />
       </div>
-      {/* Upgrade CTA card removed — it overpowered the sidebar and the
+      {/* Upgrade CTA card removed, it overpowered the sidebar and the
           tier badge inside the profile popover already conveys plan
           state without selling. Re-introduce only if conversion data
           points at it. */}
@@ -412,7 +412,7 @@ function ContextMenu({ x, y, pinned, onRename, onPin, onDelete, onRetranscribe, 
 }
 
 /// Right-click menu when the user opened the context on a row that's
-/// part of a multi-selection — collapse to a single batch action so
+/// part of a multi-selection, collapse to a single batch action so
 /// per-row operations (rename, pin, re-transcribe) don't try to apply
 /// to N rows at once.
 function BatchContextMenu({ x, y, count, onArchive, t }: {

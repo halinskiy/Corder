@@ -105,7 +105,7 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [search, setSearch] = React.useState("");
-  // Speakers-clarify banner visibility — controlled here so the toolbar
+  // Speakers-clarify banner visibility, controlled here so the toolbar
   // icon button can toggle it. Auto-opens once per meeting if the diarizer
   // looks over-segmented and the user hasn't already dismissed for this id.
   const [clarifyOpen, setClarifyOpen] = React.useState(false);
@@ -161,7 +161,7 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
   React.useEffect(() => {
     if (!detail) return;
     // Re-poll while a transcription or recording is in flight, or while we're
-    // waiting on auto-boost — segments only get text_boost asynchronously.
+    // waiting on auto-boost, segments only get text_boost asynchronously.
     const hasBoostNow = detail.segments.some((s) => s.text_boost);
     const awaitingBoost = boostMode && detail.status === "ready" && detail.segments.length > 0 && !hasBoostNow;
     if (detail.status === "transcribing" || detail.status === "recording" || awaitingBoost) {
@@ -171,7 +171,7 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
   }, [detail, load, boostMode]);
 
   // Surface backend transcription errors (Gemini quota / billing, missing
-  // key, timeout) as a red toast. Polled once per meeting load — server
+  // key, timeout) as a red toast. Polled once per meeting load, server
   // clears the marker on the next successful run.
   const lastErrorShown = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -198,7 +198,7 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
       // currentTime is only meaningful once metadata has loaded; setting it
       // before that quietly snaps back to 0. Wait for `loadedmetadata` if
       // we're not there yet, then seek + play. play() may reject in some
-      // states (e.g. while still loading); we silently ignore — the click
+      // states (e.g. while still loading); we silently ignore, the click
       // counts as a user gesture so the next call usually succeeds.
       const apply = () => {
         try { v.currentTime = sec; } catch {}
@@ -208,7 +208,7 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
         apply();
       } else {
         v.addEventListener("loadedmetadata", apply, { once: true });
-        // Make sure metadata actually loads — `preload="auto"` does this
+        // Make sure metadata actually loads, `preload="auto"` does this
         // already, but calling load() guards against browsers that paused
         // it after the previous error/seek.
         try { v.load(); } catch {}
@@ -227,7 +227,7 @@ export function MeetingView({ meetingId, onDeleted, onToast, recordingState, onR
 
   const onDelete = () => {
     // The actual REST DELETE is scheduled by the parent's `onDeleted`
-    // handler with a 10-second Undo window — we just hand it the id.
+    // handler with a 10-second Undo window, we just hand it the id.
     onDeleted(detail.id);
   };
 

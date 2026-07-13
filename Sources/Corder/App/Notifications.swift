@@ -12,7 +12,7 @@ import UserNotifications
 /// post a banner, and let the delegate route taps back to the Library window.
 @MainActor
 enum NotificationsService {
-    /// Identifier used for every banner Corder posts — there's only ever one
+    /// Identifier used for every banner Corder posts, there's only ever one
     /// "transcription ready" type at a time, so a fixed id is enough.
     static let categoryID = "corder.notification"
 
@@ -29,7 +29,7 @@ enum NotificationsService {
                     }
                 }
             case .denied:
-                FileLogger.log("Notifications: authorization is .denied — banners will be silent")
+                FileLogger.log("Notifications: authorization is .denied, banners will be silent")
             default:
                 break
             }
@@ -38,7 +38,7 @@ enum NotificationsService {
 
     /// Stable identifier reused across every Corder banner. macOS
     /// Notification Center replaces an existing notification with the
-    /// same identifier instead of stacking a new one — exactly what
+    /// same identifier instead of stacking a new one, exactly what
     /// we want: Corder's banners are status updates ("transcription
     /// ready", "silent recording archived", "network lost"), each
     /// new one supersedes the previous, the Center shouldn't pile
@@ -58,7 +58,7 @@ enum NotificationsService {
         content.body = body
         // Softer notification tone than the macOS default "Funk" /
         // "Bottle" alert. `Glass.aiff` ships in /System/Library/Sounds/
-        // on every macOS — short, gentle water-drop chime, much less
+        // on every macOS, short, gentle water-drop chime, much less
         // jarring than the default banner sound. Falls back to system
         // default if the file isn't where we expect (older macOS / a
         // user who deleted it).
@@ -75,7 +75,7 @@ enum NotificationsService {
         // same time (`add` with the same identifier is documented to
         // replace, but Sonoma occasionally double-delivers if the
         // previous request was already in the queue with a different
-        // pending content payload — the explicit remove avoids that).
+        // pending content payload, the explicit remove avoids that).
         center.removeDeliveredNotifications(withIdentifiers: [bannerID])
         center.removePendingNotificationRequests(withIdentifiers: [bannerID])
 

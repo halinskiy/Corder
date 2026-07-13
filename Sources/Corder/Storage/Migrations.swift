@@ -103,7 +103,7 @@ enum Migrations {
         }
 
         // User-provided hint for diarization: how many participants were on
-        // the call besides the local user. Optional — when set we pin
+        // the call besides the local user. Optional, when set we pin
         // FluidAudio to that exact cluster count, otherwise we let it
         // auto-detect (and clean up with mergeTinyClusters).
         m.registerMigration("v5_expected_speakers") { db in
@@ -126,7 +126,7 @@ enum Migrations {
         // need to re-upload the audio and re-bill another generateContent.
         // `gemini_raw_turns` stores the array of {speaker, start_ms, end_ms,
         // text} dictionaries as JSON. `audio_hash` is the MD5 of the file
-        // we sent to Gemini — used to invalidate the cache if the audio
+        // we sent to Gemini, used to invalidate the cache if the audio
         // gets re-mixed (e.g. user re-runs after a fix to AudioMixer).
         m.registerMigration("v7_gemini_raw_cache") { db in
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN gemini_raw_turns TEXT;")
@@ -185,7 +185,7 @@ enum Migrations {
         // Per-meeting "seen" marker. A non-null timestamp means the user
         // has opened the meeting at least once; null = unseen (the title
         // is rendered in the unseen accent in the sidebar + Recent).
-        // Existing rows stay NULL — that's wrong for old meetings on
+        // Existing rows stay NULL, that's wrong for old meetings on
         // first launch after upgrade (they'd all show as unseen), so
         // the second SQL statement seeds them as seen by stamping
         // viewed_at = ended_at where ended_at is set.
@@ -197,7 +197,7 @@ enum Migrations {
         // Drives the inline elapsed counter in the Transcribing banner
         // so it reflects the BACKEND start, not when the user happened
         // to open the meeting view. Legacy rows stay NULL; the banner
-        // falls back to `ended_at` (close enough — that's seconds
+        // falls back to `ended_at` (close enough, that's seconds
         // before the pipeline kicks off) and finally to "now" if both
         // are absent.
         m.registerMigration("v17_transcribing_started_at") { db in
@@ -228,7 +228,7 @@ enum Migrations {
 
         // Index speakers by meeting so the per-row speaker_names subquery
         // in listMeetingSummaries (+ speaker merge/reassign) stops full-
-        // scanning the speakers table. Pure perf — no behaviour change.
+        // scanning the speakers table. Pure perf, no behaviour change.
         m.registerMigration("v21_speakers_meeting_index") { db in
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_speakers_meeting ON speakers(meeting_id);")
         }
@@ -236,7 +236,7 @@ enum Migrations {
         // Index segments by speaker so the hot per-speaker queries (merge,
         // reassign, orphan-speaker purge, and the listMeetingSummaries preview
         // subquery) stop full-scanning the segments table on a large library.
-        // Pure perf — no behaviour change (mirrors v21). idx_segments_meeting_start
+        // Pure perf, no behaviour change (mirrors v21). idx_segments_meeting_start
         // already covers meeting_id, but not speaker_id.
         m.registerMigration("v22_segments_speaker_index") { db in
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_segments_speaker ON segments(speaker_id);")

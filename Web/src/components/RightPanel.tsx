@@ -18,7 +18,7 @@ interface Props {
   onTimeUpdate: (sec: number) => void;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
-  /// Download mode is a sibling of "Recording" inside this column —
+  /// Download mode is a sibling of "Recording" inside this column
   /// state lives in the parent so the tab strip's `← Download`
   /// back-chip can drive it without a ref-chain.
   downloadOpen: boolean;
@@ -37,7 +37,7 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
   // The "Screen video recording" toggle. The ghost pitch is tied to it: turning
   // screen video OFF removes the pitch entirely (there's nothing to grant for).
-  // Defaults FALSE — screen video is opt-in / default-OFF (since 0.15.11), so we
+  // Defaults FALSE, screen video is opt-in / default-OFF (since 0.15.11), so we
   // must NOT flash the "Capture your screen too" pitch before the real setting
   // loads (or if the fetch fails). Only a confirmed capture_video=true shows it.
   const [captureVideo, setCaptureVideo] = React.useState<boolean>(false);
@@ -62,16 +62,16 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   }, []);
   // Video slot. A FINALISED video plays via `ScreenVideo`; while a recording is
   // in flight the file exists but isn't streamable yet (the moov atom only lands
-  // on finishWriting), so we must NOT try to play it — otherwise the Recording
+  // on finishWriting), so we must NOT try to play it, otherwise the Recording
   // panel's video slot is just empty. When screen video is ON but there's no
   // playable file, fill the slot: pitch the grant if it's missing, else (granted)
-  // show the "your screen appears here while you record" placeholder — which is
+  // show the "your screen appears here while you record" placeholder, which is
   // exactly the case the Recording panel hit during an active capture.
   const isRecording = detail.status === "recording";
   // A finalised, playable video file (ready meeting with a video).
   const hasFinalisedVideo = detail.has_video && !isRecording;
   // The whole VIDEO SLOT (real player / ghost pitch / "shows here" placeholder)
-  // stays put when the Download view opens — it does NOT gate on downloadOpen.
+  // stays put when the Download view opens, it does NOT gate on downloadOpen.
   // Only the bottom section swaps (Timeline ↔ Download chooser), so the top of
   // the panel never jumps. (The video used to vanish on download, which read as
   // a bug.)
@@ -129,9 +129,9 @@ function VideoShowsHereCard({ t }: { t: T }) {
 /// Video capture is unavailable until the user allows it, so instead of a real
 /// preview we show a placeholder frame with an enticing CTA that kicks off the
 /// macOS Screen Recording grant (and turns screen video on). Audio recording is
-/// unaffected — only the video half waits on the permission.
+/// unaffected, only the video half waits on the permission.
 /// `recording` = a session is in flight. Screen Recording can only be granted
-/// through a relaunch, so enabling it mid-recording is a dead end — the CTA is
+/// through a relaunch, so enabling it mid-recording is a dead end, the CTA is
 /// disabled until the recording stops.
 function GhostVideo({ t, recording = false }: { t: T; recording?: boolean }) {
   // Same outline-card vocabulary as the "Ready when you are." home card
@@ -148,7 +148,7 @@ function GhostVideo({ t, recording = false }: { t: T; recording?: boolean }) {
         </div>
       </div>
       <div className="clarify-actions clarify-actions-stack">
-        {/* Secondary CTA (plain `.clarify-btn` — white/outline, no accent fill):
+        {/* Secondary CTA (plain `.clarify-btn`, white/outline, no accent fill):
             granting screen video is optional, so it ranks below the green
             primary actions elsewhere on the surface. */}
         <button
@@ -171,8 +171,8 @@ function GhostVideo({ t, recording = false }: { t: T; recording?: boolean }) {
 /// placeholder once it is.
 export function GhostRecordingPanel({ t, recording = false }: { t: T; recording?: boolean }) {
   const [screenGranted, setScreenGranted] = React.useState<boolean | undefined>(undefined);
-  // "Screen video recording" toggle — when OFF the ghost VIDEO block disappears
-  // entirely (the audio + timeline ghosts stay). Defaults FALSE — screen video
+  // "Screen video recording" toggle, when OFF the ghost VIDEO block disappears
+  // entirely (the audio + timeline ghosts stay). Defaults FALSE, screen video
   // is opt-in / default-OFF (since 0.15.11), so the video ghost stays hidden
   // until a confirmed capture_video=true arrives (no first-paint flash).
   const [captureVideo, setCaptureVideo] = React.useState<boolean>(false);
@@ -217,7 +217,7 @@ export function GhostRecordingPanel({ t, recording = false }: { t: T; recording?
 /// banners). The audio element lives a sibling level up and stays
 /// mounted while this view is on screen, so playback continues.
 /// Solid Download glyph for the active-state Download button on the
-/// audio scrubber — same Heroicons Solid path used by SettingsFilled /
+/// audio scrubber, same Heroicons Solid path used by SettingsFilled /
 /// ArchiveFilled in MainHeader. Inline so we don't pull a fresh
 /// dependency for a single icon.
 function DownloadFilled({ size = 16 }: { size?: number }) {
@@ -252,7 +252,7 @@ function DownloadView({
   const artifactCount = [!!detail.has_video, hasAudio, hasTranscript].filter(Boolean).length;
   type Row = { value: string; label: string; href: string; file: string; show: boolean };
   const rows: Row[] = [
-    // Video is offered ONLY muxed with audio — a silent .mov download was
+    // Video is offered ONLY muxed with audio, a silent .mov download was
     // useless and huge (it has no audio track; we capture sound
     // separately). Audio-only is the compressed AAC .m4a, not the
     // half-gigabyte raw .wav.
@@ -294,7 +294,7 @@ function DownloadView({
           onClick={() => {
             if (!active?.href) return;
             // `<a href download>` in WKWebView silently no-ops on
-            // some macOS versions — the `download` attribute isn't
+            // some macOS versions, the `download` attribute isn't
             // honoured. Forcing a navigation to the same-origin file
             // endpoint is the path that DOES reliably trip
             // `WebDownloadDelegate.decidePolicyFor → .download` and
@@ -324,7 +324,7 @@ function ScreenVideo({
   currentTimeSec: number;
 }) {
   // `has_video` is set on the backend by checking the file path + the
-  // Dropbox archive flag, but the actual fetch can still 404 — the
+  // Dropbox archive flag, but the actual fetch can still 404, the
   // Dropbox copy may have been pruned, the meeting may pre-date the
   // video-recording feature, etc. We hide the whole card the moment
   // the <video> element fires its `error` event so empty black boxes
@@ -426,13 +426,13 @@ function ScreenVideo({
       window.clearTimeout(closeTimer.current);
       closeTimer.current = null;
     }
-    // Snapshot where the card is right now — the FLIP grows from here.
+    // Snapshot where the card is right now, the FLIP grows from here.
     originRect.current = cardRef.current?.getBoundingClientRect() ?? null;
     // Native inline blob is stacked above the web layer; hide it so it
     // doesn't punch through the dimmed overlay.
     (window as any).corderSetBlobVisible?.(false);
     setExpanded(true);
-    // Opening the viewer starts playback — the video mirrors the audio
+    // Opening the viewer starts playback, the video mirrors the audio
     // master clock, so without this the fullscreen just shows a frozen
     // frame ("нажимаю на видео но оно не воспроизводится").
     audioRef.current?.play().catch(() => {});
@@ -510,7 +510,7 @@ function ScreenVideo({
   }, [expanded, closeFullscreen, togglePlay]);
 
   // Keep the fullscreen <video> glued to the audio master clock for as
-  // long as the lightbox is open — mirror play/pause/seek and seed its
+  // long as the lightbox is open, mirror play/pause/seek and seed its
   // position when it mounts. Same contract as the inline preview.
   React.useEffect(() => {
     if (!expanded) return;
@@ -542,7 +542,7 @@ function ScreenVideo({
   }, [expanded, currentTimeSec]);
 
   // Transient play/pause badge in fullscreen: pop the current state
-  // icon for ~1.1s on open and on every toggle, then fade it out — so
+  // icon for ~1.1s on open and on every toggle, then fade it out, so
   // the user always gets a moment of "you're paused / playing" feedback
   // even though the controls are otherwise hidden.
   const [fsHint, setFsHint] = React.useState<"play" | "pause" | null>(null);
@@ -557,7 +557,7 @@ function ScreenVideo({
 
   // A click on the inline video goes straight to fullscreen; a click on
   // the fullscreen video closes it, exactly like clicking the dark
-  // margin. No play/pause-on-video and no debounce — transport is the
+  // margin. No play/pause-on-video and no debounce, transport is the
   // audio card's job; the video is a viewer you pop open and dismiss.
 
   // Force a single frame to decode and paint the moment metadata is
@@ -629,7 +629,7 @@ function ScreenVideo({
           />
         )}
         {!loaded && !failed && !cachedPoster && <div className="screen-video-ghost" aria-hidden />}
-        {/* No more paused scrim — the frosted play puck reads clearly
+        {/* No more paused scrim, the frosted play puck reads clearly
             on its own, and the white veil broke the theme cross-fade
             (it lived in front of the <video>, so during the wipe the
             play button's backdrop-filter sampled the disappearing
@@ -699,7 +699,7 @@ function ScreenVideo({
             )}
           </div>
           {/* Scrubber is a SIBLING of `.video-fs-inner`, not its
-              child — keeping it out of the FLIP box lets the inner
+              child, keeping it out of the FLIP box lets the inner
               morph onto the inline card without distortion, and
               anchoring to the overlay's bottom edge guarantees the
               bar is on-screen regardless of how the centred video
@@ -722,7 +722,7 @@ function ScreenVideo({
 /// Fullscreen seek bar. Lays every speech segment down as a block at
 /// its position on the timeline, tinted with that speaker's colour, so
 /// the bar doubles as a "who spoke when" map. Click or drag anywhere on
-/// it to scrub — it drives the master clock (the hidden <audio>), which
+/// it to scrub, it drives the master clock (the hidden <audio>), which
 /// the fullscreen video already follows via the drift sync.
 function FsScrubber({
   detail, currentTimeSec, audioRef,
@@ -820,7 +820,7 @@ function FsScrubber({
 /** Custom audio player shaped like the old video card: 16/10 box with a
  *  big centred play button, ±10s skip buttons in the bottom bar, current
  *  time / duration, and a clickable scrub line. The native <audio>
- *  element is kept hidden — we drive it through React state. */
+ *  element is kept hidden, we drive it through React state. */
 function AudioCard({
   detail, audioRef, onTimeUpdate, downloadOpen, onToggleDownload, t,
 }: {
@@ -837,7 +837,7 @@ function AudioCard({
 
   // The <audio> element is reused across meeting switches (RightPanel
   // never unmounts), so changing its `src` doesn't reliably zero
-  // `currentTime` until new metadata loads — meanwhile the scrubber
+  // `currentTime` until new metadata loads, meanwhile the scrubber
   // showed the previous session's position. Hard-reset element +
   // local state the instant the meeting id changes.
   React.useEffect(() => {
@@ -855,8 +855,8 @@ function AudioCard({
     if (a.paused) {
       // Recover a stuck element: the browser preloads the audio src, and if it
       // was fetched WHILE the meeting was still recording (the playback mix is
-      // produced only at stop) it 404s and the element sticks in an error state
-      // — so play() stays silent even once the file exists. A fresh load()
+      // produced only at stop) it 404s and the element sticks in an error state,
+      // so play() stays silent even once the file exists. A fresh load()
       // re-fetches the now-available audio before playing.
       if (a.error || a.readyState === 0) { try { a.load(); } catch {} }
       a.play().catch(() => {});
@@ -1040,7 +1040,7 @@ function SpeakerTimeline({
   t: T;
   lang: Lang;
 }) {
-  // Hooks must run before any conditional return — moving the early
+  // Hooks must run before any conditional return, moving the early
   // `if (...) return null` below this state/effect block fixes a
   // "Rendered fewer hooks than expected" crash that took the whole
   // Library window down to a white screen.

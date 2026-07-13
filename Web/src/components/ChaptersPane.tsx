@@ -16,7 +16,7 @@ interface Props {
   /// Click on a chapter row → seek the audio scrubber to that
   /// timestamp. Same callback the transcript-line click uses.
   onSeek: (sec: number) => void;
-  /// Current playback position (seconds) — drives the active-chapter
+  /// Current playback position (seconds), drives the active-chapter
   /// highlight (the chapter whose window contains `now`).
   currentTimeSec?: number;
   onToast?: (msg: string, kind?: "success" | "error") => void;
@@ -25,7 +25,7 @@ interface Props {
 
 type Chapter = { startMs: number; title: string };
 
-/// Loom-style Chapters pane. Mirrors `SummaryPane` exactly — same
+/// Loom-style Chapters pane. Mirrors `SummaryPane` exactly, same
 /// `.summary-wrap` shell, same `.summary-wrap-empty` banner family
 /// for empty/loading/error states, same `.transcript-toolbar`
 /// (Copy + Regenerate) on top, same `.summary-content` body.
@@ -89,7 +89,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
     </>
   );
 
-  // ── EMPTY STATES — identical shell to SummaryPane.SummaryBanner ──
+  // ── EMPTY STATES, identical shell to SummaryPane.SummaryBanner ──
   if (!ready) {
     return (
       <div className="summary-wrap summary-wrap-empty">
@@ -193,7 +193,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
   }
   const activeChapter = activeIdx >= 0 ? chapters[activeIdx] : null;
   // Progress THROUGH the active chapter (0…1): playhead position within
-  // [thisChapter.start, nextChapter.start) — or the recording end for the
+  // [thisChapter.start, nextChapter.start), or the recording end for the
   // last chapter. Drives the darker-green fill on the active timecode pill,
   // full right as it's time to move to the next chapter.
   let activeProgress = 0;
@@ -205,7 +205,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
     activeProgress = Math.max(0, Math.min(1, (nowMs - start) / Math.max(1, end - start)));
   }
 
-  // ── READY STATE — toolbar + chapter list inside .summary-content ──
+  // ── READY STATE, toolbar + chapter list inside .summary-content ──
   return (
     <div className="summary-wrap">
       <div className="transcript-toolbar">
@@ -251,7 +251,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
       <div className="summary-content ovsb-scroll" ref={scrollRef}>
         {filtered.map((c, i) => (
           // The whole row is the click target and lights up on hover,
-          // not just the time pill — a chapter is one seek action.
+          // not just the time pill, a chapter is one seek action.
           <button
             key={i}
             type="button"

@@ -3,7 +3,7 @@ import Foundation
 /// Reads the signed-in Supabase user's `app_metadata.tier` and
 /// mirrors it into local `AppSettings.userTier`. The admin API (the
 /// only thing that can write `app_metadata`) is the source of
-/// truth for paid plans — server-side grant beats any local
+/// truth for paid plans, server-side grant beats any local
 /// override. Local `defaults write` still works as a fallback while
 /// a user is offline / signed-out.
 @MainActor
@@ -28,7 +28,7 @@ enum SupabaseTierSync {
 
         let raw = user.appMetadata["tier"]?.stringValue?.lowercased() ?? ""
         // Absent / empty tier ≡ Free. Previously we returned early on
-        // an empty value ("keeping local") — that left a paid user
+        // an empty value ("keeping local"), that left a paid user
         // stuck on the cached tier after a server-side downgrade,
         // because the local Free fallback was never written. Treat
         // empty as Free so server downgrades reflect locally.
@@ -38,7 +38,7 @@ enum SupabaseTierSync {
         } else if raw.isEmpty {
             tier = .free
         } else {
-            FileLogger.log("SupabaseTierSync: unrecognised tier value '\(raw)' — keeping local")
+            FileLogger.log("SupabaseTierSync: unrecognised tier value '\(raw)', keeping local")
             return
         }
         let priorTier = AppSettings.userTier
@@ -55,7 +55,7 @@ enum SupabaseTierSync {
         let wasPaid = (priorTier == .pro || priorTier == .max)
         let isPaid = (tier == .pro || tier == .max)
         if wasPaid != isPaid {
-            FileLogger.log("SupabaseTierSync: tier transitioned \(priorTier.rawValue) → \(tier.rawValue) — clearing provider override so the new tier default applies")
+            FileLogger.log("SupabaseTierSync: tier transitioned \(priorTier.rawValue) → \(tier.rawValue), clearing provider override so the new tier default applies")
             AppSettings.clearTranscriptionProviderOverride()
         }
     }
@@ -66,7 +66,7 @@ enum SupabaseTierSync {
     /// JWT carries the current `app_metadata.tier`, so a paid plan granted
     /// server-side (Paddle webhook → admin API) shows up WITHOUT a
     /// relaunch. Throttled so rapid focus toggles can't hammer the auth
-    /// endpoint. Called on `applicationDidBecomeActive` — i.e. the moment
+    /// endpoint. Called on `applicationDidBecomeActive`, i.e. the moment
     /// the user switches back to Corder after paying in the browser.
     static func refreshTier(throttleSeconds: TimeInterval = 12) {
         guard SupabaseClientHolder.shared.auth.currentUser != nil else { return }

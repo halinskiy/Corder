@@ -2,7 +2,7 @@ import Foundation
 
 /// Granola-style post-processing for raw Whisper turns. We pipe the
 /// model's verbatim output through gpt-4o-mini and ask for ONLY
-/// punctuation, capitalisation, and obvious typo fixes — no rewording,
+/// punctuation, capitalisation, and obvious typo fixes, no rewording,
 /// no summarisation, no translation. Timestamps and speaker labels are
 /// preserved 1:1; only `Turn.text` is replaced.
 ///
@@ -15,7 +15,7 @@ import Foundation
 /// Hard rules:
 ///   • Best-effort only. ANY failure (no key, timeout, 4xx, parse
 ///     error, line-count mismatch) returns the input unchanged. This
-///     stage must NEVER block transcript availability — the worst it
+///     stage must NEVER block transcript availability, the worst it
 ///     can do is no-op.
 ///   • Same timestamps + speaker labels as the input, full stop. The
 ///     model is instructed to keep one line per input line; if the
@@ -39,7 +39,7 @@ enum WhisperCleanup {
     /// Per-call turn budget. 50 short turns ≈ 3-5 k tokens of input,
     /// well under the 16 k context window and small enough that one
     /// flaky response only loses 50 lines of polish (the original
-    /// turns are still served — see "best-effort" above).
+    /// turns are still served, see "best-effort" above).
     private static let maxTurnsPerCall = 50
 
     /// Cleanup is a luxury. If there's almost nothing to polish, skip
@@ -54,7 +54,7 @@ enum WhisperCleanup {
     /// On any failure returns the input unchanged.
     static func polish(_ turns: [GeminiTranscriber.Turn],
                        language: String?) async -> [GeminiTranscriber.Turn] {
-        // Setting gate first — a Whisper user who flipped cleanup off
+        // Setting gate first, a Whisper user who flipped cleanup off
         // shouldn't pay an HTTP round-trip just to be told no.
         guard AppSettings.transcriptCleanup else {
             FileLogger.log("WhisperCleanup: disabled via AppSettings, returning turns unchanged")
@@ -70,7 +70,7 @@ enum WhisperCleanup {
         // Resolve routing once for the whole transcript. When the
         // user is signed in we proxy through the Worker (server-side
         // OpenAI key, tier-gated). Signed-out builds still need a
-        // local key file as before — and on that path a missing key
+        // local key file as before, and on that path a missing key
         // is the silent skip it always was.
         let jwt = await Self.jwt()
         let key = readAPIKey() ?? ""
@@ -79,7 +79,7 @@ enum WhisperCleanup {
             return turns
         }
 
-        // Batched calls preserve order — we never touch a turn outside
+        // Batched calls preserve order, we never touch a turn outside
         // its own batch, so the global sequence is just batches glued
         // back together.
         var out: [GeminiTranscriber.Turn] = []
@@ -132,7 +132,7 @@ enum WhisperCleanup {
         }()
 
         // Numbered input lines. We strip newlines from each turn so the
-        // 1:1 line correspondence on the way back is unambiguous —
+        // 1:1 line correspondence on the way back is unambiguous
         // otherwise a turn containing a literal "\n" would land on two
         // output lines and our parser would mis-align everything that
         // follows.
@@ -181,7 +181,7 @@ enum WhisperCleanup {
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             let bodyText = String(data: data, encoding: .utf8) ?? ""
-            FileLogger.log("WhisperCleanup: batch \(batchNo) HTTP \(status) — \(bodyText.prefix(200)), returning unchanged")
+            FileLogger.log("WhisperCleanup: batch \(batchNo) HTTP \(status), \(bodyText.prefix(200)), returning unchanged")
             return batch
         }
 
@@ -204,7 +204,7 @@ enum WhisperCleanup {
         out.reserveCapacity(batch.count)
         for (i, t) in batch.enumerated() {
             let cleaned = edited[i].trimmingCharacters(in: .whitespaces)
-            // Empty polished line is suspect — the model dropped a turn,
+            // Empty polished line is suspect, the model dropped a turn,
             // and we'd rather keep the original than serve a blank.
             let finalText = cleaned.isEmpty ? t.text : cleaned
             out.append(GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
@@ -247,7 +247,7 @@ enum WhisperCleanup {
     // MARK: - API key
 
     /// Reads the OpenAI API key from the same source `WhisperTranscriber`
-    /// Legacy local-key fallback removed — production users go through
+    /// Legacy local-key fallback removed, production users go through
     /// the Cloudflare Worker proxy (`/transcribe/whisper-cleanup`) with
     /// their Supabase JWT. The .app never ships an OpenAI key, and the
     /// `~/.config/corder/openai_key` file is no longer read so we can

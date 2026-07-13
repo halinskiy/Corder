@@ -35,7 +35,7 @@ final class UpdateBridge {
     /// is dropped, Sparkle then sits waiting on the user's reply, and when
     /// the user later opens the Library + clicks the pill, a fresh
     /// `checkForUpdates()` is ignored because that session is still
-    /// pending — so the pill "does nothing". Replaying the cached state on
+    /// pending, so the pill "does nothing". Replaying the cached state on
     /// mount surfaces the modal so the user can actually click Install.
     private var lastState: UpdateModalState?
 
@@ -75,7 +75,7 @@ final class UpdateBridge {
 }
 
 /// Wire-format state sent to the React modal. Mirrors the SwiftUI
-/// `UpdateState` model — same vocabulary so phases line up between
+/// `UpdateState` model, same vocabulary so phases line up between
 /// the two layers during the React migration.
 struct UpdateModalState: Codable {
     var visible: Bool

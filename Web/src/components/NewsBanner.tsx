@@ -28,7 +28,7 @@ function saveDismissed(s: Set<string>) {
 /// "Ready when you are." block. Carries one news item at a time;
 /// users dismiss it via the × and the id is remembered forever in
 /// localStorage so it never reappears. Pulled from the Worker once
-/// on mount + every 10 min — light traffic, only one request.
+/// on mount + every 10 min, light traffic, only one request.
 export function NewsBanner({
   tier, t, onOpenSettings,
 }: {
@@ -93,14 +93,14 @@ export function NewsBanner({
   // Collapsed state: a single glossy green pill with the "New" label.
   // Tapping it expands into the full outline card (title + body + CTA
   // + Skip + ×). Skip / × dismiss the news item permanently. The
-  // expand state is session-local — closing and reopening the app
+  // expand state is session-local, closing and reopening the app
   // brings the pill back; the only thing that hides the news for good
   // is an explicit dismiss.
   if (!expanded) {
     // Full-width running marquee at the very top of the column. Click
     // anywhere on the bar (except the × at the right edge) expands it
     // into the full card. Marquee text duplicated so the loop seam is
-    // invisible — `translateX(-50%)` shifts by one copy's worth.
+    // invisible, `translateX(-50%)` shifts by one copy's worth.
     const eyebrow = t.news_eyebrow ?? "New";
     const segments = Array.from({ length: 6 }, (_, i) => (
       <span className="news-bar-seg" key={i}>

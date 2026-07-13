@@ -6,7 +6,7 @@ interface Props {
   t: T;
   /// Called when the user clicks Send (rating > 0). Rating is the
   /// 1-5 star pick, comment is trimmed (may be empty). Email is
-  /// added by the parent from the signed-in account — we don't
+  /// added by the parent from the signed-in account, we don't
   /// ask the user for it here.
   onSubmit: (rating: number, comment: string) => void;
   /// Called when the user clicks the X corner button or the Skip
@@ -17,7 +17,7 @@ interface Props {
 
 /// Inline rating prompt that lives at the bottom of a non-empty
 /// transcript. Same outline-card visual language as
-/// SpeakersClarifyBanner / EmptyDeleteBanner — 18 px light heading,
+/// SpeakersClarifyBanner / EmptyDeleteBanner, 18 px light heading,
 /// 1 px `--border-strong`, 12 px content gap. Two phases:
 ///   1) only stars + dismiss X are visible
 ///   2) once a star is clicked the comment + email fields and the
@@ -33,7 +33,7 @@ export function RatingBanner({ t, onSubmit, onDismiss }: Props) {
 
   // Fallback to English literals when a locale hasn't translated the
   // rating strings yet. Keys are optional in the Strings interface so
-  // a missing key returns undefined rather than crashing — but undefined
+  // a missing key returns undefined rather than crashing, but undefined
   // in JSX would render nothing. Hardcoded fallbacks are intentional.
   const title = t.rating_title || "How is Corder treating you?";
   const commentPh = t.rating_comment_placeholder || "What can we improve? (optional)";

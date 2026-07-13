@@ -11,7 +11,7 @@ export interface MeetingSummary {
   title?: string | null;
   preview?: string;
   speaker_count: number;
-  /** "Speaker 2 · Влад" etc. — joined names of who actually spoke. */
+  /** "Speaker 2 · Влад" etc., joined names of who actually spoke. */
   speaker_names?: string;
   /** Pinned sessions sort to a group at the very top with a gold title. */
   pinned?: boolean;
@@ -53,7 +53,7 @@ export interface MeetingDetail {
   /// True when a playable audio file exists on disk (mix, mic, or archived).
   /// The player's Play button gates on this, not on duration_ms.
   has_audio?: boolean;
-  /// JSON-encoded `[{start_ms, title}]` — Chapters tab. May be
+  /// JSON-encoded `[{start_ms, title}]`, Chapters tab. May be
   /// absent on rows that haven't been auto-chaptered yet.
   chapters?: string | null;
   /// Unix-ms timestamp the backend pipeline first moved the meeting
@@ -103,7 +103,7 @@ export async function hasBugEvents(): Promise<boolean> {
 }
 
 export interface AccountUsage {
-  /// True for a signed-out user — the only one the session cap applies to.
+  /// True for a signed-out user, the only one the session cap applies to.
   is_guest: boolean;
   /// Sessions the guest currently holds (library + archive).
   sessions_used: number;
@@ -129,7 +129,7 @@ export async function submitLogs(): Promise<void> {
 }
 
 /// Opens the native Welcome wizard at the sign-in step. The
-/// frontend has no auth surface of its own — the wizard owns it.
+/// frontend has no auth surface of its own, the wizard owns it.
 export async function openWelcome(): Promise<void> {
   await fetch("/api/open-welcome", { method: "POST" });
 }
@@ -407,7 +407,7 @@ export function requestScreenRecording(): void {
 
 export interface Settings {
   /// All locales the LangPicker can show. Untranslated locales fall
-  /// back to English at runtime (see `pickStrings` in i18n.ts) — the
+  /// back to English at runtime (see `pickStrings` in i18n.ts), the
   /// backend just stores the code, no translation work needed here.
   language?: string;
   vocabulary?: string;
@@ -466,7 +466,7 @@ export interface Settings {
   is_pro?: boolean;
   /** read-only: account carries the admin role (`app_metadata.role ==
    *  "admin"`), mirrored from the Supabase session. Drives the blue
-   *  profile avatar. Display-only — never a privilege grant. */
+   *  profile avatar. Display-only, never a privilege grant. */
   is_admin?: boolean;
   /** read-only: paid-tier ladder rung. `free` = baseline, `pro` = paying
    *  customer, `max` = top-tier unlimited bundle. Drives the profile
@@ -482,7 +482,7 @@ export interface Settings {
    *  rawValues. POST `"auto"` to clear the override. */
   transcription_provider?: "auto" | "gemini" | "whisper" | "groq" | "whisperLocal";
   /** read-only: is the *currently picked* WhisperKit variant fully
-   *  downloaded? Convenience flag — per-variant state lives in
+   *  downloaded? Convenience flag, per-variant state lives in
    *  `whisper_local_models`. */
   whisper_local_model_ready?: boolean;
   /** Picked Whisper Local variant id (e.g. "openai_whisper-large-v3_turbo").
@@ -492,7 +492,7 @@ export interface Settings {
    *  "unlimited"). Stored as a JSON string on the native side because
    *  `UserDefaults` is the only persistent storage we trust across
    *  launches (WKWebView localStorage gets wiped if the listening
-   *  port rotates — Костя's case). Empty / absent = no snooze. */
+   *  port rotates, Костя's case). Empty / absent = no snooze. */
   upsell_snooze?: string;
   /** Per-variant catalogue with ready/progress state. The picker
    *  renders this directly; the DownloadButton under the picker reads
@@ -632,7 +632,7 @@ export async function signOut(): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
-/** Hard delete — wipes every meeting / speaker / segment / summary /
+/** Hard delete, wipes every meeting / speaker / segment / summary /
  *  audio file owned by the signed-in user from Supabase + local
  *  state, then relaunches the app on the Welcome wizard. GDPR
  *  "right to be forgotten" path. */

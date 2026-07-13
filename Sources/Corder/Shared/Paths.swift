@@ -5,8 +5,8 @@ import CryptoKit
 /// (identified by email) gets their own folder under
 /// `~/Library/Application Support/Corder/accounts/<email-hash>/`,
 /// holding their corder.db + recordings/ + models/. Switching
-/// Google accounts on the same Mac swaps to a different folder
-/// — accounts can't see each other's recordings even at the
+/// Google accounts on the same Mac swaps to a different folder,
+/// accounts can't see each other's recordings even at the
 /// filesystem level.
 ///
 /// While signed out we fall back to a `_guest` bucket so the lazy
@@ -32,16 +32,16 @@ enum AppPaths {
         supportRoot.appendingPathComponent("accounts", isDirectory: true)
     }
 
-    /// 16-hex-char SHA-256 prefix of the lowercased+trimmed email
-    /// — stable across cases / surrounding whitespace.
+    /// 16-hex-char SHA-256 prefix of the lowercased+trimmed email,
+    /// stable across cases / surrounding whitespace.
     static func accountID(forEmail email: String) -> String {
         let normalised = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let digest = SHA256.hash(data: Data(normalised.utf8))
         return String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
-    /// `nil` when signed out (the Library is closed in that state
-    /// — only the lazy DB init might still touch `databaseURL`,
+    /// `nil` when signed out (the Library is closed in that state,
+    /// only the lazy DB init might still touch `databaseURL`,
     /// hence the `_guest` fallback in `accountRoot` below).
     static func currentAccountID() -> String? {
         guard let email = AppSettings.userEmail else { return nil }
@@ -62,7 +62,7 @@ enum AppPaths {
     /// MACHINE-WIDE, NOT per-account. The on-device Whisper model is a PUBLIC
     /// artifact (not user data), so it lives once per Mac under `supportRoot`.
     /// Per-account storage meant a full ~1.5 GB RE-DOWNLOAD on every account
-    /// folder switch — sign-in moved it into the account, then sign-out left the
+    /// folder switch, sign-in moved it into the account, then sign-out left the
     /// `_guest` folder empty and re-downloaded (observed: two 3 GB copies on
     /// disk). Sharing it kills that. The content-hashed ANE compile cache is
     /// unaffected (keyed by model content, not path). See `migrateModelToSharedIfNeeded`.
@@ -79,7 +79,7 @@ enum AppPaths {
 
     /// meetingId → human-readable folder name (e.g. "2026-07-07_10-19 Sync").
     /// Populated at launch from the DB (`dir_name` column) and updated when a
-    /// folder is renamed. Guarded by a lock — read from capture/pipeline/Swifter
+    /// folder is renamed. Guarded by a lock, read from capture/pipeline/Swifter
     /// threads. A recording whose folder is still the plain `<id>` is simply
     /// absent here.
     private static var dirNameIndex: [String: String] = [:]
@@ -207,7 +207,7 @@ enum AppPaths {
     /// (`accounts/<id>/models`) to the NEW machine-wide one (`supportRoot/models`),
     /// so existing installs don't re-download ~1.5 GB after the storage change.
     /// Moves the FIRST non-empty per-account model up, then deletes any remaining
-    /// per-account model dirs (they were redundant duplicates — e.g. a `_guest`
+    /// per-account model dirs (they were redundant duplicates, e.g. a `_guest`
     /// copy and an account copy after a sign-in/out cycle). Idempotent +
     /// best-effort: once `supportRoot/models` has a model it bails; a failure just
     /// means a re-download, never a crash. Runs at launch before any model load.
@@ -229,7 +229,7 @@ enum AppPaths {
                 try fm.createDirectory(at: supportRoot, withIntermediateDirectories: true)
                 if fm.fileExists(atPath: shared.path) { try? fm.removeItem(at: shared) }
                 try fm.moveItem(at: perAccount, to: shared)
-                FileLogger.log("AppPaths: model storage now machine-wide — moved accounts/\(acc)/models → supportRoot/models")
+                FileLogger.log("AppPaths: model storage now machine-wide, moved accounts/\(acc)/models → supportRoot/models")
                 break
             } catch {
                 FileLogger.log("AppPaths: shared-model migration move failed for \(acc): \(error)")

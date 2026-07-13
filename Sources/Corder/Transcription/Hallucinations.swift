@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared filter for the subtitle-style phrases Whisper/WhisperKit
 /// hallucinate over silent stretches (leftovers from YouTube training
-/// data — "спасибо за просмотр", "Субтитры сделал DimaTorzok", …). This
+/// data, "спасибо за просмотр", "Субтитры сделал DimaTorzok", …). This
 /// used to be copy-pasted verbatim into `WhisperTranscriber`,
 /// `LocalWhisperTranscriber`, and `TranscriptionPipeline`; consolidated
 /// here so a new pattern only has to be added once. The list now also
@@ -20,7 +20,7 @@ enum Hallucinations {
         "продолжение в следующем видео",
         "продолжение в следующем выпуске",
         "спасибо за просмотр",
-        // "спасибо за внимание" — in PRACTICE this is overwhelmingly a
+        // "спасибо за внимание", in PRACTICE this is overwhelmingly a
         // Whisper hallucination over silence (Kostya: it "часто появлялось"
         // when nobody said it), not a real closer, so it stays filtered.
         // The destructive launch purge uses isExactHallucination (whole-
@@ -79,7 +79,7 @@ enum Hallucinations {
     /// any segment CONTAINING one is a hallucination regardless of length (no
     /// 60%-domination requirement, and safe for the destructive launch purge).
     /// "amaraorg" alone covers the ENTIRE Amara.org subtitle-community credit
-    /// family across every language Whisper emits it in over silence —
+    /// family across every language Whisper emits it in over silence
     /// "Subtitles by the Amara.org community", "Sous-titres … d'Amara.org",
     /// "Untertitel der Amara.org-Community", "Legendas pela comunidade
     /// Amara.org", … all normalise to contain "amaraorg". No real call says
@@ -92,7 +92,7 @@ enum Hallucinations {
 
     /// Bare caption words Whisper emits over silence: "자막" (Korean for
     /// subtitles), "字幕" (Chinese/Japanese). Unlike the Amara watermark these
-    /// are ORDINARY words, so we must not drop every segment containing them —
+    /// are ORDINARY words, so we must not drop every segment containing them
     /// a Korean speaker really can say "자막" in a meeting. We only drop a
     /// segment that is NOTHING BUT these words (repeated and/or punctuated),
     /// which is exactly the artefact: "자막: 자막:" on an empty track.
@@ -148,7 +148,7 @@ enum Hallucinations {
             // Substring match: only drop the turn if the pattern DOMINATES
             // the segment (≥60% of its length). A short pattern ("субтитри",
             // "enjoy this video") appearing inside a long real sentence must
-            // NOT nuke that whole turn — and the launch-time purge actually
+            // NOT nuke that whole turn, and the launch-time purge actually
             // DELETEs matches, so a false positive permanently loses real
             // speech. Genuine all-outro segments still clear the bar; an
             // appended outro is handled display-side by `cleanSegmentText`.

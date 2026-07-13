@@ -31,7 +31,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         // ALWAYS give visible feedback the instant the pill is clicked. The
         // old no-op (just setting the flag) left the click silent whenever
         // Sparkle already had a cached / downloaded update and didn't
-        // re-present it — the user just saw a pressed pill and nothing else.
+        // re-present it, the user just saw a pressed pill and nothing else.
         // We push a "checking" modal here; Sparkle then transitions it to
         // the real Install card (showUpdateFound) or "up to date"
         // (showUpdateNotFound). `onPrimary` stays a no-op until a real
@@ -52,7 +52,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         lastReleaseNotes = htmlToPlain(appcastItem.itemDescription ?? "")
         FileLogger.log("UpdateDriver: showUpdateFound stage=\(updateState.stage.rawValue) version=\(appcastItem.displayVersionString)")
 
-        // The button label is ALWAYS "Install" through the whole flow —
+        // The button label is ALWAYS "Install" through the whole flow
         // never a frozen "Installing…" verb. Progress is shown inside
         // the button (an in-button fill), not by swapping the text.
         let phase: String
@@ -64,7 +64,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
             phase = "readyToInstall";  readyToInstall = true
         case .installing:
             // A resumed install. Present it as a RESTING "ready to
-            // install" card (enabled "Install", no spinner) — NOT an
+            // install" card (enabled "Install", no spinner), NOT an
             // in-progress one. The modal must not animate before the
             // user clicks; the click resumes the install. (Showing this
             // as "installing" made the progress bar fill on its own at
@@ -78,7 +78,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         bridge.onPrimary = { [weak self] in
             // NEVER install while a recording is live. Installing terminates +
             // relaunches the app (see showInstallingUpdate), which KILLS the
-            // in-flight recording — a tester lost a meeting exactly this way
+            // in-flight recording, a tester lost a meeting exactly this way
             // (RecordingRecovery logged it "unsalvageable (0ms)"). Defer: keep
             // the update pill lit (appcast still offers it) and tell the user to
             // finish first. The install runs when they click again after Stop.
@@ -102,7 +102,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
             // (proven to terminate + relaunch cleanly). We must NOT call
             // NSApp.terminate here too: a second termination races
             // Sparkle's install/relaunch handshake and wedges the update
-            // at "Installing…" forever — that was the real hang.
+            // at "Installing…" forever, that was the real hang.
             reply(.install)
         }
         bridge.onDismiss = { reply(.dismiss) }
@@ -147,11 +147,11 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         }
         // No-update modal: title states the conclusion ("You're up to
         // date"), the status line just confirms with the current
-        // version, and the only action is "OK" — there's nothing to
+        // version, and the only action is "OK", there's nothing to
         // install, so the previous "Update available" / "Update now"
         // labels were straight-up misleading (Костя caught this).
         // No-update modal: just a confirmation card. Primary (Update
-        // now / OK) is suppressed — there's literally nothing to do
+        // now / OK) is suppressed, there's literally nothing to do
         // here, so the only affordance is the secondary "Later" which
         // dismisses the dialog. Empty `primaryLabel` is the contract
         // the React side reads to hide the primary slot.
@@ -227,13 +227,13 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         // unpacked we auto-proceed straight to the installer + relaunch. We show
         // the "Installing" state (immediately superseded by showInstallingUpdate,
         // the single terminate point) and reply .install ourselves.
-        // SAFETY: showReady is only reached after a USER-INITIATED download — a
+        // SAFETY: showReady is only reached after a USER-INITIATED download, a
         // resumed already-downloaded update comes through
-        // showUpdateFound(readyToInstall) and still needs an explicit click — so
+        // showUpdateFound(readyToInstall) and still needs an explicit click, so
         // this never relaunches the app unprompted on launch.
         // A recording can START during the download window (user clicked
         // Install while idle, then began a meeting). Auto-installing now would
-        // terminate + kill that recording — defer instead.
+        // terminate + kill that recording, defer instead.
         if RecordingStateSnapshot.read() != .idle {
             FileLogger.log("UpdateDriver: showReady while RECORDING → deferring install, not terminating")
             pushPhase("readyToInstall", primaryLabel: "Install", primaryEnabled: true)
@@ -261,7 +261,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         // quitting the host so Sparkle's installer can swap the bundle is
         // our responsibility. Sparkle then relaunches the new version.
         // Verified end-to-end: this one terminate quits + relaunches in
-        // ~1 s. Do NOT add a second terminate in the onPrimary handlers —
+        // ~1 s. Do NOT add a second terminate in the onPrimary handlers
         // two terminations race the install/relaunch handshake and wedge
         // the update at "Installing…" forever. Nothing in this app vetoes
         // termination (applicationShouldTerminate returns .terminateNow).
@@ -326,7 +326,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     /// Quick HTML → plain text for the appcast description CDATA. The
     /// modal title already shows "Version X.Y.Z", so we strip the
     /// changelog's leading version heading and collapse the stray
-    /// whitespace it leaves behind — the notes should read as plain
+    /// whitespace it leaves behind, the notes should read as plain
     /// text, not a sparse indented outline.
     private func htmlToPlain(_ html: String) -> String {
         var s = html
@@ -344,7 +344,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         s = s.replacingOccurrences(of: "<br>", with: "\n")
         s = s.replacingOccurrences(of: "<br/>", with: "\n")
         s = s.replacingOccurrences(of: "<br />", with: "\n")
-        // List items → plain lines (NO bullet prefix — the notes must
+        // List items → plain lines (NO bullet prefix, the notes must
         // read as plain text, no "•"/"-"/"·" markers).
         s = s.replacingOccurrences(of: "<li[^>]*>", with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: "</li>", with: "\n")

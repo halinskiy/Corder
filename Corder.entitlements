@@ -11,7 +11,7 @@
          re-signed with our Team ID (PDB9JGGX74) during build, so
          hardened-runtime library validation passes without the
          opt-out. Dropping the entitlement lowers our Gatekeeper risk
-         score — Apple's malware-scan path treats apps with fewer
+         score, Apple's malware-scan path treats apps with fewer
          hardening opt-outs as lower-risk, which removes the "Apple
          could not verify Corder is free of malware" diagnostic that
          was firing on cleanly-notarized builds on tester Macs.
@@ -25,7 +25,7 @@
          The `com.apple.developer.applesignin` entitlement is
          temporarily disabled because adding it causes launchd
          to refuse the binary (RBSRequestErrorDomain 5,
-         NSPOSIXErrorDomain 163) — even when signed with the
+         NSPOSIXErrorDomain 163), even when signed with the
          Developer ID identity and hardened runtime. Hypothesis:
          macOS Developer ID builds want an embedded
          provisioning profile (`embedded.provisionprofile` in
@@ -35,7 +35,7 @@
     <!-- TODO: Universal Links via
          `com.apple.developer.associated-domains` + applinks:getcorder.com.
          Pulled because self-signed dev builds need a provisioning
-         profile carrying that capability — without it launchd
+         profile carrying that capability, without it launchd
          rejects the binary (RBSRequestErrorDomain 5, NSPOSIXErrorDomain
          163), same failure mode as the parked `applesignin` entitlement
          above. Re-add once notarized Developer ID builds ship with

@@ -15,12 +15,12 @@ import { useTheme } from "../theme";
 /// REAL: loaded from and persisted to /api/settings. Each change posts
 /// only the changed field (debounced ~400 ms); the backend treats an
 /// absent field as "unchanged" so a stale tab can't clobber the rest.
-/// Audio (mic + system) deliberately has NO toggle — a transcription
+/// Audio (mic + system) deliberately has NO toggle, a transcription
 /// recorder must capture audio, it's intrinsic; and mic/system stay
 /// coupled because the dual-track pipeline assumes both exist. Video
 /// IS optional.
 /// Per-section scroll offset, remembered across close/reopen. Module-level (not
-/// state) because both Settings panes stay MOUNTED (display-toggled) — WebKit
+/// state) because both Settings panes stay MOUNTED (display-toggled), WebKit
 /// drops their scrollTop when the wrapper goes display:none, so we restore it
 /// ourselves when the section becomes active again. Survives navigation within a
 /// session; a relaunch starts at the top (fine).
@@ -77,7 +77,7 @@ export function SettingsPane({
   // Poll /api/settings every second while at least one Whisper Local
   // model is in flight, so the inline DownloadButton's progress fill
   // updates without the user touching anything. As soon as no model
-  // has a non-null `progress` we stop — the rest of Settings is
+  // has a non-null `progress` we stop, the rest of Settings is
   // user-edited only, no polling needed.
   const isDownloading = !!s?.whisper_local_models?.some(
     (m) => typeof m.progress === "number");
@@ -124,7 +124,7 @@ export function SettingsPane({
       onScroll={(e) => { settingsScrollCache[section] = (e.currentTarget as HTMLDivElement).scrollTop; }}
     >
       <div style={{ display: section === "general" ? "contents" : "none" }}>
-        {/* Recording equalizer (the floating HUD pill) — default ON. Same
+        {/* Recording equalizer (the floating HUD pill), default ON. Same
             SoloCard + Toggle shell as Screen video recording, sits directly
             above it. Off suppresses the floating pill for the whole session
             (recording still starts/stops from the popover + in-app button). */}
@@ -138,7 +138,7 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Screen video recording — local capture, fine for guests. */}
+        {/* Screen video recording, local capture, fine for guests. */}
         <SoloCard>
           <Toggle
             label={t.settings_video}
@@ -153,7 +153,7 @@ export function SettingsPane({
                 window.dispatchEvent(new CustomEvent("corder-capture-video", { detail: v }));
               } catch { /* dev shell */ }
               // Screen video is now opt-in (default OFF). Enabling it is the
-              // moment we ask for Screen Recording — the native bridge fires the
+              // moment we ask for Screen Recording, the native bridge fires the
               // macOS permission prompt (or points to System Settings if already
               // asked). No more record-time permission surprise. Also warn that
               // it's a heavy HEVC encode.
@@ -169,7 +169,7 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* High-resolution video — appears ONLY for a SIGNED-IN user who has
+        {/* High-resolution video, appears ONLY for a SIGNED-IN user who has
             screen video ON. Default OFF records a small 720p file to keep
             recordings tiny; ON records at the display's native resolution (up
             to 4K). Sign-in-gated because native-res files are large. */}
@@ -219,7 +219,7 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Microphone picker — moved here (was at the top of General) so it
+        {/* Microphone picker, moved here (was at the top of General) so it
             sits directly above the Recordings folder block. "System default"
             stays the first option (the value when mic_device_uid is empty);
             the choice applies to the NEXT recording (no live AVAudioEngine
@@ -234,10 +234,10 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Recordings folder — same vertical `.hk-block` shell as the
+        {/* Recordings folder, same vertical `.hk-block` shell as the
             Microphone block (label + desc + full-width control), only the
             control is an "Open" button instead of a dropdown, sized identically
-            (full-width, backgroundless — matches the dropdown surface). Strict
+            (full-width, backgroundless, matches the dropdown surface). Strict
             component reuse: same shell + the shared `.clarify-btn`. */}
         <SoloCard>
           <div className="hk-block">
@@ -255,7 +255,7 @@ export function SettingsPane({
           </div>
         </SoloCard>
 
-        {/* Subscription flip is an admin/QA-only lever — regular users
+        {/* Subscription flip is an admin/QA-only lever, regular users
             must not be able to change their own tier from Settings. */}
         {s?.is_admin === true && (
           <>
@@ -268,7 +268,7 @@ export function SettingsPane({
       </div>
 
       <div style={{ display: section === "advanced" ? "contents" : "none" }}>
-        {/* Transcription model picker — ADMIN-ONLY. Normal users have no
+        {/* Transcription model picker, ADMIN-ONLY. Normal users have no
             model choice (the hard provider lock pins them to Groq cloud +
             on-device), so the whole block is hidden for non-admins; only
             admins (who can benchmark cloud models) see and use it. */}
@@ -295,7 +295,7 @@ export function SettingsPane({
         {/* Auto-summary / Auto-chapters are cloud features (need sign-in). They
             live in the Advanced tab, which is hidden wholesale for guests (see
             MeetingView/Dashboard), so no per-row guard needed here. Auto-title is
-            NOT user-toggleable anymore — it's always on (recording folder names
+            NOT user-toggleable anymore, it's always on (recording folder names
             depend on it), so it has no Settings row. */}
         <SoloCard>
           <Toggle
@@ -317,12 +317,11 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Transcription-language picker removed — transcription is always
+        {/* Transcription-language picker removed, transcription is always
             Auto-detect for everyone, so there's nothing to choose. */}
 
         <div className="settings-divider" />
-        {/* "Always offer to record" (whitelist) block removed per request —
-            only the "Never offer to record" (blacklist) list remains. The
+        {/* "Always offer to record" (whitelist) block removed per request, only the "Never offer to record" (blacklist) list remains. The
             meeting_whitelist field stays in the backend, just not editable. */}
         <SoloCard>
           <AppListEditor
@@ -339,7 +338,7 @@ export function SettingsPane({
   );
 }
 
-/// One-row framed card — no section title above. Used for the standalone
+/// One-row framed card, no section title above. Used for the standalone
 /// toggle settings; visually a single `.settings-rows` frame holding one
 /// child. Identical look to a single-row Section but without the eyebrow.
 function SoloCard({ children }: { children: React.ReactNode }) {
@@ -397,17 +396,17 @@ function MicDevicePicker({
   );
 }
 
-// TranscriptionLanguageRow + TRANSCRIPTION_LANGS were removed — transcription
+// TranscriptionLanguageRow + TRANSCRIPTION_LANGS were removed, transcription
 // is always Auto-detect for everyone now, so the picker (and its curated
 // spoken-language list) is gone. The backend `transcription_language` field
 // stays "" (auto) and the WhisperTranscriber only forces a language when it's
 // non-empty, so dropping the UI keeps everyone on auto.
 
 /// One app list (whitelist or blacklist). No bundle-id typing: the
-/// user picks from installed apps via a searchable dropdown — apps
+/// user picks from installed apps via a searchable dropdown, apps
 /// Corder recently saw on the mic float to the top. Rows show the app
 /// icon + friendly name (bundle id is the tooltip). Built only from
-/// existing tokens/components — consistency first.
+/// existing tokens/components, consistency first.
 function AppListEditor({
   title, items, apps, disabled, onChange, t,
 }: {
@@ -450,7 +449,7 @@ function AppListEditor({
   const remove = (b: string) => onChange(items.filter((x) => x !== b));
 
   // Picker is PORTALLED to <body> and fixed-positioned at the button's
-  // rect — the settings list is `overflow:hidden` and stacked under
+  // rect, the settings list is `overflow:hidden` and stacked under
   // sibling cards, so an in-flow dropdown got clipped / hidden. Anchored
   // like ProfileMenu; repositions on scroll/resize; outside-click/Esc.
   React.useEffect(() => {
@@ -491,7 +490,7 @@ function AppListEditor({
     <div className="applist-block">
       <div className="settings-row-label">{title}</div>
       {/* Picked apps render as a plain stack (no surrounding frame,
-          no Empty placeholder — empty just means no rows). The Add
+          no Empty placeholder, empty just means no rows). The Add
           button sits below them as a regular outline `.clarify-btn`,
           matching "Transcribe now" in the empty-transcript banner. */}
       {items.length > 0 && (
@@ -579,7 +578,7 @@ function AppListEditor({
   );
 }
 
-/// Test-mode tier switch — Upgrade flips `app_metadata.tier=max`,
+/// Test-mode tier switch, Upgrade flips `app_metadata.tier=max`,
 /// Downgrade flips it back to free. Hits a Worker endpoint that
 /// calls Supabase admin with the service role, then refreshes the
 /// local session so the change shows up everywhere without a
@@ -597,7 +596,7 @@ function TierTestRow({
   // Which plan the user wants to upgrade INTO. Surfaced as a secondary
   // dropdown under the primary CTA, same shape as the model picker
   // (`Whisper Turbo • 1.5 GB`) under Start recording. Hidden once the
-  // user IS on a paid tier — Downgrade has only one destination.
+  // user IS on a paid tier, Downgrade has only one destination.
   const [pickedPlan, setPickedPlan] = React.useState<"pro" | "max">("max");
   const click = async () => {
     setBusy(true);
@@ -688,7 +687,7 @@ function TierTestRow({
   );
 }
 
-/// Theme block — same shell as `MicDevicePicker` (label + desc +
+/// Theme block, same shell as `MicDevicePicker` (label + desc +
 /// SettingsSelect). Three options: System (follow macOS),
 /// Light, Dark. The view-transition radial wipe still fires; the
 /// origin is the centre of the SettingsSelect trigger pill (we

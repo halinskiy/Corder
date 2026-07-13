@@ -19,7 +19,7 @@ interface Props {
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-/// Sidebar in "archive mode" — replaces the normal meeting sidebar
+/// Sidebar in "archive mode", replaces the normal meeting sidebar
 /// when the user opens the archive. Visually identical to `Sidebar`:
 /// same `.meeting-item` rows, same hover/active fill, no checkboxes
 /// or per-row chrome. Multi-select via Cmd-click + Shift-click; right-
@@ -62,7 +62,7 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
   }, [menu]);
 
   // Archive rows carry only a date + duration (no transcript preview),
-  // so search matches the formatted date string — the same field the
+  // so search matches the formatted date string, the same field the
   // row actually shows. Mirrors the Sidebar's search-as-you-type.
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -141,7 +141,7 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
       <div className="sidebar-titlebar-pad" />
       {/* Search header with a back button to its LEFT (same circular
           `.toolbar-icon-btn` shell as the header Settings/Archive buttons, but
-          a back arrow). It closes the archive — exactly what the active Archive
+          a back arrow). It closes the archive, exactly what the active Archive
           toolbar button does. 6px gap to the search mirrors the top toolbar's
           button spacing. */}
       <div className="sidebar-search arc-sidebar-search">
@@ -187,7 +187,7 @@ export function ArchiveSidebar({ onClose, onChanged, onToast, t, lang }: Props) 
                   )}
                 </div>
               </div>
-              {/* Inline Restore — matches the `.toolbar-icon-btn`
+              {/* Inline Restore, matches the `.toolbar-icon-btn`
                   look from the main header (outlined square, 16 px
                   icon). Stops click propagation so it does not also
                   toggle the row selection. */}

@@ -8,7 +8,7 @@
 #   - Corder.app already built + signed + notarized + stapled at
 #     repo root (run Scripts/notarize.sh first).
 #   - `create-dmg` from Homebrew: `brew install create-dmg`.
-#   - `python3` with PIL — used to regenerate the background PNG.
+#   - `python3` with PIL, used to regenerate the background PNG.
 #
 # Output:
 #   releases/Corder-<version>.dmg
@@ -38,7 +38,7 @@ fi
 
 APP="$ROOT/Corder.app"
 if [[ ! -d "$APP" ]]; then
-    echo "ERROR: $APP not found — run Scripts/build-app.sh (and"
+    echo "ERROR: $APP not found, run Scripts/build-app.sh (and"
     echo "       ideally Scripts/notarize.sh) first."
     exit 2
 fi

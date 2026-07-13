@@ -10,7 +10,7 @@ import Foundation
 ///   (transcription finished → capture files closed), never during capture.
 /// - `AppPaths.recordingDir` always prefers a folder that actually exists, so a
 ///   not-yet-renamed row, a half-finished rename, or a stale index all resolve
-///   to a real folder — never a dangling path.
+///   to a real folder, never a dangling path.
 /// - The stored absolute `video_path` / `audio_path` are re-based in the SAME
 ///   DB write, because they're read directly in serving/transcription.
 /// - If the DB write fails after the folder move, the move is reverted so disk
@@ -24,7 +24,7 @@ enum RecordingDirNaming {
         let desired = AppPaths.folderName(startedAtMs: meeting.startedAt, title: meeting.title)
         let currentName = meeting.dirName ?? meetingId
         // Already at the desired name (ignoring any " (2)" dedupe suffix already
-        // applied) — nothing to do.
+        // applied), nothing to do.
         if currentName == desired || currentName.hasPrefix(desired + " (") { return }
 
         let currentDir = AppPaths.recordingsDir.appendingPathComponent(currentName, isDirectory: true)
@@ -52,7 +52,7 @@ enum RecordingDirNaming {
             AppPaths.registerDirName(finalName, for: meetingId)
             FileLogger.log("RecordingDirNaming: \(meetingId) folder → \"\(finalName)\"")
         } catch {
-            // DB write failed after the move — move it back so disk + DB stay
+            // DB write failed after the move, move it back so disk + DB stay
             // consistent (resolution keeps working under the old name).
             try? fm.moveItem(at: newDir, to: currentDir)
             FileLogger.log("RecordingDirNaming: DB update failed for \(meetingId), reverted move: \(error)")

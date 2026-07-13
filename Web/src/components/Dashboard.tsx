@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { getSettings } from "../api";
 import { NewsBanner } from "./NewsBanner";
-import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { ResizeHandle } from "./ResizeHandle";
 import { SettingsPane } from "./SettingsPane";
@@ -11,7 +10,7 @@ import { UpcomingPane } from "./UpcomingPane";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
 /// Same filled-bust glyph the sidebar uses next to each meeting's
-/// speaker count — duplicated here (not exported from Sidebar.tsx) so
+/// speaker count, duplicated here (not exported from Sidebar.tsx) so
 /// the Recent rows render the same chip without crossing components.
 /// Small wrapper that polls /api/settings once on mount + every 5 s
 /// to expose the current tier to children (NewsBanner). Cheap GET,
@@ -37,12 +36,11 @@ function DashTier({ render }: { render: (tier: "free" | "pro" | "max") => React.
 
 
 interface Props {
-  /// Lifetime stats sample — all meetings EVER recorded, archived
+  /// Lifetime stats sample, all meetings EVER recorded, archived
   /// included. Drives the Stats card (Recordings / Total recorded /
   /// This week) so the counters reflect everything the user has
   /// produced, not just the current library subset. Only the
   /// `started_at` and `duration_ms` fields are read.
-  statsMeetings: Array<{ started_at: number; duration_ms?: number }>;
   onStart: () => void;
   /// Mirrors `RecordingState.active` from the backend. When true, the
   /// Dashboard's primary card flips to a "still recording" headline +
@@ -61,9 +59,9 @@ interface Props {
   /// Bumped when the profile menu's Settings item is clicked. We
   /// listen for changes (not value) and flip the right section from
   /// the Recent/sort view to Settings. Stats column on the left
-  /// stays untouched — only the right section toggles.
+  /// stays untouched, only the right section toggles.
   openSettingsNonce: number;
-  /// Lifted Settings state — null = Settings not open, "general" /
+  /// Lifted Settings state, null = Settings not open, "general" /
   /// "advanced" = which slice. Lives in main.tsx so opening Settings
   /// here and then clicking a meeting keeps the right pane on
   /// Settings (Костя: «настройки должны быть поверх пока не выключу»).
@@ -74,48 +72,20 @@ interface Props {
   onSettingsOpenChange?: (open: boolean) => void;
   /// Surfaces one-line nudge/error toasts from the Dashboard surface.
   onToast?: (msg: string, kind?: "success" | "error") => void;
-  /// Signed-in marker — guests don't see the Advanced settings tab.
+  /// Signed-in marker, guests don't see the Advanced settings tab.
   signedIn?: boolean;
 }
 
 /// Home / landing surface (shown when no specific meeting is open).
-/// Built from the SAME bones as `MeetingView` — `.detail` (column) wraps
+/// Built from the SAME bones as `MeetingView`, `.detail` (column) wraps
 /// `.detail-tabs` (two-col tab strip with a shared 1 px hairline divider)
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
-/// same way it does in a meeting (and vice-versa — they share `--right-w`).
-export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, signedIn = true }: Props) {
-  // Counters read off `statsMeetings` (lifetime — includes archived
-  // rows) so archiving never silently decreases the user's totals.
-  // The Recent list and everything else below still uses `meetings`
-  // (the live library subset).
-  // Memoised so the two passes over `statsMeetings` (sum + week filter)
-  // only re-run when the list actually changes, not on every Dashboard
-  // re-render (sort change, settings toggle, resize drag, etc.).
-  const { total, totalMs, thisWeek } = useMemo(() => {
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return {
-      total: statsMeetings.length,
-      totalMs: statsMeetings.reduce((s, m) => s + (m.duration_ms ?? 0), 0),
-      thisWeek: statsMeetings.filter((m) => m.started_at >= weekAgo).length,
-    };
-  }, [statsMeetings]);
-
-  // `formatDuration` tops out at "Nm SSs" — fine for one session, not
-  // for a totals tile where N can be 100s of minutes. Render hours
-  // explicitly past the 1-hour mark.
-  const totalLabel = (() => {
-    if (totalMs <= 0) return "—";
-    const sec = Math.round(totalMs / 1000);
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    return formatDuration(totalMs, lang);
-  })();
-
+/// same way it does in a meeting (and vice-versa, they share `--right-w`).
+export function Dashboard({ onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, signedIn = true }: Props) {
   /// `busy` covers the gap between the user clicking Start/Stop and
   /// the backend `RecordingState.active` flipping in the next poll.
-  /// Without this, the button looked frozen — the click landed, the
+  /// Without this, the button looked frozen, the click landed, the
   /// network hop took 100-400 ms, and nothing on-screen changed.
   /// Now the click flips `busy` immediately, the button shows a
   /// spinner + "Starting…" / "Stopping…" copy, and the moment
@@ -123,12 +93,12 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
   const [busy, setBusy] = useState(false);
   const lastRecRef = useRef(isRecording);
   /// Same overlay scrollbar wiring as the Transcript pane: pass
-  /// just the scroll container, no dividerRef — the thumb centres
+  /// just the scroll container, no dividerRef, the thumb centres
   /// on the container's own right edge (the column seam carrying
   /// the hairline from `.transcript-wrap`).
   const dashLeftRef = useRef<HTMLDivElement | null>(null);
   // Monotonic counter bumped on every transition into a recording
-  // state — covers Start from the Dashboard button, the menu-bar
+  // state, covers Start from the Dashboard button, the menu-bar
   // popover, and the auto-detect invite.
   useEffect(() => {
     if (lastRecRef.current !== isRecording) {
@@ -137,20 +107,6 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
     }
   }, [isRecording]);
 
-  // The Dashboard statistics card is opt-in: a paid-only toggle in
-  // Advanced → Statistics (off by default for everyone). Poll the
-  // setting so flipping it in Settings reflects here within ~5 s.
-  const [statsEnabled, setStatsEnabled] = useState<boolean>(false);
-  useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      try { const st = await getSettings(); if (alive) setStatsEnabled(st.stats_enabled === true); }
-      catch {}
-    };
-    tick();
-    const id = window.setInterval(tick, 5000);
-    return () => { alive = false; window.clearInterval(id); };
-  }, []);
   const handlePrimary = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -201,7 +157,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
       {/* The Welcome surface is ALWAYS two-column now (1fr | --right-w), exactly
           like MeetingView: the left column holds the Home card, the right column
           holds the ghost recording preview (Recent view) or the Settings pane.
-          No more `dashboard-solo` single-column collapse — that left the ghost
+          No more `dashboard-solo` single-column collapse, that left the ghost
           panel with nowhere to land in the grid and it dropped to the bottom of
           the main column. The splitter drags --right-w, so resizing here resizes
           the right pane everywhere, identical to a session. */}
@@ -220,7 +176,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
         </div>
         <div className="detail-tab-col detail-tab-col-right">
           {inSettings && (
-            // Settings mode — `← General Settings` doubles as back
+            // Settings mode, `← General Settings` doubles as back
             // affordance (returns to Recent when clicked while
             // General is already active), `Advanced Settings` is a
             // plain sibling tab. Same pattern as MeetingView's strip.
@@ -270,7 +226,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
                     Stop" instead of luring the user into a second
                     Start. Subtitle stays visible (always two lines)
                     so the card's height doesn't pop in/out around
-                    the state change — only the copy and the button
+                    the state change, only the copy and the button
                     change, not the chrome. */}
                 <div className="clarify-body">
                   {isRecording ? t.rec_label : t.dashboard_heading}
@@ -305,28 +261,6 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
                 </button>
               </div>
             </div>
-
-            {statsEnabled && (
-              <>
-                {/* Stats — one outlined `.settings-rows` card, three rows
-                    separated by hairline borders. Same width and look as
-                    the banner above; same as Settings rows. */}
-                <div className="settings-rows dash-stats-card">
-                  <div className="dash-stat-row">
-                    <div className="settings-row-label">{t.dashboard_stat_total}</div>
-                    <div className="dash-stat-value">{total}</div>
-                  </div>
-                  <div className="dash-stat-row">
-                    <div className="settings-row-label">{t.dashboard_stat_time}</div>
-                    <div className="dash-stat-value">{totalLabel}</div>
-                  </div>
-                  <div className="dash-stat-row">
-                    <div className="settings-row-label">{t.dashboard_stat_thisweek}</div>
-                    <div className="dash-stat-value">{thisWeek}</div>
-                  </div>
-                </div>
-              </>
-            )}
             </>
             )}
           </div>
@@ -334,7 +268,7 @@ export function Dashboard({ statsMeetings, onStart, isRecording, onStop, t, lang
         </div>
 
         {/* Right column now hosts ONLY the Settings pane (the Recent /
-            "Longest" session list was removed — sessions live in the
+            "Longest" session list was removed, sessions live in the
             left sidebar). Both settings sections stay mounted, display
             toggled, so toggle state survives a tab flip. */}
         <div style={{ display: rightSection === "settings-general" ? "contents" : "none" }}>

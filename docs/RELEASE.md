@@ -2,7 +2,7 @@
 
 Corder ships as a Sparkle 2 auto-updating macOS app. The signed update
 appcast lives in a separate repo (`corder-updates`) on `gh-pages`. End
-users never download .zip files manually — they run an existing copy
+users never download .zip files manually, they run an existing copy
 of Corder, Sparkle's daemon polls the appcast (default 24 h), an
 update notification appears, and a verified install proceeds.
 
@@ -28,7 +28,7 @@ The version lives in two files:
 
 1. Sparkle's `generate_keys` produced an EdDSA keypair. Public half
    sits in `Info.plist` under `SUPublicEDKey`. Private half is in the
-   developer's macOS Keychain — Sparkle's `sign_update` finds it
+   developer's macOS Keychain, Sparkle's `sign_update` finds it
    automatically.
 2. A `corder-updates` GitHub repo with a `gh-pages` branch and a
    `appcast.xml` pointing at release zips on `https://halinskiy.github.io/corder-updates/`.
@@ -46,7 +46,7 @@ The version lives in two files:
 Move entries from `[Unreleased]` to a new dated section. Format:
 
 ```
-## [0.7.0] — 2026-MM-DD
+## [0.7.0], 2026-MM-DD
 
 ### Added
 - One sentence per feature, present-tense.
@@ -93,7 +93,7 @@ spctl --assess --type execute --verbose Corder.app    # should not error
 
 ### 4. Notarize (optional but recommended)
 
-Sparkle works fine on a self-signed app — but Gatekeeper warns the
+Sparkle works fine on a self-signed app, but Gatekeeper warns the
 first time the user runs an un-notarized binary. Notarisation removes
 that warning.
 
@@ -113,7 +113,7 @@ sign_update Corder-0.7.0.zip > /tmp/sparkle-signature.txt
 ```
 
 The signature is what Sparkle's client verifies against `SUPublicEDKey`
-before installing. If the keypair drifts — recovery is painful (see
+before installing. If the keypair drifts, recovery is painful (see
 SECURITY.md).
 
 ### 6. Push to corder-updates
@@ -162,7 +162,7 @@ Optional: open a GitHub Release with the same notes.
 
 If you ship a release that bricks installs, push a `MAJOR.MINOR.PATCH+1`
 within hours, not days. Sparkle pulls again on next launch. There is no
-rollback infrastructure — older zips stay on the `gh-pages` branch but
+rollback infrastructure, older zips stay on the `gh-pages` branch but
 the app only ever installs the latest one.
 
 ## Things that go wrong
@@ -176,8 +176,7 @@ the app only ever installs the latest one.
   dependency unsigned (Sparkle.framework!).
 - **`The application "Corder" can't be opened`** on first run after
   zip → quarantine. `xattr -dr com.apple.quarantine /Applications/Corder.app`.
-  Should never happen for users who got the binary through Sparkle —
-  Sparkle handles quarantine internally.
+  Should never happen for users who got the binary through Sparkle, Sparkle handles quarantine internally.
 
 ## Don't release if
 

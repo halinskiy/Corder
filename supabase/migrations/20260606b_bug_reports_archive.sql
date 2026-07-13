@@ -1,4 +1,4 @@
--- Bug reports — archive support. June 2026.
+-- Bug reports, archive support. June 2026.
 --
 -- Adds a soft-archive flag so the admin can clear a handled / noise
 -- report out of the active Logs list without hard-deleting it (the raw
@@ -14,7 +14,7 @@ begin;
 alter table public.bug_reports
   add column if not exists archived_at timestamptz;
 
--- Active list is the hot path — index the "not archived" predicate.
+-- Active list is the hot path, index the "not archived" predicate.
 create index if not exists bug_reports_active_idx
   on public.bug_reports (created_at desc)
   where archived_at is null;

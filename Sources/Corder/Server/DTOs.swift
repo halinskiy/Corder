@@ -30,7 +30,7 @@ enum DTO {
         let speakers: [SpeakerDTO]
         let segments: [SegmentDTO]
         let expected_other_speakers: Int?
-        /// True if the meeting has a playable video.mov — either on
+        /// True if the meeting has a playable video.mov, either on
         /// disk in recordingDir or archived to Dropbox. The frontend
         /// uses this to decide whether to render the `<video>` block
         /// above the audio player.
@@ -63,7 +63,7 @@ enum DTO {
         /// just sees a frozen spinner for minutes.
         let model_download_progress: Double?
         /// True while the model bytes are fully down but we're in the SILENT
-        /// post-download phase — staging the tokenizer + the one-time ANE
+        /// post-download phase, staging the tokenizer + the one-time ANE
         /// Core ML compile (minutes on a slow Mac, no progress callbacks).
         /// Progress is pinned at 0.99 here, so the frontend uses this to show
         /// a "Preparing model…" / indeterminate state instead of a frozen
@@ -75,10 +75,10 @@ enum DTO {
         let count: Int?
     }
 
-    /// `GET /api/usage` — drives the Dashboard Usage bars. The
+    /// `GET /api/usage`, drives the Dashboard Usage bars. The
     /// frontend renders a real fill when `limit_seconds` is non-null
     /// and a shimmer when it's null (unlimited). `resets_at` is the
-    /// first instant of next calendar month in Unix-ms — same for
+    /// first instant of next calendar month in Unix-ms, same for
     /// both classes (single billing window).
     struct Usage: Codable {
         let plan: String                       // "free" | "pro" | "max"
@@ -104,7 +104,7 @@ enum DTO {
         /// Read-only: GET reports whether a key is on disk, not the key.
         let gemini_key_set: Bool?
         /// Functional toggles. All optional so an older client that
-        /// omits a field never flips it — `settingsSet` treats absent
+        /// omits a field never flips it, `settingsSet` treats absent
         /// as "leave unchanged" (migration/compat guarantee). Defaults
         /// live in `AppSettings` (every Bool → true).
         let notifications: Bool?
@@ -135,13 +135,10 @@ enum DTO {
         /// Register Corder as a login item (launch on boot / login).
         /// Backed by `SMAppService.mainApp`.
         let launch_at_login: Bool?
-        /// Opt-in diagnostic telemetry — default off. When on, the
+        /// Opt-in diagnostic telemetry, default off. When on, the
         /// app ships diagnostic counts (no PII / no transcript) to
         /// the maintainer's Worker once per 24h.
         let telemetry: Bool?
-        /// Dashboard statistics block visibility. Default off; the toggle
-        /// is paid-only (gated in the web SettingsPane).
-        let stats_enabled: Bool?
         /// Silent pre-roll: start capturing when a call is detected so
         /// accepting the offer keeps audio/video from the start. Opt-in,
         /// default OFF (records before consent, then discards on decline).
@@ -156,14 +153,14 @@ enum DTO {
         /// Preferred microphone input device. Stored as the stable
         /// Core Audio UID (not the numeric AudioDeviceID, which the
         /// OS re-issues on reboot/replug). `nil` / empty string =
-        /// "use system default" — the pre-feature behaviour.
+        /// "use system default", the pre-feature behaviour.
         let mic_device_uid: String?
         /// Read-only: discovered input devices for the picker. Sorted
         /// with the current system default first.
         let audio_input_devices: [AudioInputDeviceDTO]?
         /// Paddle-issued licence key (raw string the user pasted into
         /// the Welcome wizard). Empty / nil = Free tier. The frontend
-        /// also reads `is_pro` for the derived state — keeping both
+        /// also reads `is_pro` for the derived state, keeping both
         /// avoids re-implementing the format rule in TypeScript.
         let licence_key: String?
         /// Display name harvested from the sign-in provider (Google
@@ -181,9 +178,9 @@ enum DTO {
         /// Read-only: `true` when the signed-in account has the admin
         /// role (`app_metadata.role == "admin"`), mirrored from the
         /// Supabase session by `SupabaseTierSync`. Drives the blue
-        /// profile avatar. Display-only — never a privilege grant.
+        /// profile avatar. Display-only, never a privilege grant.
         let is_admin: Bool?
-        /// Read-only: current paid-tier ladder rung — `free` / `pro` /
+        /// Read-only: current paid-tier ladder rung, `free` / `pro` /
         /// `max`. Source of truth on the server, mirrors
         /// `AppSettings.userTier`. The frontend reads this directly to
         /// drive the tier badge + the Sidebar Upgrade card visibility;
@@ -193,7 +190,7 @@ enum DTO {
         /// once? AppDelegate uses this to decide whether to auto-open
         /// the wizard on launch. The wizard's final step flips it.
         let onboarding_completed: Bool?
-        /// ASR provider override. `"auto"` means "no override stored —
+        /// ASR provider override. `"auto"` means "no override stored
         /// let `AppSettings.transcriptionProvider` pick by tier" (Free
         /// → whisperLocal, Pro/Max → whisper). The three concrete
         /// values map 1:1 to `TranscriptionProvider.rawValue`:
@@ -210,12 +207,12 @@ enum DTO {
         /// transcription-pipeline UI; per-variant state lives in
         /// `whisper_local_models`.
         let whisper_local_model_ready: Bool?
-        /// Picked Whisper Local variant id — only `openai_whisper-large-v3_turbo`
+        /// Picked Whisper Local variant id, only `openai_whisper-large-v3_turbo`
         /// now (Whisper Small + base/tiny were dropped). Echoed back unchanged;
         /// absent means the server hasn't seen one yet and is using the
         /// default (turbo).
         let whisper_local_variant: String?
-        /// JSON-encoded `{speed: ts, best: ts, unlimited: ts}` map —
+        /// JSON-encoded `{speed: ts, best: ts, unlimited: ts}` map
         /// timestamps the user dismissed the matching upsell strip at.
         /// Lives in UserDefaults on the native side because the
         /// WKWebView's localStorage gets wiped if Swifter binds a
@@ -238,7 +235,7 @@ enum DTO {
     /// DownloadButton state under the picker. `progress` is `nil`
     /// when the model isn't currently downloading.
     struct WhisperLocalModelDTO: Codable {
-        /// Raw variant id (`openai_whisper-large-v3_turbo` etc.) — used
+        /// Raw variant id (`openai_whisper-large-v3_turbo` etc.), used
         /// as the value in the SettingsSelect and the body of POST
         /// `/api/whisper-local/download`.
         let id: String
@@ -247,7 +244,7 @@ enum DTO {
         /// Human-readable size shown as the meta after the label
         /// ("1.5 GB" / "480 MB").
         let size_label: String
-        /// Integer MB — lets the frontend sort or render an exact byte
+        /// Integer MB, lets the frontend sort or render an exact byte
         /// count if it wants to.
         let size_mb: Int
         /// True when the model's Core ML packages are fully on disk.
@@ -265,7 +262,7 @@ enum DTO {
         let name: String
         let manufacturer: String?
         /// "BuiltIn" / "USB" / "Bluetooth" / "Virtual" / "Aggregate" /
-        /// "Continuity" / etc. — used for an icon hint in the picker.
+        /// "Continuity" / etc., used for an icon hint in the picker.
         let transport: String?
         let is_system_default: Bool
     }
@@ -327,12 +324,12 @@ enum DTO {
         let text: String
     }
 
-    /// Right-click → "Assign to" — move a segment to another speaker.
+    /// Right-click → "Assign to", move a segment to another speaker.
     struct SegmentSpeakerRequest: Codable {
         let speaker_id: String
     }
 
-    /// Right-click speaker → "Merge into" — fold this speaker's segments
+    /// Right-click speaker → "Merge into", fold this speaker's segments
     /// into another and drop the source row.
     struct MergeSpeakerRequest: Codable {
         let into: String

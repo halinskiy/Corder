@@ -1,9 +1,9 @@
--- Bug reports + AI summaries — June 2026.
+-- Bug reports + AI summaries, June 2026.
 --
 -- Backs the admin panel's "Logs" tab (3rd tab after News). Every time a
 -- user taps the 🐞 Send-report button, the Worker (/submit-logs) still
 -- emails the maintainer AND files a GitHub issue as before, but now ALSO
--- writes the report here and — in the background (ctx.waitUntil) — asks
+-- writes the report here and, in the background (ctx.waitUntil), asks
 -- Gemini Flash for a short summary so the admin can skim "what's most
 -- important" without reading the raw log. Clicking a row reveals the
 -- full `log_tail` with a Copy button.
@@ -26,7 +26,7 @@ create table if not exists public.bug_reports (
   -- "interesting" lines). Capped by the Worker before insert.
   log_tail        text not null,
   -- AI summary, filled in asynchronously after insert. Null until the
-  -- background Gemini call lands (or if it failed — the admin can
+  -- background Gemini call lands (or if it failed, the admin can
   -- re-trigger via POST /admin/logs/:id/summarize).
   title           text,                              -- ≤ ~8-word headline
   summary         text,                              -- 1-3 sentence digest
@@ -45,7 +45,7 @@ create index if not exists bug_reports_created_idx
 -- ---------------------------------------------------------------------
 -- RLS: admins read everything; nobody else sees reports. The Worker
 -- inserts/updates with the service_role key, which bypasses RLS, so we
--- intentionally add NO insert/update policy (defence in depth — there's
+-- intentionally add NO insert/update policy (defence in depth, there's
 -- no path for a normal JWT to write or read here).
 -- ---------------------------------------------------------------------
 alter table public.bug_reports enable row level security;

@@ -7,7 +7,7 @@ import AVFoundation
 /// + Dropbox archive.
 ///
 /// This used to fork between Gemini (cloud) and WhisperKit (local). The
-/// local path was retired in v0.7 — running 1.5 GB of CoreML on every
+/// local path was retired in v0.7, running 1.5 GB of CoreML on every
 /// install was bloating the bundle and the quality vs Gemini Flash on
 /// Russian + English mixed audio was just worse. The cloud path is now
 /// the only path.
@@ -28,14 +28,14 @@ final class TranscriptionPipeline {
     /// of `transcribe()` to either honour the user setting or, if
     /// the monthly Advanced cap is exhausted, downshift to local.
     /// Everything downstream that needs to branch on provider reads
-    /// `currentProvider` — which falls back to the user setting if
+    /// `currentProvider`, which falls back to the user setting if
     /// nothing is active (e.g. prewarm-time reads at launch).
     private var activeProvider: TranscriptionProvider?
     private var currentProvider: TranscriptionProvider {
         activeProvider ?? AppSettings.transcriptionProvider
     }
 
-    /// True when the cloud provider can serve this transcribe call —
+    /// True when the cloud provider can serve this transcribe call
     /// either via the Cloudflare Worker proxy (any signed-in user
     /// whose `app_metadata.tier` clears the Worker's check) OR via
     /// a legacy on-disk key file. Returning false here pushes the
@@ -44,7 +44,7 @@ final class TranscriptionPipeline {
     /// `noKey` for a provider they can't configure themselves.
     private func cloudKeyAvailable(for provider: TranscriptionProvider) -> Bool {
         // Cloud providers go through the Cloudflare Worker proxy with
-        // the user's Supabase JWT — no local key is consulted any
+        // the user's Supabase JWT, no local key is consulted any
         // more. The legacy `~/.config/corder/{openai,gemini}_key`
         // fallback was removed in 0.13.29 to keep the .app from ever
         // depending on a user-side API secret. A signed-out user can
@@ -62,10 +62,10 @@ final class TranscriptionPipeline {
     /// isn't on disk yet, kick off a background pre-fetch so the first
     /// recording transcribes without a 3-5 min cold-start download.
     /// Other providers (Gemini, cloud Whisper) are stateless on our
-    /// side — nothing to warm up.
+    /// side, nothing to warm up.
     func prewarm() {
         guard LocalWhisperTranscriber.isAvailable() else {
-            FileLogger.log("TranscriptionPipeline.prewarm: WhisperKit unavailable on this arch — skip")
+            FileLogger.log("TranscriptionPipeline.prewarm: WhisperKit unavailable on this arch, skip")
             return
         }
 
@@ -74,26 +74,26 @@ final class TranscriptionPipeline {
         // safety net: if the connection drops mid-transcribe, the
         // per-chunk fallback finishes the meeting locally instead of
         // failing it (see WhisperTranscriber.localChunkFallback). Only
-        // fetch it when NOTHING is on disk yet — if the user already has
+        // fetch it when NOTHING is on disk yet, if the user already has
         // any local model (they picked local before), that one is the net.
         guard AppSettings.transcriptionProvider == .whisperLocal else {
             if LocalWhisperTranscriber.firstDownloadedVariant() != nil {
-                FileLogger.log("TranscriptionPipeline.prewarm: cloud user already has a local model on disk — skip")
+                FileLogger.log("TranscriptionPipeline.prewarm: cloud user already has a local model on disk, skip")
                 return
             }
             let net = LocalWhisperTranscriber.offlineFallbackVariant
-            FileLogger.log("TranscriptionPipeline.prewarm: cloud user — staging offline fallback \(net.rawValue) in background")
+            FileLogger.log("TranscriptionPipeline.prewarm: cloud user, staging offline fallback \(net.rawValue) in background")
             Task { @MainActor in
                 do {
                     // Full ensureModelReady (not downloadOnly): it ALSO
                     // fetches + caches the tokenizer sidecar, which the
-                    // offline fallback needs — once the network is down we
+                    // offline fallback needs, once the network is down we
                     // can't fetch it. Small (the offline fallback now that
                     // base/tiny were dropped) is light, so warming it is cheap.
                     try await LocalWhisperTranscriber.ensureModelReady(net)
                     FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) ready (model + tokenizer cached)")
                 } catch {
-                    FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) staging failed — \(error)")
+                    FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) staging failed, \(error)")
                 }
             }
             return
@@ -101,7 +101,7 @@ final class TranscriptionPipeline {
 
         let variant = AppSettings.whisperLocalVariant
         if LocalWhisperTranscriber.isModelDownloaded(variant) {
-            FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) already on disk — skip")
+            FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) already on disk, skip")
             return
         }
         FileLogger.log("TranscriptionPipeline.prewarm: pre-fetching \(variant.rawValue) in background")
@@ -110,7 +110,7 @@ final class TranscriptionPipeline {
                 try await LocalWhisperTranscriber.downloadOnly(variant)
                 FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) ready")
             } catch {
-                FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) download failed — \(error)")
+                FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) download failed, \(error)")
             }
         }
     }
@@ -126,7 +126,7 @@ final class TranscriptionPipeline {
     func enqueue(meetingId: String) -> Task<Void, Never> {
         // Double-clicking Re-transcribe used to spawn a SECOND task while
         // the first was still unwinding its cancellation. Both ran
-        // `transcribe()` concurrently and raced on the meeting row — the
+        // `transcribe()` concurrently and raced on the meeting row, the
         // cancelled one wrote `.failed` over the winner's `.ready`. Fix:
         // cancel the predecessor, then make the new task WAIT for it to
         // fully unwind before touching the DB, so there is only ever one
@@ -139,7 +139,7 @@ final class TranscriptionPipeline {
             await previous?.value          // let the cancelled run finish
             guard let self else { return }
             // A still-newer enqueue may have superseded us while we
-            // waited on `previous` — don't start a stale run.
+            // waited on `previous`, don't start a stale run.
             guard self.taskGen[meetingId] == gen else {
                 FileLogger.log("enqueue: superseded before start for \(meetingId)")
                 return
@@ -154,7 +154,7 @@ final class TranscriptionPipeline {
     /// Cancel a running transcription. Marks the meeting as `.failed` so
     /// the UI flips out of the loader state immediately; the underlying
     /// Task is cancelled, but Gemini upload may run for a few more
-    /// seconds — we ignore its eventual result via `catch is
+    /// seconds, we ignore its eventual result via `catch is
     /// CancellationError` in `transcribe()`.
     func cancel(meetingId: String) {
         guard let task = activeTasks[meetingId] else {
@@ -174,7 +174,7 @@ final class TranscriptionPipeline {
     func transcribe(meetingId: String) async {
         FileLogger.log("transcribe(): START for \(meetingId)")
         // Reset the runtime provider override no matter how this
-        // returns — exception, cancel, or normal completion — so a
+        // returns, exception, cancel, or normal completion, so a
         // following transcribe() always begins by re-evaluating the
         // user setting + cap.
         defer { activeProvider = nil }
@@ -187,7 +187,7 @@ final class TranscriptionPipeline {
         // Watchdog: a HANG detector, NOT a hard time cap. A cold first-run can
         // legitimately spend 15-25 min downloading (~1.5 GB) + paying the
         // one-time ANE/GPU compile (especially the ≤8 GB generous-GPU-budget
-        // path), and a long meeting then takes real wall-time to transcribe —
+        // path), and a long meeting then takes real wall-time to transcribe
         // none of that is a hang. A flat 45-min-from-entry cap would kill those
         // legitimately-slow first runs. So we fire ONLY after 45 CONTIGUOUS
         // minutes with NO forward progress: the idle timer resets whenever the
@@ -216,7 +216,7 @@ final class TranscriptionPipeline {
             await MainActor.run {
                 let repo = AppContext.shared.repo
                 if let m = try? repo.meeting(id: meetingId), m.status == .transcribing {
-                    FileLogger.log("transcribe(): WATCHDOG — \(meetingId) no forward progress for 45 min, marking failed")
+                    FileLogger.log("transcribe(): WATCHDOG, \(meetingId) no forward progress for 45 min, marking failed")
                     TranscriptionErrors.record(meetingId: meetingId,
                                                message: "Transcription took too long and was stopped. Please try again.")
                     try? repo.setStatus(meetingId: meetingId, status: .failed)
@@ -232,7 +232,7 @@ final class TranscriptionPipeline {
         }
 
         // Idempotent re-runs: clear stale errors. We do NOT clear the
-        // prior transcript here — keeping it means an interrupted /
+        // prior transcript here, keeping it means an interrupted /
         // failed re-transcribe leaves the previous (already-paid-for)
         // result readable instead of wiping it. The mapping step clears +
         // re-inserts atomically once a run actually produces turns, so
@@ -251,7 +251,7 @@ final class TranscriptionPipeline {
         // TranscribingBanner show a huge elapsed (e.g. 84:15 for a 23s clip that
         // had only just restarted after an app update). The explicit
         // re-transcribe route also nils it for instant UI reset, but that path
-        // doesn't cover recovery/retry — so the single source of truth is here.
+        // doesn't cover recovery/retry, so the single source of truth is here.
         meeting.transcribingStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
 
         // Resolve which provider this transcribe call ACTUALLY uses.
@@ -259,7 +259,7 @@ final class TranscriptionPipeline {
         // monthly cap has already been hit, silently fall back to
         // on-device Whisper for this run instead of charging the
         // user beyond their plan. We don't mutate `AppSettings`
-        // (the user's preference is intact for next month) — the
+        // (the user's preference is intact for next month), the
         // helper just stashes the runtime choice so every read
         // inside this method goes through `currentProvider`.
         let userPick = AppSettings.transcriptionProvider
@@ -270,7 +270,7 @@ final class TranscriptionPipeline {
             // (if WhisperKit is available on this arch). Logs and
             // moves on rather than failing the meeting.
             if !cloudKeyAvailable(for: userPick), LocalWhisperTranscriber.isAvailable() {
-                FileLogger.log("transcribe(): no API key for \(userPick) — falling back to whisperLocal for this run")
+                FileLogger.log("transcribe(): no API key for \(userPick), falling back to whisperLocal for this run")
                 effective = .whisperLocal
             } else if let limit = AppSettings.userTier.advancedMonthlyLimitSeconds {
                 let cal = Calendar(identifier: .gregorian)
@@ -282,15 +282,15 @@ final class TranscriptionPipeline {
                 let usedAdv = (bucket["advanced"] ?? 0) + simAdv
                 if usedAdv >= Int64(limit) {
                     if LocalWhisperTranscriber.isAvailable() {
-                        FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s) — falling back to whisperLocal for this run")
+                        FileLogger.log("transcribe(): advanced cap reached (\(usedAdv)s used, limit \(limit)s), falling back to whisperLocal for this run")
                         effective = .whisperLocal
                     } else {
                         // Intel: no on-device fallback. Do NOT silently keep
-                        // going on cloud — the SERVER cap is fail-open on a D1
+                        // going on cloud, the SERVER cap is fail-open on a D1
                         // read error (returns 0 used), so an over-cap Intel
                         // user during a metering outage could leak unlimited
                         // paid cloud. Refuse the run with a cap message.
-                        FileLogger.log("transcribe(): advanced cap reached on Intel (\(usedAdv)s/\(limit)s, no on-device fallback) — refusing cloud for this run")
+                        FileLogger.log("transcribe(): advanced cap reached on Intel (\(usedAdv)s/\(limit)s, no on-device fallback), refusing cloud for this run")
                         TranscriptionErrors.record(meetingId: meetingId,
                                                    message: "Monthly cloud limit reached. Upgrade your plan or wait for next month.")
                         try? repo.setStatus(meetingId: meetingId, status: .failed)
@@ -318,28 +318,28 @@ final class TranscriptionPipeline {
         do {
             // 1. Locate raw recording files. Dual-track path needs both
             //    mic.wav and system.wav. Fallback to the legacy mix
-            //    (audio.wav) only when we can't get them — typically an
+            //    (audio.wav) only when we can't get them, typically an
             //    older recording that was already Dropbox-archived
             //    before this code shipped.
             let dir = AppPaths.recordingDir(for: meetingId)
             let micURL = URL(fileURLWithPath: meeting.audioPath)
             // System track has TWO possible sources, with opposite
             // failure modes:
-            //  • system.wav     — Core Audio process tap. Captures
+            //  • system.wav    , Core Audio process tap. Captures
             //    real-call/VPIO audio, but is SILENT when the output
             //    route is Bluetooth (AirPods / BT headset).
-            //  • system_sck.wav — ScreenCaptureKit audio. Survives BT
+            //  • system_sck.wav, ScreenCaptureKit audio. Survives BT
             //    output, but is silent on VPIO calls.
             // Choose between the two system tracks by ACTUAL speech
             // energy, not a binary "tap fully silent" gate. The old gate
-            // only swapped to SCK when the tap had ZERO voiced windows —
+            // only swapped to SCK when the tap had ZERO voiced windows
             // but on a Bluetooth output route the Core-Audio tap records
             // a faint, attenuated bleed (not true silence), so the gate
             // never tripped and the user got the garbled tap while the
             // clean SCK backup was thrown away. Now: on a BT route (flag
             // persisted at record time) the SCK track is authoritative
             // whenever it has real speech; otherwise SCK wins only when
-            // it has materially MORE voiced speech than the tap — so a
+            // it has materially MORE voiced speech than the tap, so a
             // real VPIO call (SCK digitally silent) still keeps the tap.
             // Near-tie / read-error → tap (historical default, never
             // regresses a good non-BT capture).
@@ -348,7 +348,7 @@ final class TranscriptionPipeline {
             // Run the track chooser OFF the main actor: `voicedEnergy` does a
             // full-file decode of both system tracks, and transcribe() is
             // @MainActor, so on a long meeting this would stall the popover /
-            // HUD. The decision logic is unchanged — only the heavy decode
+            // HUD. The decision logic is unchanged, only the heavy decode
             // moves off-main (mirrors the auto-transcribe-OFF chooser in
             // RecordingController). Returns just the chosen URL (Sendable).
             let btAtStart = meeting.outputBluetoothAtStart ?? false
@@ -357,7 +357,7 @@ final class TranscriptionPipeline {
                 let sckExists = FileManager.default.fileExists(atPath: sckSystemURL.path)
                 guard sckExists else { return tapSystemURL }
                 guard tapExists else {
-                    FileLogger.log("transcribe(): no tap system.wav — using system_sck.wav")
+                    FileLogger.log("transcribe(): no tap system.wav, using system_sck.wav")
                     return sckSystemURL
                 }
                 guard let tap = VoiceActivityDetector.voicedEnergy(audioURL: tapSystemURL),
@@ -390,7 +390,7 @@ final class TranscriptionPipeline {
 
             // Produce the PLAYBACK mix (audio.wav = mic + system, 16 kHz
             // mono). The audio route serves audio.wav and only falls back
-            // to mic.wav when it's absent — and nothing was generating it,
+            // to mic.wav when it's absent, and nothing was generating it,
             // so playback was mic-only: the user heard themselves but
             // never the far end (the remote side lives in system.wav,
             // which was captured and transcribed but never blended into
@@ -405,7 +405,7 @@ final class TranscriptionPipeline {
                         outputURL: mixURL)
                     FileLogger.log("transcribe(): produced playback mix audio.wav (mic\(systemExists ? "+system" : " only")) for \(meetingId)")
                 } catch {
-                    FileLogger.log("transcribe(): playback mix failed (\(error)) — playback falls back to mic.wav for \(meetingId)")
+                    FileLogger.log("transcribe(): playback mix failed (\(error)), playback falls back to mic.wav for \(meetingId)")
                 }
             }
 
@@ -420,7 +420,7 @@ final class TranscriptionPipeline {
             if !systemExists {
                 systemSilent = true
             } else {
-                // Off-main — `detect` is another full-file decode (see chooser).
+                // Off-main, `detect` is another full-file decode (see chooser).
                 let vad = await Task.detached { VoiceActivityDetector.detect(audioURL: systemURL) }.value
                 systemVadSegs = vad?.count ?? -2
                 systemSilent = (vad?.isEmpty == true)
@@ -431,13 +431,13 @@ final class TranscriptionPipeline {
             // the count.
             let inPerson = micExists && systemSilent
 
-            // DIAGNOSTIC SUMMARY — one self-contained line so a Send-Report log
+            // DIAGNOSTIC SUMMARY, one self-contained line so a Send-Report log
             // tail ALWAYS carries the capture/routing decision, with no need to
             // ask the user to dig. This is the signature for the "2 people → 1
             // speaker" class: bt=false + systemSilent=true + fork=in-person means
             // the far end reached only the mic via speaker bleed and got
             // collapsed; bt=true means a Bluetooth route genuinely lost it. Keep
-            // this line cheap (no extra decode — it reuses values already
+            // this line cheap (no extra decode, it reuses values already
             // computed above) and present on EVERY transcribe.
             FileLogger.log("DIAG capture: meeting=\(meetingId) bt=\(meeting.outputBluetoothAtStart) micExists=\(micExists) systemExists=\(systemExists) systemSilent=\(systemSilent) systemVadSegs=\(systemVadSegs) fork=\(inPerson ? "in-person/mic-only" : "call/dual-track") provider=\(currentProvider.rawValue)")
 
@@ -450,12 +450,12 @@ final class TranscriptionPipeline {
             //    can't collide so a single column carries both.
             // Provider tag bakes into the cache key so flipping
             // Gemini ↔ Whisper never replays the other model's raw
-            // turns. Stage 1 uses two prefixes — gemini-default
+            // turns. Stage 1 uses two prefixes, gemini-default
             // (unprefixed, preserves every existing cache hit) and
             // `whisper:v2:` for the new path. v2 = post-LLM-cleanup
             // (gpt-4o-mini polish for punctuation / capitalisation /
             // obvious typos); v1 records were raw whisper-1 output
-            // and aren't replayable here — the prefix bump forces a
+            // and aren't replayable here, the prefix bump forces a
             // re-transcribe through the new polish stage.
             let providerTag: String = {
                 switch currentProvider {
@@ -465,15 +465,15 @@ final class TranscriptionPipeline {
                     // Groq Whisper-large-v3-turbo. Distinct prefix from
                     // .whisper so a flip between OpenAI and Groq never
                     // replays the other backend's output (the models
-                    // are close but not identical — large-v3 vs large-v2
-                    // — and we don't run the gpt-4o-mini polish step
+                    // are close but not identical, large-v3 vs large-v2,
+                    // and we don't run the gpt-4o-mini polish step
                     // on Groq, so the cleaned text differs as well).
                     return "groq:v1:"
                 case .whisperLocal:
                     // Local Whisper keeps its own cache namespace so a
                     // flip between cloud and local never replays the
                     // other model's raw text. The VARIANT is part of the
-                    // namespace too — Turbo and Small produce different raw
+                    // namespace too, Turbo and Small produce different raw
                     // turns, and without this a switch between them would
                     // replay the other model's transcript (a cache hit on
                     // the wrong model). v1 = first ship of the local provider.
@@ -483,14 +483,14 @@ final class TranscriptionPipeline {
             let cacheKey: String
             // False when any source-WAV MD5 came back empty (a transient
             // read failure). Without this, the key degenerates to a shared
-            // `…:` value and two meetings that both hit a read error collide
-            // — one meeting's transcript replayed for another. When unusable
+            // `…:` value and two meetings that both hit a read error collide,
+            // one meeting's transcript replayed for another. When unusable
             // we neither read nor write the whole-meeting cache for this run.
             var cacheUsable = true
             if inPerson {
                 // The expected-speaker hint is baked into the Gemini
                 // prompt for the in-person path, so a different clarify
-                // count produces genuinely different raw turns — it MUST
+                // count produces genuinely different raw turns, it MUST
                 // be part of the cache key. This covers BOTH mic-only
                 // and "system.wav exists but is silent": picking "3"
                 // after "2" was a no-op before because a silent-system
@@ -499,7 +499,7 @@ final class TranscriptionPipeline {
                 // v2: diarize-first (FluidAudio decides WHO, Gemini
                 // .single decides WHAT). The speaker count is now a hard
                 // clustering constraint, not a Gemini prompt hint, so the
-                // raw output differs from any v1 cache — the prefix bump
+                // raw output differs from any v1 cache, the prefix bump
                 // forces a clean re-transcribe instead of replaying stale
                 // Gemini-diarized turns.
                 let mh = (try? Self.md5OfFile(at: micURL)) ?? ""
@@ -510,7 +510,7 @@ final class TranscriptionPipeline {
                 // timestamps) differ from any v2 cache.
                 // v10: the system-track chooser may now select a
                 // different raw audio source than the old "tap silent"
-                // gate did, so any v9-cached turns can be stale — bump
+                // gate did, so any v9-cached turns can be stale, bump
                 // to force a clean re-transcribe.
                 cacheKey = "\(providerTag)inperson:v10:\(ex):\(mh)"
             } else if canDualTrack {
@@ -522,7 +522,7 @@ final class TranscriptionPipeline {
                 if mh.isEmpty || sh.isEmpty { cacheUsable = false }
                 let ex = meeting.expectedOtherSpeakers.map(String.init) ?? "nil"
                 // v11: mic.wav now passes through EchoSuppressor (far-end
-                // bleed removed) before ASR when on speakers — the raw mic
+                // bleed removed) before ASR when on speakers, the raw mic
                 // text changes, so the key must bust the v10 cache once.
                 // v12: a late-starting system.wav is now left-padded with
                 // leading silence at capture time so mic/system share frame 0
@@ -532,7 +532,7 @@ final class TranscriptionPipeline {
             } else {
                 if !FileManager.default.fileExists(atPath: mixURL.path),
                    let remote = meeting.dropboxAudioPath {
-                    FileLogger.log("transcribe(): legacy fallback — pulling mix from Dropbox \(remote)")
+                    FileLogger.log("transcribe(): legacy fallback, pulling mix from Dropbox \(remote)")
                     try await DropboxService.shared.download(remotePath: remote, to: mixURL)
                 }
                 let mxh = (try? Self.md5OfFile(at: mixURL)) ?? ""
@@ -543,7 +543,7 @@ final class TranscriptionPipeline {
             // RAW Gemini text turns (the only thing a Gemini call buys).
             // WHEN/WHO is re-derived on-device from these every run, so a
             // cached raw set means timing can be fixed/iterated with ZERO
-            // Gemini calls — and any cached meeting recovers for free.
+            // Gemini calls, and any cached meeting recovers for free.
             var rawUserTurns: [GeminiTranscriber.Turn] = []
             var rawOtherTurns: [GeminiTranscriber.Turn] = []
             var legacyTurns: [GeminiTranscriber.Turn] = []
@@ -565,7 +565,7 @@ final class TranscriptionPipeline {
                let bundle = try? JSONDecoder().decode(CachedTranscript.self, from: data) {
                 if bundle.isDualTrack {
                     // New records carry rawUser/rawOther explicitly. Older
-                    // v9 records only stored the FINAL (timed) turns — but
+                    // v9 records only stored the FINAL (timed) turns, but
                     // relabel/alignByTokens never touch `.text`, so those
                     // finals' text+order ARE the raw Gemini turns. Either
                     // way the cached times are discarded: we re-derive
@@ -585,16 +585,16 @@ final class TranscriptionPipeline {
             }
 
             if haveRaw {
-                FileLogger.log("transcribe(): cache hit (raw turns) — re-deriving timing on-device, no Gemini")
+                FileLogger.log("transcribe(): cache hit (raw turns), re-deriving timing on-device, no Gemini")
             } else if canDualTrack || micOnly {
                 // call-vs-in-person decided above via `systemSilent`.
                 if !systemSilent {
                     // Real call. mic.wav = you, system.wav = remote. Only
                     // the .single TEXT is fetched here (WHAT) via the active
-                    // provider (Whisper / Groq / local Whisper — NOT Gemini
+                    // provider (Whisper / Groq / local Whisper, NOT Gemini
                     // unless explicitly overridden); WHEN/WHO is the
                     // on-device re-derive step below.
-                    FileLogger.log("transcribe(): dual-track — \(currentProvider.rawValue) .single on mic + system (raw text only)")
+                    FileLogger.log("transcribe(): dual-track, \(currentProvider.rawValue) .single on mic + system (raw text only)")
                     // Speaker-bleed suppression. On speakers the far-end
                     // leaks into mic.wav and gets transcribed as the user
                     // (cross-language, even translated). Run the offline echo
@@ -643,13 +643,13 @@ final class TranscriptionPipeline {
                     // Per-track polish keeps each speaker's lines in
                     // one numbered block, which matches what the model
                     // can actually reason about.
-                    // LLM polish applies to both cloud and local Whisper
-                    // — the polish stage only touches text and doesn't
+                    // LLM polish applies to both cloud and local Whisper,
+                    // the polish stage only touches text and doesn't
                     // care where the raw turns came from.
                     // Language guard (Whisper/Groq only; Gemini transcribes
                     // in-language natively). Each chunk auto-detects its own
                     // language, so a BT-coded / quiet far-end can have a few
-                    // chunks misheard as English — Whisper then TRANSLATES
+                    // chunks misheard as English, Whisper then TRANSLATES
                     // rather than transcribes them, and half the call comes
                     // back in the wrong language. Using the per-chunk language
                     // Whisper itself reported (reliable, unlike NL on Cyrillic)
@@ -663,7 +663,7 @@ final class TranscriptionPipeline {
                         let meetingName = WhisperTranscriber.LanguageTally
                             .combinedDominantName(micTally, sysTally)
                         meetingLang = meetingName.flatMap(WhisperTranscriber.iso639)
-                        FileLogger.log("transcribe(): meeting language '\(meetingName ?? "?")' → iso '\(meetingLang ?? "?")' — mic \(micTally.snapshot().counts), sys \(sysTally.snapshot().counts)")
+                        FileLogger.log("transcribe(): meeting language '\(meetingName ?? "?")' → iso '\(meetingLang ?? "?")', mic \(micTally.snapshot().counts), sys \(sysTally.snapshot().counts)")
                         if let name = meetingName, let iso = meetingLang {
                             rawUserTurns = await rescueDriftedTrack(
                                 turns: rawUserTurns, tally: micTally, meetingName: name,
@@ -688,7 +688,7 @@ final class TranscriptionPipeline {
                     // .single pass over mic.wav for the text; the room
                     // headcount drives the on-device diarizer below.
                     let why = micOnly ? "no system.wav (mic-only)" : "system.wav has no speech"
-                    FileLogger.log("transcribe(): \(why) — in-person \(currentProvider.rawValue) .single on mic.wav (raw text only)")
+                    FileLogger.log("transcribe(): \(why), in-person \(currentProvider.rawValue) .single on mic.wav (raw text only)")
                     usingDualTrack = true
                     rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
                     rawUserTurns = []
@@ -699,7 +699,7 @@ final class TranscriptionPipeline {
                     }
                 }
             } else {
-                FileLogger.log("transcribe(): legacy single-stream (no mic+system on disk) — falling back to mix")
+                FileLogger.log("transcribe(): legacy single-stream (no mic+system on disk), falling back to mix")
                 switch currentProvider {
                 case .gemini:
                     do {
@@ -711,7 +711,7 @@ final class TranscriptionPipeline {
                     }
                 case .whisper:
                     do {
-                        // Legacy mix is one merged stream — diarization
+                        // Legacy mix is one merged stream, diarization
                         // labels come from the model itself
                         // (gpt-4o-transcribe-diarize).
                         let prompt = AppVocabulary.current.nilIfEmpty
@@ -722,7 +722,7 @@ final class TranscriptionPipeline {
                                                    message: err.localizedDescription)
                         throw err
                     }
-                    // LLM polish stage — same best-effort cleanup as
+                    // LLM polish stage, same best-effort cleanup as
                     // the dual-track path. Legacy mix carries multiple
                     // speakers in one numbered block which the editor
                     // model handles fine (it's not asked to attribute,
@@ -733,7 +733,7 @@ final class TranscriptionPipeline {
                 case .groq:
                     // Groq Whisper-large-v3-turbo. Same .diarize mode
                     // call as OpenAI; backend swaps the proxy URL and
-                    // model name. No polish stage — large-v3 punctuation
+                    // model name. No polish stage, large-v3 punctuation
                     // is already cleaner than whisper-1's, and the cost
                     // savings disappear if we tack a gpt-4o-mini pass
                     // back on.
@@ -751,12 +751,12 @@ final class TranscriptionPipeline {
                     // Local Whisper has no diarize mode, so the legacy mix
                     // case needs a cloud diarizer. Gemini is ADMIN-ONLY now
                     // (the hard provider lock), so only admins take the
-                    // Gemini path; non-admins use Groq (paid) and Free —
-                    // which has no cloud at all — fails cleanly rather than
+                    // Gemini path; non-admins use Groq (paid) and Free
+                    // which has no cloud at all, fails cleanly rather than
                     // ever reaching Gemini. Rare branch: only fires when the
                     // original wavs are gone and we transcribe a hydrated mix.
                     if AppSettings.isAdmin {
-                        FileLogger.log("transcribe(): admin — whisperLocal + legacy mix → Gemini diarize")
+                        FileLogger.log("transcribe(): admin, whisperLocal + legacy mix → Gemini diarize")
                         do {
                             legacyTurns = try await GeminiTranscriber.transcribe(
                                 audioURL: mixURL, mode: .diarize)
@@ -775,7 +775,7 @@ final class TranscriptionPipeline {
                             throw err
                         }
                     } else {
-                        FileLogger.log("transcribe(): whisperLocal + legacy mix on Free — no cloud diarizer available")
+                        FileLogger.log("transcribe(): whisperLocal + legacy mix on Free, no cloud diarizer available")
                         TranscriptionErrors.record(meetingId: meetingId,
                                                    message: "This archived recording needs a cloud model to separate speakers. Upgrade to Pro.")
                         throw WhisperTranscriber.WhisperError.tierRequired
@@ -789,7 +789,7 @@ final class TranscriptionPipeline {
             // Re-derive WHEN/WHO from the raw Gemini text using the
             // on-device forced-aligner + diarizer over the FULL
             // uncompressed wav. Free + deterministic, so it runs every
-            // time — that's what lets the timing logic be fixed without
+            // time, that's what lets the timing logic be fixed without
             // ever re-spending a Gemini call. Legacy single-stream keeps
             // Gemini's own diarization (no diarize-first), so it skips
             // this and uses legacyTurns as-is.
@@ -797,15 +797,15 @@ final class TranscriptionPipeline {
             var otherTurns: [GeminiTranscriber.Turn] = []
             if usingDualTrack {
                 let roomSize = meeting.expectedOtherSpeakers.map { $0 + 1 }
-                // Immutable copy — captured by the parallel `async let`s
+                // Immutable copy, captured by the parallel `async let`s
                 // (a captured `var` is a Swift 6 concurrency error).
                 // Gemini-diarize fallback is allowed ONLY on a fresh run, a
                 // paid tier, AND an admin. Gemini is admin-only now (the
-                // hard provider lock — normal users transcribe through Groq
+                // hard provider lock, normal users transcribe through Groq
                 // or the on-device model, never Gemini). For a non-admin
                 // whose on-device diarization yields nothing we keep the raw
                 // local turns (their WhisperKit timing is reliable), exactly
-                // as Free already does — never reach for Gemini.
+                // as Free already does, never reach for Gemini.
                 let geminiFallback = !haveRaw && AppSettings.userTier != .free && AppSettings.isAdmin
                 // Fresh run with no Gemini fallback (Free): keep the raw ASR
                 // turns (their own WhisperKit timing is reliable) instead of
@@ -820,7 +820,7 @@ final class TranscriptionPipeline {
                     if otherTurns.isEmpty { otherTurns = cachedFinalOther }
                     userTurns = []
                 } else {
-                    // Immutable copies — the parallel `async let`s
+                    // Immutable copies, the parallel `async let`s
                     // capture these (a captured `var` is a Swift 6
                     // concurrency error).
                     let rawU = rawUserTurns
@@ -837,7 +837,7 @@ final class TranscriptionPipeline {
                     var (u, o) = try await (uT, oT)
                     if u.isEmpty { u = cachedFinalUser }
                     if o.isEmpty { o = cachedFinalOther }
-                    // B — bleed suppression via a speaking-rate duration
+                    // B, bleed suppression via a speaking-rate duration
                     // cap. numSpeakers:1 diarization of a mic that recorded
                     // the room (user on speakers) marks the whole call as
                     // "you", so the proportional time-placement stretches
@@ -862,7 +862,7 @@ final class TranscriptionPipeline {
                     // each speaker's turns only where THEIR OWN track is the
                     // louder one. Computed once per track (100ms RMS), so
                     // it's cheap; a clean headphone recording is a near no-op.
-                    // Off-main — frameRMS is a full-file decode per track.
+                    // Off-main, frameRMS is a full-file decode per track.
                     let rms = await Task.detached { () -> ([Float], [Float])? in
                         guard let m = Self.frameRMS(micURL), let s = Self.frameRMS(systemURL) else { return nil }
                         return (m, s)
@@ -872,17 +872,17 @@ final class TranscriptionPipeline {
                         let oBefore = otherTurns.count
                         userTurns = Self.gateTurnsByDominance(userTurns, own: micRMS, rival: sysRMS)
                         otherTurns = Self.gateTurnsByDominance(otherTurns, own: sysRMS, rival: micRMS)
-                        // Log the gate's effect — when far-end voice bleeds
+                        // Log the gate's effect, when far-end voice bleeds
                         // into the mic (user on speakers), the gate is what
                         // SHOULD strip the bleed turns. A report showing
                         // bleed text with "user N→N" (nothing dropped) means
                         // the gate didn't fire on that recording.
-                        FileLogger.log("transcribe(): dominance gate — user \(uBefore)→\(userTurns.count), other \(oBefore)→\(otherTurns.count)")
+                        FileLogger.log("transcribe(): dominance gate, user \(uBefore)→\(userTurns.count), other \(oBefore)→\(otherTurns.count)")
                     } else {
-                        FileLogger.log("transcribe(): dominance gate SKIPPED — frameRMS unreadable (no bleed suppression this run)")
+                        FileLogger.log("transcribe(): dominance gate SKIPPED, frameRMS unreadable (no bleed suppression this run)")
                     }
                 }
-                FileLogger.log("transcribe(): timing re-derived — \(userTurns.count) user / \(otherTurns.count) other")
+                FileLogger.log("transcribe(): timing re-derived, \(userTurns.count) user / \(otherTurns.count) other")
             }
 
             try Task.checkCancellation()
@@ -893,20 +893,20 @@ final class TranscriptionPipeline {
             //      and the system stream was silent), there's nothing
             //      to map / boost / archive to Dropbox. Flip the row
             //      straight into the 7-day archive bin so the user
-            //      doesn't see an empty session in their library —
+            //      doesn't see an empty session in their library
             //      it'll auto-purge after 7 days like any other
             //      archived meeting.
             let hasAnyContent = usingDualTrack
                 ? (!userTurns.isEmpty || !otherTurns.isEmpty)
                 : !legacyTurns.isEmpty
             if !hasAnyContent {
-                FileLogger.log("transcribe(): no speech detected — auto-archiving \(meetingId)")
+                FileLogger.log("transcribe(): no speech detected, auto-archiving \(meetingId)")
                 let now = Int64(Date().timeIntervalSince1970 * 1000)
                 // Targeted writes (NOT full updateMeeting) so a pin/rename the
                 // user did during the run survives the auto-archive.
                 try? repo.setTranscribeFinished(meetingId: meetingId, status: .ready, transcribedAt: now)
                 try? repo.setArchived(meetingId: meetingId, archivedAt: now)
-                // Best-effort: drop the local audio dir too — there's
+                // Best-effort: drop the local audio dir too, there's
                 // nothing of value in it. Dropbox archive is skipped
                 // by virtue of returning before the upload branch.
                 try? FileManager.default.removeItem(at: AppPaths.recordingDir(for: meetingId))
@@ -944,7 +944,7 @@ final class TranscriptionPipeline {
             // mapping just flipped the DB to .ready, and round-tripping
             // the stale local copy through updateMeeting would revert it.
             // Skip the cache write entirely when the key is degenerate
-            // (empty source MD5) — a cache keyed by a collision-prone value
+            // (empty source MD5), a cache keyed by a collision-prone value
             // is worse than no cache.
             if cacheUsable {
                 let bundle: CachedTranscript
@@ -969,23 +969,23 @@ final class TranscriptionPipeline {
                         // Surface the failure (was silently `try?`) so a
                         // disk-full / locked-DB write that strands the
                         // resume cache is at least visible in the log.
-                        FileLogger.log("transcribe(): setRawTurnsCache FAILED (\(error)) — meeting ready but cache not persisted")
+                        FileLogger.log("transcribe(): setRawTurnsCache FAILED (\(error)), meeting ready but cache not persisted")
                     }
                 }
             } else {
-                FileLogger.log("transcribe(): cache write skipped — degenerate key (source MD5 unreadable)")
+                FileLogger.log("transcribe(): cache write skipped, degenerate key (source MD5 unreadable)")
             }
 
             // 3. Refetch (status is now .ready, transcribedAt set) for the
             //    archive + boost branches below.
             guard let updated = try? repo.meeting(id: meetingId) else { return }
             meeting = updated
-            // Success — clear the attempt counter so a future failure gets
+            // Success, clear the attempt counter so a future failure gets
             // the full retry budget again.
             if meeting.status == .ready { try? repo.resetTranscribeAttempts(meetingId: meetingId) }
 
             // 3.5. Auto-title: one cheap text-only Gemini call from the
-            //      fresh transcript. Best-effort + idempotent — only when
+            //      fresh transcript. Best-effort + idempotent, only when
             //      it's actually ready, has content, and isn't titled
             //      yet, so a re-transcribe of an already-named meeting
             //      doesn't re-bill or churn the name. Targeted write so
@@ -1005,7 +1005,7 @@ final class TranscriptionPipeline {
                 }
             }
 
-            // 3b. Optional auto-summary — run once per meeting after
+            // 3b. Optional auto-summary, run once per meeting after
             //     transcription finishes, only when the user opted in
             //     and the row doesn't already have a structured summary
             //     (handles re-transcribe + interrupted-app scenarios).
@@ -1019,7 +1019,7 @@ final class TranscriptionPipeline {
                 if !segs.isEmpty {
                     let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
                     // Auto path is best-effort: a tier-gate (throws
-                    // PaidFeatureError) or any failure just skips silently —
+                    // PaidFeatureError) or any failure just skips silently
                     // the on-demand route surfaces the upsell when the user
                     // opens the tab.
                     if let summary = try? await GeminiSummarizer.generate(transcript: text) {
@@ -1029,7 +1029,7 @@ final class TranscriptionPipeline {
                 }
             }
 
-            // 3c. Optional auto-chapters — Loom-style chapter markers
+            // 3c. Optional auto-chapters, Loom-style chapter markers
             //     for the new third tab. Same invariants as title /
             //     summary: bills once, can be re-triggered by clearing
             //     the cached `chapters` column. Feeds the model the
@@ -1051,8 +1051,8 @@ final class TranscriptionPipeline {
                 }
             }
 
-            // 4. Dropbox archive — DISABLED. Legacy cloud-backup path,
-            //    superseded by the (pending) R2 migration — same state as
+            // 4. Dropbox archive, DISABLED. Legacy cloud-backup path,
+            //    superseded by the (pending) R2 migration, same state as
             //    SupabaseSync's audio upload. It kept firing for configured
             //    accounts and failing on full ones (insufficient_space):
             //    log + bug-report noise for zero current benefit. Flip
@@ -1099,7 +1099,7 @@ final class TranscriptionPipeline {
                         // retranscribe, audio.wav for playback (the only
                         // file with BOTH speakers on one timeline), and
                         // video.mov for the screen preview in the Library.
-                        // The Dropbox copy is just a cold-store backup —
+                        // The Dropbox copy is just a cold-store backup
                         // the UI never has to hydrate it just to render
                         // the most recent meetings. `purgeStaleOriginals`
                         // sweeps older recordings at launch.
@@ -1116,19 +1116,19 @@ final class TranscriptionPipeline {
             // A superseded re-transcribe cancels the in-flight Gemini
             // upload; URLSession surfaces that as URLError(-999), which
             // is NOT a Swift CancellationError. Treat it as a
-            // cancellation — NOT a failure — so it never writes `.failed`
+            // cancellation, NOT a failure, so it never writes `.failed`
             // over the successful run that replaced it.
             FileLogger.log("transcribe(): cancelled (URLError -999) for \(meetingId)")
         } catch {
             FileLogger.log("Corder transcription error: \(error)")
-            // Targeted status flip — NOT updateMeeting(meeting). The local
+            // Targeted status flip, NOT updateMeeting(meeting). The local
             // copy is stale (pre-increment transcribe_attempts), and writing
             // the whole struct would revert the attempt counter, breaking the
             // retry budget (failedRetriableMeetingIds would never exclude a
             // permanently-failing row → unbounded paid re-transcribe loop).
             try? repo.setStatus(meetingId: meetingId, status: .failed)
             // Surface a Library-window toast for the failure. One
-            // string for every failure mode on purpose — Костя's call:
+            // string for every failure mode on purpose, Костя's call:
             // no model-load vs network vs auth branching, no jargon.
             // Power users send the bug report (toolbar 🐞 button) and
             // we read the log; the user just needs to know "something
@@ -1138,13 +1138,13 @@ final class TranscriptionPipeline {
         }
         // Post-transcribe Supabase sync: push speakers + segments
         // for cross-device read, and upload the playback mix +
-        // raw tracks to Storage. All best-effort — the local
+        // raw tracks to Storage. All best-effort, the local
         // experience already works without any of this.
         await syncToSupabase(meetingId: meetingId)
     }
 
     /// Mirror this meeting's transcript + audio to Supabase.
-    /// Idempotent — speakers/segments are wholesale-replaced server-
+    /// Idempotent, speakers/segments are wholesale-replaced server-
     /// side, recordings_meta upserts on `(meeting_id, kind)`. Safe
     /// to call repeatedly (e.g. after a re-transcribe).
     private func syncToSupabase(meetingId: String) async {
@@ -1167,7 +1167,7 @@ final class TranscriptionPipeline {
         }
         // Audio upload. Mix is the playback file (always there once
         // transcribed); mic/system are the raw tracks (kept until
-        // hard-delete). Each push is independent — a failure on one
+        // hard-delete). Each push is independent, a failure on one
         // doesn't block the others.
         let dir = AppPaths.recordingDir(for: meetingId)
         let mix = dir.appendingPathComponent("audio.wav")
@@ -1193,7 +1193,7 @@ final class TranscriptionPipeline {
 
     /// Map a [Turn] list (either freshly transcribed by Gemini or pulled
     /// from the cache) onto our speaker model and persist segments.
-    /// Speakers are wiped and rewritten on every call — this is what
+    /// Speakers are wiped and rewritten on every call, this is what
     /// makes the "clarify count → re-map without billing" path possible.
     /// Returns the chosen `userLabel` so the caller can persist it for
     /// future cache-hit re-maps (after Dropbox archival the channel-gate
@@ -1232,7 +1232,7 @@ final class TranscriptionPipeline {
                 userScore[turn.speakerLabel, default: 0] += Double(turn.endMs - turn.startMs) / 1000.0
             }
             // The label with the largest cumulative "user-dominant" duration
-            // becomes the user — but only if it actually crosses some threshold.
+            // becomes the user, but only if it actually crosses some threshold.
             // Otherwise (cloud-only call where the mic was muted) nobody is.
             userLabel = userScore.filter { $0.value >= 1.5 }
                 .max(by: { $0.value < $1.value })?.key
@@ -1287,7 +1287,7 @@ final class TranscriptionPipeline {
         // minutes during which the user may pin / rename / set expected
         // speakers on the .transcribing row via other routes; a full-struct
         // write from the stale `meeting` snapshot would revert those edits.
-        // Only refresh transcribedAt on a REAL run — a cache-hit re-map keeps
+        // Only refresh transcribedAt on a REAL run, a cache-hit re-map keeps
         // the original timestamp so an old meeting isn't pulled into the
         // current usage month and re-credited as if freshly transcribed.
         try repo.setTranscribeFinished(
@@ -1301,8 +1301,8 @@ final class TranscriptionPipeline {
     /// `otherTurns` are system.wav (diarized 1+ remote speakers, labeled
     /// "Speaker 1" etc within that single track).
     ///
-    /// Speaker assignment here is architecturally clean — no channel-gate
-    /// guesswork — because each input was a single source. The
+    /// Speaker assignment here is architecturally clean, no channel-gate
+    /// guesswork, because each input was a single source. The
     /// `expectedOtherSpeakers == 0` ("Just me") clarify still works:
     /// we just drop everything from system.wav onto the user.
     /// Cross-track acoustic-echo filter. When the user records without
@@ -1310,7 +1310,7 @@ final class TranscriptionPipeline {
     /// video) is captured CLEAN by the Core-Audio process tap
     /// (`system.wav`) AND a second, degraded time by the microphone
     /// (`mic.wav`) as speaker→mic bleed. Both get transcribed, so every
-    /// sentence appears twice — once as "Speaker 2", once as "you" —
+    /// sentence appears twice, once as "Speaker 2", once as "you"
     /// the duplicated transcript the user hit while testing with a
     /// video. The tap is the true source; the mic copy is a delayed,
     /// lower-quality echo. So drop any mic turn whose words are largely
@@ -1367,22 +1367,22 @@ final class TranscriptionPipeline {
         return kept
     }
 
-    /// B — speaking-rate duration cap for the user (mic) track.
+    /// B, speaking-rate duration cap for the user (mic) track.
     /// numSpeakers:1 diarization of a mic that's recording the room (user
     /// on speakers) marks the whole call as "you", and the proportional
     /// time-placement then stretches each short user utterance across the
     /// silence until the next one ("Нет" measured at 333 s, "Или как-то…"
     /// at 447 s on a 24-min meeting where the user actually spoke ~1 min
-    /// total). A human can't say 4 characters in 333 s — so we clamp each
+    /// total). A human can't say 4 characters in 333 s, so we clamp each
     /// user turn's DURATION to what its text could plausibly take to
     /// speak, keeping the placed start.
     ///
-    /// Safe by construction: monotonic-shortening only — it never
+    /// Safe by construction: monotonic-shortening only, it never
     /// lengthens a turn, never drops text, and leaves already-tight turns
     /// untouched, so a clean headphone meeting (timing already correct) is
     /// a no-op. On the real bleed recording this lands user coverage at
     /// 61 s, matching the independently measured "mic louder than far-end"
-    /// voiced time — the cap converges on the acoustic ground truth.
+    /// voiced time, the cap converges on the acoustic ground truth.
     static func capTurnDurations(_ turns: [GeminiTranscriber.Turn]) -> [GeminiTranscriber.Turn] {
         guard !turns.isEmpty else { return turns }
         let msPerChar: Int64 = 120     // ~8 characters/second conversational speech
@@ -1438,7 +1438,7 @@ final class TranscriptionPipeline {
 
     /// Cross-track dominance gate. Dual-track bleed (mic hears the far end
     /// and vice versa) makes BOTH tracks look "voiced" at the same time, so
-    /// each speaker's turns get placed across ~the whole recording — the
+    /// each speaker's turns get placed across ~the whole recording, the
     /// far-end timeline reads as one solid 100% stripe. We keep each turn
     /// only where ITS OWN track is louder than the rival, on a 100ms grid,
     /// after normalising each track by its own loud level (so a quieter
@@ -1462,7 +1462,7 @@ final class TranscriptionPipeline {
         let rOwn = ref(own), rRival = ref(rival)
         let floor: Float = 0.004
         // A turn whose own track is SILENT across its whole span (max RMS
-        // below this) carries no real speech — it's a Whisper silence-
+        // below this) carries no real speech, it's a Whisper silence-
         // hallucination or pure far-end bleed, and must be DROPPED, not kept
         // as a phantom point. Sits above the dominance `floor` (0.004) so
         // genuinely quiet-but-real speech (which has peaks well above it) is
@@ -1542,14 +1542,14 @@ final class TranscriptionPipeline {
         // If the whole mic was just bleed of the system audio this comes
         // back empty, so `userHasContent` is false and no ghost
         // "Speaker 1 / you" row is created (which would also skew the
-        // clarify banner). The rest of the function is unchanged — it
+        // clarify banner). The rest of the function is unchanged, it
         // just sees the cleaned mic turns under the same name.
         let userTurns = Self.echoFiltered(userTurns: rawUserTurns,
                                           otherTurns: otherTurns)
 
         let userSpeakerId = "\(meetingId)-you"
         let collapseAll = (meeting.expectedOtherSpeakers == 0)
-        // "User said there's exactly 1 other person on the call" — fold
+        // "User said there's exactly 1 other person on the call", fold
         // every Gemini label inside system.wav into a single "Speaker 2"
         // bucket. This is the common case for auto-detected 1:1 calls,
         // and it's also the right answer when the clarify banner pill
@@ -1558,10 +1558,10 @@ final class TranscriptionPipeline {
         // interlocutor) would leak straight through.
         let collapseOthers = (meeting.expectedOtherSpeakers == 1)
         // Only persist the user speaker when they'll actually own
-        // segments — either they spoke (userTurns non-empty) or
+        // segments, either they spoke (userTurns non-empty) or
         // `collapseAll` will land every other-turn on the user. The
         // previous unconditional insert left a ghost "Speaker 1" row
-        // for dual-track recordings where the mic was silent — that
+        // for dual-track recordings where the mic was silent, that
         // row inflated `speakers.length` and skewed the clarify banner
         // to a higher pill than the actual speaker count.
         let userHasContent = collapseAll || !userTurns.isEmpty
@@ -1570,14 +1570,14 @@ final class TranscriptionPipeline {
                                            label: "Speaker 1", customName: AppSettings.userName ?? "you", colorHex: "#3b82f6"))
         }
 
-        // Each distinct label inside system.wav maps to one "other" id —
+        // Each distinct label inside system.wav maps to one "other" id
         // unless `collapseOthers` is on, in which case every label gets
         // folded into a single bucket.
         let othersLabelOffset = userHasContent ? 2 : 1
         let singleOtherSpeakerId = "\(meetingId)-other-0"
         var otherSpeakerIds: [String: String] = [:]
         if collapseAll {
-            // no "other" rows — everything lands on the user
+            // no "other" rows, everything lands on the user
         } else if collapseOthers {
             try repo.insertSpeaker(Speaker(id: singleOtherSpeakerId, meetingId: meetingId,
                                            label: "Speaker \(othersLabelOffset)", customName: nil,
@@ -1603,7 +1603,7 @@ final class TranscriptionPipeline {
         }
 
         // Merge both lists by start_ms so the transcript reads in the
-        // correct chronological order — even when user and remote
+        // correct chronological order, even when user and remote
         // overlap, we still want them in the right slot.
         struct Item { let speakerId: String; let turn: GeminiTranscriber.Turn }
         var items: [Item] = []
@@ -1645,7 +1645,7 @@ final class TranscriptionPipeline {
         FileLogger.log("mapDual: stored \(items.count) items (user=\(userTurns.count), other=\(otherTurns.count)) for \(meetingId)")
     }
 
-    /// In-person mapping. Everyone — including the device owner — was on
+    /// In-person mapping. Everyone, including the device owner, was on
     /// the single mic, so there is NO dedicated "you" track and the
     /// call-path collapse model (Speaker 1 = you, fold the rest) does
     /// not apply. `turns` is Gemini's diarized output over mic.wav.
@@ -1665,7 +1665,7 @@ final class TranscriptionPipeline {
     ///     echo, brief background voices), so trimming to N is what makes
     ///     picking "3" actually yield 3. It's a cap, not a floor: when
     ///     Gemini under-counts we keep what it gave (we can't invent a
-    ///     voice) and we NEVER collapse to 1 here — that was the bug
+    ///     voice) and we NEVER collapse to 1 here, that was the bug
     ///     where picking "2"/"3" showed 1/2.
     private func mapInPersonTurns(meetingId: String, meeting: Meeting,
                                   turns: [GeminiTranscriber.Turn],
@@ -1694,12 +1694,12 @@ final class TranscriptionPipeline {
         let keptLabels: [String]
 
         if expected == 0 {
-            // "Just me" — fold everything onto one speaker.
+            // "Just me", fold everything onto one speaker.
             let sink = distinctLabels.first ?? "Speaker 1"
             for l in distinctLabels { labelRemap[l] = sink }
             keptLabels = distinctLabels.isEmpty ? [] : [sink]
         } else if expected == nil {
-            // Unspecified — trust Gemini's diarization verbatim.
+            // Unspecified, trust Gemini's diarization verbatim.
             for l in distinctLabels { labelRemap[l] = l }
             keptLabels = distinctLabels.sorted {
                 (firstSeenByLabel[$0] ?? .max) < (firstSeenByLabel[$1] ?? .max)
@@ -1719,7 +1719,7 @@ final class TranscriptionPipeline {
             }
         }
 
-        // One Speaker row per kept label. No "you" — in-person has no
+        // One Speaker row per kept label. No "you", in-person has no
         // audio basis to single out the device owner, so they're just
         // Speaker 1..N in speaking order.
         var speakerIdByLabel: [String: String] = [:]
@@ -1791,7 +1791,7 @@ final class TranscriptionPipeline {
     /// "Cloud needs Pro" line into TranscriptionErrors for the toast,
     /// and re-runs the same track through local Whisper for THIS call.
     /// On Intel where local Whisper isn't available we re-throw the
-    /// tier error — there's nothing useful we can fall back to.
+    /// tier error, there's nothing useful we can fall back to.
     private func fallbackToLocalAfterTierGate(wavURL: URL,
                                               meetingId: String) async throws -> [GeminiTranscriber.Turn] {
         FileLogger.log("Whisper tier-gate: cloud refused, falling back to whisperLocal for \(meetingId)")
@@ -1845,19 +1845,19 @@ final class TranscriptionPipeline {
         guard !turns.isEmpty else { return turns }
         let snapshot = tally.snapshot()
         // The track's own dominant must BE the meeting language (else it is
-        // genuinely another language — don't clobber it) AND it must carry
+        // genuinely another language, don't clobber it) AND it must carry
         // some minority weight in a different language (the drift to fix).
         guard snapshot.dominantName == meetingName else { return turns }
         let hasDrift = snapshot.counts.contains { $0.key != meetingName && $0.value > 0 }
         guard hasDrift else { return turns }
         let drifted = snapshot.counts.filter { $0.key != meetingName }
             .map { "\($0.key)×\($0.value)" }.joined(separator: ",")
-        FileLogger.log("transcribe(): \(wavURL.lastPathComponent) language drift (\(drifted)) vs meeting '\(meetingName)' — re-transcribing forced to '\(forcedISO)'")
+        FileLogger.log("transcribe(): \(wavURL.lastPathComponent) language drift (\(drifted)) vs meeting '\(meetingName)', re-transcribing forced to '\(forcedISO)'")
         let forced = try? await WhisperTranscriber.$languageOverride.withValue(forcedISO) {
             try await geminiRawTurns(wavURL: wavURL, meetingId: meetingId)
         }
         guard let forced, !forced.isEmpty else {
-            FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass empty/failed — keeping original")
+            FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass empty/failed, keeping original")
             return turns
         }
         FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass produced \(forced.count) turns in '\(forcedISO)'")
@@ -1879,7 +1879,7 @@ final class TranscriptionPipeline {
             }
         case .whisper:
             do {
-                // Initial prompt — same vocabulary lever the Gemini
+                // Initial prompt, same vocabulary lever the Gemini
                 // path uses, just routed through Whisper's `prompt=`
                 // parameter. Whisper biases recognition toward the
                 // words in the prompt, which is exactly the right
@@ -1924,13 +1924,13 @@ final class TranscriptionPipeline {
                 throw err
             }
         case .whisperLocal:
-            // Apple-Silicon-only — gracefully fall back on Intel rather than
+            // Apple-Silicon-only, gracefully fall back on Intel rather than
             // hard-failing the meeting. Gemini is ADMIN-ONLY now (the hard
             // provider lock), so only admins fall back to Gemini; non-admins
-            // use Groq (paid), and Free — no cloud at all — hard-fails.
+            // use Groq (paid), and Free, no cloud at all, hard-fails.
             guard LocalWhisperTranscriber.isAvailable() else {
                 if AppSettings.isAdmin {
-                    FileLogger.log("LocalWhisper: Intel + admin — falling back to Gemini for this track")
+                    FileLogger.log("LocalWhisper: Intel + admin, falling back to Gemini for this track")
                     do {
                         return try await GeminiTranscriber.transcribe(
                             audioURL: wavURL, mode: .single, singlePass: false)
@@ -1939,7 +1939,7 @@ final class TranscriptionPipeline {
                         throw err
                     }
                 } else if AppSettings.userTier != .free {
-                    FileLogger.log("LocalWhisper: Intel — falling back to Groq for this track (Gemini is admin-only)")
+                    FileLogger.log("LocalWhisper: Intel, falling back to Groq for this track (Gemini is admin-only)")
                     do {
                         let prompt = AppVocabulary.current.nilIfEmpty
                         return try await WhisperTranscriber.transcribe(
@@ -1949,7 +1949,7 @@ final class TranscriptionPipeline {
                         throw err
                     }
                 } else {
-                    FileLogger.log("LocalWhisper: Intel + Free — no local model and no cloud allowed")
+                    FileLogger.log("LocalWhisper: Intel + Free, no local model and no cloud allowed")
                     TranscriptionErrors.record(meetingId: meetingId,
                                                message: "The on-device model needs Apple Silicon. Upgrade to Pro for cloud transcription.")
                     throw WhisperTranscriber.WhisperError.tierRequired
@@ -1970,14 +1970,14 @@ final class TranscriptionPipeline {
                     initialPrompt: prompt, onProgress: onProgress)
             } catch let err as LocalWhisperTranscriber.LocalWhisperError {
                 // Free cloud fallback (the audit's #1 safety net). The on-device
-                // model couldn't run on THIS Mac — a slow/old/8 GB cold compile
+                // model couldn't run on THIS Mac, a slow/old/8 GB cold compile
                 // that never landed, a corrupt bundle a re-download couldn't fix,
                 // or an init failure. Rather than dead-end the user's first
                 // transcript with a red "failed" card + upsell, fall back to Groq
                 // cloud so they still get a transcript. Requires a JWT (signed
                 // in): the Worker meters a small free monthly cloud budget. A
                 // signed-out guest has no JWT, so we nudge them to sign in. Don't
-                // pass a localFallbackVariant — local just failed, so a per-chunk
+                // pass a localFallbackVariant, local just failed, so a per-chunk
                 // "recover locally" would loop straight back into the failure.
                 guard err.isModelUnavailable else {
                     TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
@@ -1988,7 +1988,7 @@ final class TranscriptionPipeline {
                         message: "Your Mac couldn't run the on-device model. Sign in to transcribe in the cloud.")
                     throw err
                 }
-                FileLogger.log("LocalWhisper: model unavailable on this Mac (\(err)) — falling back to Groq cloud for this track")
+                FileLogger.log("LocalWhisper: model unavailable on this Mac (\(err)), falling back to Groq cloud for this track")
                 do {
                     let prompt = AppVocabulary.current.nilIfEmpty
                     let turns = try await WhisperTranscriber.transcribe(
@@ -1999,9 +1999,9 @@ final class TranscriptionPipeline {
                     return turns
                 } catch let cloudErr as WhisperTranscriber.WhisperError {
                     // Cloud also unavailable (over the free cloud budget, or the
-                    // Worker refused). Surface the ORIGINAL local error — it's the
+                    // Worker refused). Surface the ORIGINAL local error, it's the
                     // actionable one (the model couldn't run on this Mac).
-                    FileLogger.log("LocalWhisper: cloud fallback also failed (\(cloudErr)) — failing with local error")
+                    FileLogger.log("LocalWhisper: cloud fallback also failed (\(cloudErr)), failing with local error")
                     TranscriptionErrors.record(meetingId: meetingId, message: err.localizedDescription)
                     throw err
                 }
@@ -2011,19 +2011,19 @@ final class TranscriptionPipeline {
 
     /// The free, deterministic half: lay Gemini's raw text onto a real
     /// timeline using the on-device speaker diarizer over the FULL
-    /// uncompressed wav. Re-runnable offline on every transcribe — that's
+    /// uncompressed wav. Re-runnable offline on every transcribe, that's
     /// what lets the timing logic be fixed/iterated without ever
     /// re-spending a Gemini call, and what recovers any cached meeting
     /// for free.
     ///
-    /// Step 2: known-good PROPORTIONAL placement (`relabel`) — the
+    /// Step 2: known-good PROPORTIONAL placement (`relabel`), the
     /// validated v8 behaviour the karaoke highlight tracks correctly.
     /// The on-device forced-aligner (`alignByTokens`) is being reworked
     /// (Step 3) and is intentionally not wired here yet.
     ///
     /// Returns `[]` when on-device diarization is unavailable and a
     /// Gemini fallback isn't allowed (cache-hit re-derive must stay
-    /// offline) — the caller then keeps the last-derived cached finals
+    /// offline), the caller then keeps the last-derived cached finals
     /// so timing never regresses. On a true miss (`allowGeminiFallback`)
     /// it falls back to a Gemini `.diarize` pass exactly like before.
     private func applyTiming(rawTurns: [GeminiTranscriber.Turn],
@@ -2036,18 +2036,18 @@ final class TranscriptionPipeline {
         guard !rawTurns.isEmpty else { return [] }
 
         // SINGLE-speaker track (the mic "you" track, numSpeakers == 1): there is
-        // nothing to re-diarize — every turn is the one speaker — and the
+        // nothing to re-diarize, every turn is the one speaker, and the
         // re-derivation below DISCARDS Whisper's own timestamps (which the code
         // itself calls reliable) and re-lays turns proportionally onto diarized
         // speech spans. On a mic that mostly listened (sparse speech + a few
         // real replies) that proportional placement drops a real phrase onto a
-        // SILENT span, where the dominance gate then deletes it as "silence" —
+        // SILENT span, where the dominance gate then deletes it as "silence"
         // the "думаете, белый будет уместен?" / "Неплохо" mis-placement. Whisper
         // timed those correctly; keep its timing. capUserTurnDurations + the
         // dominance gate downstream still clamp durations and strip real
         // hallucinations (which keep their own silent timestamp and get gated).
         if numSpeakers == 1 {
-            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — single speaker, keeping \(rawTurns.count) raw ASR turns with Whisper's own timing (no re-derivation)")
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single speaker, keeping \(rawTurns.count) raw ASR turns with Whisper's own timing (no re-derivation)")
             return rawTurns
         }
 
@@ -2072,16 +2072,16 @@ final class TranscriptionPipeline {
                 }
             }
             // No Gemini fallback (Free, or offline). On a FRESH run keep the
-            // raw ASR turns as-is — local Whisper's own timestamps are
+            // raw ASR turns as-is, local Whisper's own timestamps are
             // reliable, so the transcript is still good (just not re-diarized
             // into multiple remote speakers). Far better than dropping the
             // track or 403-failing the whole meeting. A cache-hit re-derive
             // returns [] so the caller keeps its previously-derived finals.
             if keepRawIfNoDiar {
-                FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — no on-device diarization, keeping \(rawTurns.count) raw ASR turns with their own timing")
+                FileLogger.log("applyTiming: \(wavURL.lastPathComponent), no on-device diarization, keeping \(rawTurns.count) raw ASR turns with their own timing")
                 return rawTurns
             }
-            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — no on-device diarization, offline re-derive → caller keeps cached finals")
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent), no on-device diarization, offline re-derive → caller keeps cached finals")
             return []
         }
 
@@ -2092,29 +2092,29 @@ final class TranscriptionPipeline {
         let result: [GeminiTranscriber.Turn]
         if tokens.isEmpty {
             result = Self.relabel(asr: rawTurns, using: diarSegs)
-            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — \(rawTurns.count) turns, PROPORTIONAL placement across \(Set(diarSegs.map(\.speakerId)).count) speakers")
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent), \(rawTurns.count) turns, PROPORTIONAL placement across \(Set(diarSegs.map(\.speakerId)).count) speakers")
         } else {
             result = Self.alignByTokens(asr: rawTurns, tokens: tokens, diar: diarSegs)
-            FileLogger.log("applyTiming: \(wavURL.lastPathComponent) — \(rawTurns.count) turns, FORCED-ALIGNED on \(tokens.count) tokens across \(Set(diarSegs.map(\.speakerId)).count) speakers")
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent), \(rawTurns.count) turns, FORCED-ALIGNED on \(tokens.count) tokens across \(Set(diarSegs.map(\.speakerId)).count) speakers")
         }
         return result
     }
 
     /// Diarize-first time assignment. Gemini's per-chunk timestamps over
-    /// the VAD-compressed track are unreliable on dense speech — turns
+    /// the VAD-compressed track are unreliable on dense speech, turns
     /// overlap, balloon to 40 s+, sum PAST the recording length, and the
     /// karaoke highlight drifts right off the audio. FluidAudio diarizes
     /// the FULL, uncompressed file, so ITS timeline is the ground truth
     /// for WHEN. We therefore discard Gemini's timestamps entirely and
     /// lay the ASR text turns end-to-end onto the concatenation of
     /// diarized speech spans, proportional to each turn's text length (a
-    /// steady proxy for spoken duration — Gemini's own duration is the
+    /// steady proxy for spoken duration, Gemini's own duration is the
     /// exact thing we don't trust). Every turn then lands on a real,
     /// monotonic, non-overlapping interval inside actual diarized speech,
     /// labelled by the FluidAudio speaker at that time. Net: the
     /// highlight tracks the audio, the timeline can't exceed 100 %, and
     /// the tail can't collapse. The dual-track routing (mic=you /
-    /// system=others, merge by start-ms) is unchanged — only the
+    /// system=others, merge by start-ms) is unchanged, only the
     /// start-ms SOURCE moves from "Gemini-projected (broken)" to
     /// "FluidAudio".
     static func relabel(asr: [GeminiTranscriber.Turn],
@@ -2170,7 +2170,7 @@ final class TranscriptionPipeline {
     /// `scale` drifted progressively and the `lastEnd` clamp compounded
     /// it. Instead we find sparse, high-confidence ANCHOR words that are
     /// unique in BOTH streams, force their order monotone (LIS), and
-    /// proportionally place turns BETWEEN adjacent anchors — resetting
+    /// proportionally place turns BETWEEN adjacent anchors, resetting
     /// the proportion constant at every anchor so error can never
     /// accumulate past one span. Regions with no anchors degrade
     /// seamlessly to bounded proportional placement (== `relabel`
@@ -2221,7 +2221,7 @@ final class TranscriptionPipeline {
 
         // ── Anchor candidates: terms (≥4 normalised chars) that occur
         //    EXACTLY once in each stream. Uniqueness is the rejection
-        //    rule — ambiguous repeats are exactly what mis-jumped before.
+        //    rule, ambiguous repeats are exactly what mis-jumped before.
         var gCount: [String: Int] = [:]
         var pCount: [String: Int] = [:]
         for w in gWords where w.norm.count >= 4 { gCount[w.norm, default: 0] += 1 }
@@ -2298,7 +2298,7 @@ final class TranscriptionPipeline {
             let rs = msAtChar(turnStartChar[i])
             let re = msAtChar(turnEndChar[i])
             // Clamp to `lastEnd`/`tailMs`: monotone, non-overlapping,
-            // in-bounds. Carry `end` (not `start`) — the historical bug
+            // in-bounds. Carry `end` (not `start`), the historical bug
             // carried `start`, which let the next turn overlap this
             // turn's body.
             let start = min(max(lastEnd, min(rs, re)), tailMs)
@@ -2333,13 +2333,13 @@ final class TranscriptionPipeline {
     /// migrates transparently. `userTurns`/`otherTurns` are now the
     /// last-derived finals, kept only as a no-audio fallback.
     private struct CachedTranscript: Codable {
-        // Legacy — single-stream output.
+        // Legacy, single-stream output.
         let userLabel: String?
         let turns: [GeminiTranscriber.Turn]?
-        // Dual-track — last-derived FINAL (timed) turns.
+        // Dual-track, last-derived FINAL (timed) turns.
         let userTurns: [GeminiTranscriber.Turn]?
         let otherTurns: [GeminiTranscriber.Turn]?
-        // Dual-track — RAW Gemini text turns (pre-timing). Source of
+        // Dual-track, RAW Gemini text turns (pre-timing). Source of
         // truth for re-derivation; absent on pre-migration records.
         var rawUserTurns: [GeminiTranscriber.Turn]? = nil
         var rawOtherTurns: [GeminiTranscriber.Turn]? = nil
@@ -2377,9 +2377,9 @@ final class TranscriptionPipeline {
 
     /// Subtitle-style hallucinations the Whisper era left behind. Gemini
     /// doesn't generate these natively, but old Whisper transcripts in the
-    /// DB still contain them — `purgeKnownHallucinations` clears those at
+    /// DB still contain them, `purgeKnownHallucinations` clears those at
     /// launch, and this filter blocks any that slip through new pipelines.
-    /// One-time scrub at app launch — sweeps known hallucinated lines out
+    /// One-time scrub at app launch, sweeps known hallucinated lines out
     /// of the existing transcripts so users don't have to re-run anything.
     static func purgeKnownHallucinations(repo: MeetingRepository) {
         do {

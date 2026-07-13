@@ -6,7 +6,7 @@
 
 ## Tone
 
-Calm, editorial, a little serious. Mindtrip × Merge — generous whitespace,
+Calm, editorial, a little serious. Mindtrip × Merge, generous whitespace,
 hairlines instead of cards, mono captions for every numeric thing. The
 product records private conversations; loud SaaS ergonomics would
 undermine that. No emoji, no exclamation marks, no "AI" jargon.
@@ -22,7 +22,7 @@ seamlessly, unlock, leverage, cutting-edge, revolutionary, transform.
 ```
 --bg            #ffffff       page / card backgrounds
 --bg-elev       #f7f7f6       elevated surfaces (sidebar, etc.)
---bg-hover      #fafaf8       hover tint — almost imperceptible
+--bg-hover      #fafaf8       hover tint, almost imperceptible
 --bg-active     #f3f3f1       pressed state for transparent buttons
 --bg-input      #ffffff       inputs
 
@@ -43,7 +43,7 @@ seamlessly, unlock, leverage, cutting-edge, revolutionary, transform.
                               Delete session, error toast
 --record        #dd3340       live recording indicator (animated dot)
 
---speaker-1..4               purple / green / red / blue — assigned
+--speaker-1..4               purple / green / red / blue, assigned
                               to "other" speakers in arrival order
 ```
 
@@ -56,7 +56,7 @@ seamlessly, unlock, leverage, cutting-edge, revolutionary, transform.
 - No gradients except the very faint accent-tint wash behind the Local
   Mode card on the privacy section of the marketing site.
 - Selected state has **no hover treatment**. Once a pill is the answer,
-  hovering it doesn't make it "more selected" — it stays put. Other
+  hovering it doesn't make it "more selected", it stays put. Other
   pills in the row still respond to hover normally.
 
 ## Typography
@@ -129,7 +129,7 @@ because it's a circle, not a pill.
 
 ## Motion
 
-- Easing: `cubic-bezier(0.16, 1, 0.3, 1)` — soft start, hard stop.
+- Easing: `cubic-bezier(0.16, 1, 0.3, 1)`, soft start, hard stop.
 - Durations: 150 / 240 / 480ms.
 - Hover transitions: 80-150ms (faster, because they're constant).
 - Toast in: 280ms transform, 220ms opacity (slides up from y+32).
@@ -163,7 +163,7 @@ default   0 6px 24px rgba(0,0,0,0.06)
 lg        0 24px 64px rgba(0,0,0,0.08)
 ```
 
-Toasts have **no shadow** — by user preference. Let the hairline border
+Toasts have **no shadow**, by user preference. Let the hairline border
 do the lifting.
 
 ## Components
@@ -194,15 +194,15 @@ only colour, no gradients beyond the blur falloff.
 ```
 Primary CTA        --accent fill, white text, 14×28, 999 radius
 Header pill        transparent, --border-strong outline, --fg text,
-                   8×14, 999 radius — the EN / Copy / Delete row
+                   8×14, 999 radius, the EN / Copy / Delete row
 Toolbar circle     38×38, --border-strong outline, 50% radius,
                    icon only; .active state = --bg-hover slightly
                    darker, no hover feedback
 Banner action      transparent, --border-strong outline, --fg text,
                    13×16, 8 radius (Stop transcription, clarify pills)
-Destructive        --danger fill, white text — Stop recording,
+Destructive        --danger fill, white text, Stop recording,
                    Delete session, Undo button on error toast
-Boost toggle       custom switch — green when ON
+Boost toggle       custom switch, green when ON
 ```
 
 ### Banners
@@ -211,14 +211,14 @@ Three banner cards share the same outline-card visual language
 (`max-width: 360-420`, `1px --border-strong`, `12 radius`, padding
 `14×16`):
 
-- **RecordingBanner** — live recording. Red dot pulses, timer counts
+- **RecordingBanner**, live recording. Red dot pulses, timer counts
   up, "Stop recording" red CTA.
-- **TranscribingBanner** — transcription in progress. Green spinner,
+- **TranscribingBanner**, transcription in progress. Green spinner,
   timer, "Stop transcription" white outline CTA.
-- **SpeakersClarifyBanner** — "How many people were on the call?"
+- **SpeakersClarifyBanner**, "How many people were on the call?"
   Four pills, X-dismiss in top-right corner. Active pill is
   `--accent-pressed` (slightly darker than --accent), no hover.
-- **EmptyDeleteBanner** — for `status === ready` empty / `status ===
+- **EmptyDeleteBanner**, for `status === ready` empty / `status ===
   failed`. Reuses the clarify card outline. Failed variant adds a
   Re-transcribe (white outline) above the destructive Delete (red).
   The "not transcribed yet" variant adds a Transcribe (white outline)
@@ -228,20 +228,20 @@ Three banner cards share the same outline-card visual language
 ### Popups (`.modal-pop`)
 
 Sits in the `.donate-overlay` blurred backdrop and reads like an
-enlarged inline banner — the same outline-card visual language as
+enlarged inline banner, the same outline-card visual language as
 the cards above so popups feel like the same product, not like a
 stock OS alert.
 
 - 12 px radius, 1 px `--border-strong`, `0 10px 32px rgba(0,0,0,.14)`
-  shadow (subtle — the heavier 24/64 shadow on the older
+  shadow (subtle, the heavier 24/64 shadow on the older
   `.donate-card` read as generic platform chrome).
 - Width per-instance: Archive 560 px, Download 380 px.
-- Title — `.modal-pop-title`, 18/300 (mirrors `.clarify-body`, the
+- Title, `.modal-pop-title`, 18/300 (mirrors `.clarify-body`, the
   banner heading).
-- Subtitle — `.modal-pop-note`, 14/1.55 muted (segment-paragraph
+- Subtitle, `.modal-pop-note`, 14/1.55 muted (segment-paragraph
   character, tightened to the title via negative margin-top).
-- Close X — `.modal-pop-close`, top-right, borderless, hover bg only.
-- Actions — `.clarify-btn` / `.clarify-btn.danger` (inline-flex with
+- Close X, `.modal-pop-close`, top-right, borderless, hover bg only.
+- Actions, `.clarify-btn` / `.clarify-btn.danger` (inline-flex with
   gap, icon+label centred).
 
 Used by **ArchiveView** and **DownloadMenu**. The download chooser
@@ -250,11 +250,11 @@ the audio, served from `/video-audio.mp4`) and "Audio" (compressed AAC,
 served from `/audio.m4a`). The old silent video-only download is gone.
 The Donate modal keeps its own `.donate-card` shell because its content
 is a 3-up amount grid with very different geometry. Don't introduce a third modal
-style — extend `.modal-pop` instead.
+style, extend `.modal-pop` instead.
 
 ### Update & Pricing modal (`.update-overlay` / `.update-card`)
 
-A separate, richer shell from `.modal-pop` — a centred card on a
+A separate, richer shell from `.modal-pop`, a centred card on a
 dimmed full-viewport backdrop with `StarsCanvas`, cursor-tilt
 parallax, a cursor-following sheen, and a scale/fade entrance. Both
 the **UpdateModal** and the **PricingModal** use it; the pricing modal
@@ -268,7 +268,7 @@ is the canonical "reuse, don't reinvent" case.
   card taller than the viewport (the sign-in modal on a short Library
   window) scrolls instead of clipping its top and bottom. The Library
   window itself pins a 920×600 minimum content size.
-- **Update modal:** button label is ALWAYS "Install" — never a frozen
+- **Update modal:** button label is ALWAYS "Install", never a frozen
   "Installing…". At rest: no progress, no spinner. After the click:
   the label is replaced by a centred Loader2 spinner, plus a
   left-anchored fill (`.update-primary-fill`, like `.trans-stop-fill`)
@@ -290,9 +290,9 @@ button). Use for "this failed, tell us" affordances, not for navigation.
 ### Toasts
 
 Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
-- **Success / info** — white fill, hairline border, ink text. No
+- **Success / info**, white fill, hairline border, ink text. No
   shadow. No countdown. Auto-dismiss 2.2 s.
-- **Error** — `#c4423a` fill, white text. Used for delete + undo:
+- **Error**, `#c4423a` fill, white text. Used for delete + undo:
   optional Undo button + live "5s · 4s · 3s" countdown. An error toast
   raised with no explicit duration (e.g. "Send a report" failures) is
   PERSISTENT instead: it stays until the user clicks "Send a report"
@@ -302,7 +302,7 @@ Bottom-centre, pill, 280ms slide-up enter, mirror slide-down exit.
 ### Sidebar
 
 - `bg-elev` left rail, hairline divider as a vertical gradient (the
-  scrollbar visually sits *on* the hairline — see the gradient trick
+  scrollbar visually sits *on* the hairline, see the gradient trick
   in `.sidebar` styles).
 - Section labels (TODAY / YESTERDAY / N DAYS AGO) in eyebrow 12/600
   uppercase. First label has no separator above; subsequent labels

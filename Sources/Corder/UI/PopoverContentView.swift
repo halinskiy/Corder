@@ -208,7 +208,7 @@ private struct RecordingStatus: View {
 /// `RecordingLevelMeter` has gone > 10 minutes without crossing the
 /// "speech" peak floor. The view evaluates the warning on its own 5 s
 /// timer (cheap, since the popover only exists while open) and reads
-/// `lastSpeechAt` from the shared meter — no extra state in
+/// `lastSpeechAt` from the shared meter, no extra state in
 /// AppContext, no Combine hops on the audio thread. When the user
 /// speaks again the card disappears on its next tick.
 private struct SilenceWarningBlock: View {
@@ -255,7 +255,7 @@ private struct SilenceWarningBlock: View {
 // MARK: - Flat IBM/Airbnb-style button
 
 // Internal (not private) so the menu-bar invite popover can reuse the
-// exact same button vocabulary — the invite must read as the same
+// exact same button vocabulary, the invite must read as the same
 // component family as the main menu, not a lookalike.
 struct FlatButtonStyle: ButtonStyle {
     enum Role { case primary, secondary, danger, accent }
@@ -266,7 +266,7 @@ struct FlatButtonStyle: ButtonStyle {
     }
 }
 
-/// Internal view so we can hold @State (hover) — ButtonStyle protocol does not
+/// Internal view so we can hold @State (hover), ButtonStyle protocol does not
 /// allow stateful storage directly. Also makes the whole rounded rect a hit
 /// target via `.contentShape`, instead of just the label glyphs.
 private struct FlatButtonView: View {
@@ -278,7 +278,7 @@ private struct FlatButtonView: View {
     var body: some View {
         configuration.label
             // `.accent` matches the larger Library CTA pattern
-            // (`.audio-btn-primary` / `.clarify-btn.accent` — 16 px /
+            // (`.audio-btn-primary` / `.clarify-btn.accent`, 16 px /
             // medium, 14 px vertical padding, 10 px radius, no
             // visible border). The other roles keep the original
             // menu-bar popover sizing (14 / regular, 8 px radius).
@@ -292,7 +292,7 @@ private struct FlatButtonView: View {
             .padding(.horizontal, 16)
             .foregroundColor(foreground)
             .background(fillColor)
-            // Only outlined roles need an overlay stroke — for the
+            // Only outlined roles need an overlay stroke, for the
             // filled variants (primary / danger / accent) the
             // `strokeBorder` + `clipShape` combo produced a faint
             // 0.5 px anti-aliased halo that read as a "white edge"
@@ -313,7 +313,7 @@ private struct FlatButtonView: View {
     // for the dark-fill roles (primary on light popover = dark text
     // on white → SF subpixel AA already paints those glyphs as
     // visually weighty; .regular tipped over into "bold"). Inverse-
-    // colour roles (secondary / danger / accent — light text on
+    // colour roles (secondary / danger / accent, light text on
     // dark fill) get `.regular`: white-on-dark loses some weight to
     // the dark surface eating into the glyph edges, so a touch
     // more body keeps "Start recording" reading at the same visual
@@ -378,7 +378,7 @@ private struct FlatButtonView: View {
             if hovered { return Color(red: 0.85, green: 0.22, blue: 0.30) }
             return Color(red: 0.78, green: 0.16, blue: 0.24)
         case .accent:
-            // Brand-green prominent — same `#1F7A4F` as `--accent` in
+            // Brand-green prominent, same `#1F7A4F` as `--accent` in
             // `Web/src/styles.css`. Hover = `color-mix(--accent 88%, #000)`
             // ≈ `#1B6B45`. Pressed darkens further to `#15573A` so the
             // mousedown reads as "selected" not "still hovered".
@@ -426,7 +426,7 @@ private struct FlatButtonView: View {
         // transparent dark-mode pill. Using `Color.primary` directly
         // was insufficient because, under a `vibrantDark` popover, it
         // resolved to WHITE even when the pill itself was forced
-        // white — yielding the white-on-white "invisible button"
+        // white, yielding the white-on-white "invisible button"
         // Kostya saw on the Locked popover.
         case .secondary:
             return Color(NSColor(name: nil) { appearance in

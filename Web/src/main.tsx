@@ -29,7 +29,7 @@ function readNum(key: string, fallback: number): number {
 function Toast({ toast, leaving, onDismiss }: { toast: ToastState; leaving: boolean; onDismiss: () => void }) {
   // Two-phase mount: render with `.entering` (off-screen below), flip to the
   // resting state on the next frame so CSS sees a transition. Exit is parent-
-  // driven via the `leaving` prop — when true, the modifier flips us back to
+  // driven via the `leaving` prop, when true, the modifier flips us back to
   // the off-screen state and the parent unmounts after the transition.
   const [entering, setEntering] = React.useState(true);
   React.useEffect(() => {
@@ -64,7 +64,7 @@ function Toast({ toast, leaving, onDismiss }: { toast: ToastState; leaving: bool
           onClick={() => {
             // Run the action's callback FIRST so consumers see the
             // toast as "still open" while cancelling work, then close
-            // the toast — clicking Undo shouldn't leave a stale
+            // the toast, clicking Undo shouldn't leave a stale
             // countdown chip on screen waiting out its 10 s.
             toast.action!.onClick();
             onDismiss();
@@ -98,21 +98,21 @@ interface ToastState {
 
 function App() {
   const [meetings, setMeetings] = React.useState<MeetingSummary[]>([]);
-  // First-load flag — distinguishes "no meetings yet, still fetching" from
+  // First-load flag, distinguishes "no meetings yet, still fetching" from
   // "fetched, list is empty". Sidebar renders skeleton rows in the former
   // case and an empty-state in the latter.
   const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
-  // Lifted "which Settings slice is open" — null = not in Settings.
+  // Lifted "which Settings slice is open", null = not in Settings.
   // Lives up here so the open Settings slice survives a Dashboard ↔ Meeting
   // render flip. NOTE: clicking a session in the sidebar now CLOSES Settings
-  // (see `pickMeeting`) — Settings is a detour, not a sticky mode; it only
+  // (see `pickMeeting`), Settings is a detour, not a sticky mode; it only
   // persists across flips that aren't an explicit session pick.
   const [settingsSection, setSettingsSection] = React.useState<null | "general" | "advanced">(null);
   const settingsOpenUI = settingsSection !== null;
   // Bumped each time the user taps the gear (header / profile menu)
   // so consumers (Dashboard / MeetingView) can react with toggle
-  // semantics — same nonce pattern as before, but now it only feeds
+  // semantics, same nonce pattern as before, but now it only feeds
   // the "open / close Settings" toggle in main.tsx.
   const [openSettingsNonce, setOpenSettingsNonce] = React.useState(0);
   const lastSettingsNonceRef = React.useRef(openSettingsNonce);
@@ -137,7 +137,7 @@ function App() {
     // General.
     setSettingsSection((cur) => (cur === null ? lastSettingsSectionRef.current : null));
   }, [openSettingsNonce]);
-  // Last meeting the user actually opened — keeps MeetingView mounted
+  // Last meeting the user actually opened, keeps MeetingView mounted
   // across Dashboard↔Meeting flips so its `detail` survives and the
   // skeleton doesn't flash on every return. See the render block below.
   const lastSeenMeetingRef = React.useRef<string | null>(null);
@@ -148,7 +148,7 @@ function App() {
   const [toastLeaving, setToastLeaving] = React.useState(false);
   const toastTimer = React.useRef<number | null>(null);
   const toastLeaveTimer = React.useRef<number | null>(null);
-  // Suppression table — keyed by toast message (or explicit `dedupKey`
+  // Suppression table, keyed by toast message (or explicit `dedupKey`
   // when passed) → timestamp until which we silently swallow new toasts
   // with that key. The native bridge can fire the same Whisper-cancel
   // toast a dozen times as one cancellation cascades through the
@@ -156,11 +156,11 @@ function App() {
   // over and over. Lives outside React state because it's a side-channel,
   // not part of the visible UI tree.
   const toastSuppressUntilRef = React.useRef<Map<string, number>>(new Map());
-  // Soft-deleted meeting IDs — UI hides them immediately, real DELETE is
+  // Soft-deleted meeting IDs, UI hides them immediately, real DELETE is
   // scheduled for 10s later. While the meeting is in this set the user can
   // press Undo on the toast and the timer is cancelled.
   const [softDeleted, setSoftDeleted] = React.useState<Set<string>>(new Set());
-  // Archived rows are kept around just for the Dashboard stats card —
+  // Archived rows are kept around just for the Dashboard stats card
   // the user wants the lifetime "Recordings / Total recorded / This week"
   // counters to include everything they've ever recorded, not only the
   // library subset. Polled alongside meetings on every `refresh()`.
@@ -177,7 +177,7 @@ function App() {
   // new session, instead of leaving the user on the dashboard / a prior meeting.
   const wasRecordingRef = React.useRef(false);
   // Hide the native recording-blob (bottom-right NSView) while the user
-  // sits on the Dashboard and nothing is recording — the Dashboard's
+  // sits on the Dashboard and nothing is recording, the Dashboard's
   // "Start recording" CTA already covers that role, the blob is just
   // visual clutter there. As soon as recording starts (or the user
   // opens a meeting), restore it so the stop-affordance reappears.
@@ -197,7 +197,7 @@ function App() {
   const t: T = pickStrings(lang);
 
   // The native window posts this on show/close. While the Library
-  // window is hidden the page is alive but invisible — pausing the
+  // window is hidden the page is alive but invisible, pausing the
   // poll timers stops pointless background requests/CPU. Defaults to
   // active so the very first open (event may fire before listeners
   // attach) still polls.
@@ -220,7 +220,7 @@ function App() {
       const d = (e as CustomEvent).detail as { title?: string; body?: string; kind?: string };
       // Use whichever piece is set; never join with an em-dash
       // (project-wide style rule). When both are present, the title
-      // wins as the user-visible string — body becomes the implicit
+      // wins as the user-visible string, body becomes the implicit
       // context that lives in the native banner / log lines only.
       const msg = (d?.title && d.title.trim()) || (d?.body && d.body.trim()) || "";
       if (!msg) return;
@@ -240,7 +240,7 @@ function App() {
   }, []);
 
   // The header "+" button fires this the instant it starts a recording, so we
-  // jump into the new session WITHOUT waiting for the (idle, 5 s) state poll —
+  // jump into the new session WITHOUT waiting for the (idle, 5 s) state poll
   // "сразу переместиться". The poll's false→true edge above is the fallback
   // that also covers a menu-bar start.
   React.useEffect(() => {
@@ -361,8 +361,8 @@ function App() {
     if (toastLeaveTimer.current) { window.clearTimeout(toastLeaveTimer.current); toastLeaveTimer.current = null; }
     const isError = kind === "error";
     // Errors carry a "Send a report" button (same affordance/backend as the
-    // header bug-report button) and — unless the caller asked for a finite
-    // duration — they DON'T auto-dismiss: an error you need to read and act
+    // header bug-report button) and, unless the caller asked for a finite
+    // duration, they DON'T auto-dismiss: an error you need to read and act
     // on shouldn't vanish on a timer. It stays until the user clicks "Send a
     // report" (which closes it) or the × close button. (Костя.)
     const persist = isError && opts?.durationMs == null;
@@ -384,14 +384,14 @@ function App() {
   }, [dismissToast, sendReportFromToast]);
   React.useEffect(() => { showToastRef.current = showToast; }, [showToast]);
 
-  // Current paid-tier rung — drives the Sidebar Upgrade-card
+  // Current paid-tier rung, drives the Sidebar Upgrade-card
   // visibility (`max` hides it) and is forwarded to nested components
   // that need to react to the tier. Re-fetched alongside the language
   // so a manual `defaults write Corder.set.userTier` shows up after a
   // window reload.
   const [tier, setTier] = React.useState<"free" | "pro" | "max">("free");
   // Signed-in marker (`user_email` present). Drives hiding the Advanced settings
-  // tab for guests — everything in Advanced beyond local toggles is cloud
+  // tab for guests, everything in Advanced beyond local toggles is cloud
   // (auto-title/summary/chapters) and useless signed-out. Default true so a
   // signed-in user never flashes it hidden; a guest hides it after the first poll.
   const [signedIn, setSignedIn] = React.useState(true);
@@ -412,7 +412,7 @@ function App() {
     return () => { alive = false; window.clearInterval(id); };
   }, []);
 
-  // A guest must never sit on the (now-hidden) Advanced settings slice — if they
+  // A guest must never sit on the (now-hidden) Advanced settings slice, if they
   // were on it when signing out, snap back to General.
   React.useEffect(() => {
     if (!signedIn && settingsSection === "advanced") setSettingsSection("general");
@@ -421,7 +421,7 @@ function App() {
   // Batched soft-archive: every meeting archived within a 5-second window
   // collects into ONE pending batch with ONE shared timer + ONE toast.
   // Previously each archive replaced the previous toast and its
-  // `pendingDeleteTimers` entry — so Undo restored only the most-recent
+  // `pendingDeleteTimers` entry, so Undo restored only the most-recent
   // row even when the user just archived a dozen in a row. Now Undo
   // restores every id in the open batch, the toast label updates to
   // "Archived (N)", and the 5-second countdown resets each time a new
@@ -433,7 +433,7 @@ function App() {
 
     // If we archived the open meeting, fall to the landing target (most
     // recent remaining meeting, or the empty start screen when none left)
-    // instead of the dashboard — it's hidden while recordings exist.
+    // instead of the dashboard, it's hidden while recordings exist.
     setActiveId((prev) => {
       if (prev !== archivedId) return prev;
       const visible = meetings.filter((m) => !softDeleted.has(m.id) && m.id !== archivedId);
@@ -476,7 +476,7 @@ function App() {
       });
       await refresh();
       dismissToast();
-      // Confirm the undo actually happened — the original "Archived"
+      // Confirm the undo actually happened, the original "Archived"
       // toast is gone by now, so without this the user is left
       // guessing whether the click landed. Singular / plural copy
       // is handled inside the locale helper.
@@ -511,20 +511,9 @@ function App() {
     [meetings, softDeleted]
   );
 
-  // Lifetime stats sample for the Dashboard counters — live meetings
-  // (including the just-archived rows still in softDeleted) PLUS the
-  // server's archive listing, so the totals never tick down when the
-  // user moves a row to Archive. We only need `started_at` and
-  // `duration_ms` downstream.
-  const statsMeetings = React.useMemo(() => {
-    return [
-      ...meetings.map((m) => ({ started_at: m.started_at, duration_ms: m.duration_ms })),
-      ...archived.map((a) => ({ started_at: a.started_at, duration_ms: a.duration_ms })),
-    ];
-  }, [meetings, archived]);
 
   /// Open a meeting AND immediately clear its "unseen" gold/green
-  /// title — the backend stamps `viewed_at` inside `GET /api/meetings/:id`,
+  /// title, the backend stamps `viewed_at` inside `GET /api/meetings/:id`,
   /// but the 5-second poll on `/api/meetings` only catches up later.
   /// Without this optimistic flip, the title stays accent-coloured for
   /// up to a poll cycle after the user obviously sees it.
@@ -534,7 +523,7 @@ function App() {
     );
     setActiveId(id);
     // Clicking ANY session (even the already-selected one) closes an open
-    // Settings pane and returns to the transcript — Settings is a detour, not a
+    // Settings pane and returns to the transcript, Settings is a detour, not a
     // sticky mode. (This intentionally reverses the old "keep Settings open
     // across session clicks" behaviour.)
     setSettingsSection(null);
@@ -609,8 +598,8 @@ function App() {
       <main className="main">
         {(() => {
           // Remember the last meeting the user actually opened. Used so
-          // MeetingView can stay MOUNTED while the Dashboard is showing
-          // — that's what makes flipping Dashboard ↔ Meeting feel
+          // MeetingView can stay MOUNTED while the Dashboard is showing,
+          // that's what makes flipping Dashboard ↔ Meeting feel
           // instant. Without this, every return to a meeting remounts
           // MeetingView with `detail = null`, which flashes the
           // skeleton on every click ("postoянно подгружается").
@@ -641,7 +630,6 @@ function App() {
                   />
                   <Dashboard
                     onToast={showToast}
-                    statsMeetings={statsMeetings}
                     onStart={async () => {
                       try { await startRecordingNow(); } catch { showToast(t.toast_settings_failed, "error"); }
                     }}
@@ -663,7 +651,7 @@ function App() {
               )}
               {lastSeen !== null && (
                 // MeetingView stays mounted across Dashboard↔Meeting
-                // flips so its `detail` survives — no skeleton flash
+                // flips so its `detail` survives, no skeleton flash
                 // on subsequent opens. The wrapper toggles flex/none;
                 // when hidden it's still in the DOM, just not painted.
                 <div
@@ -675,13 +663,13 @@ function App() {
                   }}
                 >
                   <MeetingView
-                    // No `key={activeId}` — id changes are handled by
+                    // No `key={activeId}`, id changes are handled by
                     // MeetingView's internal `useEffect([meetingId])`,
                     // which fetches the new detail while keeping the
                     // previous one visible until it arrives. `initialTitle`
                     // / `initialStartedAt` come from the cached sidebar
                     // row so the breadcrumb updates INSTANTLY on session
-                    // switch — without these, the header showed the
+                    // switch, without these, the header showed the
                     // previous meeting's title for the ~few hundred ms
                     // the detail fetch took.
                     meetingId={activeId ?? lastSeen}
@@ -715,11 +703,11 @@ function App() {
         })()}
       </main>
       {toast && <Toast toast={toast} leaving={toastLeaving} onDismiss={dismissToast} />}
-      {/* Sparkle update modal — rendered into the same WebView so a
+      {/* Sparkle update modal, rendered into the same WebView so a
           `position: fixed; inset: 0` overlay covers the whole Library,
           not a fragment-sized child window. */}
       <UpdateModalHost lang={lang} />
-      {/* In-app sign-in modal — same card/tilt as the update modal (no
+      {/* In-app sign-in modal, same card/tilt as the update modal (no
           stars), driven by the native auth bridge. Replaces the old
           separate native sign-in window. */}
       <SignInModalHost lang={lang} />

@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FileLogger.log("AppDelegate: applicationDidFinishLaunching")
         // Single-instance guard. THIS instance is the newest (a fresh
         // launch, a Sparkle update, or a CorderRelaunch), so reap any older
-        // Corder still running — otherwise two processes race the same
+        // Corder still running, otherwise two processes race the same
         // loopback port (which OAuth pins) and the per-account SQLite DB.
         Self.terminateOtherInstances()
         // One-time: force screen video OFF for the whole base (even users who
@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sign-in), migrate the legacy files into that user's
         // account folder BEFORE any GRDB connection opens. Done
         // here so AppContext.shared.repo's lazy init reads from
-        // the right path on the very first access. Idempotent —
+        // the right path on the very first access. Idempotent
         // re-runs notice the destination already has a corder.db
         // and bail out without touching anything.
         // Model storage moved from per-account to machine-wide (supportRoot/models)
@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (RecordingRecovery below already calls AppPaths.recordingDir). The
         // actual RENAME of not-yet-titled folders runs later, after title
         // backfill. Resolution always falls back to a real folder, so an
-        // unloaded index is never fatal — this just makes already-renamed
+        // unloaded index is never fatal, this just makes already-renamed
         // folders resolvable immediately.
         AppPaths.loadDirNameIndex((try? AppContext.shared.repo.allDirNames()) ?? [:])
         // Salvage recordings interrupted by a crash BEFORE the cleanup
@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a crash mid-meeting no longer loses the recording.
         RecordingRecovery.run(repo: AppContext.shared.repo)
         // Delete the dirs of any orphaned silent pre-rolls (app died while a
-        // call was being pre-rolled, before accept/decline) — then
+        // call was being pre-rolled, before accept/decline), then
         // resetStuckMeetings drops their rows. Pre-roll must leave nothing.
         if let prerollIds = try? AppContext.shared.repo.prerollMeetingIds() {
             for pid in prerollIds {
@@ -69,19 +69,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Recover from prior crashes: drop orphan recording rows and flip
         // bare 'recording' state to failed. Transcribing rows are recovered
-        // separately below — they get re-enqueued, not failed.
+        // separately below, they get re-enqueued, not failed.
         try? AppContext.shared.repo.resetStuckMeetings()
         // Sweep any leftover demo rows from earlier builds that used
         // to ship a canned dashboard. Real users want an empty Library
         // on first launch, not someone else's "Daily standup" sample.
         DemoSeeder.removeAll(repo: AppContext.shared.repo)
         // Reclaim disk from dead `system_sck.wav` backups left by older builds
-        // (48kHz stereo float32 SILENCE — the biggest file per BT meeting; we no
+        // (48kHz stereo float32 SILENCE, the biggest file per BT meeting; we no
         // longer write it). One-time-per-launch, guarded to never remove a
         // meeting's only system track.
         Self.reclaimDeadSCKBackups()
-        // Shrink retained audio (mic/system/playback) to 16 kHz mono 16-bit PCM
-        // — the format ASR + playback actually use — reclaiming the capture-time
+        // Shrink retained audio (mic/system/playback) to 16 kHz mono 16-bit PCM,
+        // the format ASR + playback actually use, reclaiming the capture-time
         // 44.1/48 kHz stereo Float32 waste. Heavy (transcodes files), so it runs
         // in the BACKGROUND off the launch path; atomic + idempotent per file so
         // a concurrent open never sees a half-written file. The skip set (this
@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Recover stuck + failed-retriable meetings SEQUENTIALLY (await each
         // before starting the next). `enqueue` runs each meeting as its own
         // concurrent Task, so firing several at launch used to run two model
-        // loads at once — for a whisperLocal user with >=2 recovered rows that
+        // loads at once, for a whisperLocal user with >=2 recovered rows that
         // races Core ML / Metal (the documented concurrent-GPU-load SIGABRT).
         // Recovery is rare and runs in the background, so one-at-a-time costs
         // nothing the user feels and is safe for every provider.
@@ -113,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // Also auto-retry meetings that hard-FAILED on a prior run, as long
             // as they're still under the retry budget (3 attempts). With the
-            // per-chunk resume cache this is cheap — a transient failure
+            // per-chunk resume cache this is cheap, a transient failure
             // (network drop, killed app) recovers on its own instead of
             // leaving a red "failed" card the user must re-transcribe by hand.
             // A genuinely-broken row stops after 3 tries (no re-bill loop).
@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        // One-time cleanup of "ghost" speakers (rows with zero segments) —
+        // One-time cleanup of "ghost" speakers (rows with zero segments)
         // legacy dual-track transcriptions used to insert "Speaker 1"
         // unconditionally even when the mic was silent, which skewed the
         // clarify banner's auto-default. Idempotent; safe to run on every
@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // any pre-existing transcripts so the user sees a clean library on launch.
         TranscriptionPipeline.purgeKnownHallucinations(repo: AppContext.shared.repo)
         // Name recordings made before the auto-title feature (or whose
-        // title pass failed) — generates titles in the background so the
+        // title pass failed), generates titles in the background so the
         // sidebar stops showing bare dates for old transcripts.
         TranscriptionPipeline.backfillTitles(repo: AppContext.shared.repo)
         // One-time: rename recording folders from the opaque `<id>` to the
@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hard-delete archived meetings older than 7 days (DB row + local
         // recording dir + Dropbox files). Runs once per launch; missing
         // a launch just means the entries linger one extra day, which is
-        // fine — the cap is "≥7 days, eventually wiped".
+        // fine, the cap is "≥7 days, eventually wiped".
         purgeExpiredArchive()
         // Free disk: delete mic.wav + system.wav for meetings older than
         // 30 days that already have gemini_raw_turns cached. Re-transcribe
@@ -178,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Boot Sparkle's background updater. Reads SUFeedURL / SUPublicEDKey
         // from Info.plist; checks once on launch and then on Sparkle's
         // default 24h schedule. If feed/key are missing the controller
-        // logs a Sparkle error and stays inert — it never crashes the app.
+        // logs a Sparkle error and stays inert, it never crashes the app.
         _ = UpdateController.shared
         menuBar = MenuBarController { [weak self] in
             self?.openLibrary()
@@ -195,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationsService.requestAuthorizationIfNeeded()
         NewsPoller.start()
         // Auto-stop the recording when macOS is about to sleep / switch
-        // sessions — SCStream silently dies through those transitions,
+        // sessions, SCStream silently dies through those transitions,
         // and a quiet abort with no notification is the worst UX of all.
         SleepWatchdog.shared.start()
         // Watch reachability so the user gets a banner when the network
@@ -210,12 +210,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // No global record hotkey: the shortcut feature was removed entirely.
         // Recording starts/stops from the menu-bar popover and the in-app
         // button only. (Carbon `RegisterEventHotKey` + the Settings capture
-        // row are gone — there is intentionally no keyboard shortcut.)
+        // row are gone, there is intentionally no keyboard shortcut.)
 
         // Surface SOMETHING visible on launch. The "signed in?"
         // decision used to read the local `onboardingCompleted`
         // UserDefaults flag; now it asks Supabase for an active
-        // session — that's the real source of truth once auth
+        // session, that's the real source of truth once auth
         // moved server-side. The flag is still flipped by the
         // wizard for backward-compat with surfaces that haven't
         // been ported yet, but it's not the decision input here.
@@ -272,7 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Returning to Corder (e.g. after completing a Paddle checkout in the
     /// browser) refreshes the Supabase session so a freshly-granted
-    /// `app_metadata.tier` is picked up WITHOUT a relaunch — the user gets
+    /// `app_metadata.tier` is picked up WITHOUT a relaunch, the user gets
     /// Pro the moment they switch back to the app. Throttled inside
     /// `refreshTier`, so frequent focus toggles are cheap.
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -357,7 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// ⌘Q handler. If the menu-bar popover is open, close it
-    /// instead of terminating — Kostya was losing live recordings
+    /// instead of terminating, Kostya was losing live recordings
     /// to accidental ⌘Q hits while the invite or recording-state
     /// popover was on screen. Outside of an open popover, ⌘Q
     /// behaves as the normal "Quit Corder".
@@ -403,7 +403,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// raw Gemini turns are already cached, the original mic.wav and
     /// system.wav are dead weight. Re-transcribe (clarify-banner, pinned
     /// speaker count) reuses gemini_raw_turns and never touches the
-    /// originals again. mix.wav stays — it's still served for playback.
+    /// originals again. mix.wav stays, it's still served for playback.
     /// Idempotent: re-runs are no-ops when files have already been purged.
     private func purgeStaleOriginals() {
         let retentionMs: Int64 = 30 * 24 * 60 * 60 * 1000
@@ -436,7 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Delete the dead `system_sck.wav` backups left on disk by older builds.
     /// SCK is the SCStream-`.audio` far-end backup that measured all-zero
     /// silence in 100% of recordings (see AGENTS); at 48 kHz stereo float32 it
-    /// was ~384 KB/s of zeros (596 MB on one real BT meeting — the single
+    /// was ~384 KB/s of zeros (596 MB on one real BT meeting, the single
     /// biggest file). New recordings no longer write it; this reclaims the ones
     /// already on disk. Guarded: only removes `system_sck.wav` when the primary
     /// `system.wav` (process tap) is present, so a meeting's only system track
@@ -444,7 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static func reclaimDeadSCKBackups() {
         let fm = FileManager.default
         // Sweep EVERY account on this Mac (accounts/<id>/recordings/<meeting>/),
-        // not just the active one — a signed-in user's dead backups live under
+        // not just the active one, a signed-in user's dead backups live under
         // their account folder, which may not be the account that's active right
         // now. `_guest` is just another entry here.
         guard let accounts = try? fm.contentsOfDirectory(
@@ -474,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Background sweep: compact every meeting's retained `mic.wav` /
     /// `system.wav` / `audio.wav` to 16 kHz mono 16-bit PCM (see
     /// `AudioMixer.compactToTranscriptionFormat`). Covers ALL accounts on this
-    /// Mac. SKIPS meetings that this launch will (re)transcribe — compacting a
+    /// Mac. SKIPS meetings that this launch will (re)transcribe, compacting a
     /// source under an active transcription read would race; those get compacted
     /// on a later launch once they're `.ready`. Every file op is atomic +
     /// best-effort, so the pass can never corrupt a recording.
@@ -545,7 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // finished state and to call its own onSuccess.
                     NotificationCenter.default.post(name: .corderSupabaseSignedIn, object: nil)
                 } catch {
-                    FileLogger.log("AppDelegate: Supabase session(from:) failed — \(error)")
+                    FileLogger.log("AppDelegate: Supabase session(from:) failed, \(error)")
                 }
             }
         }
@@ -564,7 +564,7 @@ extension Notification.Name {
 /// next process boots with the right per-account on-disk paths
 /// (the GRDB connection in AppContext.shared.dbq is `lazy` and
 /// binds to whatever `AppPaths.databaseURL` returned on first
-/// access — there's no way to swap it in place without tearing
+/// access, there's no way to swap it in place without tearing
 /// the SwiftUI/Swifter graph apart).
 @MainActor
 enum CorderRelaunch {
@@ -574,14 +574,14 @@ enum CorderRelaunch {
         // instance immediately while this one was still terminating, so two
         // Corder processes briefly raced for the same loopback port (which
         // the OAuth flow pins) and the same per-account SQLite DB. A shelled
-        // `sleep 1; open` lets this process fully exit — releasing the port
-        // and DB handle — before the replacement launches. No `-n`: we want
+        // `sleep 1; open` lets this process fully exit, releasing the port
+        // and DB handle, before the replacement launches. No `-n`: we want
         // exactly one instance, and the old one is already on its way out.
         let p = Process()
         p.launchPath = "/bin/sh"
         p.arguments = ["-c", "sleep 1; open \"\(path)\""]
         do { try p.run() }
-        catch { FileLogger.log("CorderRelaunch: spawn failed — \(error)") }
+        catch { FileLogger.log("CorderRelaunch: spawn failed, \(error)") }
         NSApp.terminate(nil)
     }
 }
@@ -592,7 +592,7 @@ enum CorderRelaunch {
 private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     var onAction: (@MainActor (NotificationsService.Action) -> Void)?
 
-    /// Always show the banner, even if Corder is in the foreground —
+    /// Always show the banner, even if Corder is in the foreground
     /// the user may be in another window watching the recording finish.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,

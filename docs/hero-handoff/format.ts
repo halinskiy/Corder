@@ -8,7 +8,7 @@ const LONG_M_EN  = ["January","February","March","April","May","June","July","Au
 function pad(n: number) { return n.toString().padStart(2, "0"); }
 
 export function formatDuration(ms?: number, lang: Lang = "ru"): string {
-  if (!ms || ms < 0) return "—";
+  if (!ms || ms < 0) return "0:00";
   const sec = Math.round(ms / 1000);
   const m = Math.floor(sec / 60);
   const s = sec % 60;

@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 /// as the same visual family.
 ///
 /// Rationale: WKWebView's native `title=` tooltip takes ~1.5 s to
-/// show and renders as the system bubble — both miss the
+/// show and renders as the system bubble, both miss the
 /// "instant context" feeling Kostya is after. A controlled JS
 /// tooltip with a tight delay and our design tokens does.
 export function Tooltip({
@@ -25,7 +25,7 @@ export function Tooltip({
   /// viewport so the tooltip doesn't clip off-screen.
   side?: "top" | "bottom";
   /// ms before the tooltip appears after pointer-enter. 350 is the
-  /// sweet spot — fast enough to feel snappy on the second pass,
+  /// sweet spot, fast enough to feel snappy on the second pass,
   /// long enough not to flash when sweeping across the toolbar.
   delay?: number;
   /// Skip the tooltip entirely (e.g. when the anchor itself is
@@ -98,7 +98,7 @@ export function Tooltip({
       child.props.onMouseLeave?.(e); onLeave();
     },
     // Click on the trigger should hide the tooltip immediately and
-    // suppress re-show on the lingering hover — otherwise the chip
+    // suppress re-show on the lingering hover, otherwise the chip
     // stays floating while the user's already acted on the button
     // (theme switch, archive open, copy, etc.). mouseLeave is the
     // only thing that resets the suppression.

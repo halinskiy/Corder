@@ -26,7 +26,7 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
 /** Custom audio player shaped like the old video card: 16/10 box with a
  *  big centred play button, ±10s skip buttons in the bottom bar, current
  *  time / duration, and a clickable scrub line. The native <audio>
- *  element is kept hidden — we drive it through React state. */
+ *  element is kept hidden, we drive it through React state. */
 function AudioCard({
   detail, audioRef, onTimeUpdate,
 }: {
@@ -60,7 +60,7 @@ function AudioCard({
 
   const cursorPct = duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;
 
-  // Empty / not-yet-finalised meetings have nothing to play — disable the
+  // Empty / not-yet-finalised meetings have nothing to play, disable the
   // primary control instead of letting the user click into nothing.
   const playable =
     duration > 0 &&
@@ -158,7 +158,7 @@ function colorForSpeaker(name: string): string {
 }
 
 /// For each speech segment, lay down ~2-3 px ticks every 220 ms. This gives
-/// the Grain look — natural pauses (silent gaps in the source) become gaps
+/// the Grain look, natural pauses (silent gaps in the source) become gaps
 /// between ticks; long monologues turn into a dense run of ticks.
 function ticksFor(segs: { start_ms: number; end_ms: number }[], totalMs: number): number[] {
   const TICK_MS = 220;

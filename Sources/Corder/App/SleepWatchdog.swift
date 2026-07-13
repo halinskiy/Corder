@@ -4,7 +4,7 @@ import AppKit
 /// recording before the OS yanks the rug out from under SCStream.
 ///
 /// SCStream + the bundled microphone tap have proven unreliable across
-/// system sleeps and fast-user-switches — the stream sometimes resumes
+/// system sleeps and fast-user-switches, the stream sometimes resumes
 /// silently producing nothing, and the writer never gets a `didStopWithError`
 /// callback. Instead of trying to defend against that retroactively, we just
 /// stop cleanly at the first sign of trouble: the user gets up to ~30 seconds
@@ -14,7 +14,7 @@ import AppKit
 ///
 /// Events we listen to (NSWorkspace publishes them all on the main thread):
 ///   - `willSleepNotification`             system going to suspend
-///   - `screensDidSleepNotification`       display sleep — usually harmless,
+///   - `screensDidSleepNotification`       display sleep, usually harmless,
 ///                                          but combined with extended idle
 ///                                          it tends to silently kill mic
 ///   - `sessionDidResignActiveNotification` fast user switch / login window
@@ -68,7 +68,7 @@ final class SleepWatchdog {
     private func handle(reason: String, message: String) {
         // React to BOTH a live recording AND a silent pre-roll. Pre-roll
         // (now default-ON, auto-armed when a meeting app grabs the mic) arms
-        // a FULL capture — SCStream + Core-Audio tap + mic — so if the Mac
+        // a FULL capture, SCStream + Core-Audio tap + mic, so if the Mac
         // sleeps / the screen sleeps / the user switches accounts while an
         // unanswered invite-offer popover sits open, the OS would suspend the
         // process with capture still live (zombie capture, stuck privacy
@@ -76,7 +76,7 @@ final class SleepWatchdog {
         // fire routinely, so do nothing when nothing is in flight.
         switch AppContext.shared.recordingState {
         case .recording:
-            FileLogger.log("SleepWatchdog: \(reason) — auto-stopping recording")
+            FileLogger.log("SleepWatchdog: \(reason), auto-stopping recording")
             Task { @MainActor in
                 await RecordingController.shared.stopRecording()
                 NotificationsService.post(
@@ -85,9 +85,9 @@ final class SleepWatchdog {
                 )
             }
         case .preroll:
-            // Tear the pre-roll capture down silently — there's no committed
+            // Tear the pre-roll capture down silently, there's no committed
             // meeting to notify about, just a buffered offer in flight.
-            FileLogger.log("SleepWatchdog: \(reason) — discarding live pre-roll capture")
+            FileLogger.log("SleepWatchdog: \(reason), discarding live pre-roll capture")
             Task { @MainActor in
                 await RecordingController.shared.discardPreroll()
             }

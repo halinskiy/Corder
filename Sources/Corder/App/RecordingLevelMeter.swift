@@ -7,7 +7,7 @@ import os
 /// Observable singleton fed by CaptureEngine on every audio buffer it
 /// receives. Drives the floating recording HUD (RecordingHUDPanel).
 ///
-/// We expose two channels — `micLevel` and `systemLevel` — both clamped
+/// We expose two channels, `micLevel` and `systemLevel`, both clamped
 /// to 0…1 with a fast attack / slow release envelope so the bars don't
 /// look spasmodic. CaptureEngine pushes raw peak values; the smoothing
 /// (decay + attack) lives here so the math stays in one place and the
@@ -22,13 +22,13 @@ final class RecordingLevelMeter: ObservableObject {
     /// 0…1 envelope of the system / loopback audio (SCStream .audio).
     @Published private(set) var systemLevel: Float = 0
 
-    /// Rolling history of combined `max(mic, system)` levels — drives
+    /// Rolling history of combined `max(mic, system)` levels, drives
     /// the waveform-style bars in the floating HUD. Index 0 is newest;
     /// each frame we shift the array one slot to the right.
     @Published private(set) var history: [Float] = Array(repeating: 0, count: barCount)
     static let barCount = 7
 
-    /// REAL frequency spectrum (FFT) of the live audio — one value per
+    /// REAL frequency spectrum (FFT) of the live audio, one value per
     /// log-spaced band, 0…1, fast-attack/slow-release enveloped. This is
     /// what drives the floating-HUD equalizer: each bar is a genuine
     /// frequency band (low → high), so lows / mids / highs react
@@ -39,7 +39,7 @@ final class RecordingLevelMeter: ObservableObject {
     // Per-SOURCE envelopes + AGC references. The system tap fires ~86 Hz
     // (512-frame buffers) while the mic fires ~10 Hz (4096), so if both fed
     // ONE envelope the frequent (usually silent) system buffers would decay
-    // the bars to flat faster than the mic could raise them — the "barely
+    // the bars to flat faster than the mic could raise them, the "barely
     // reacts" bug. Keeping them separate and publishing the per-band MAX
     // means a silent system track can't wash out the user's voice.
     private var micEnv = [Float](repeating: 0, count: spectrumBands)
@@ -49,7 +49,7 @@ final class RecordingLevelMeter: ObservableObject {
     private var lastSpecPublish: CFTimeInterval = 0
     enum SpecSource { case mic, system }
 
-    // FFT scratch — created once. vDSP FFT setups are read-only during a
+    // FFT scratch, created once. vDSP FFT setups are read-only during a
     // transform, so the two capture threads (mic + system) can share this.
     private static let fftSize = 1024
     private static let fftLog2n = vDSP_Length(10)
@@ -61,10 +61,10 @@ final class RecordingLevelMeter: ObservableObject {
     }()
 
     /// Frames since last UI publish. Gated at the HUD's render rate (20 Hz)
-    /// so we never publish a spectrum the HUD can't draw — publishing at 30
+    /// so we never publish a spectrum the HUD can't draw, publishing at 30
     /// against a 20 fps consumer made a 3:2 beat where every third update was
-    /// dropped unevenly. (The mic tap fires at only ~10 Hz — 4096 frames /
-    /// 44.1 kHz — so the visual smoothness comes from the HUD's per-frame
+    /// dropped unevenly. (The mic tap fires at only ~10 Hz, 4096 frames /
+    /// 44.1 kHz, so the visual smoothness comes from the HUD's per-frame
     /// lerp, not this gate; the gate just bounds redraw cost.)
     private var lastPublishMic: CFTimeInterval = 0
     private var lastPublishSys: CFTimeInterval = 0
@@ -78,7 +78,7 @@ final class RecordingLevelMeter: ObservableObject {
     private(set) var sessionMaxMic: Float = 0
     private(set) var sessionMaxSystem: Float = 0
     /// True when neither track ever rose above a near-silence floor
-    /// (≈ -48 dBFS) — i.e. nothing was actually captured.
+    /// (≈ -48 dBFS), i.e. nothing was actually captured.
     var capturedSilence: Bool { max(sessionMaxMic, sessionMaxSystem) < 0.004 }
 
     /// Timestamp of the most recent audible buffer (peak ≥ speech floor).
@@ -90,7 +90,7 @@ final class RecordingLevelMeter: ObservableObject {
     /// Threshold above which we consider a buffer to contain real
     /// speech (or any meaningful audio activity). Sits well above the
     /// silence floor (0.004) used for the post-stop "no audio" check
-    /// but below normal-volume voice — keyboard taps and HVAC won't
+    /// but below normal-volume voice, keyboard taps and HVAC won't
     /// reset the warning, but quiet talking will.
     private static let speechFloor: Float = 0.05
 
@@ -114,12 +114,12 @@ final class RecordingLevelMeter: ObservableObject {
     // Rate gates that bound how often the FFT + MainActor hop run, on the
     // AUDIO thread, INDEPENDENT of how fast the taps fire. The input sample
     // rate varies (16 kHz or 44.1 kHz) and the buffer size is small for a
-    // responsive equalizer, so the tap can fire 40-90 Hz — doing a full FFT
+    // responsive equalizer, so the tap can fire 40-90 Hz, doing a full FFT
     // and spawning a @MainActor Task every time was a real recording-load
     // spike. We process at ~25 Hz (mic) / 30 Hz (system), which is already
     // above what the 20 fps HUD (with its per-frame lerp) can show, so the
     // animation is unaffected while the load drops back down. File writes are
-    // NOT gated here — they happen per buffer in CaptureEngine.
+    // NOT gated here, they happen per buffer in CaptureEngine.
     private let micGate = OSAllocatedUnfairLock(initialState: CFTimeInterval(0))
     private let sysGate = OSAllocatedUnfairLock(initialState: CFTimeInterval(0))
     private static let micIngestInterval: CFTimeInterval = 1.0 / 25.0
@@ -135,7 +135,7 @@ final class RecordingLevelMeter: ObservableObject {
     }
 
     /// Called from CaptureEngine's mic tap. Always invoked on the audio
-    /// thread — we hop to the main actor to mutate `@Published` state.
+    /// thread, we hop to the main actor to mutate `@Published` state.
     nonisolated func ingestMic(buffer: AVAudioPCMBuffer) {
         guard passGate(micGate, Self.micIngestInterval) else { return }
         let peak = Self.peak(of: buffer)
@@ -189,7 +189,7 @@ final class RecordingLevelMeter: ObservableObject {
     /// mic vs a loud video on system audio span ~10×), so a fixed gain
     /// either pins everything to the ceiling or leaves quiet speech as flat
     /// dots. Instead each band normalises against its OWN slow-decaying
-    /// reference peak — so quiet speech and loud audio BOTH fill the bars
+    /// reference peak, so quiet speech and loud audio BOTH fill the bars
     /// and show real spectral shape. Verified on real quiet + normal mic
     /// recordings. `amps == all-zero` means the stateless gate found
     /// silence → bars ease to flat. Then a fast-attack / slow-release
@@ -201,7 +201,7 @@ final class RecordingLevelMeter: ObservableObject {
         // The envelope's release runs per-CALL, but the two sources fire at
         // very different rates (system ~86 Hz, mic ~10 Hz). Scale the release
         // by the source rate so a fast source doesn't decay faster in real
-        // time than a slow one — otherwise the bars still favour whichever
+        // time than a slow one, otherwise the bars still favour whichever
         // source ticks more often.
         // Mic release lowered 0.22 → 0.12: the mic now fires ~15.6 Hz (1024
         // frames) instead of ~10 Hz, and a gentler release holds the bars
@@ -224,7 +224,7 @@ final class RecordingLevelMeter: ObservableObject {
         let now = CACurrentMediaTime()
         guard now - lastSpecPublish >= Self.publishHz else { return }
         lastSpecPublish = now
-        // Per-band max of the two sources — the louder of mic / system wins,
+        // Per-band max of the two sources, the louder of mic / system wins,
         // and a silent track contributes 0 instead of dragging the bars down.
         spectrum = (0..<bands).map { max(micEnv[$0], sysEnv[$0]) }
     }
@@ -249,7 +249,7 @@ final class RecordingLevelMeter: ObservableObject {
     }
 
     /// Fast attack (level snaps up to a louder peak), slow release
-    /// (level decays smoothly during silence). Tweaked by feel — too
+    /// (level decays smoothly during silence). Tweaked by feel, too
     /// slow and the bars feel laggy, too fast and they twitch.
     private static func envelope(current: Float, target: Float) -> Float {
         if target > current {
@@ -260,7 +260,7 @@ final class RecordingLevelMeter: ObservableObject {
     }
 
     /// Linear peak over the first channel of an AVAudioPCMBuffer.
-    /// Cheap enough to call per-tap — we only walk floatChannelData.
+    /// Cheap enough to call per-tap, we only walk floatChannelData.
     nonisolated private static func peak(of buffer: AVAudioPCMBuffer) -> Float {
         guard let data = buffer.floatChannelData?[0] else { return 0 }
         let n = Int(buffer.frameLength)

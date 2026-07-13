@@ -20,7 +20,7 @@ enum PermissionsChecker {
     }
 
     /// Reads the current TCC microphone status WITHOUT calling requestAccess.
-    /// We deliberately avoid AVCaptureDevice.requestAccess(for: .audio) — for
+    /// We deliberately avoid AVCaptureDevice.requestAccess(for: .audio), for
     /// some bundle/sign configurations it silently returns false without ever
     /// surfacing a TCC prompt, which then writes a permanent .denied entry.
     /// Instead we let AVAudioEngine.start() in CaptureEngine produce the

@@ -20,7 +20,7 @@ enum PopoverShell {
 
     /// Gap between the primary block (status + action button)
     /// and the hairline divider, and between the hairline and
-    /// the secondary block (Open library / Quit). 10 pt — tighter
+    /// the secondary block (Open library / Quit). 10 pt, tighter
     /// than the previous 18 pt so the divider reads as a section
     /// break inside the same card, not as a hard split between two.
     static let outerSpacing: CGFloat = 10

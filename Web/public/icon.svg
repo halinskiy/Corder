@@ -7,13 +7,13 @@
     </clipPath>
   </defs>
 
-  <!-- Solid black disc — base of the icon -->
+  <!-- Solid black disc, base of the icon -->
   <circle cx="512" cy="512" r="448" fill="#0a0a0a"/>
 
   <!-- Waveform bars: tallest on the left, shrinking towards the right (where they merge into the disc).
        White on black for high contrast. -->
   <g clip-path="url(#discClip)" fill="#ffffff">
-    <!-- bar widths: 30, gaps: 22 — 8 bars total visible across the disc -->
+    <!-- bar widths: 30, gaps: 22, 8 bars total visible across the disc -->
     <rect x="156" y="356"  width="30" height="312" rx="15"/>
     <rect x="208" y="296"  width="30" height="432" rx="15"/>
     <rect x="260" y="396"  width="30" height="232" rx="15"/>

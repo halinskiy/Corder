@@ -49,9 +49,9 @@ tail -f /tmp/corder.log
 
 `Scripts/build-app.sh` does, in order:
 
-1. `Web && npm run build` — produces `dist/` and copies it into
+1. `Web && npm run build`, produces `dist/` and copies it into
    `Sources/Corder/Resources/web/`.
-2. `swift build -c release` — produces the binary.
+2. `swift build -c release`, produces the binary.
 3. Wraps the binary into `Corder.app/Contents/MacOS/Corder`, copies
    `Info.plist`, the Sparkle framework, and the resources, signs.
 4. Strips quarantine.
@@ -71,7 +71,7 @@ Safari; what won't work without the Swift app are the native bridges
 because the local server isn't running. Use this for layout / styling.
 
 For full-loop testing (real meetings, real transcription) you have to
-rebuild the .app — Vite's dev server can't talk to the embedded
+rebuild the .app, Vite's dev server can't talk to the embedded
 Swifter on the random port.
 
 ### Swift dev loop
@@ -119,7 +119,7 @@ Corder/
 ### Add a database column
 
 1. Append a migration to `Sources/Corder/Storage/Migrations.swift`
-   (`v6_…`). **Never** edit existing migrations — they've already run
+   (`v6_…`). **Never** edit existing migrations, they've already run
    on installed copies.
 2. Add the field to `Sources/Corder/Storage/Models.swift` plus the
    `CodingKeys` enum. Default optional fields to `nil`:
@@ -154,7 +154,7 @@ KEPT and unrelated to `i18n.ts`.
    `Web/src/styles.css :root` and document it in `docs/DESIGN.md`.
 2. If it's a one-off shade for a specific component (e.g. a toast
    countdown), keep it scoped to that selector with a comment.
-3. Never hardcode `#0e0e0d` — use `var(--fg)`.
+3. Never hardcode `#0e0e0d`, use `var(--fg)`.
 
 ### Bump the on-device (WhisperKit) model
 
@@ -203,13 +203,13 @@ swift test
 
 Coverage as of v0.6.0 (23 tests total):
 
-- `RangeRequestTests` — HTTP Range header parser edge cases.
-- `MigrationsTests` — schema bootstrap, FTS5 round-trip.
-- `MeetingRepositoryTests` — insert, list, search, rename.
-- `TranscriptFormatterTests` — paragraph mode, "you" → "I", custom
+- `RangeRequestTests`, HTTP Range header parser edge cases.
+- `MigrationsTests`, schema bootstrap, FTS5 round-trip.
+- `MeetingRepositoryTests`, insert, list, search, rename.
+- `TranscriptFormatterTests`, paragraph mode, "you" → "I", custom
   names, hour formatting, empty segment skipping.
-- `AudioMixerTests` — peak-normalised mix, clip safety, length handling.
-- `DiarizerTests` — channel-gate (mic dominance) thresholds + per-segment
+- `AudioMixerTests`, peak-normalised mix, clip safety, length handling.
+- `DiarizerTests`, channel-gate (mic dominance) thresholds + per-segment
   independence, with on-the-fly `.wav` fixtures in the temp dir.
 
 We don't yet test the bigger integration paths (Whisper, Gemini,
@@ -237,11 +237,11 @@ that touches those modules, also run the manual smoke test:
 
 ## Known build / runtime warnings
 
-- `NSUserNotification` deprecated in macOS 11 — used in
+- `NSUserNotification` deprecated in macOS 11, used in
   `AppDelegate.swift` and `RecordingController.swift`. Migration to
   `UserNotifications.framework` is pending; the deprecated API still
   works fine.
-- `'WhisperKit' was deprecated …` — depends on which version of
+- `'WhisperKit' was deprecated …`, depends on which version of
   WhisperKit is pinned in `Package.swift`. Upstream churn; usually
   safe to ignore unless the build itself fails.
 
@@ -271,7 +271,7 @@ See `docs/RELEASE.md` for the Sparkle workflow. TL;DR:
 ### TypeScript
 
 - Strict, `noUnusedLocals`, `noUnusedParameters`. The `tsc -b` step in
-  `npm run build` is your linter — it will fail the build on dead
+  `npm run build` is your linter, it will fail the build on dead
   imports and props.
 - Avoid `any`. If you can't avoid it, leave a comment why.
 - `useCallback` for callbacks that go into `useEffect` deps.
@@ -304,9 +304,9 @@ tail -200 /tmp/corder.log | grep -E "transcribe|EchoSuppressor|Groq|Whisper"
 rm ~/Library/Application\ Support/Corder/corder.db
 
 # Force re-download of the on-device Whisper model (per-account sandbox):
-# (Rarely needed: the app now AUTO-detects a corrupt/partial model — a
+# (Rarely needed: the app now AUTO-detects a corrupt/partial model, a
 #  missing/zero-length weights/weight.bin, or a load that fails on both ANE
-#  and GPU — wipes the model + its HuggingFace download cache, and re-downloads
+#  and GPU, wipes the model + its HuggingFace download cache, and re-downloads
 #  clean, retrying the meeting once instead of failing it.)
 rm -rf ~/Library/Application\ Support/Corder/accounts/*/models/models/argmaxinc/whisperkit-coreml
 

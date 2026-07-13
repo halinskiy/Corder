@@ -66,7 +66,7 @@ with the Dropbox `app_secret` + refresh token.
 | POST   | `/api/meetings/:id/pin` · `/unpin`      | Pin/unpin; pinned sort to a top group. |
 | POST   | `/api/meetings/:id/archive` · `/restore`| Soft-archive / un-archive (7-day bin). |
 | GET    | `/api/archive`                          | `{items: ArchivedMeeting[]}` with `purge_at`. |
-| GET    | `/api/meetings/:id/last-error`          | `{error: string|null}` — last quota / billing / parse error. |
+| GET    | `/api/meetings/:id/last-error`          | `{error: string|null}`, last quota / billing / parse error. |
 | POST   | `/api/meetings/:id/speakers/:sid/rename`| Body `{name: string|null}`.        |
 
 `POST /api/meetings/:id/summarize` accepts an optional `?force=1`
@@ -135,7 +135,7 @@ SegmentDTO  { id, speaker_id, start_ms, end_ms, text, text_boost }
 
 The frontend polls `/api/recording/state` once per second to drive the
 live RecordingBanner card. The state is read through the lock-protected
-`RecordingStateSnapshot` mirror — Swifter handlers don't need to hop
+`RecordingStateSnapshot` mirror, Swifter handlers don't need to hop
 to `MainActor`.
 
 ## Account / auth
@@ -168,7 +168,7 @@ to `sessions_used = 0` with no DB query. At the cap, every Start path
 | Method | Path                | Body                                            |
 | ------ | ------------------- | ----------------------------------------------- |
 | GET    | `/api/settings`     | `Settings`                                      |
-| POST   | `/api/settings`     | `Settings` — partial updates accepted; returns the merged result. |
+| POST   | `/api/settings`     | `Settings`, partial updates accepted; returns the merged result. |
 
 ```ts
 Settings {
@@ -283,7 +283,7 @@ the v1 migration keep it in sync with `segments`.
   been Dropbox-archived and is gone, the handler proxies bytes from a
   Dropbox `temporary_link` with the correct `Content-Type`. **This
   blocks a Swifter worker thread** for the duration of the proxy via
-  `DispatchSemaphore.wait()` — known limitation, see ARCHITECTURE.md.
+  `DispatchSemaphore.wait()`, known limitation, see ARCHITECTURE.md.
 - `retranscribe` flips the status row synchronously before enqueuing
   the actual pipeline so the UI sees `transcribing` on the very next
   GET.
@@ -298,10 +298,10 @@ the v1 migration keep it in sync with `segments`.
 
 ## What's deliberately not in the API
 
-- No auth, ever — see Security model.
-- No batch endpoints (`POST /api/meetings/batch-delete`) — the UI
+- No auth, ever, see Security model.
+- No batch endpoints (`POST /api/meetings/batch-delete`), the UI
   doesn't need them and they invite footguns.
-- No WebSocket / SSE — polling at 1 Hz is enough for the cardinality
+- No WebSocket / SSE, polling at 1 Hz is enough for the cardinality
   of a personal recorder. If we ever add live partial transcripts
   during recording, that's the moment to revisit.
 - No GraphQL. Three endpoints would be GraphQL by accident, the rest

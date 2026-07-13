@@ -6,14 +6,14 @@
 # Requires in the environment:
 #   CORDER_SIGN_IDENTITY  "Developer ID Application: <Name> (<TEAMID>)"
 #                         (the cert+key must be imported into the login
-#                          keychain — e.g. from a shared .p12)
+#                          keychain, e.g. from a shared .p12)
 #
 # Plus ONE notarytool auth method:
 #   A) NOTARY_KEYCHAIN_PROFILE=<name>           (after `notarytool store-credentials`)
 #   B) NOTARY_API_KEY=/path/AuthKey_XXXX.p8  NOTARY_KEY_ID=XXXX  NOTARY_ISSUER=<uuid>
 #   C) NOTARY_APPLE_ID=<email>  NOTARY_PASSWORD=<app-specific-pw>  NOTARY_TEAM_ID=<TEAMID>
 #
-# (B) — App Store Connect API key — is preferred: revocable, scoped,
+# (B), App Store Connect API key, is preferred: revocable, scoped,
 # never exposes anyone's Apple ID password.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,7 +37,7 @@ else
 fi
 
 # 1. Build + sign with Developer ID, hardened runtime ON, secure
-#    timestamp ON. (NOT CORDER_NO_HARDENED — notarization needs it.)
+#    timestamp ON. (NOT CORDER_NO_HARDENED, notarization needs it.)
 CORDER_SIGN_IDENTITY="$CORDER_SIGN_IDENTITY" CORDER_TIMESTAMP=1 "$ROOT/Scripts/build-app.sh"
 
 APP="$ROOT/Corder.app"

@@ -23,7 +23,7 @@ export interface SettingsSelectOption<V extends string = string> {
 /// instead of falling back to the native `<select>` (which renders as
 /// a dark macOS context menu and looks alien inside the white settings
 /// cards). Use this everywhere in Settings where a row needs a single
-/// pick from a short list — Microphone, Transcription model, etc.
+/// pick from a short list, Microphone, Transcription model, etc.
 ///
 /// The trigger is a full-width pill (same base `button` token as the
 /// rest of the app, 8/14 padding, 13 px text, 999 px radius); the
@@ -43,7 +43,7 @@ export function SettingsSelect<V extends string = string>({
   options: SettingsSelectOption<V>[];
   disabled?: boolean;
   onChange: (v: V) => void;
-  /// Called when the user clicks a `disabled` option — lets the parent
+  /// Called when the user clicks a `disabled` option, lets the parent
   /// fire a toast ("Upgrade to Pro to use cloud models" etc.) without
   /// changing the actual value. If omitted, disabled clicks no-op.
   onLockedClick?: (v: V) => void;
@@ -58,7 +58,7 @@ export function SettingsSelect<V extends string = string>({
   const popRef = React.useRef<HTMLDivElement>(null);
   /// Position of the popover. `placement` tells the renderer whether
   /// the popover hangs DOWN from the trigger (default) or flips UP
-  /// when the trigger sits too close to the viewport's bottom edge —
+  /// when the trigger sits too close to the viewport's bottom edge
   /// see `placeDropdown` for the calculation. The chevron rotates
   /// using the same flag so the visual arrow always points "into"
   /// the open list, not opposite to it.

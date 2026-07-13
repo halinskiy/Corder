@@ -30,7 +30,7 @@ sparkle_eddsa_priv*
 .DS_Store
 *.swp
 
-# Secrets — none of these should ever exist in the repo, listed defensively
+# Secrets, none of these should ever exist in the repo, listed defensively
 .env
 .env.*
 !.env.example

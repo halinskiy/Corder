@@ -1,7 +1,7 @@
 :root {
   --bg: #ffffff;
   --bg-elev: #f7f7f6;
-  /* Hover/active fills tuned to be barely-perceptible — barely a tint
+  /* Hover/active fills tuned to be barely-perceptible, barely a tint
      above the white background of the toolbar buttons. */
   --bg-hover: #fafaf8;
   --bg-active: #f3f3f1;
@@ -11,8 +11,8 @@
   --fg: #0e0e0d;
   --fg-muted: #6b6b68;
   --fg-dim: #a0a09c;
-  /* Primary accent — Corder's green. Used for selected pills, CTA fills,
-     toggle ON states. NEVER use --fg (black) for those — black is just
+  /* Primary accent, Corder's green. Used for selected pills, CTA fills,
+     toggle ON states. NEVER use --fg (black) for those, black is just
      for text and icons. See corder-design-system memory. */
   --accent: #0e7c44;
   --accent-pressed: #0a5e34;
@@ -47,7 +47,7 @@ button {
   font: inherit;
   font-size: 13px;
   padding: 8px 14px;
-  /* Pill — corners fully rounded so all controls in the header read as a
+  /* Pill, corners fully rounded so all controls in the header read as a
      family with the "Усилить" toggle. */
   border-radius: 999px;
   cursor: pointer;
@@ -77,7 +77,7 @@ input[type="text"], input[type="search"] {
   /* Match the toolbar `button` proportions so search fields and buttons
      read as siblings (same height, same horizontal padding). */
   padding: 8px 14px;
-  /* Pill — same shape as the toolbar buttons. */
+  /* Pill, same shape as the toolbar buttons. */
   border-radius: 999px;
   outline: none;
 }
@@ -96,7 +96,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   background: #d8d8d4;
   border-radius: 4px;
   /* Without min-height the thumb collapses into a stubby pill that reads
-     as a dot rather than a scrollbar — see the transcript pane where
+     as a dot rather than a scrollbar, see the transcript pane where
      content overflow is small relative to the viewport. */
   min-height: 48px;
 }
@@ -117,15 +117,15 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* Sidebar */
 .sidebar {
   /* `min-height: 0` so the inner `.sidebar-list` can actually scroll
-     instead of stretching the sidebar past the grid row's edge — see the
+     instead of stretching the sidebar past the grid row's edge, see the
      long comment on `.transcript-wrap` for the same fix on the main pane. */
   min-height: 0;
   /* Two stacked gradients drawn in one background:
      1) a 1 px vertical hairline at `right: 5px` (the divider).
      2) a grey fill that stops 5 px before the right edge so the final
         strip is transparent and reveals the white main-area body.
-     Drawing the line as part of the background — instead of an absolutely
-     positioned ::after — means the native scrollbar (which paints AFTER
+     Drawing the line as part of the background, instead of an absolutely
+     positioned ::after, means the native scrollbar (which paints AFTER
      background) sits on top of it without any z-index gymnastics. */
   background:
     linear-gradient(to right,
@@ -153,7 +153,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 
    Left padding matches a toolbar `button`: 14 px from the field's edge to
    the icon (same as button left padding to its leading icon), then a 6 px
-   gap, then the placeholder/text — total left padding 14 + 14 + 6 = 34 px. */
+   gap, then the placeholder/text, total left padding 14 + 14 + 6 = 34 px. */
 .search-field { position: relative; display: block; }
 .search-field svg {
   position: absolute;
@@ -170,7 +170,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   padding-right: 14px;
 }
 
-/* Active-recording card — same shape as IdleStatus / RecordingStatus in the
+/* Active-recording card, same shape as IdleStatus / RecordingStatus in the
    popover so the visual language matches across the menu-bar and Library. */
 .rec-banner {
   border: 1px solid var(--border-strong);
@@ -198,7 +198,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 .rec-dot.on { opacity: 1; }
 .rec-text { display: flex; flex-direction: column; gap: 1px; }
 .rec-label {
-  /* Same type as the sidebar's meeting-title (Today, 17:56) — quiet 13/500
+  /* Same type as the sidebar's meeting-title (Today, 17:56), quiet 13/500
      instead of the previous loud all-caps with wide tracking. */
   font-size: 13px;
   font-weight: 500;
@@ -211,8 +211,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   color: var(--fg);
 }
 .rec-stop {
-  /* Same proportions as the popover's primary "Остановить запись" button —
-     full-width row, generous vertical padding — but in red to mark a
+  /* Same proportions as the popover's primary "Остановить запись" button, full-width row, generous vertical padding, but in red to mark a
      destructive action inside the live-recording card. */
   background: #B7443C;
   color: #fff;
@@ -239,7 +238,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   display: inline-block;
 }
 
-/* Transcribing card — same shape as `.rec-banner`, but in our accent green
+/* Transcribing card, same shape as `.rec-banner`, but in our accent green
    so it visually says "work in progress, not destructive". Sits in the
    same slot inside `.transcript` while detail.status === 'transcribing'. */
 .trans-banner {
@@ -263,7 +262,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .trans-text { display: flex; flex-direction: column; gap: 1px; }
 .trans-label {
-  /* Match `.rec-label` — same type family as meeting-title in the sidebar. */
+  /* Match `.rec-label`, same type family as meeting-title in the sidebar. */
   font-size: 13px;
   font-weight: 500;
   color: var(--fg-muted);
@@ -275,7 +274,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   color: var(--fg);
 }
 .trans-stop {
-  /* Same size & radius as before — only fill/border swapped to match the
+  /* Same size & radius as before, only fill/border swapped to match the
      header's outline buttons (EN / Copy / Delete). */
   background: transparent;
   color: var(--fg);
@@ -311,7 +310,7 @@ input[type="text"]:focus, input[type="search"]:focus {
      scroll track doesn't run up against the sidebar's bottom edge. */
   margin-bottom: 16px;
 }
-/* Real in-flow element — WebKit reliably counts its height in
+/* Real in-flow element, WebKit reliably counts its height in
    `scrollHeight`, unlike the container's own `padding-bottom`. Just
    enough breathing room (24 px) so the last meeting card's preview
    line never reads as clipped. */
@@ -353,7 +352,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 /* Sidebar lives on `--bg-elev`, so a hover that uses the toolbar's
    `--bg-hover` (which is whiter than `--bg-elev`) actually makes items
-   *lighter* than the surrounding panel — invisible. Use explicit darker
+   *lighter* than the surrounding panel, invisible. Use explicit darker
    greys here so hover/active read clearly on the elevated surface. */
 .meeting-item:hover { background: #ececea; }
 .meeting-item.active { background: #e8e8e5; }
@@ -429,7 +428,7 @@ input[type="text"]:focus, input[type="search"]:focus {
      The page-level mousedown handler asks AppKit to perform the drag, while
      individual buttons inside still receive clicks normally. */
   cursor: default;
-  /* Don't let the breadcrumb/title text be selected — it would interfere
+  /* Don't let the breadcrumb/title text be selected, it would interfere
      with grabbing the header to drag the window. */
   user-select: none;
   -webkit-user-select: none;
@@ -468,7 +467,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .empty-title { color: var(--fg); font-weight: 500; font-size: 16px; }
 
-/* Detail layout — column-stack of (tabs row spanning both columns, body grid).
+/* Detail layout, column-stack of (tabs row spanning both columns, body grid).
    The tabs row hairline runs continuously from "Transcript" to "Recording";
    the vertical divider between the two columns extends through both rows. */
 .detail {
@@ -490,7 +489,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   gap: 24px;
 }
 .detail-tab-col-left {
-  /* Hairline at 3-4 px from the right edge — same offset as the sidebar
+  /* Hairline at 3-4 px from the right edge, same offset as the sidebar
      divider, centred under the 7 px scrollbar of the transcript pane
      below. */
   background: linear-gradient(to right,
@@ -509,7 +508,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   overflow: hidden;
 }
 
-/* Tabs row above transcript (kept for backwards compat — currently unused) */
+/* Tabs row above transcript (kept for backwards compat, currently unused) */
 .tabs {
   display: flex;
   gap: 24px;
@@ -536,12 +535,12 @@ input[type="text"]:focus, input[type="search"]:focus {
   flex-direction: column;
   overflow: hidden;
   /* Critical: grid items default to `min-height: auto` which ignores
-     overflow on children — the inner `.transcript` then stretches to
+     overflow on children, the inner `.transcript` then stretches to
      its content size and the bottom of the meeting list is clipped by
      the grid row instead of being scrolled into. */
   min-height: 0;
   min-width: 0;
-  /* Hairline at 3-4 px from the right edge — matches the sidebar divider
+  /* Hairline at 3-4 px from the right edge, matches the sidebar divider
      so the transcript scrollbar sits centred on the same line as the
      sidebar one. */
   background: linear-gradient(to right,
@@ -580,12 +579,12 @@ input[type="text"]:focus, input[type="search"]:focus {
   flex-shrink: 0;
 }
 .toolbar-icon-btn:hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
-/* Active state — barely darker than hover so it reads as "currently
+/* Active state, barely darker than hover so it reads as "currently
    engaged" without shouting. Same delta as the sidebar's active row
    (#ececea hover → #e8e8e5 active). */
 .toolbar-icon-btn.active {
   /* Hover is #fafaf8; active sits one tick darker so it's perceptible
-     but stays in the same near-white range. No hover treatment — once
+     but stays in the same near-white range. No hover treatment, once
      the banner is open the button is "currently doing its job", an extra
      hover state would just look noisy. */
   background: #f4f4f0;
@@ -613,13 +612,13 @@ input[type="text"]:focus, input[type="search"]:focus {
   margin-bottom: 12px;
 }
 
-/* SpeakersClarifyBanner — same outline card as `.trans-banner`, but without
+/* SpeakersClarifyBanner, same outline card as `.trans-banner`, but without
    the icon column. Body uses the same big-light type as the recording timer
    so all three banners (recording / transcribing / clarify) read as a family. */
 .clarify-banner { max-width: 420px; position: relative; }
 .clarify-dismiss {
   /* X button anchored to the top-right corner of the card. Outline-less,
-     muted hover — discreet because dismissing is a passive action. */
+     muted hover, discreet because dismissing is a passive action. */
   position: absolute;
   top: 10px;
   right: 10px;
@@ -665,7 +664,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .clarify-btn:hover { background: var(--bg-hover); border-color: #b8b8b4; }
 .clarify-btn:disabled { opacity: 0.5; cursor: default; }
-/* Currently-selected option — auto-detected by the diarizer or picked
+/* Currently-selected option, auto-detected by the diarizer or picked
    by the user previously. Filled with the accent green so the choice
    is instantly readable. No hover treatment: it's already the answer,
    the affordance is "pick another or close with X". */
@@ -682,7 +681,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   border-color: var(--accent-pressed);
 }
 
-/* Destructive variant — used by EmptyDeleteBanner. Same shape as
+/* Destructive variant, used by EmptyDeleteBanner. Same shape as
    `.rec-stop` (red fill, white text) so all destructive primary actions
    read the same regardless of which card hosts them. */
 .clarify-btn.danger {
@@ -715,7 +714,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   flex: 1;
   overflow-y: auto;
   padding: 8px 20px 0;
-  /* Stop the scroll track 16 px before the bottom — same trick as the
+  /* Stop the scroll track 16 px before the bottom, same trick as the
      sidebar's `.sidebar-list`. */
   margin-bottom: 16px;
   display: flex;
@@ -723,7 +722,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   gap: 28px;
   scroll-behavior: smooth;
 }
-/* Real in-flow spacer — WebKit ignores `padding-bottom` of an
+/* Real in-flow spacer, WebKit ignores `padding-bottom` of an
    `overflow: auto` container in `scrollHeight`. Mirrors the sidebar
    solution. 80 px = enough breathing room under the last segment so
    long paragraphs don't read as cropped on long meetings. */
@@ -792,7 +791,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   background: #dff1e5;
 }
 
-/* Right pane (audio controls + timeline). No outer padding — children
+/* Right pane (audio controls + timeline). No outer padding, children
    manage their own spacing so the audio controls sit flush with the
    shared tabs row above, matching the transcript column on the left. */
 .right-panel {
@@ -824,7 +823,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   justify-content: center;
 }
 
-/* Audio player — sits directly under the shared tabs row, no card wrapper
+/* Audio player, sits directly under the shared tabs row, no card wrapper
    any more; matches the transcript-toolbar's layout on the left so the
    two columns read as the same composition. Horizontal padding matches
    `.transcript-toolbar` (32 px). */
@@ -848,7 +847,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   padding: 0;
 }
 .audio-btn:hover { background: var(--bg-hover); }
-/* Primary (play/pause) — fully round green pill, brand colour. */
+/* Primary (play/pause), fully round green pill, brand colour. */
 .audio-btn-primary {
   background: #1E7A50;
   color: #fff;
@@ -857,7 +856,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   height: 36px;
 }
 .audio-btn-primary:hover { background: #186439; }
-/* Disabled state when there is nothing to play yet — flat neutral grey,
+/* Disabled state when there is nothing to play yet, flat neutral grey,
    no hover, no opacity-fade (we want a solid, intentional look, not a
    ghosted button). */
 .audio-btn-primary:disabled,
@@ -870,7 +869,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   color: var(--fg-muted);
-  /* Symmetric breathing room — left/right margins on top of the parent's
+  /* Symmetric breathing room, left/right margins on top of the parent's
      `gap: 6px`, so the visible space between the time label and its
      neighbours (play button on the left, scrub bar on the right) ends up
      identical (12 px on both sides). */
@@ -1092,7 +1091,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   cursor: pointer;
   white-space: nowrap;
 }
-/* Darker than the toolbar `--bg-hover` — the context menu sits on the
+/* Darker than the toolbar `--bg-hover`, the context menu sits on the
    floating white panel and needs a perceptible hover. */
 .ctx-item:hover { background: #ececea; }
 .ctx-danger { color: var(--danger); }
@@ -1104,7 +1103,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   bottom: 20px;
   left: 50%;
   /* Default state is the resting position. Enter and exit are driven by
-     `.toast.entering` / `.toast.leaving` modifiers — clearer than a
+     `.toast.entering` / `.toast.leaving` modifiers, clearer than a
      CSS-only animation because we want different durations and easings. */
   transform: translate(-50%, 0);
   opacity: 1;
@@ -1130,7 +1129,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   opacity: 0;
 }
 /* Success / info toasts mimic the toolbar pill buttons (EN, Copy,
-   Delete) — white fill, hairline border, ink text. Keeps neutral state
+   Delete), white fill, hairline border, ink text. Keeps neutral state
    notifications visually quiet. */
 .toast-success {
   background: var(--bg);
@@ -1167,7 +1166,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   text-align: right;
 }
 
-/* Floating donate button — bottom-right, white pill matching toolbar
+/* Floating donate button, bottom-right, white pill matching toolbar
    buttons (EN / Copy / Delete) so it doesn't compete with the action
    colour. Just an icon. */
 .donate-fab {
@@ -1210,7 +1209,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   width: 380px;
   display: flex;
   flex-direction: column;
-  /* explicit per-child margins below — title→body 8 px, body→amounts 20 px */
+  /* explicit per-child margins below, title→body 8 px, body→amounts 20 px */
   box-shadow: 0 24px 64px rgba(0,0,0,0.28);
 }
 .donate-card-title { margin-bottom: 4px; }

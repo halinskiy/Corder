@@ -8,7 +8,7 @@ import AVFoundation
 /// Why this exists: SCStream's `capturesAudio` taps the system *output
 /// mix*. Communication apps (Zoom, Meet, Telegram, Discord, …) render
 /// their call audio through a Voice-Processing I/O unit for echo
-/// cancellation, and that path bypasses the mix SCStream taps — so on
+/// cancellation, and that path bypasses the mix SCStream taps, so on
 /// a real call SCStream delivers digital silence for the remote
 /// participants. A process tap reads each process's audio directly
 /// (the same mechanism Granola / Loom use), which captures call audio
@@ -25,13 +25,13 @@ final class SystemAudioTap {
     /// `format` (see below); the callee copies what it needs and must
     /// not retain the buffer past the call. The second argument is the
     /// buffer's mach host time (`AudioTimeStamp.mHostTime`), sampled in the
-    /// IOProc — the ONLY place it's available, since the PCM buffer carries
+    /// IOProc, the ONLY place it's available, since the PCM buffer carries
     /// no timestamp and the main-actor hop adds skew. The writer uses it to
     /// left-pad system.wav to the recording's start clock.
     var onAudio: ((AVAudioPCMBuffer, UInt64) -> Void)?
 
     /// Fired (off the watchdog queue) the one time the watchdog exhausts its
-    /// rebuilds without ever seeing a buffer — i.e. the BT HFP/SCO failure where
+    /// rebuilds without ever seeing a buffer, i.e. the BT HFP/SCO failure where
     /// the far end is genuinely uncapturable. Lets the engine warn the user
     /// ~8 s in (so they can switch output and re-record) instead of only at stop.
     var onGaveUp: (() -> Void)?
@@ -40,7 +40,7 @@ final class SystemAudioTap {
     /// `start()`. Used by the caller to open the destination WAV.
     ///
     /// Read from CaptureEngine's serial write queue while the self-heal
-    /// watchdog may re-assign it from `watchdogQueue` on a tap rebuild —
+    /// watchdog may re-assign it from `watchdogQueue` on a tap rebuild
     /// that's a cross-thread access to a reference, so go through `stateLock`
     /// to keep the ARC retain/release of the optional safe (the value is
     /// identical across rebuilds, but the reference op must not race).
@@ -57,24 +57,24 @@ final class SystemAudioTap {
 
     // Self-heal watchdog. Two DISTINCT failure modes, and the fix for one
     // was hurting the other:
-    //  1. BT mid-switch (A2DP↔SCO) at create time — the tap+aggregate build
+    //  1. BT mid-switch (A2DP↔SCO) at create time, the tap+aggregate build
     //     OK (`AudioDeviceStart` == noErr) but the IOProc NEVER fires. A
     //     from-scratch rebuild recovers it.
-    //  2. SLOW-Mac cold start (8 GB, macOS busy encoding screen video) — the
+    //  2. SLOW-Mac cold start (8 GB, macOS busy encoding screen video), the
     //     IOProc is simply LATE: the aggregate device takes ~9-15 s to begin
     //     delivering. This is NOT a wedge; the tap works if left alone.
     // The old 1.5 s × 4 watchdog treated #2 as #1: it tore down and rebuilt a
     // perfectly-fine-but-warming-up tap every 1.5 s, RESETTING its warm-up
     // clock each time, then "gave up" at ~8 s and fired the scary "other side
-    // not recorded" warning — even though the tap recovered on its own a few
+    // not recorded" warning, even though the tap recovered on its own a few
     // seconds later (measured on a tester's 8 GB Mac: gave up at 8 s, first
     // real buffer at 15.9 s, so the first ~16 s of the far end was lost to
     // needless rebuilds + a false alarm). A HEALTHY tap delivers its first
-    // buffer in ~100 ms (even pure silence counts — `gotFirstBuffer` flips on
+    // buffer in ~100 ms (even pure silence counts, `gotFirstBuffer` flips on
     // ANY callback), so a LONG first-check delay is a no-op on every fast/
     // working path and only ever bites a genuinely-not-yet-delivering tap.
-    // So: wait a generous `watchdogDelay` (10 s) before the FIRST rebuild —
-    // long enough for a slow cold tap to warm up untouched — and cap rebuilds
+    // So: wait a generous `watchdogDelay` (10 s) before the FIRST rebuild
+    // long enough for a slow cold tap to warm up untouched, and cap rebuilds
     // at 2 (a real BT wedge recovers on the first fresh build). Only give up
     // (and warn) after all of that, i.e. the tap is genuinely dead. Trade-off:
     // a true BT-switch wedge now takes ~10 s to trigger its first rebuild
@@ -121,7 +121,7 @@ final class SystemAudioTap {
 
     /// Arm (or re-arm) the no-audio watchdog for this generation. If no
     /// IOProc buffer has arrived by `watchdogDelay`, tear the tap down and
-    /// rebuild it — the BT-mid-switch start race recovers on a fresh build.
+    /// rebuild it, the BT-mid-switch start race recovers on a fresh build.
     private func armWatchdog(generation gen: Int) {
         watchdogQueue.asyncAfter(deadline: .now() + watchdogDelay) { [weak self] in
             guard let self = self else { return }
@@ -132,14 +132,14 @@ final class SystemAudioTap {
             if stale || healthy { self.stateLock.unlock(); return }
             if !canRetry {
                 self.stateLock.unlock()
-                FileLogger.log("SystemAudioTap: still no audio after \(self.maxRestarts) restarts + \(self.watchdogDelay)s warm-up grace — giving up (tap genuinely not delivering: BT HFP/SCO, or a Mac that never brought the aggregate up; remote side not capturable).")
+                FileLogger.log("SystemAudioTap: still no audio after \(self.maxRestarts) restarts + \(self.watchdogDelay)s warm-up grace, giving up (tap genuinely not delivering: BT HFP/SCO, or a Mac that never brought the aggregate up; remote side not capturable).")
                 self.onGaveUp?()
                 return
             }
             self.restarts += 1
             let attempt = self.restarts
             self.stateLock.unlock()
-            FileLogger.log("SystemAudioTap: no IOProc audio within \(self.watchdogDelay)s — rebuilding tap (attempt \(attempt)/\(self.maxRestarts)).")
+            FileLogger.log("SystemAudioTap: no IOProc audio within \(self.watchdogDelay)s, rebuilding tap (attempt \(attempt)/\(self.maxRestarts)).")
             TelemetryService.bump(.tapRebuilds)
             self.teardownCoreAudio()
             do {
@@ -152,7 +152,7 @@ final class SystemAudioTap {
     }
 
     /// Destroy just the Core Audio objects (IOProc, aggregate, tap) without
-    /// touching `onAudio` / watchdog state — used by both `stop()` and the
+    /// touching `onAudio` / watchdog state, used by both `stop()` and the
     /// watchdog rebuild.
     private func teardownCoreAudio() {
         if let proc = ioProcID, aggregateID != AudioObjectID(kAudioObjectUnknown) {
@@ -171,7 +171,7 @@ final class SystemAudioTap {
     }
 
     private func buildAndStart() throws {
-        // 1. Our own process's audio object — so we can exclude it from
+        // 1. Our own process's audio object, so we can exclude it from
         //    the global tap (don't record Corder's own output).
         let ourObject = Self.processObject(forPID: getpid())
 
@@ -181,7 +181,7 @@ final class SystemAudioTap {
         if ourObject != AudioObjectID(kAudioObjectUnknown) {
             desc = CATapDescription(stereoGlobalTapButExcludeProcesses: [ourObject])
         } else {
-            // Couldn't resolve our object — fall back to a full global
+            // Couldn't resolve our object, fall back to a full global
             // mixdown. Worst case we also record our own blip sounds,
             // which is far better than missing the call audio.
             desc = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
@@ -235,7 +235,7 @@ final class SystemAudioTap {
         }
         aggregateID = newAgg
 
-        // 5. IOProc — copy the input AudioBufferList into an
+        // 5. IOProc, copy the input AudioBufferList into an
         //    AVAudioPCMBuffer and hand it off.
         let fmt = avFormat
         var procID: AudioDeviceIOProcID?
@@ -245,8 +245,8 @@ final class SystemAudioTap {
             guard let self = self, let onAudio = self.onAudio else { return }
             // mHostTime of THIS buffer's input (mach host clock). Fall back to
             // `inNow` if the input timestamp's host time is missing. Reported
-            // up so CaptureEngine can diff it against the recording-start clock
-            // — done per buffer (cheap), the writer only uses the first one.
+            // up so CaptureEngine can diff it against the recording-start clock,
+            // done per buffer (cheap), the writer only uses the first one.
             var hostTime = inInputTime.pointee.mHostTime
             if hostTime == 0 { hostTime = inNow.pointee.mHostTime }
             let abl = inInputData.pointee
@@ -274,7 +274,7 @@ final class SystemAudioTap {
             let firstTime = !self.gotFirstBuffer
             self.gotFirstBuffer = true
             self.stateLock.unlock()
-            if firstTime { FileLogger.log("SystemAudioTap: first IOProc buffer (\(frameCount) frames) — tap healthy.") }
+            if firstTime { FileLogger.log("SystemAudioTap: first IOProc buffer (\(frameCount) frames), tap healthy.") }
             onAudio(pcm, hostTime)
         }
         guard procStatus == noErr, let proc = procID else {
@@ -336,8 +336,8 @@ final class SystemAudioTap {
 
     /// True when the system's default OUTPUT device is a Bluetooth
     /// route (AirPods / BT headset). A Core Audio process tap captures
-    /// silence in that case — the audio is rendered to the BT device
-    /// the global tap can't see — so the remote side of a call never
+    /// silence in that case, the audio is rendered to the BT device
+    /// the global tap can't see, so the remote side of a call never
     /// makes it into system.wav. We use this only to warn the user;
     /// it never blocks recording.
     static func defaultOutputIsBluetooth() -> Bool {

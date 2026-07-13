@@ -39,7 +39,7 @@ enum Routes {
         server.get["/index.html"] = { _ in serveIndex() }
         server.get["/assets/:path"] = { req in serveAsset(path: req.params[":path"] ?? "") }
         // Vite-public assets land at the web root (avatar.jpg, icon.svg,
-        // etc.) — not under /assets/. Map them explicitly so the
+        // etc.), not under /assets/. Map them explicitly so the
         // <img src="/avatar.jpg"> in ProfileMenu actually resolves.
         server.get["/avatar.jpg"] = { _ in serveRoot(name: "avatar.jpg") }
         server.get["/icon.svg"]   = { _ in serveRoot(name: "icon.svg") }
@@ -109,13 +109,13 @@ enum Routes {
         }
         server.post["/api/meetings/:id/summarize"] = { req in
             // `?force=1` regenerates the summary even if the row has a
-            // cached one — used by the UI's "Regenerate" button.
+            // cached one, used by the UI's "Regenerate" button.
             let force = req.queryParams.contains(where: { $0.0 == "force" && $0.1 == "1" })
             return summarize(id: req.params[":id"] ?? "", repo: repo, force: force)
         }
         server.post["/api/meetings/:id/chapters"] = { req in
             // On-demand Chapters generation. Same `?force=1` semantics
-            // as `/summarize` — used by the ChaptersPane "Generate" /
+            // as `/summarize`, used by the ChaptersPane "Generate" /
             // "Regenerate" buttons when the user wants chapters on a
             // meeting that finished before auto-chapters was on.
             let force = req.queryParams.contains(where: { $0.0 == "force" && $0.1 == "1" })
@@ -127,7 +127,7 @@ enum Routes {
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
         server.get["/api/usage"] = { _ in usageGet(repo: repo) }
-        // Upcoming calendar meetings for the Dashboard "Upcoming" tab —
+        // Upcoming calendar meetings for the Dashboard "Upcoming" tab
         // served from the GoogleCalendar cache (connected:false until the
         // user opts in via /connect).
         server.get["/api/calendar/upcoming"] = { _ in upcomingCalendar() }
@@ -141,7 +141,7 @@ enum Routes {
         server.post["/api/submit-logs"] = { _ in submitLogs() }
         server.get["/api/has-bug-events"] = { _ in hasBugEvents() }
         server.post["/api/billing/test-set-tier"] = { req in setTestTier(req: req) }
-        // Whisper Local model download — kicks off a background fetch
+        // Whisper Local model download, kicks off a background fetch
         // for the requested variant id (no body needed beyond `id`).
         // The /api/settings GET is the single source of truth for
         // progress / ready state; the React DownloadButton polls it
@@ -178,7 +178,7 @@ enum Routes {
         // Opens the in-app sign-in MODAL (SignInModalHost in the Library
         // WebView), driven by AuthController. Used by the profile popover's
         // "Sign in" when signed-out. Replaces the old separate native sign-in
-        // window — no jarring extra window, consistent with the update modal.
+        // window, no jarring extra window, consistent with the update modal.
         server.post["/api/open-welcome"] = { _ in
             Task { @MainActor in AuthController.shared.present() }
             return .ok(.text("ok"))
@@ -256,7 +256,7 @@ enum Routes {
     private static func authCallback(req: HttpRequest) -> HttpResponse {
         // Reconstruct the full URL the browser hit (Swifter strips it
         // into path + query params). The SDK only needs scheme, host,
-        // path, and the query string in shape — we synthesise the
+        // path, and the query string in shape, we synthesise the
         // canonical `corder://auth/callback` URL with the same query
         // so the same code path used by the URL-scheme handler
         // (AppDelegate.application(_:open:)) finishes the exchange.
@@ -285,7 +285,7 @@ enum Routes {
                     NotificationCenter.default.post(
                         name: .corderSupabaseSignedIn, object: nil)
                 } catch {
-                    FileLogger.log("authCallback: session(from:) failed — \(error)")
+                    FileLogger.log("authCallback: session(from:) failed, \(error)")
                 }
             }
         }
@@ -300,7 +300,7 @@ enum Routes {
     /// Styled "You're signed in" page served from `/auth/callback`.
     /// Inline CSS + inline SVG so the page renders identically with
     /// no extra requests (Supabase Auth's callback tab is closed
-    /// seconds later — not worth an asset). Brand row at the top
+    /// seconds later, not worth an asset). Brand row at the top
     /// (3mpq + Corder marks), green check + headline centred, ⌘W
     /// hint chip at the bottom.
     private static let signedInHTML = """
@@ -474,7 +474,7 @@ enum Routes {
                 try await SupabaseSync.deleteEverything()
                 FileLogger.log("accountDelete: cloud data wiped, signed out")
             } catch {
-                FileLogger.log("accountDelete: failed — \(error)")
+                FileLogger.log("accountDelete: failed, \(error)")
             }
             // Also clear local UserDefaults so the relaunched
             // process starts fresh (welcome wizard reopens).
@@ -502,7 +502,7 @@ enum Routes {
             do {
                 try await SupabaseClientHolder.shared.auth.signOut()
             } catch {
-                FileLogger.log("AccountAPI: Supabase signOut failed (\(error)) — clearing local state anyway")
+                FileLogger.log("AccountAPI: Supabase signOut failed (\(error)), clearing local state anyway")
             }
             AppSettings.setLicenceKey(nil)
             AppSettings.setUserName(nil)
@@ -511,7 +511,7 @@ enum Routes {
             AppSettings.setIsAdmin(false)
             AppSettings.setOnboardingCompleted(false)
             AppSettings.setOnboardingStep(0)
-            FileLogger.log("AccountAPI: signed out — cleared identity + admin/tier; relaunching into guest Library")
+            FileLogger.log("AccountAPI: signed out, cleared identity + admin/tier; relaunching into guest Library")
             // Gate the rest of Corder behind sign-in: close the
             // Library window so the signed-in surface isn't visible
             // behind the wizard, then re-present the wizard so the
@@ -527,13 +527,13 @@ enum Routes {
 
     // MARK: static
 
-    /// Web-assets root, resolved from `Bundle.main` — NOT the
+    /// Web-assets root, resolved from `Bundle.main`, NOT the
     /// SwiftPM-generated `Bundle.module`.
     ///
     /// `Bundle.module`'s accessor calls `fatalError` when it can't find
     /// `Corder_Corder.bundle`. Its candidate list is baked at compile
     /// time and includes the dev machine's `.build/release/` path, so a
-    /// miss is invisible locally but a HARD CRASH on any other Mac — the
+    /// miss is invisible locally but a HARD CRASH on any other Mac, the
     /// friend's "open Library → SIGTRAP" was exactly this: the first
     /// HTTP request from the WKWebView hit `Bundle.module` init →
     /// assertionFailure. In a packaged .app the resource bundle lives at
@@ -558,7 +558,7 @@ enum Routes {
                 return web
             }
         }
-        FileLogger.log("Routes: web assets not found in any Bundle.main candidate — serving 404 (resource bundle missing from .app)")
+        FileLogger.log("Routes: web assets not found in any Bundle.main candidate, serving 404 (resource bundle missing from .app)")
         return nil
     }()
 
@@ -641,7 +641,7 @@ enum Routes {
 
     private static func listMeetings(repo: MeetingRepository) -> HttpResponse {
         do {
-            // Single SQL query with correlated subselects — replaces the
+            // Single SQL query with correlated subselects, replaces the
             // old per-meeting segments + speakers fan-out that produced
             // ≥2N reads on every sidebar poll.
             let rows = try repo.listMeetingSummaries()
@@ -670,7 +670,7 @@ enum Routes {
         do {
             guard let m = try repo.meeting(id: id) else { return .notFound }
             // Mark the meeting as seen on first detail fetch. The repo
-            // is a no-op if `viewed_at` is already set — once seen,
+            // is a no-op if `viewed_at` is already set, once seen,
             // stays seen. We only stamp once the row is ready, so a
             // still-recording / still-transcribing meeting doesn't get
             // marked as seen prematurely (the user is "watching it
@@ -722,7 +722,7 @@ enum Routes {
                 model_download_progress: m.status == .transcribing
                     ? LocalWhisperTranscriber.currentProgress(AppSettings.whisperLocalVariant) : nil,
                 // Silent post-download "preparing" (tokenizer + ANE compile)
-                // phase — lets the UI swap the frozen 99% download bar for a
+                // phase, lets the UI swap the frozen 99% download bar for a
                 // "Preparing model…" indeterminate state.
                 model_preparing: m.status == .transcribing
                     ? LocalWhisperTranscriber.isPreparing(AppSettings.whisperLocalVariant) : nil
@@ -747,7 +747,7 @@ enum Routes {
     }
 
     /// Bundles whatever exists locally (video, mixed audio, transcript)
-    /// into a single .zip. Shells out to /usr/bin/zip — ships with macOS,
+    /// into a single .zip. Shells out to /usr/bin/zip, ships with macOS,
     /// no dependency. Blocks the Swifter worker like the other media
     /// routes; the payload is small (a short meeting) to a few hundred MB.
     private static func bundleZip(id: String, repo: MeetingRepository) -> HttpResponse {
@@ -773,7 +773,7 @@ enum Routes {
             try? fm.copyItem(at: videoURL,
                              to: stage.appendingPathComponent("video." + videoURL.pathExtension))
         }
-        // Audio — prefer the mixed audio.wav (both sides), else stored path.
+        // Audio, prefer the mixed audio.wav (both sides), else stored path.
         let mixURL = AppPaths.recordingDir(for: id).appendingPathComponent("audio.wav")
         let audioURL = fm.fileExists(atPath: mixURL.path)
             ? mixURL : URL(fileURLWithPath: m.audioPath)
@@ -838,7 +838,7 @@ enum Routes {
 
     private static func recordingState() -> HttpResponse {
         switch RecordingStateSnapshot.read() {
-        // `.preroll` reads as inactive to the web — the silent pre-roll
+        // `.preroll` reads as inactive to the web, the silent pre-roll
         // must not surface a recording indicator anywhere.
         case .idle, .preroll:
             return jsonResponse(["active": false] as [String: Any])
@@ -881,7 +881,7 @@ enum Routes {
         // Opportunistically kick Sparkle's silent background check
         // when the React poll arrives and we don't yet have a
         // resolved update. Sparkle's own 24h scheduled check might
-        // not have fired since install — without this nudge the
+        // not have fired since install, without this nudge the
         // pill could take a full day to appear after a fresh release.
         // checkInBackground is a no-op if a check is already in
         // flight, so the polling cadence (60 s) can't double-fire it.
@@ -900,7 +900,7 @@ enum Routes {
     private static func updateCheck() -> HttpResponse {
         Task { @MainActor in
             // Surface any update modal that was already resolved but whose
-            // push got dropped (e.g. found while the Library was closed) —
+            // push got dropped (e.g. found while the Library was closed)
             // otherwise a fresh checkForUpdates() is ignored while that
             // Sparkle session is still pending, and the pill click looks
             // dead. Replaying shows the Install card so the click always
@@ -933,7 +933,6 @@ enum Routes {
             auto_chapters: AppSettings.autoChapters,
             launch_at_login: AppSettings.launchAtLogin,
             telemetry: AppSettings.telemetryEnabled,
-            stats_enabled: AppSettings.statsEnabled,
             preroll: AppSettings.prerollEnabled,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
@@ -957,7 +956,7 @@ enum Routes {
             transcription_provider: {
                 // `"auto"` when no explicit override is stored, so the
                 // tier-driven default is in effect; otherwise echo the
-                // stored override — but CLAMP it through the same admin rule
+                // stored override, but CLAMP it through the same admin rule
                 // as the other three surfaces (runtime read, POST write,
                 // Worker). A stale `gemini`/`whisper` value (demoted admin /
                 // manual `defaults write`) must not surface to a non-admin,
@@ -1011,8 +1010,8 @@ enum Routes {
     /// (`POST /submit-logs`) which forwards via Resend to the
     /// maintainer. The user clicks one button (header Bug icon) and
     /// we attach their email + app version + macOS version for
-    /// triage — they don't have to copy anything by hand.
-    /// Regex that flags a log line as "interesting" — i.e. worth
+    /// triage, they don't have to copy anything by hand.
+    /// Regex that flags a log line as "interesting", i.e. worth
     /// shipping to the maintainer's inbox. Routine status lines
     /// (server started, hotkey registered, popover suppressed) are
     /// dropped so the email isn't 95 % noise. Case-insensitive.
@@ -1026,7 +1025,7 @@ enum Routes {
     /// errors, but they're exactly what we need to debug a "wrong text"
     /// report (provider chosen, dual-track mode, per-track turn counts,
     /// dominance gate, capture device / Bluetooth route). The error regex
-    /// alone is useless for a QUALITY bug that throws no error — e.g. the
+    /// alone is useless for a QUALITY bug that throws no error, e.g. the
     /// far-end voice bleeding into the mic on speakers and being
     /// re-transcribed as the user. Kept separate so the two intents stay
     /// readable.
@@ -1038,7 +1037,7 @@ enum Routes {
 
     /// Whether the current session has any matching event lines.
     /// Frontend polls this to decide whether to show the Bug icon
-    /// at all — no events → button hidden.
+    /// at all, no events → button hidden.
     private static func hasBugEvents() -> HttpResponse {
         // The report button is now ALWAYS available when there's any log
         // to send. Gating it on error-regex hits hid the button exactly
@@ -1068,7 +1067,7 @@ enum Routes {
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
             // Keep both the error lines AND the transcription/capture flow
             // lines (see flowLineRegex) with ±3 lines of context each. The
-            // wider context window matters for the pipeline lines — the
+            // wider context window matters for the pipeline lines, the
             // per-track turn counts and the chosen audio file are logged a
             // few lines apart.
             let hit = bugLineRegex.firstMatch(in: line, range: range) != nil
@@ -1079,7 +1078,7 @@ enum Routes {
                 for j in from...to { keep[j] = true }
             }
         }
-        // Always include the raw tail — the immediate state when the user
+        // Always include the raw tail, the immediate state when the user
         // hit "Send a report", even if none of it matched. Cheap insurance
         // against a quiet failure mode we don't have a keyword for yet.
         let tailStart = max(0, lines.count - 200)
@@ -1117,7 +1116,7 @@ enum Routes {
         var markerIdx: [Int] = []
         for i in lines.indices where lines[i].contains(sessionMarker) { markerIdx.append(i) }
         if let start = markerIdx.suffix(3).first { return Array(lines[start...]) }
-        // No marker in the window (a single marathon session) — return all
+        // No marker in the window (a single marathon session), return all
         // of it rather than nothing.
         return lines
     }
@@ -1131,12 +1130,12 @@ enum Routes {
         return Array(lines.suffix(maxLines))
     }
 
-    /// Log lines for the CURRENT session only — everything from the last
+    /// Log lines for the CURRENT session only, everything from the last
     /// `applicationDidFinishLaunching` marker onward. `/tmp/corder.log`
     /// accumulates across days, so an unbounded tail makes a bug report
     /// resurface ancient, already-fixed errors (the AI summary then flags
     /// long-dead issues as "critical"). Scoping to this launch keeps the
-    /// report — and its summary — about what's actually happening now.
+    /// report, and its summary, about what's actually happening now.
     private static let sessionMarker = "applicationDidFinishLaunching"
 
     private static func submitLogs() -> HttpResponse {
@@ -1160,7 +1159,7 @@ enum Routes {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
         req.timeoutInterval = 15
-        // Sync via a semaphore — Swifter handlers are blocking; we
+        // Sync via a semaphore, Swifter handlers are blocking; we
         // want to surface success/failure to the React toast in one
         // round-trip, not fire-and-forget.
         let sem = DispatchSemaphore(value: 0)
@@ -1188,7 +1187,7 @@ enum Routes {
               ["free", "pro", "max"].contains(tier) else {
             return .badRequest(.text("tier must be free|pro|max"))
         }
-        // Pull the user's Supabase JWT — same source the transcription
+        // Pull the user's Supabase JWT, same source the transcription
         // proxies use. No JWT = no session = nothing to upgrade.
         let sem0 = DispatchSemaphore(value: 0)
         var jwt = ""
@@ -1262,7 +1261,7 @@ enum Routes {
     /// Installed apps for the Settings picker. Scans the usual app
     /// roots, reads each bundle's id + display name, dedups, and floats
     /// apps Corder recently saw on the mic to the top. Best-effort and
-    /// off-main (Swifter thread) — purely UI sugar, never blocks core.
+    /// off-main (Swifter thread), purely UI sugar, never blocks core.
     private static func installedAppsGet() -> HttpResponse {
         let fm = FileManager.default
         let roots = [
@@ -1307,8 +1306,8 @@ enum Routes {
         else { return .notFound }
         return autoreleasepool { () -> HttpResponse in
             // Rasterise to a fixed 64 px bitmap. (icon.tiffRepresentation
-            // hands back the full multi-resolution icon — up to 1024 px,
-            // ~1.4 MB each — far too heavy for a list of rows.)
+            // hands back the full multi-resolution icon, up to 1024 px,
+            // ~1.4 MB each, far too heavy for a list of rows.)
             let px = 64
             let icon = NSWorkspace.shared.icon(forFile: appURL.path)
             guard let rep = NSBitmapImageRep(
@@ -1332,7 +1331,7 @@ enum Routes {
         }
     }
 
-    /// Supported UI locale codes — keep in sync with `Web/src/i18n.ts` LANGS.
+    /// Supported UI locale codes, keep in sync with `Web/src/i18n.ts` LANGS.
     private static let supportedLocales: Set<String> = [
         "en", "uk", "ru", "de", "fr", "es", "pt", "it", "pl", "cs",
         "tr", "nl", "sv", "id", "vi", "ja", "ko", "zh", "hi", "ar",
@@ -1343,7 +1342,7 @@ enum Routes {
             let body = Data(req.body)
             let parsed = try JSONDecoder().decode(DTO.Settings.self, from: body)
             // Persist ANY supported UI locale (must match the frontend's
-            // LANGS list), not just ru/en — otherwise a German/French/etc.
+            // LANGS list), not just ru/en, otherwise a German/French/etc.
             // pick was silently dropped here and reset to English on reload.
             if let lang = parsed.language, Self.supportedLocales.contains(lang) {
                 UserDefaults.standard.set(lang, forKey: AppLanguage.key)
@@ -1363,7 +1362,7 @@ enum Routes {
                     atPath: (path as NSString).deletingLastPathComponent,
                     withIntermediateDirectories: true)
                 try? key.write(toFile: path, atomically: true, encoding: .utf8)
-                // Owner-only — it's a secret.
+                // Owner-only, it's a secret.
                 try? FileManager.default.setAttributes(
                     [.posixPermissions: 0o600], ofItemAtPath: path)
             }
@@ -1375,7 +1374,7 @@ enum Routes {
                 // Reflect it LIVE if a recording is on screen: show/hide the
                 // floating equalizer pill now instead of waiting for the next
                 // recording. Only for a real `.recording` (preroll is silent
-                // and never shows the pill). Hop to the main actor — Swifter
+                // and never shows the pill). Hop to the main actor, Swifter
                 // handlers run off it.
                 if case .recording = RecordingStateSnapshot.read() {
                     Task { @MainActor in
@@ -1393,7 +1392,6 @@ enum Routes {
             if let v = parsed.auto_chapters    { AppSettings.setAutoChapters(v) }
             if let v = parsed.launch_at_login  { AppSettings.setLaunchAtLogin(v) }
             if let v = parsed.telemetry        { AppSettings.setTelemetryEnabled(v) }
-            if let v = parsed.stats_enabled    { AppSettings.setStatsEnabled(v) }
             if let v = parsed.preroll          { AppSettings.setPrerollEnabled(v) }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
@@ -1441,7 +1439,7 @@ enum Routes {
             // Whisper Local variant override (Tiny / Base / Small /
             // Turbo). Stored separately from the provider so a user
             // can have provider=whisperLocal AND pick which model
-            // size to use. Unknown ids are silently ignored — same
+            // size to use. Unknown ids are silently ignored, same
             // pattern as `transcription_provider`.
             if let raw = parsed.whisper_local_variant,
                let v = LocalWhisperTranscriber.Variant(rawValue: raw) {
@@ -1451,12 +1449,12 @@ enum Routes {
             if let lang = parsed.transcription_language {
                 AppSettings.setTranscriptionLanguage(lang)
             }
-            // Upsell snooze map — opaque JSON on the native side, the
+            // Upsell snooze map, opaque JSON on the native side, the
             // frontend owns the schema. Empty string clears the snooze.
             if let snooze = parsed.upsell_snooze {
                 AppSettings.setUpsellSnooze(snooze)
             }
-            // Onboarding flag. Only `true` is meaningful as a payload —
+            // Onboarding flag. Only `true` is meaningful as a payload
             // we never want a stale client to silently revert "wizard
             // finished" back to false (would re-open the Welcome window
             // on the next launch and confuse the user). True flips the
@@ -1491,7 +1489,7 @@ enum Routes {
             return jsonResponse(currentSettings())
         }
         if LocalWhisperTranscriber.currentProgress(variant) != nil {
-            // Already downloading — let the existing task finish.
+            // Already downloading, let the existing task finish.
             return jsonResponse(currentSettings())
         }
         // Fire-and-forget on the main actor (the downloader is
@@ -1501,7 +1499,7 @@ enum Routes {
             do {
                 try await LocalWhisperTranscriber.downloadOnly(variant)
             } catch {
-                FileLogger.log("LocalWhisper: download \(variant.rawValue) failed — \(error)")
+                FileLogger.log("LocalWhisper: download \(variant.rawValue) failed, \(error)")
             }
         }
         return jsonResponse(currentSettings())
@@ -1516,7 +1514,7 @@ enum Routes {
         // or the model fails, the meeting flips back to `.failed` with
         // the PREVIOUS transcript still intact (the user already paid for
         // it). The new segments only replace the old ones once a run
-        // succeeds — the mapping step (`mapDualTrackTurns` etc.) clears +
+        // succeeds, the mapping step (`mapDualTrackTurns` etc.) clears +
         // inserts atomically right before writing the fresh result. The
         // TranscribingBanner now shows from status alone, not from an
         // empty segment list, so wiping early is no longer needed.
@@ -1540,7 +1538,7 @@ enum Routes {
 
     /// On-demand summary. Returns the cached `summary` if present;
     /// otherwise generates one from the transcript (blocking this
-    /// Swifter worker for the Gemini round-trip — same accepted pattern
+    /// Swifter worker for the Gemini round-trip, same accepted pattern
     /// as the Dropbox-hydrate path), stores it, and returns it.
     private static func summarize(id: String, repo: MeetingRepository, force: Bool = false) -> HttpResponse {
         guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
@@ -1550,7 +1548,7 @@ enum Routes {
            !cached.isEmpty,
            isStructuredMarkdown(cached) {
             // Pre-Granola summaries were plain prose without `###` /
-            // bullets — re-render those by falling through, so the new
+            // bullets, re-render those by falling through, so the new
             // format replaces the old one on first open of the tab.
             return jsonResponse(["summary": cached])
         }
@@ -1561,7 +1559,7 @@ enum Routes {
         // Summary/Chapters run through the Worker (Gemini), which needs a
         // Supabase JWT. A signed-OUT guest has none, so generation would fail
         // with a bare "generation failed" card (what a tester reported). Tell
-        // the frontend to show a "Sign in to generate" CTA instead — the
+        // the frontend to show a "Sign in to generate" CTA instead, the
         // feature is free, it just needs an account.
         guard AppSettings.isSignedIn else {
             return jsonResponse(["summary": "", "error": "sign_in_required"])
@@ -1592,7 +1590,7 @@ enum Routes {
         return jsonResponse(["summary": summary])
     }
 
-    /// On-demand chapters: same shape as `summarize` — cached value
+    /// On-demand chapters: same shape as `summarize`, cached value
     /// returned unless `force=true`, otherwise rebuilds via
     /// `GeminiChapters.generate(...)`, persists the JSON string into
     /// `meetings.chapters`, and returns it. Returns an
@@ -1639,7 +1637,7 @@ enum Routes {
 
     /// True iff the cached summary already uses the new Granola-style
     /// structured Markdown (`### Heading` + `- ` bullets). Pre-Granola
-    /// summaries are plain prose — let them re-generate on first open.
+    /// summaries are plain prose, let them re-generate on first open.
     private static func isStructuredMarkdown(_ s: String) -> Bool {
         // Either an `### ` heading anywhere or at least one bullet line
         // qualifies. We don't require both because a very short meeting
@@ -1880,11 +1878,11 @@ enum Routes {
             let contentType = (kind == .video) ? "video/quicktime" : "audio/wav"
 
             // Audio resolution order:
-            //   1. The post-mix audio.wav inside the meeting dir — this is
+            //   1. The post-mix audio.wav inside the meeting dir, this is
             //      what AudioMixer produces from mic+system, and the only
             //      local file that contains BOTH the user and the
             //      interlocutor. Always prefer it when it's on disk.
-            //   2. The DB-stored audioPath (usually mic.wav) — fallback for
+            //   2. The DB-stored audioPath (usually mic.wav), fallback for
             //      meetings where mix.wav is gone but mic.wav is still around
             //      (legacy rows pre-dual-track, or capture races).
             //   3. Neither exists → fall through to Dropbox hydrate below,
@@ -1906,9 +1904,9 @@ enum Routes {
                     AudioMixer.rewriteFloat32ToInt16IfNeeded(at: mixURL)
                     url = mixURL
                 } else {
-                    // No playback mix on disk. Before serving mic.wav ALONE —
+                    // No playback mix on disk. Before serving mic.wav ALONE
                     // which silently drops the far end even though system.wav
-                    // captured it (the mix-production-threw / never-ran case) —
+                    // captured it (the mix-production-threw / never-ran case)
                     // BUILD the mix on demand now (mic-only is fine; the tap is
                     // preferred when present). `produceWhisperInput` writes
                     // 16-bit PCM. Blocks this one Swifter worker (the same
@@ -1936,7 +1934,7 @@ enum Routes {
                         FileLogger.log("serveMedia: built playback mix on demand for \(id)")
                         url = mixURL
                     } else {
-                        // Couldn't build one (no sources / corrupt) — serve the
+                        // Couldn't build one (no sources / corrupt), serve the
                         // raw mic track, or fall through to Dropbox hydrate.
                         let direct = URL(fileURLWithPath: m.audioPath)
                         url = fm.fileExists(atPath: direct.path) ? direct : mixURL
@@ -1947,7 +1945,7 @@ enum Routes {
             // Cloud cache miss: file was archived to Dropbox and the local
             // copy got deleted. Pull it back to the canonical local path
             // (one-time blocking download), then continue down the regular
-            // local-file branch — including Range support. Subsequent
+            // local-file branch, including Range support. Subsequent
             // scrubbing requests are served straight from disk without
             // re-blocking a Swifter worker.
             if !FileManager.default.fileExists(atPath: url.path), let remote = dropboxRemote {
@@ -2055,7 +2053,7 @@ enum Routes {
     }
 
     /// Build (or reuse a cached) export via MediaExporter, then STREAM it
-    /// to the client in chunks. The video+audio mux can be ~1.6 GB —
+    /// to the client in chunks. The video+audio mux can be ~1.6 GB
     /// loading that into memory with `Data(contentsOf:)` the way the
     /// playback path does would spike RAM by the whole file size, so this
     /// path reads a sliding window off a FileHandle and writes each chunk
@@ -2109,7 +2107,7 @@ enum Routes {
     /// canonical local file has been archived and deleted. Blocks the
     /// calling Swifter worker for the duration of the download (which can
     /// be tens of seconds for an hour-long meeting), but only on the very
-    /// first request — once the file lands at `localURL` every subsequent
+    /// first request, once the file lands at `localURL` every subsequent
     /// request, including Range scrubs, is served straight from disk
     /// without ever touching this code path again.
     ///
@@ -2137,8 +2135,8 @@ enum Routes {
     /// Pull a meeting's mix audio from Supabase Storage to the local
     /// `audio.wav` path. The "cross-device cache miss" case: Mac B
     /// signed in, pulled metadata, but has no local recording. The
-    /// upload path stores objects at `<user_id>/<meeting_id>/mix.wav`
-    /// — we ask the storage client for that key, write it to disk,
+    /// upload path stores objects at `<user_id>/<meeting_id>/mix.wav`,
+    /// we ask the storage client for that key, write it to disk,
     /// then the regular Range branch serves the file. Returns false
     /// on any failure (missing object, not signed in, network).
     private static func hydrateSupabaseAudio(meetingId: String, localURL: URL) -> Bool {
@@ -2154,7 +2152,7 @@ enum Routes {
                 try FileManager.default.createDirectory(
                     at: localURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true)
-                // Lowercase UUID — Postgres `auth.uid()::text` returns
+                // Lowercase UUID, Postgres `auth.uid()::text` returns
                 // lowercase, and our Storage RLS policy compares
                 // `split_part(name, '/', 1)` against it strictly.
                 // Swift's default `uuidString` is UPPERCASE → mismatch
@@ -2167,7 +2165,7 @@ enum Routes {
                 ok = true
                 FileLogger.log("hydrateSupabaseAudio: pulled \(key) (\(data.count) bytes)")
             } catch {
-                FileLogger.log("hydrateSupabaseAudio: \(meetingId) failed — \(error)")
+                FileLogger.log("hydrateSupabaseAudio: \(meetingId) failed, \(error)")
             }
         }
         semaphore.wait()

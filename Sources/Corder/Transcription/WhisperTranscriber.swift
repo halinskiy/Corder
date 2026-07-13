@@ -9,13 +9,13 @@ import AVFoundation
 /// (forced alignment, diarize-first re-labeling, mapping) is unchanged.
 ///
 /// Why two endpoints depending on `mode`:
-///   • `.single` uses `gpt-4o-mini-transcribe` — cheap, fast, no
+///   • `.single` uses `gpt-4o-mini-transcribe`, cheap, fast, no
 ///     diarization. Mic track + the in-person `.diarize` system case
 ///     (where on-device FluidAudio decides WHO) both ride this path.
 ///     The function still accepts `.diarize` to mirror the Gemini API
 ///     surface; in the current pipeline FluidAudio handles WHO, so the
 ///     pipeline always asks for `.single` regardless of provider.
-///   • `.diarize` uses `gpt-4o-transcribe-diarize` — same endpoint, same
+///   • `.diarize` uses `gpt-4o-transcribe-diarize`, same endpoint, same
 ///     `verbose_json`, but the model emits speaker labels per segment.
 ///     Kept here as a forward-compatible option for a future "no
 ///     on-device diarizer" build.
@@ -42,8 +42,8 @@ enum WhisperTranscriber {
     /// verbose_json `language` field), weighted by the turns that chunk
     /// produced. The pipeline sets one per track, reads the majority to find
     /// the meeting language, and spots per-chunk drift (a few chunks misheard
-    /// as English and translated). Reliable where NLLanguageRecognizer is not
-    /// — NL misreads Cyrillic (it calls Russian "Kazakh" with full confidence).
+    /// as English and translated). Reliable where NLLanguageRecognizer is not,
+    /// NL misreads Cyrillic (it calls Russian "Kazakh" with full confidence).
     final class LanguageTally: @unchecked Sendable {
         private let lock = NSLock()
         private var counts: [String: Int] = [:]
@@ -54,7 +54,7 @@ enum WhisperTranscriber {
         }
         /// The language of the most recently added chunk. A track's chunk
         /// loop is sequential, so right after a chunk transcribes this is
-        /// THAT chunk's language — used to persist it into the resume cache.
+        /// THAT chunk's language, used to persist it into the resume cache.
         var lastLanguage: String { lock.lock(); defer { lock.unlock() }; return _last }
         struct Snapshot { let counts: [String: Int]; let dominantName: String? }
         func snapshot() -> Snapshot {
@@ -103,7 +103,7 @@ enum WhisperTranscriber {
     /// model, followed by gpt-4o-mini polish). `groq` swaps in Groq's
     /// hosted Whisper-large-v3-turbo at ~10× lower per-minute cost; the
     /// response shape is identical (OpenAI-compatible verbose_json),
-    /// so chunking / VAD / parse logic stays unchanged — only the
+    /// so chunking / VAD / parse logic stays unchanged, only the
     /// endpoint URL and model name flip.
     enum Backend {
         case openai
@@ -187,16 +187,16 @@ enum WhisperTranscriber {
     /// audio chunks. That trivially fires 4-6 simultaneous requests at
     /// OpenAI, which on Tier 1 instantly blows the per-minute audio
     /// TPM cap and gets back `insufficient_quota`. Single-flight here
-    /// is the cheapest correct fix — we trade a few seconds of wall
+    /// is the cheapest correct fix, we trade a few seconds of wall
     /// time for never tripping the limiter. Cleanup after Tier 2
     /// (50,000 → 500,000 TPM): bump the value or remove the gate.
     private static let inflight = WhisperInflightLimiter(maxConcurrent: 1)
     /// `whisper-1` is the only OpenAI ASR that returns
     /// `verbose_json` (= segment-level timestamps we need to project
     /// turns onto the original timeline). The newer `gpt-4o-transcribe`
-    /// family only emits `json` / `text`, no timestamps — fine for a
+    /// family only emits `json` / `text`, no timestamps, fine for a
     /// one-shot transcript but useless for our dual-track flow. Cost
-    /// trade-off: $0.006/min vs $0.003/min — still ~60× cheaper than
+    /// trade-off: $0.006/min vs $0.003/min, still ~60× cheaper than
     /// Gemini, so the upgrade is worth the timestamps.
     private static let modelSingle  = "whisper-1"
     /// Diarization-aware variant. Kept distinct so a future "no on-device
@@ -220,8 +220,8 @@ enum WhisperTranscriber {
     /// (compressed) timeline, so when the connection drops mid-run the
     /// transcript keeps going from exactly where the cloud left off and
     /// later chunks transparently return to the cloud once it's back.
-    /// We require the model to be ALREADY downloaded — the network just
-    /// died, so we can't fetch a missing model — otherwise we rethrow
+    /// We require the model to be ALREADY downloaded, the network just
+    /// died, so we can't fetch a missing model, otherwise we rethrow
     /// the network error and the meeting fails as before.
     static func transcribe(audioURL: URL,
                            mode: WMode,
@@ -231,7 +231,7 @@ enum WhisperTranscriber {
                            onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
         // Signed-in users go through the Worker proxy (server-side
         // OpenAI key). Only when there's no Supabase session do we
-        // require the legacy local key — keeps `swift test` / dev
+        // require the legacy local key, keeps `swift test` / dev
         // shells running without a sign-in.
         let signedIn = await Self.hasSupabaseSession()
         let key = apiKey ?? ""
@@ -276,7 +276,7 @@ enum WhisperTranscriber {
                                       Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count))
             } catch {
                 try? FileManager.default.removeItem(at: dir)
-                FileLogger.log("WhisperTranscriber: VAD concat failed (\(error)) — falling back to original")
+                FileLogger.log("WhisperTranscriber: VAD concat failed (\(error)), falling back to original")
                 workURL = audioURL
                 projection = nil
                 tmpDir = nil
@@ -300,7 +300,7 @@ enum WhisperTranscriber {
                                                             localFallbackVariant: localFallbackVariant,
                                                             onProgress: onProgress)
         } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
-            throw WhisperError.network("No internet — try again when you're online.")
+            throw WhisperError.network("No internet, try again when you're online.")
         }
 
         // Project compressed timestamps back onto the original timeline
@@ -356,7 +356,7 @@ enum WhisperTranscriber {
 
         let fitsInOnePost = fileSize <= maxBytesPerChunk && durationSec <= maxSecondsPerChunk
         if fitsInOnePost {
-            // One upload — no per-chunk granularity, so creep to a holding
+            // One upload, no per-chunk granularity, so creep to a holding
             // value while the single request is in flight (the banner still
             // reads as "moving"), then complete on return.
             onProgress?(0.15)
@@ -375,7 +375,7 @@ enum WhisperTranscriber {
             }
         }
 
-        FileLogger.log(String(format: "WhisperTranscriber: %ds / %.1f MB > limits — slicing into ≤%.0fs chunks",
+        FileLogger.log(String(format: "WhisperTranscriber: %ds / %.1f MB > limits, slicing into ≤%.0fs chunks",
                               Int(durationSec),
                               Double(fileSize) / (1024 * 1024),
                               perChunkSec))
@@ -396,7 +396,7 @@ enum WhisperTranscriber {
         var all: [GeminiTranscriber.Turn] = []
         all.reserveCapacity(chunks.count * 100)
         // Provider/mode/language tag for the resume cache so a re-transcribe
-        // with a different provider — OR a language-forced re-pass — never
+        // with a different provider, OR a language-forced re-pass, never
         // replays the earlier (wrong-language) chunk text. Without the lang
         // component, forcing a language would hit the stale auto-detected
         // chunks and silently no-op the far-end rescue.
@@ -418,7 +418,7 @@ enum WhisperTranscriber {
             // deterministic re-slice on the retry lines up byte-for-byte.
             let cacheKey = ChunkTranscriptCache.key(forChunkAt: chunk.url, tag: cacheTag)
             if let key = cacheKey, let cached = ChunkTranscriptCache.get(key) {
-                FileLogger.log("WhisperTranscriber: chunk \(i + 1)/\(chunks.count) — resume cache hit, skipping upload")
+                FileLogger.log("WhisperTranscriber: chunk \(i + 1)/\(chunks.count), resume cache hit, skipping upload")
                 // Feed the cached chunk's language into the tally so the
                 // drift guard still works when a run resumes over chunks it
                 // already transcribed (parseVerboseJSON isn't called here).
@@ -438,7 +438,7 @@ enum WhisperTranscriber {
                                                    initialPrompt: initialPrompt,
                                                    backend: backend)
             } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
-                // Connection dropped on THIS chunk — finish it on-device
+                // Connection dropped on THIS chunk, finish it on-device
                 // and carry on. The next chunk retries the cloud first,
                 // so the run drifts back to cloud the moment it returns.
                 guard let local = try await localChunkFallback(
@@ -448,7 +448,7 @@ enum WhisperTranscriber {
                 turns = local
                 fromLocalFallback = true
             }
-            // Persist immediately so a kill AFTER this chunk resumes here —
+            // Persist immediately so a kill AFTER this chunk resumes here
             // but ONLY cloud results. A locally-recovered chunk is cached
             // under the CLOUD key (cacheTag is backend:mode), so a later
             // all-cloud run would replay the lower-quality on-device text
@@ -469,8 +469,8 @@ enum WhisperTranscriber {
     }
 
     /// On-device recovery for ONE chunk whose cloud call hit a network
-    /// error. Returns `nil` — telling the caller to rethrow the network
-    /// error and fail as before — when recovery is impossible: no
+    /// error. Returns `nil`, telling the caller to rethrow the network
+    /// error and fail as before, when recovery is impossible: no
     /// variant requested, not Apple Silicon, or the model isn't already
     /// on disk (the connection just dropped, so we can't download it).
     /// On success the chunk-local timestamps are shifted by `offsetMs`
@@ -484,13 +484,13 @@ enum WhisperTranscriber {
         guard LocalWhisperTranscriber.isAvailable() else { return nil }
         guard LocalWhisperTranscriber.isModelDownloaded(variant) else {
             FileLogger.log("WhisperTranscriber: \(label) network-failed but local model "
-                + "\(variant.rawValue) not on disk — can't fall back offline")
+                + "\(variant.rawValue) not on disk, can't fall back offline")
             return nil
         }
         FileLogger.log("WhisperTranscriber: \(label) cloud network-failed → on-device fallback (\(variant.rawValue))")
         // Graceful: if on-device init/transcribe itself fails (e.g. the
         // tokenizer was never cached and we can't fetch it offline), we
-        // return nil so the caller rethrows the ORIGINAL network error —
+        // return nil so the caller rethrows the ORIGINAL network error
         // the meeting fails exactly as it would have without this path,
         // never worse, and never with a confusing local-model error.
         let local: [GeminiTranscriber.Turn]
@@ -501,7 +501,7 @@ enum WhisperTranscriber {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            FileLogger.log("WhisperTranscriber: \(label) on-device fallback failed (\(error)) — rethrowing network error")
+            FileLogger.log("WhisperTranscriber: \(label) on-device fallback failed (\(error)), rethrowing network error")
             return nil
         }
         guard offsetMs != 0 else { return local }
@@ -543,7 +543,7 @@ enum WhisperTranscriber {
                                                    mode: WMode,
                                                    initialPrompt: String?,
                                                    backend: Backend) async throws -> [GeminiTranscriber.Turn] {
-        // Groq exposes only one Whisper variant per request — the
+        // Groq exposes only one Whisper variant per request, the
         // diarize-aware OpenAI endpoint doesn't exist there, so we
         // pin the model by backend rather than by mode. The pipeline
         // currently always passes `.single` regardless of provider
@@ -553,7 +553,7 @@ enum WhisperTranscriber {
             : backend.modelName
 
         // Resolve routing: if we have an active Supabase session we
-        // ship the audio to our Cloudflare Worker — it holds the
+        // ship the audio to our Cloudflare Worker, it holds the
         // OpenAI / Groq key server-side and gates by `app_metadata.tier`.
         // Otherwise we hit OpenAI directly with the user's local
         // key (the legacy path; still used during sign-out / dev).
@@ -565,7 +565,7 @@ enum WhisperTranscriber {
         req.setValue(route.authHeader, forHTTPHeaderField: "Authorization")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         // Report this chunk's audio length so the Worker can meter monthly
-        // cloud usage per tier. Best-effort: 0 means "don't count" — the
+        // cloud usage per tier. Best-effort: 0 means "don't count", the
         // server fails open and never blocks on a missing/zero value.
         let chunkSec = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
         if chunkSec > 0 {
@@ -648,7 +648,7 @@ enum WhisperTranscriber {
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             let bodyText = String(data: data, encoding: .utf8) ?? ""
-            FileLogger.log("WhisperTranscriber: HTTP \(status) — \(bodyText.prefix(300))")
+            FileLogger.log("WhisperTranscriber: HTTP \(status), \(bodyText.prefix(300))")
             // Worker's tier-gate (403 + "tier required") is a known
             // expected condition for free-tier users who somehow ended
             // up with a cloud-provider preference (legacy account
@@ -706,7 +706,7 @@ enum WhisperTranscriber {
                !text.isEmpty {
                 let durationSec = (json["duration"] as? Double) ?? 0
                 let endMs = Int64(durationSec * 1000)
-                FileLogger.log("WhisperTranscriber: response had no segments — collapsing to one turn")
+                FileLogger.log("WhisperTranscriber: response had no segments, collapsing to one turn")
                 languageTally?.add(detectedLang, weight: 1)
                 let label = (mode == .single) ? "user" : "speaker-1"
                 return [.init(speakerLabel: label, startMs: 0, endMs: endMs, text: text)]
@@ -822,19 +822,19 @@ enum WhisperTranscriber {
         guard let h = http as? HTTPURLResponse else { return }
         let body = String(data: data, encoding: .utf8) ?? ""
         if h.statusCode == 402 {
-            FileLogger.log("WhisperTranscriber: 402 body — \(body.prefix(500))")
+            FileLogger.log("WhisperTranscriber: 402 body, \(body.prefix(500))")
             throw WhisperError.quotaOrBilling("OpenAI quota exhausted (402). Top up the API project's billing.")
         }
-        // Strict check — only treat body as billing when it carries the
+        // Strict check, only treat body as billing when it carries the
         // OpenAI-defined error code "insufficient_quota". The previous
         // loose `body.contains(...)` matched help-text references to
         // the same string in unrelated errors.
         if isInsufficientQuotaBody(body) {
-            FileLogger.log("WhisperTranscriber: insufficient_quota — \(body.prefix(500))")
+            FileLogger.log("WhisperTranscriber: insufficient_quota, \(body.prefix(500))")
             throw WhisperError.quotaOrBilling("OpenAI quota exhausted. Top up the API project's billing.")
         }
         if h.statusCode == 401 {
-            FileLogger.log("WhisperTranscriber: 401 body — \(body.prefix(500))")
+            FileLogger.log("WhisperTranscriber: 401 body, \(body.prefix(500))")
             throw WhisperError.quotaOrBilling("OpenAI API key rejected (401). Check ~/.config/corder/openai_key.")
         }
     }
@@ -854,7 +854,7 @@ enum WhisperTranscriber {
     // MARK: - API key
 
     /// Legacy `~/.config/corder/openai_key` and `$OPENAI_API_KEY`
-    /// reads are gone — production goes through the Cloudflare
+    /// reads are gone, production goes through the Cloudflare
     /// Worker proxy (`/transcribe/whisper`) with the user's Supabase
     /// JWT. Returning nil here funnels every direct-to-OpenAI code
     /// path into the existing noKey fallback that re-routes the run
@@ -876,7 +876,7 @@ enum WhisperTranscriber {
             return Route(endpoint: backend.proxyPath, authHeader: "Bearer \(jwt)")
         }
         // No-session fallback: only `openai` keeps a direct path with a
-        // user-supplied key. `groq` always goes through the worker —
+        // user-supplied key. `groq` always goes through the worker
         // we don't ship a local Groq-key field on purpose (key hygiene).
         return Route(endpoint: backend.directEndpoint, authHeader: "Bearer \(apiKey)")
     }
@@ -913,7 +913,7 @@ actor WhisperInflightLimiter {
         // Release the permit STRUCTURALLY (awaited), not in a detached
         // `Task`. The old `defer { Task { … } }` released asynchronously
         // after `run` returned, so a back-to-back caller could reach
-        // `wait()` before the prior `signal()` Task was scheduled — briefly
+        // `wait()` before the prior `signal()` Task was scheduled, briefly
         // exceeding maxConcurrent=1, the exact TPM gate this exists to hold.
         do {
             let result = try await work()

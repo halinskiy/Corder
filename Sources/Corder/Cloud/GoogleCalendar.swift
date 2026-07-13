@@ -6,7 +6,7 @@ import AppKit
 /// Google login (email/profile) is untouched, so existing users never see
 /// the calendar consent. Only when the user clicks "Connect calendar" do
 /// we run a SECOND, incremental OAuth that adds `calendar.readonly` to the
-/// session — and only those users see the (currently unverified) calendar
+/// session, and only those users see the (currently unverified) calendar
 /// consent screen.
 ///
 /// Flow:
@@ -14,14 +14,14 @@ import AppKit
 ///     calendar scope, with the same loopback `/auth/callback` redirect
 ///     the sign-in uses. Sets `pendingConnect`.
 ///  2. The browser round-trips to `/auth/callback`; `authCallback`
-///     calls `auth.session(from:)`, then — because `pendingConnect` is
-///     set — invokes `finishConnect()`.
+///     calls `auth.session(from:)`, then, because `pendingConnect` is
+///     set, invokes `finishConnect()`.
 ///  3. `finishConnect()` reads the now calendar-scoped `providerToken`
 ///     off the session, fetches the upcoming events, and caches them on
 ///     disk (account-scoped). `/api/calendar/upcoming` serves that cache.
 ///
 /// Token refresh (Google access tokens expire in ~1h) needs the Google
-/// client secret, which lives on the Worker — so for now the events are
+/// client secret, which lives on the Worker, so for now the events are
 /// fetched at connect time and cached; a stale connection is refreshed by
 /// the user reconnecting. Proper background refresh is a Worker follow-up.
 @MainActor
@@ -73,15 +73,14 @@ enum GoogleCalendar {
             // so a much-later ordinary sign-in callback can't be mistaken
             // for this calendar connect. The window must be LONGER than a real
             // Google consent flow (account chooser + sign-in + 2FA + the
-            // unverified-app warning click-through routinely exceed 5 min) —
-            // otherwise the timer disarms the identity-mismatch rollback in
+            // unverified-app warning click-through routinely exceed 5 min), // otherwise the timer disarms the identity-mismatch rollback in
             // finishConnectIfPending BEFORE the genuine callback lands, and a
             // connect that resolved to a different account silently swaps the
             // Corder identity. 15 min covers realistic slow consent; the only
             // residual is a callback later than that, which falls back to
             // being treated as an ordinary sign-in. (Ideal future fix: bind a
             // random nonce into the redirect and verify it in authCallback so
-            // the connect callback is identified regardless of timing — held
+            // the connect callback is identified regardless of timing, held
             // off here to avoid Supabase redirect-allowlist churn on a feature
             // still behind Google's unverified-consent screen.)
             Task { @MainActor in
@@ -95,7 +94,7 @@ enum GoogleCalendar {
             FileLogger.log("GoogleCalendar: opening incremental calendar OAuth (hint=\(signedInEmail ?? "none"))")
             NSWorkspace.shared.open(url)
         } catch {
-            FileLogger.log("GoogleCalendar: failed to build connect URL — \(error)")
+            FileLogger.log("GoogleCalendar: failed to build connect URL, \(error)")
         }
     }
 
@@ -115,7 +114,7 @@ enum GoogleCalendar {
         // Identity guard: `session(from:)` in authCallback ALREADY swapped the
         // live session to whatever account the browser resolved to. If that's
         // a DIFFERENT account than the one we connected as (or ANY account
-        // when none was signed in), the swap must be ROLLED BACK — otherwise a
+        // when none was signed in), the swap must be ROLLED BACK, otherwise a
         // calendar connect silently changes the Corder identity (wrong
         // account-id sandbox, wrong JWT/tier). Only logging + returning (the
         // old behaviour) left the wrong identity in place.
@@ -126,7 +125,7 @@ enum GoogleCalendar {
             return expectedEmail.lowercased() != nowEmail.lowercased()
         }()
         if identityChanged {
-            FileLogger.log("GoogleCalendar: connect resolved to a different account (was \(expectedEmail ?? "none"), now \(nowEmail ?? "none")) — reverting session, not caching")
+            FileLogger.log("GoogleCalendar: connect resolved to a different account (was \(expectedEmail ?? "none"), now \(nowEmail ?? "none")), reverting session, not caching")
             do {
                 if let at = priorAccessToken, let rt = priorRefreshToken {
                     _ = try await SupabaseClientHolder.shared.auth.setSession(accessToken: at, refreshToken: rt)
@@ -134,7 +133,7 @@ enum GoogleCalendar {
                     try await SupabaseClientHolder.shared.auth.signOut()
                 }
             } catch {
-                FileLogger.log("GoogleCalendar: failed to revert session after connect mismatch — \(error)")
+                FileLogger.log("GoogleCalendar: failed to revert session after connect mismatch, \(error)")
             }
             return
         }
@@ -153,7 +152,7 @@ enum GoogleCalendar {
         } catch {
             let code = (error as NSError).code
             let authFailed = (code == 401 || code == 403)
-            FileLogger.log("GoogleCalendar: event fetch failed (code \(code), authFailed=\(authFailed)) — \(error)")
+            FileLogger.log("GoogleCalendar: event fetch failed (code \(code), authFailed=\(authFailed)), \(error)")
             writeCache(connected: !authFailed, events: [], refreshToken: authFailed ? nil : refresh)
         }
     }
@@ -169,7 +168,7 @@ enum GoogleCalendar {
               let refresh = cache.refreshToken, !refresh.isEmpty else { return }
         if Date().timeIntervalSince1970 - cache.fetchedAt < maxAgeSeconds { return }
         guard let access = await exchangeRefreshToken(refresh) else {
-            FileLogger.log("GoogleCalendar: token refresh failed — keeping cached events")
+            FileLogger.log("GoogleCalendar: token refresh failed, keeping cached events")
             return
         }
         do {
@@ -177,7 +176,7 @@ enum GoogleCalendar {
             writeCache(connected: true, events: events, refreshToken: refresh)
             FileLogger.log("GoogleCalendar: refreshed feed, \(events.count) events")
         } catch {
-            FileLogger.log("GoogleCalendar: refetch after token refresh failed — \(error)")
+            FileLogger.log("GoogleCalendar: refetch after token refresh failed, \(error)")
         }
     }
 

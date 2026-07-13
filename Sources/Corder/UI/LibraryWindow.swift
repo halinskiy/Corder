@@ -20,8 +20,8 @@ import WebKit
 /// returns `nil` whenever the point falls inside one of the live
 /// element rects the page reports via the `headerHits` JS bridge. Those
 /// events then propagate to the underlying WKWebView, exactly as if the
-/// overlay wasn't there. Drag still works in every other pixel — over
-/// breadcrumb text, between toolbar icons, above/below them — because
+/// overlay wasn't there. Drag still works in every other pixel, over
+/// breadcrumb text, between toolbar icons, above/below them, because
 /// hover-less geometry is the only thing the overlay covers.
 ///
 /// This replaces the earlier "L-shape + 28 pt button band carve-out"
@@ -109,7 +109,7 @@ private final class HeaderDragView: NSView {
     private func forwardClick(at windowPoint: NSPoint) {
         guard let wv = webView else { return }
         // WKWebView reports `isFlipped == true`, so `convert(_:from: nil)`
-        // already yields CSS coordinates (top-left origin, Y grows down) —
+        // already yields CSS coordinates (top-left origin, Y grows down)
         // the SAME convention `headerHits` uses to build `interactiveRects`.
         // The old code then did `bounds.height - y`, an extra flip that sent
         // a header click to the bottom of the page (landing on a sidebar
@@ -121,7 +121,7 @@ private final class HeaderDragView: NSView {
         // target actually lives inside `.main-header`. The drag overlay only
         // ever covers the header, so a click that resolves to anything below
         // it (sidebar row, transcript) is a coordinate-mapping miss and must
-        // NOT fire — otherwise an empty-header click could navigate sessions.
+        // NOT fire, otherwise an empty-header click could navigate sessions.
         let js = """
         (function() {
           var x = \(cssX), y = \(cssY);
@@ -152,7 +152,7 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
     weak var window: NSWindow?
     /// Toggles the inline recording blob. The blob is a native NSView
     /// stacked above the WKWebView, so a web-side fullscreen overlay
-    /// (the video lightbox) can't paint over it — it would otherwise
+    /// (the video lightbox) can't paint over it, it would otherwise
     /// float on top of the dimmed video. The page calls
     /// `corderSetBlobVisible(false)` on open and `(true)` on close.
     var onBlobVisible: ((Bool) -> Void)?
@@ -195,7 +195,7 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
                 return wv.convert(cssRect, to: nil)
             }
             let rects = interactive.compactMap(toWindowRect)
-            // Diagnostic log removed — this message used to fire on every
+            // Diagnostic log removed, this message used to fire on every
             // header DOM mutation (theme switch, route change, tooltip
             // open), filling `/tmp/corder.log` with hundreds of entries
             // per minute. The bridge itself stays; just don't narrate it.
@@ -312,7 +312,7 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
 }
 
 /// Turns navigations to Corder's file endpoints into real downloads.
-/// WKWebView never honours `<a download>` on its own — without a
+/// WKWebView never honours `<a download>` on its own, without a
 /// navigation/download delegate the click just navigates the web view
 /// (text endpoints render raw, binary ones do nothing), which is why
 /// "Transcript as Markdown" (and every other download row) saved
@@ -320,7 +320,7 @@ private final class WebBridgeHandler: NSObject, WKScriptMessageHandler {
 /// through a standard NSSavePanel.
 /// Routes WKWebView's JavaScript dialogs (`alert`, `confirm`,
 /// `prompt`) to native NSAlerts attached to the library window.
-/// Without a UIDelegate, WKWebView silently swallows these calls —
+/// Without a UIDelegate, WKWebView silently swallows these calls
 /// `confirm()` always returns false, which is what broke the
 /// archive's "Delete forever" button (the user's OK click never
 /// reached the JS handler, so nothing was deleted).
@@ -397,7 +397,7 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
     private let maxReloads = 6
 
     /// True once the automatic retry budget is exhausted and we've stopped
-    /// trying — the Library is now BLANK. Cleared on the next successful load.
+    /// trying, the Library is now BLANK. Cleared on the next successful load.
     /// The window controller re-arms a retry when the window regains focus
     /// (see `windowDidChangeOcclusionState` → `reattemptIfGaveUp`), so a
     /// transient startup timeout can never strand the UI blank until relaunch.
@@ -409,15 +409,15 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard reloadAttempts < maxReloads else {
             gaveUp = true
-            FileLogger.log("LibraryWindow: WKWebView content process kept terminating (\(reloadAttempts)x) — giving up (will retry on window focus)")
+            FileLogger.log("LibraryWindow: WKWebView content process kept terminating (\(reloadAttempts)x), giving up (will retry on window focus)")
             return
         }
         reloadAttempts += 1
-        FileLogger.log("LibraryWindow: WKWebView content process terminated — reloading (attempt \(reloadAttempts))")
+        FileLogger.log("LibraryWindow: WKWebView content process terminated, reloading (attempt \(reloadAttempts))")
         webView.reload()
     }
 
-    /// Provisional navigation failed — typically the embedded server hadn't
+    /// Provisional navigation failed, typically the embedded server hadn't
     /// finished binding when the window first loaded, or its Swifter workers
     /// were briefly hogged by a blocking export/transcribe so the page load
     /// timed out. Bounded retry with linear backoff so a slow bind gets
@@ -425,16 +425,16 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard reloadAttempts < maxReloads else {
             gaveUp = true
-            FileLogger.log("LibraryWindow: provisional navigation kept failing (\(reloadAttempts)x) — giving up (will retry on window focus)")
+            FileLogger.log("LibraryWindow: provisional navigation kept failing (\(reloadAttempts)x), giving up (will retry on window focus)")
             return
         }
         reloadAttempts += 1
-        FileLogger.log("LibraryWindow: provisional navigation failed (\(error.localizedDescription)) — retrying (attempt \(reloadAttempts))")
+        FileLogger.log("LibraryWindow: provisional navigation failed (\(error.localizedDescription)), retrying (attempt \(reloadAttempts))")
         let delay = 0.5 * Double(reloadAttempts)   // 0.5s, 1.0s, 1.5s …
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { webView.reload() }
     }
 
-    /// A load succeeded — refresh the reload budget for any FUTURE crash.
+    /// A load succeeded, refresh the reload budget for any FUTURE crash.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         reloadAttempts = 0
         gaveUp = false
@@ -442,14 +442,14 @@ private final class WebDownloadDelegate: NSObject, WKNavigationDelegate, WKDownl
 
     /// Called when the Library window regains visibility. If the automatic
     /// retry budget was already exhausted (window is BLANK), take a fresh
-    /// budget and reload — the server that was busy at launch has almost
+    /// budget and reload, the server that was busy at launch has almost
     /// certainly recovered by the time the user looks at the window again.
     /// No-op unless we'd actually given up, so normal focus changes are free.
     func reattemptIfGaveUp(_ webView: WKWebView) {
         guard gaveUp else { return }
         gaveUp = false
         reloadAttempts = 0
-        FileLogger.log("LibraryWindow: window refocused while blank — reloading WKWebView")
+        FileLogger.log("LibraryWindow: window refocused while blank, reloading WKWebView")
         webView.reload()
     }
 
@@ -575,7 +575,7 @@ final class LibraryWindow: NSWindowController {
         // Needed so the inline HUDHostingView (the blob in the bottom-
         // right corner) receives `mouseMoved` events. Without this,
         // AppKit silently drops them at the window level and our
-        // cursor-update path on the blob never fires — leaving the
+        // cursor-update path on the blob never fires, leaving the
         // pointer stuck on the arrow even when SwiftUI hover registers.
         win.acceptsMouseMovedEvents = true
         win.center()
@@ -588,7 +588,7 @@ final class LibraryWindow: NSWindowController {
 
         // Bridge: page can post {copy, openExternal, themeColor,
         // blobVisible} messages to native. The old "drag" channel was
-        // removed — the header is fully native-draggable via
+        // removed, the header is fully native-draggable via
         // `HeaderDragView` now, no async JS round-trip needed.
         let handler = WebBridgeHandler(window: win)
         cfg.userContentController.add(handler, name: "themeColor")
@@ -615,7 +615,7 @@ final class LibraryWindow: NSWindowController {
             var hRect = header.getBoundingClientRect();
             // Anything the user might want to click natively. We do
             // NOT include `.breadcrumb-rename`: it's draggable AND
-            // click-to-rename — the native overlay forwards the click
+            // click-to-rename, the native overlay forwards the click
             // via elementFromPoint when there's no drag movement.
             // ALSO the sidebar search row: it sits in the same top strip the
             // drag overlay covers (full window width), so without reporting its
@@ -702,7 +702,7 @@ final class LibraryWindow: NSWindowController {
           // Cmd+C on a text selection: WKWebView in our config doesn't always
           // honour the system shortcut, so we listen ourselves and copy the
           // selection through the native bridge. We must preventDefault when we
-          // handle it — otherwise AppKit looks for a `copy:` first responder,
+          // handle it, otherwise AppKit looks for a `copy:` first responder,
           // doesn't find one (we have no Edit menu), and beeps.
           document.addEventListener('keydown', function(e) {
             if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
@@ -734,7 +734,7 @@ final class LibraryWindow: NSWindowController {
         let dl = WebDownloadDelegate(window: win)
         wv.navigationDelegate = dl
         // `window.confirm()` / `window.alert()` from the JS side are
-        // no-ops in WKWebView unless we provide a UIDelegate — `confirm`
+        // no-ops in WKWebView unless we provide a UIDelegate, `confirm`
         // silently returns `false`, which is why the Archive's
         // "Delete forever" button looked dead. UIDelegate translates
         // them into native NSAlerts and feeds the user's choice back.
@@ -748,14 +748,14 @@ final class LibraryWindow: NSWindowController {
         // Single full-width native overlay across the React
         // `.main-header` band. `hitTest` returns nil when the point
         // lands inside one of the live interactive rects the page
-        // posts via the `headerHits` bridge — those events propagate
+        // posts via the `headerHits` bridge, those events propagate
         // to the WKWebView so buttons keep hover + click. Everywhere
         // else (over breadcrumb text, between buttons, above/below
         // them, all the way down to the bottom border) the overlay
         // claims the event and drives drag/click-forward.
         //
         // The overlay's frame is also re-fit to the page's reported
-        // header rect on every "headerHits" message — guarantees the
+        // header rect on every "headerHits" message, guarantees the
         // bottom border row isn't a dead pixel.
         let initialHeaderHeight: CGFloat = 64
         let contentH = win.contentView!.bounds.height
@@ -770,7 +770,7 @@ final class LibraryWindow: NSWindowController {
         win.contentView?.addSubview(dragView)
         handler.headerDragView = dragView
 
-        // No in-window recording indicator. Per Костя — the level indicator
+        // No in-window recording indicator. Per Костя, the level indicator
         // lives ONLY in the floating HUD (when Corder is minimised / not in
         // front); inside the window there is no blob and no replacement.
         // Recording is started/stopped from the menu-bar popover and the
@@ -807,7 +807,7 @@ final class LibraryWindow: NSWindowController {
         // The Library window is now on screen; its inline blob provides
         // the start/stop affordance, so the floating HUD would be a
         // redundant SECOND blob. Suppress it for as long as the window
-        // is visible — NOT tied to key status (the user watching a call
+        // is visible, NOT tied to key status (the user watching a call
         // in another app makes the Library resign key while it's still
         // fully visible, and the old key-based toggle then popped the
         // floating HUD back as a duplicate).
@@ -816,7 +816,7 @@ final class LibraryWindow: NSWindowController {
 
     /// The web app keeps polling (recording state, meeting list) on a
     /// timer. When the window is closed the page stays alive in the
-    /// background — those polls are pure waste. Tell the page to pause
+    /// background, those polls are pure waste. Tell the page to pause
     /// while hidden and resume (with an immediate refresh) on show.
     private func setWebActive(_ active: Bool) {
         guard webView.url != nil else { return }
@@ -858,7 +858,7 @@ extension LibraryWindow: NSWindowDelegate {
         // Return to menu-bar-only behaviour when the user closes the window.
         setWebActive(false)
         NSApp.setActivationPolicy(.accessory)
-        // Window (and its inline blob) is going away — bring the
+        // Window (and its inline blob) is going away, bring the
         // floating HUD back if a recording is in flight.
         RecordingHUDPanel.shared.setLibrarySuppressed(false)
     }
@@ -879,12 +879,12 @@ extension LibraryWindow: NSWindowDelegate {
     }
 
     /// AppKit fires this whenever the window's effective visibility on
-    /// screen changes — including the case the user just hid the whole
+    /// screen changes, including the case the user just hid the whole
     /// app via ⌘H or switched to another Space that doesn't include the
     /// window. The earlier suppression logic only listened to
     /// `windowWillClose` and `windowDidMiniaturize`, so a ⌘H left the
     /// window technically open AND occluded but with the floating HUD
-    /// stuck hidden — that's the case Костя caught ("блоб не появился
+    /// stuck hidden, that's the case Костя caught ("блоб не появился
     /// отдельным окном когда свернул кордер"). Reading the occlusion
     /// bit and mirroring it onto `librarySuppressed` covers ⌘H, hide
     /// via Dock, Space switches, and anything else AppKit considers a
@@ -906,7 +906,7 @@ extension LibraryWindow: NSWindowDelegate {
         // changes collapses into one suppress/unsuppress.
         occlusionDebounce?.cancel()
         let work = DispatchWorkItem { [weak window] in
-            // Re-read the live state at fire time — if it flapped back, this
+            // Re-read the live state at fire time, if it flapped back, this
             // reflects where it actually settled, not the value at schedule time.
             let settled = window?.occlusionState.contains(.visible) ?? false
             RecordingHUDPanel.shared.setLibrarySuppressed(settled)

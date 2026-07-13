@@ -53,7 +53,7 @@ final class AudioMixerTests: XCTestCase {
     }
 
     func test_mix_neverClipsAbove0_98() {
-        // Three loud sources — sum 2.4. Final peak still capped at 0.98.
+        // Three loud sources, sum 2.4. Final peak still capped at 0.98.
         let a = buffer(of: 0.8, frames: 100)
         let b = buffer(of: 0.8, frames: 100)
         let c = buffer(of: 0.8, frames: 100)
@@ -96,7 +96,7 @@ final class AudioMixerTests: XCTestCase {
     }
 
     // The sync-bug regression guard. The far end (system.wav) can start
-    // LATE — the process tap takes seconds to come up on a Bluetooth route.
+    // LATE, the process tap takes seconds to come up on a Bluetooth route.
     // CaptureEngine now left-pads system.wav with leading silence so its
     // frame 0 lines up with the mic's. This test encodes the contract the
     // mixer depends on: a system track whose real audio sits at a later

@@ -5,7 +5,7 @@ import Foundation
 /// Library WKWebView), which replaces the old separate native sign-in
 /// window. The web modal posts JSON actions via the `authAction` message
 /// handler; this controller performs the REAL auth through the Supabase
-/// SDK — so the session + the per-account folder binding stay native — and
+/// SDK, so the session + the per-account folder binding stay native, and
 /// pushes UI state back to the web via `window.corderAuthState(...)`. On a
 /// successful sign-in it relaunches, so the new process boots into the
 /// signed-in account's folder (same handoff the old window used).
@@ -58,7 +58,7 @@ final class AuthController {
         Task { @MainActor in
             let client = SupabaseClientHolder.shared.auth
             do {
-                // Explicit mode — the user chose Sign in vs Sign up; no auto-
+                // Explicit mode, the user chose Sign in vs Sign up; no auto-
                 // flip from an unknown email.
                 if mode == "signup" {
                     _ = try await client.signUp(email: email, password: password)
@@ -139,7 +139,7 @@ final class AuthController {
         if let name, !name.isEmpty { AppSettings.setUserName(name) }
         AppSettings.setHasSignedInBefore(true)
         SupabaseTierSync.applyFromCurrentSession()
-        FileLogger.log("AuthController: signed in via \(provider) (\(email)) — relaunching into account folder")
+        FileLogger.log("AuthController: signed in via \(provider) (\(email)), relaunching into account folder")
         CorderRelaunch.now()
     }
 

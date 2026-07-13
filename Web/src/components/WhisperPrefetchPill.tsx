@@ -14,10 +14,10 @@ import { SettingsSelect, SettingsSelectOption } from "./SettingsSelect";
 ///      a downloaded local variant). Same chevron pill SettingsSelect
 ///      from the Settings panel.
 ///   2. **Progress pill** when the active provider is `whisperLocal`
-///      AND the picked variant isn't on disk yet — outline + green
+///      AND the picked variant isn't on disk yet, outline + green
 ///      fill + percent label. Cannot be clicked.
 ///
-/// Visibility: always — there's no "reveal" gate. The user wanted a
+/// Visibility: always, there's no "reveal" gate. The user wanted a
 /// single Start surface that also shows what's about to run; hiding
 /// the picker until first Start was confusing on a cold install
 /// (Pro / Max users especially, whose cloud model never needs a
@@ -65,7 +65,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     disabled?: boolean;
   };
   // HARD provider lock. The ONLY cloud model a paying user can pick is
-  // Groq Whisper — Gemini and OpenAI whisper-1 are ADMIN-ONLY (kept so
+  // Groq Whisper, Gemini and OpenAI whisper-1 are ADMIN-ONLY (kept so
   // the dev can benchmark). Free users see ONLY local models (cloud
   // appears the moment tier flips to Pro / Max). The Worker enforces the
   // same rule server-side, so even a hand-crafted request can't route a
@@ -97,12 +97,12 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     if (provider === "groq" && paid) return "groq";
     // gemini / whisper-1: admins keep the explicit selection; for a
     // non-admin these aren't selectable (hard lock), so the picker shows
-    // Groq — their only cloud model. The backend already coerces the
+    // Groq, their only cloud model. The backend already coerces the
     // stored value on the next POST.
     if ((provider === "whisper" || provider === "gemini") && paid) {
       return isAdmin ? (provider === "gemini" ? "gemini" : "whisper") : "groq";
     }
-    // Free users have no cloud option — fall back to the first
+    // Free users have no cloud option, fall back to the first
     // available local variant (or the first option overall).
     return allChoices[0]?.value ?? "";
   })();
@@ -128,7 +128,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
   }, [allChoices, models]);
 
   // Pre-first-poll: render the picker with cloud options so the slot
-  // never collapses — Pro / Max users staring at a blank dashboard
+  // never collapses, Pro / Max users staring at a blank dashboard
   // mid-launch was the previous failure mode.
   const options: SettingsSelectOption<string>[] = allChoices.map((c) => ({
     value: c.value,
@@ -137,7 +137,7 @@ export function WhisperPrefetchPill({ t, onToast }: { t: T; onToast?: (m: string
     disabled: c.disabled,
   }));
 
-  // First-poll loader — same slot shape as the picker, with a spinner so
+  // First-poll loader, same slot shape as the picker, with a spinner so
   // it's clear something's loading instead of a blank/late pop-in.
   if (!loaded) {
     return (

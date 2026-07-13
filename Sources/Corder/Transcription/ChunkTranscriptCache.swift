@@ -16,7 +16,7 @@ import CryptoKit
 /// even if earlier chunks shifted.
 ///
 /// Lives in its OWN SQLite file (`AppPaths.chunkCacheURL`) so its writes
-/// never contend with the main DB's connection. It's a disposable cache —
+/// never contend with the main DB's connection. It's a disposable cache
 /// entries self-expire after `ttlDays`; losing it just means a re-run
 /// re-transcribes, never a correctness problem.
 enum ChunkTranscriptCache {
@@ -48,13 +48,13 @@ enum ChunkTranscriptCache {
                 // a resumed chunk can still feed the language-drift tally.
                 // Ignore the error when it already exists.
                 try? db.execute(sql: "ALTER TABLE chunk_cache ADD COLUMN language TEXT NOT NULL DEFAULT ''")
-                // Drop stale entries opportunistically on open — cheap,
+                // Drop stale entries opportunistically on open, cheap,
                 // and keeps the file from growing unbounded.
                 let cutoff = Int(Date().timeIntervalSince1970) - ttlDays * 86_400
                 try db.execute(sql: "DELETE FROM chunk_cache WHERE created_at < ?", arguments: [cutoff])
             }
         } catch {
-            FileLogger.log("ChunkTranscriptCache: open/migrate failed — \(error)")
+            FileLogger.log("ChunkTranscriptCache: open/migrate failed, \(error)")
             return nil
         }
         _dbq = q

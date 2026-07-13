@@ -1,20 +1,19 @@
 import Foundation
 
 /// Seeds the Library with a handful of demo meetings on first launch
-/// so the user lands on a populated dashboard — full transcripts,
+/// so the user lands on a populated dashboard, full transcripts,
 /// realistic titles, varied lengths. Runs **once per user** (guarded
 /// by `AppSettings.demoDataSeeded`).
 ///
 /// Why fake meetings? The Library is the whole product surface; an
 /// empty list on first open teaches nothing. Five canned sessions
 /// double as a tour: the user clicks around, sees speakers, summaries,
-/// search highlights, archive controls — without recording anything.
+/// search highlights, archive controls, without recording anything.
 ///
 /// What we DON'T fake:
 ///   - audio / video files (`videoPath` and `audioPath` are stable
-///     paths under the recordings dir, but no actual WAV exists —
-///     playback returns 404 gracefully, transcript still renders).
-///   - real Gemini calls — we hand-author the transcripts.
+///     paths under the recordings dir, but no actual WAV exists, ///     playback returns 404 gracefully, transcript still renders).
+///   - real Gemini calls, we hand-author the transcripts.
 @MainActor
 enum DemoSeeder {
 
@@ -42,9 +41,9 @@ enum DemoSeeder {
             "1:1 with Dima, quarterly plan",
             "All hands, Q1 review",
             // v1 (russian, in case any v1 installs survive)
-            "Standup — что блокирует и кто блестит",
-            "1:1 с Димой — план на квартал",
-            "All-hands — итоги Q1",
+            "Standup, что блокирует и кто блестит",
+            "1:1 с Димой, план на квартал",
+            "All-hands, итоги Q1",
         ]
         if let all = try? repo.listMeetings() {
             for row in all where row.title.map(knownTitles.contains) == true {
@@ -84,9 +83,9 @@ enum DemoSeeder {
             // verbatim by hand to trigger an accidental delete.
             let legacyTitles: Set<String> = [
                 // v1 (russian)
-                "Standup — что блокирует и кто блестит",
-                "1:1 с Димой — план на квартал",
-                "All-hands — итоги Q1",
+                "Standup, что блокирует и кто блестит",
+                "1:1 с Димой, план на квартал",
+                "All-hands, итоги Q1",
             ]
             var swept = 0
             if let all = try? repo.listMeetings() {
@@ -148,7 +147,7 @@ enum DemoSeeder {
         meeting.summary = template.summary
         try repo.insertMeeting(meeting)
 
-        // Speakers — assign each a colour. The frontend palette
+        // Speakers, assign each a colour. The frontend palette
         // cycles through these so adjacent rows look distinct.
         let speakerColours = ["#1F7A4F", "#3A7BD5", "#D58A3A", "#8E47D1", "#D14773"]
         var speakerIDs: [String: String] = [:]
@@ -164,7 +163,7 @@ enum DemoSeeder {
             ))
         }
 
-        // Segments — author them so timestamps line up with the
+        // Segments, author them so timestamps line up with the
         // template duration. Each line gets ~`duration / lineCount`
         // milliseconds; gaps between speakers are short.
         let durationMs = Int64(template.durationSec) * 1000

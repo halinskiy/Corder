@@ -12,7 +12,7 @@ export function Donate({ t }: { t: T }) {
 
   /// BMC ignores `?amount=` but honours `?coffees=N`, which preselects the
   /// quantity. The page's per-coffee price is whatever the creator set in
-  /// BMC settings — for the buttons here to read as $1/$3/$5 literally, the
+  /// BMC settings, for the buttons here to read as $1/$3/$5 literally, the
   /// account must be configured with "One coffee = $1".
   const url = (n: number) =>
     `https://www.buymeacoffee.com/${BMC_USER}?coffees=${n}`;

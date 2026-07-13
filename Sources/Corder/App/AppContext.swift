@@ -60,12 +60,12 @@ enum AppVocabulary {
     }
 }
 
-/// Persisted user settings — same synchronous, thread-safe
+/// Persisted user settings, same synchronous, thread-safe
 /// `UserDefaults` source-of-truth pattern as `AppLanguage` /
 /// `AppVocabulary`. Read off-main from the capture queues, the
 /// pipeline and `MeetingDetector`; written through `POST /api/settings`.
-/// Every Bool defaults to `true` so a fresh install — or an older
-/// client that never sends the key — keeps today's "everything on"
+/// Every Bool defaults to `true` so a fresh install, or an older
+/// client that never sends the key, keeps today's "everything on"
 /// behaviour (UserDefaults.bool would wrongly report `false` for an
 /// absent key, hence the explicit object(forKey:) nil check).
 enum AppSettings {
@@ -111,7 +111,6 @@ enum AppSettings {
     private static let kAutoSummary    = "Corder.set.autoSummary"
     private static let kAutoChapters   = "Corder.set.autoChapters"
     private static let kTelemetry      = "Corder.set.telemetry"
-    private static let kStatsEnabled   = "Corder.set.statsEnabled"
     private static let kPrerollEnabled = "Corder.set.prerollEnabled"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
@@ -126,7 +125,7 @@ enum AppSettings {
     private static let kTranscriptCleanup = "Corder.set.transcriptCleanup"
     /// Sticky permission grants. `CGPreflightScreenCaptureAccess()`
     /// returns false right after a re-install of a previously-
-    /// authorised app — the OS keeps the TCC grant against the
+    /// authorised app, the OS keeps the TCC grant against the
     /// bundle id but `preflight` is process-cached and reports
     /// false until the first live screen-capture call. We snapshot
     /// the grant state to UserDefaults the first time we observe
@@ -150,7 +149,7 @@ enum AppSettings {
     static var notificationsEnabled: Bool {
         UserDefaults.standard.object(forKey: kNotifications) as? Bool ?? false
     }
-    /// Floating recording HUD — the live equalizer pill that hovers over
+    /// Floating recording HUD, the live equalizer pill that hovers over
     /// every Space while recording (also the Stop button). Default ON: it's
     /// the primary "you're being recorded" affordance. Turning it off in
     /// Settings suppresses the pill for the whole session (see
@@ -160,12 +159,12 @@ enum AppSettings {
         UserDefaults.standard.object(forKey: kHudEnabled) as? Bool ?? true
     }
     // Screen video recording defaults OFF (reversed from the earlier default-ON,
-    // 0.15.9). Screen video is a niche feature — most users only want the
-    // transcript — and default-ON dragged the whole SCStream path into EVERY
+    // 0.15.9). Screen video is a niche feature, most users only want the
+    // transcript, and default-ON dragged the whole SCStream path into EVERY
     // recording: the Screen Recording permission dance, ~600 mW of HEVC encode,
     // and SCStream failure modes (e.g. -3815 "no displays to capture" when the
     // display sleeps / Spaces churn, and heavy encode contending with the audio
-    // tap's warm-up on weak Macs — the far-end-loss amplifier seen on an 8 GB
+    // tap's warm-up on weak Macs, the far-end-loss amplifier seen on an 8 GB
     // tester Mac). Audio + the process tap is the reliable core; video is now
     // strictly opt-in via the Settings toggle, and Screen Recording is requested
     // AT TOGGLE TIME (SettingsPane → `requestScreenRecording`), not at record
@@ -174,22 +173,22 @@ enum AppSettings {
     /// Record screen video at the display's NATIVE resolution (up to 4K) instead
     /// of the small space-saving default. Opt-in (default false) AND gated on
     /// sign-in: the capture path uses `captureVideoHiresEffective`, so a signed-
-    /// out user — or one who never enabled it — always gets the small default
+    /// out user, or one who never enabled it, always gets the small default
     /// size. The UI only surfaces the toggle to a signed-in user with screen
     /// video on; this getter is just the stored preference.
     static var captureVideoHires: Bool     { UserDefaults.standard.object(forKey: kCaptureVideoHires) as? Bool ?? false }
-    /// True only when the high-res preference is set AND an account is bound —
+    /// True only when the high-res preference is set AND an account is bound
     /// the single value the capture engine reads to pick the output size.
     static var captureVideoHiresEffective: Bool { captureVideoHires && isSignedIn }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
-    // Auto-title is ALWAYS on now — it has no Settings toggle (recording folder
+    // Auto-title is ALWAYS on now, it has no Settings toggle (recording folder
     // names depend on a title being generated). The stored key is ignored; a
     // stale client POSTing auto_title:false can't turn it off.
     static var autoTitle: Bool             { true }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
-    /// Diagnostic telemetry. Default ON now (opt-OUT) — capture reliability
+    /// Diagnostic telemetry. Default ON now (opt-OUT), capture reliability
     /// (far-end lost on Bluetooth) is the product's core risk and can't be
     /// measured without real-world numbers. Strictly ANONYMOUS aggregate
     /// counts: no transcripts, no titles, no speaker names, no raw email
@@ -198,12 +197,6 @@ enum AppSettings {
     /// A user who explicitly turned it OFF keeps their stored false.
     static var telemetryEnabled: Bool {
         UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? true
-    }
-    /// Dashboard statistics block. Default OFF for everyone; the toggle
-    /// that enables it lives in Advanced and is shown only to paid tiers
-    /// (web SettingsPane). Opt-in, so an absent key ≡ off.
-    static var statsEnabled: Bool {
-        UserDefaults.standard.object(forKey: kStatsEnabled) as? Bool ?? false
     }
     /// Silent pre-roll: start capturing the instant a call is detected so
     /// that accepting the "record this call?" offer keeps the audio/video
@@ -220,7 +213,7 @@ enum AppSettings {
     /// Launch Corder when the Mac boots / the user logs in. Source of
     /// truth is the live `SMAppService.mainApp` registration status
     /// (macOS 13+); the UserDefaults key is only a cached mirror for
-    /// fast reads when building the settings DTO. Defaults OFF — a
+    /// fast reads when building the settings DTO. Defaults OFF, a
     /// fresh install must not silently add itself to login items.
     private static let kLaunchAtLogin = "Corder.set.launchAtLogin"
     static var launchAtLogin: Bool {
@@ -250,10 +243,10 @@ enum AppSettings {
     /// at launch. If the user asked for launch-at-login but the registration is
     /// no longer active (e.g. a Sparkle update replaced the bundle and dropped
     /// it), silently re-register so the preference self-heals instead of quietly
-    /// turning off. Runs for EVERY user, not a hand-fix — the whole point is that
+    /// turning off. Runs for EVERY user, not a hand-fix, the whole point is that
     /// launch-at-login survives updates without the user re-toggling it.
     /// Never self-adds (only acts when the saved preference is already ON), and
-    /// leaves `.requiresApproval` alone — that means the user disabled Corder in
+    /// leaves `.requiresApproval` alone, that means the user disabled Corder in
     /// System Settings > Login Items, which we must respect, not override.
     static func syncLaunchAtLoginIfNeeded() {
         guard #available(macOS 13.0, *) else { return }
@@ -262,7 +255,7 @@ enum AppSettings {
         guard status != .enabled, status != .requiresApproval else { return }
         do {
             try SMAppService.mainApp.register()
-            FileLogger.log("launchAtLogin: preference ON but status=\(status.rawValue) — re-registered at launch")
+            FileLogger.log("launchAtLogin: preference ON but status=\(status.rawValue), re-registered at launch")
         } catch {
             FileLogger.log("launchAtLogin: launch re-register failed (status=\(status.rawValue)): \(error)")
         }
@@ -279,8 +272,8 @@ enum AppSettings {
     static func setHudEnabled(_ v: Bool)     { setFlag(kHudEnabled, v) }
     static func setCaptureVideo(_ v: Bool)   { setFlag(kCaptureVideo, v) }
     static func setCaptureVideoHires(_ v: Bool) { setFlag(kCaptureVideoHires, v) }
-    /// One-time forced reset: turn screen video OFF for EVERYONE — including
-    /// users who had explicitly enabled it — then let them opt back in via
+    /// One-time forced reset: turn screen video OFF for EVERYONE, including
+    /// users who had explicitly enabled it, then let them opt back in via
     /// Settings. The 0.15.9 default flip to OFF only affected users who never
     /// touched the toggle; this forces the (now niche, opt-in) feature off for
     /// the whole base once. Guarded by a migration flag so a user who later
@@ -292,8 +285,8 @@ enum AppSettings {
         UserDefaults.standard.set(true, forKey: key)
         FileLogger.log("AppSettings: one-time forced screen video OFF for all users (0.15.11)")
     }
-    /// One-time forced reset: turn System notifications OFF for EVERYONE —
-    /// including users who had them on under the old default-ON behaviour —
+    /// One-time forced reset: turn System notifications OFF for EVERYONE
+    /// including users who had them on under the old default-ON behaviour,
     /// then let them opt back in via Settings. Mirrors
     /// `forceVideoOffOnceIfNeeded`; guarded by its own migration flag so a
     /// user who later re-enables notifications isn't force-disabled again on
@@ -312,9 +305,6 @@ enum AppSettings {
     static func setAutoChapters(_ v: Bool)   { setFlag(kAutoChapters, v) }
     static func setTelemetryEnabled(_ v: Bool) {
         UserDefaults.standard.set(v, forKey: kTelemetry)
-    }
-    static func setStatsEnabled(_ v: Bool) {
-        UserDefaults.standard.set(v, forKey: kStatsEnabled)
     }
     static func setPrerollEnabled(_ v: Bool) {
         UserDefaults.standard.set(v, forKey: kPrerollEnabled)
@@ -346,8 +336,8 @@ enum AppSettings {
         let resolved = resolvedTranscriptionProvider
         // HARD provider lock for non-admins. The ONLY allowed cloud
         // transcriber is Groq; Gemini and OpenAI whisper-1 are admin-only
-        // (kept so the dev can benchmark). Any other resolution — a stale
-        // UserDefaults override, a legacy account, a future bug — collapses
+        // (kept so the dev can benchmark). Any other resolution, a stale
+        // UserDefaults override, a legacy account, a future bug, collapses
         // to Groq (paid) or the on-device model (free). This is the client
         // wall that guarantees "Gemini never suddenly transcribes" for a
         // normal user; the Worker enforces the same rule server-side.
@@ -365,7 +355,7 @@ enum AppSettings {
     /// `transcriptionProvider` clamps this to the allowed set for
     /// non-admins; admins get it verbatim.
     private static var resolvedTranscriptionProvider: TranscriptionProvider {
-        // Explicit override wins — except for legacy `gemini`, which
+        // Explicit override wins, except for legacy `gemini`, which
         // we no longer offer in the picker (Whisper Cloud is the
         // single cloud option). A stale `gemini` override coerces
         // back to the tier default so an old account doesn't keep
@@ -418,7 +408,7 @@ enum AppSettings {
     /// Forced transcription language (ISO-639-1, e.g. "ru"). Empty =
     /// auto-detect. Whisper (cloud + local) otherwise guesses the
     /// language per recording and, for Russian audio, frequently drifts
-    /// to the very-close Ukrainian — rendering Russian speech as
+    /// to the very-close Ukrainian, rendering Russian speech as
     /// Ukrainian words. Pinning the language stops that. Gemini already
     /// preserves the spoken language verbatim, so this only feeds the
     /// Whisper paths.
@@ -451,7 +441,7 @@ enum AppSettings {
     /// Whisper users), raw whisper-1 output goes through gpt-4o-mini for
     /// punctuation / capitalisation / obvious-typo cleanup before being
     /// persisted. Best-effort: any failure falls back to the raw turns
-    /// untouched, so flipping this flag never breaks transcription —
+    /// untouched, so flipping this flag never breaks transcription
     /// only the polish stage is gated. Gemini path ignores this setting.
     static var transcriptCleanup: Bool { flag(kTranscriptCleanup) }
     static func setTranscriptCleanup(_ v: Bool) { setFlag(kTranscriptCleanup, v) }
@@ -459,7 +449,7 @@ enum AppSettings {
     // Preferred microphone input device, stored as the Core Audio
     // device UID (stable across reboots, unlike the numeric AudioDeviceID
     // which the system re-issues). `nil` (key absent / empty string)
-    // means "use whatever the system currently calls default input" —
+    // means "use whatever the system currently calls default input"
     // identical to the pre-feature behaviour and the fallback when the
     // saved device is unplugged at recording start. We persist the UID
     // (not the human name) because device names can collide
@@ -480,8 +470,8 @@ enum AppSettings {
     }
 
     // Paddle-issued licence key the user pastes into the Welcome wizard
-    // (or, later, Settings). MVP rule: any non-empty, well-formed key
-    // — ≥ 20 chars, alphanumeric / dash / underscore — flips the local
+    // (or, later, Settings). MVP rule: any non-empty, well-formed key,
+    // ≥ 20 chars, alphanumeric / dash / underscore, flips the local
     // `isPro` switch. Real server-side validation lands when we have a
     // backend; until then the honour system is enough (the free tier
     // already covers the unconverted-user case, and cheaters are not
@@ -515,7 +505,7 @@ enum AppSettings {
     // Three-tier model (Free / Pro / Max). Stored as the raw string so
     // a future fourth tier slots in without a UserDefaults migration.
     // `isPro` (below) is kept as a derived getter for backward compat
-    // with every existing call site — `userTier != .free` is the new
+    // with every existing call site, `userTier != .free` is the new
     // truth, but old callers still read the cached boolean. The legacy
     // licence-key format check ALSO flips `isPro` true on its own so
     // existing Paddle-key installs don't lose Pro entitlements at
@@ -533,7 +523,7 @@ enum AppSettings {
     // `app_metadata.role == "admin"` by `SupabaseTierSync`. Drives the
     // blue profile avatar so the operator can confirm at a glance that
     // the server-side admin grant landed in their session. Purely a
-    // visual cue on the client — every privileged action is still
+    // visual cue on the client, every privileged action is still
     // re-checked against the admin JWT by corder-api.
     private static let kIsAdmin = "Corder.set.isAdmin"
     static var isAdmin: Bool {
@@ -551,7 +541,7 @@ enum AppSettings {
 
     // Display name harvested from the OAuth provider (Google `name`
     // claim, Apple full-name on first sign-in). Used in the profile
-    // popover header. Optional — email-only sign-ups leave it nil.
+    // popover header. Optional, email-only sign-ups leave it nil.
     private static let kUserName = "Corder.set.userName"
     static var userName: String? {
         let raw = (UserDefaults.standard.string(forKey: kUserName) ?? "")
@@ -569,7 +559,7 @@ enum AppSettings {
 
     // Email used to sign in (Google OAuth `email` claim or the
     // email field on email/password sign-in). Surfaced in the
-    // profile popover header under the display name. Optional —
+    // profile popover header under the display name. Optional
     // we never auto-derive it, the sign-in flow has to set it.
     private static let kUserEmail = "Corder.set.userEmail"
     static var userEmail: String? {
@@ -611,7 +601,7 @@ enum AppSettings {
     /// Explicit opt-in for the one-time legacy-meetings backfill. On
     /// a dev box where several Google accounts share one local
     /// SQLite, the first sign-in shouldn't silently claim every
-    /// pre-Supabase recording as that account's — the user has to
+    /// pre-Supabase recording as that account's, the user has to
     /// say "yes, attach all my local recordings to THIS account".
     /// Toggle from CLI: `defaults write com.3mpq.Corder Corder.user.cloudBackfillOptIn -bool true`.
     /// Single-user-on-one-Mac case = set once and forget; UI surface
@@ -623,7 +613,7 @@ enum AppSettings {
     /// Last Supabase user UUID we synced the local cache against.
     /// When a different user signs in on the same Mac we wipe the
     /// local meetings cache (otherwise account A would see account
-    /// B's recordings — the local SQLite is per-machine, not per-
+    /// B's recordings, the local SQLite is per-machine, not per-
     /// user). Empty / nil means "fresh install, never synced".
     private static let kLastSyncedUserId = "Corder.user.lastSyncedUserId"
     static var lastSyncedUserId: String? {
@@ -652,7 +642,7 @@ enum AppSettings {
 
     // Resume slot for the Welcome wizard. macOS permission grants
     // (Microphone, Screen Recording) sometimes require a relaunch
-    // to take effect — without persisting "which step the user was
+    // to take effect, without persisting "which step the user was
     // on", the wizard would always reopen on step 1 and lose the
     // user's progress through the funnel. Stored as a raw `Int`
     // matching `WizardStep.rawValue`. 0 = welcome (default).
@@ -678,7 +668,7 @@ enum AppSettings {
     }
 
     /// Stored seed-content version. Compared against
-    /// `DemoSeeder.currentSeedVersion` on launch — mismatch triggers
+    /// `DemoSeeder.currentSeedVersion` on launch, mismatch triggers
     /// a re-seed (old rows are removed by id, fresh ones inserted).
     /// Defaults to 0 so any non-zero current version on a brand-new
     /// install or an install that pre-dated the version field will
@@ -715,7 +705,7 @@ enum SourceMode: String {
 enum UserTier: String { case free, pro, max }
 
 extension UserTier {
-    /// Per-tier monthly cap on "advanced" transcription seconds —
+    /// Per-tier monthly cap on "advanced" transcription seconds
     /// the cloud models (Groq/Gemini/Whisper-cloud) that cost real
     /// compute. On-device `whisperLocal` is unmetered for every tier.
     /// HIDDEN limits (not surfaced on the site yet). Over-cap → the
@@ -745,10 +735,10 @@ extension TranscriptionProvider {
 }
 
 /// ASR provider selector. Three providers in the wild now:
-///   • `.gemini`         — Gemini 2.5 Flash (cloud, default). $0.30/h-ish.
-///   • `.whisper`        — OpenAI whisper-1 + gpt-4o-mini polish (cloud).
+///   • `.gemini`        , Gemini 2.5 Flash (cloud, default). $0.30/h-ish.
+///   • `.whisper`       , OpenAI whisper-1 + gpt-4o-mini polish (cloud).
 ///                         ~$0.36/h before the LLM polish stage.
-///   • `.whisperLocal`   — WhisperKit (Core ML, on-device). Apple Silicon
+///   • `.whisperLocal`  , WhisperKit (Core ML, on-device). Apple Silicon
 ///                         only; falls back to `.gemini` at the pipeline
 ///                         level when run on Intel. $0/h after the
 ///                         one-time ~1.5 GB multilingual model download.
@@ -764,7 +754,7 @@ enum RecordingState: Equatable {
     case recording(meetingId: String, startedAt: Date)
     case stopping
     /// Silent pre-roll: capture is alive (the meeting is being recorded
-    /// from the moment a call was detected) but nothing is shown — no HUD,
+    /// from the moment a call was detected) but nothing is shown, no HUD,
     /// no menu-bar change, the row is hidden. If the user accepts the
     /// "record this call?" offer it's promoted to `.recording` keeping the
     /// captured-from-the-start audio/video; if they decline (or the call
@@ -849,7 +839,7 @@ enum RecordingStateSnapshot {
 }
 
 /// Same pattern as `RecordingStateSnapshot` for the Sparkle-reported
-/// "newer version available" flag — Swifter handlers run off-actor and
+/// "newer version available" flag, Swifter handlers run off-actor and
 /// need a synchronous read without hopping to `@MainActor`.
 enum AvailableUpdateSnapshot {
     private static let lock = NSLock()

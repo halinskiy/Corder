@@ -6,8 +6,8 @@ import AVFoundation
 /// transcription pipeline to decide which Gemini speaker label
 /// corresponds to the local user.
 ///
-/// We previously hosted a richer two-stage diarizer here — channel-gate
-/// plus FluidAudio (CoreML pyannote 3.1 + WeSpeaker) — that ran on the
+/// We previously hosted a richer two-stage diarizer here, channel-gate
+/// plus FluidAudio (CoreML pyannote 3.1 + WeSpeaker), that ran on the
 /// local Whisper path. Whisper itself has been retired (see
 /// CHANGELOG.md / ARCHITECTURE.md "Why no Whisper any more"), so the
 /// FluidAudio dependency is gone too. Only the channel-gate survives,
@@ -15,13 +15,13 @@ import AVFoundation
 enum Diarizer {
 
     /// Per-segment vote: `true` means the local microphone was clearly
-    /// louder than the system stream in that window — i.e. the local
+    /// louder than the system stream in that window, i.e. the local
     /// user was speaking. The cloud pipeline runs this for every Gemini
     /// turn and tallies the votes per speaker label; the label with the
     /// most "true" votes becomes the user, the rest stay "other-N".
     ///
     /// Hysteresis: ratio ≥ 2× and absolute mic floor ≥ 0.005. Both
-    /// matter — without the floor we'd label total silence as "user"
+    /// matter, without the floor we'd label total silence as "user"
     /// just because the system was even quieter; without the ratio
     /// we'd misclassify any time the mic picked up speaker bleed
     /// (peer's voice played through the user's speakers and back into
@@ -44,7 +44,7 @@ enum Diarizer {
 
     // MARK: - Channel gate math
 
-    /// 6 dB hysteresis. RMS ratios in linear domain — 6 dB ≈ 2× louder.
+    /// 6 dB hysteresis. RMS ratios in linear domain, 6 dB ≈ 2× louder.
     /// Plus a small absolute floor (mic > 0.005 RMS) so we don't mark
     /// silent-mic segments as "user" just because the system is also quiet.
     private static func micDominates(mic u: Float, sys o: Float) -> Bool {

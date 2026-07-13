@@ -21,7 +21,7 @@ interface Props {
 ///
 /// Visual contract (consistency = priority #1):
 /// - All EMPTY states (no transcript / no summary yet / loading /
-///   error) render as `.trans-banner.clarify-banner` cards — the
+///   error) render as `.trans-banner.clarify-banner` cards, the
 ///   same outlined block the "Transcription failed" / clarify
 ///   banners use. Single design language across the app.
 /// - When the summary IS present, the layout mirrors `.transcript-wrap`
@@ -34,7 +34,7 @@ interface Props {
 /// fires `GeminiSummarizer.generate` after the transcript is ready
 /// when the user opted in). The frontend does NOT auto-fire: clicking
 /// the Summary tab on a meeting with no cached summary shows the
-/// banner with a "Generate" button — predictable, no surprise spend.
+/// banner with a "Generate" button, predictable, no surprise spend.
 export function SummaryPane({ detail, onToast, t }: Props) {
   const initial = pickStructured(detail.summary ?? null);
   const [summary, setSummary] = useState<string | null>(initial);
@@ -46,7 +46,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
   const [locked, setLocked] = useState(false);
   // `needSignIn` = the server refused because the user is a signed-out guest
   // (Summary needs a Worker JWT). Show a "Sign in to generate" CTA, not an
-  // error card — the feature is free, it just needs an account.
+  // error card, the feature is free, it just needs an account.
   const [needSignIn, setNeedSignIn] = useState(false);
   const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +107,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
     </>
   );
 
-  // ── EMPTY STATES — all rendered as `.trans-banner.clarify-banner` ──
+  // ── EMPTY STATES, all rendered as `.trans-banner.clarify-banner` ──
   if (!ready) {
     return (
       <div className="summary-wrap summary-wrap-empty">
@@ -181,7 +181,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
     );
   }
 
-  // ── READY STATE — toolbar + markdown content ──
+  // ── READY STATE, toolbar + markdown content ──
   return (
     <div className="summary-wrap">
       <div className="transcript-toolbar">
@@ -233,7 +233,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
   );
 }
 
-/// Empty-state card — `.trans-banner.clarify-banner` shell (same as
+/// Empty-state card, `.trans-banner.clarify-banner` shell (same as
 /// EmptyDeleteBanner / TranscribingBanner).
 function SummaryBanner({
   title, body, action, spinner,
@@ -417,7 +417,7 @@ function renderInline(text: string, q: string): (string | JSX.Element)[] {
   return out;
 }
 
-/// Wrap query matches in `<mark>` — case-insensitive, all occurrences.
+/// Wrap query matches in `<mark>`, case-insensitive, all occurrences.
 /// Returns the raw `text` when `q` is empty.
 function highlight(text: string, q: string, seed: number): (string | JSX.Element)[] {
   if (!q) return [text];

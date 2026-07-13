@@ -2,13 +2,13 @@ import Foundation
 import CryptoKit
 import IOKit
 
-/// Opt-in diagnostic telemetry. Default OFF — toggled on by the
+/// Opt-in diagnostic telemetry. Default OFF, toggled on by the
 /// user in Settings ("Help improve Corder"). Once on, fires once
 /// per 24h from `tick()` (called on app launch and every hour
 /// while the app is alive). Payload is intentionally narrow:
 ///   • anonymous_id = SHA-256(email lowercased)
 ///   • app version, macOS version, Mac model, RAM gigabytes, tier
-///   • events[] — counts of meetings by status + provider used.
+///   • events[], counts of meetings by status + provider used.
 ///
 /// Explicitly NOT included: transcript text, meeting titles,
 /// speaker names, audio, IP address (Cloudflare strips it from
@@ -32,7 +32,7 @@ enum TelemetryService {
         case btFarEndLost      = "Corder.tele.btFarEndLost"      // silent AND Bluetooth
         case tapRebuilds       = "Corder.tele.tapRebuilds"       // watchdog rebuilt the tap
     }
-    /// Bump a reliability counter by one. Safe to call from any actor —
+    /// Bump a reliability counter by one. Safe to call from any actor
     /// it's a plain UserDefaults integer increment.
     nonisolated static func bump(_ c: Counter) {
         let d = UserDefaults.standard
@@ -90,7 +90,7 @@ enum TelemetryService {
 
     /// Aggregate counts over the last 24h of meetings: how many
     /// ended `ready`, how many `failed`, average duration. Just
-    /// numbers — no per-meeting identifiers. Safe under the
+    /// numbers, no per-meeting identifiers. Safe under the
     /// privacy contract above.
     private static func collectEvents() async -> [[String: Any]] {
         let repo = AppContext.shared.repo
@@ -111,7 +111,7 @@ enum TelemetryService {
         }
         // Capture-reliability counters (drained + reset for this window).
         // This is what tells us how often the far end is lost, and how
-        // much of it is Bluetooth — the core risk we couldn't see before.
+        // much of it is Bluetooth, the core risk we couldn't see before.
         for (k, v) in drainCounters() { stats["reliab_\(k)"] = v }
         return [stats]
     }

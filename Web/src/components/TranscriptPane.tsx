@@ -12,7 +12,7 @@ import { OverlayScrollbar } from "./OverlayScrollbar";
 import type { T } from "../i18n";
 
 // ──────────────────────────────────────────────────────────────────
-// Rating prompt state — surfaced once the user has seen N transcripts
+// Rating prompt state, surfaced once the user has seen N transcripts
 // so we ask for feedback only after they have actually used Corder.
 // All state lives in localStorage; no server round-trip until the
 // user clicks Send.
@@ -26,7 +26,7 @@ type RatingState = {
 const RATING_STATE_KEY = "corder.ratingPromptState";
 const RATING_SEEN_KEY = "corder.ratingPromptSeenIds";
 const RATING_SHOWN_FOR_KEY = "corder.ratingPromptShownForId";
-// Show once the user has read 3 distinct ready transcripts —
+// Show once the user has read 3 distinct ready transcripts
 // the first 1-2 might just be tests, and we don't want to ask
 // for feedback on a 5-second smoke recording.
 const RATING_THRESHOLD = 1;
@@ -119,7 +119,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     return map;
   }, [detail.speakers]);
 
-  // Signed-in user's display name — used to replace the "you" /
+  // Signed-in user's display name, used to replace the "you" /
   // "I" first-person placeholders the Swift pipeline writes into the
   // user speaker's `custom_name` so the transcript reads with the
   // user's real identity, not a placeholder.
@@ -132,7 +132,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   // ── Right-click transcript editing ──────────────────────────────
   // Single action: right-click a line to edit its text. Speaker
-  // reassignment / merge were intentionally dropped — with mislabelled
+  // reassignment / merge were intentionally dropped, with mislabelled
   // "Speaker 2/3/4" the user can't tell which is which, so those actions
   // only created confusion.
   const [editing, setEditing] = React.useState<{ segId: number; value: string } | null>(null);
@@ -181,7 +181,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     // Fire-and-forget so the UI flips instantly. The signed-in
     // user's email comes from /api/settings (best-effort: anonymous
     // if not signed in or the call fails). We don't await the
-    // response — the user has already seen "Thanks!" via the toast.
+    // response, the user has already seen "Thanks!" via the toast.
     void (async () => {
       let email: string | null = null;
       try {
@@ -222,7 +222,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     return out;
   }, [detail.segments]);
 
-  // Search no longer FILTERS the transcript — it highlights matches in
+  // Search no longer FILTERS the transcript, it highlights matches in
   // place (cmd+F style). The toolbar drives which match is current via
   // `activeMatchId`; we just scroll to it and emphasise it below.
   const q = query.trim().toLowerCase();
@@ -232,14 +232,14 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // (`t >= start && t < end`) broke on click-to-seek: the click sends
   // `start_ms / 1000` seconds, the round-trip back to ms lands a hair
   // BELOW start_ms (float error), so the clicked segment failed
-  // `t >= start` while the previous one still passed `t < end` — the
+  // `t >= start` while the previous one still passed `t < end`, the
   // green highlight landed one line ABOVE the click. `Math.round`
   // kills the epsilon; "last started" also keeps the highlight stable
   // through the silent gaps between segments instead of vanishing.
   const activeSegmentId = React.useMemo(() => {
     // Find the last segment whose start_ms <= playhead. Segments are
     // monotonic by start_ms, so a binary search gives the identical
-    // result as the old linear scan in O(log n) — this recomputes on
+    // result as the old linear scan in O(log n), this recomputes on
     // every playback tick (~tens of times/second), so the scan added up
     // on long transcripts.
     const tms = Math.round(currentTimeSec * 1000);
@@ -281,7 +281,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
 
   // While the active recording is the one we're viewing, replace the empty
   // "Идёт запись…" placeholder with a live status card that includes a Stop
-  // button — same layout as the popover's RecordingStatus block.
+  // button, same layout as the popover's RecordingStatus block.
   const isLiveRecording =
     detail.status === "recording" &&
     recordingState.active &&
@@ -290,7 +290,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // Recording / transcribing states take over the pane EVEN IF old
   // segments still exist. A re-transcribe of an already-ready meeting
   // keeps the previous transcript in the DB until the new run succeeds,
-  // so we must key the live banner off status, not an empty list —
+  // so we must key the live banner off status, not an empty list
   // otherwise the user would stare at the stale transcript with no sign
   // that a new run is underway.
   if (isLiveRecording) {
@@ -301,7 +301,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     );
   }
   if (detail.status === "recording") {
-    // Stopped but the pipeline hasn't flipped to transcribing yet — hold
+    // Stopped but the pipeline hasn't flipped to transcribing yet, hold
     // the rec-card so the UI doesn't flash a text placeholder.
     return (
       <div className="transcript ovsb-scroll" ref={containerRef}>
@@ -359,7 +359,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     <div className="transcript ovsb-scroll" ref={containerRef}>
       {clarifyOpen && (
         // Mounted/unmounted directly. We tried wrapping it in a max-height
-        // collapsible and a grid-rows collapsible — both leaked the banner's
+        // collapsible and a grid-rows collapsible, both leaked the banner's
         // own padding/border as 28-30 px of dead space when closed, because
         // the wrapper sits inside `.transcript`'s flex column with `gap: 28px`
         // and an item that close-to-zero still attracts a gap on each side.
@@ -479,7 +479,7 @@ const TRAILING_OUTRO =
 // almost never repeats a SHORT phrase 3+ times verbatim, so collapse such a run
 // to a single instance. Conservative on purpose (short phrase + ≥3 repeats)
 // so emphatic "No. No." or a repeated long sentence is left untouched. Display
-// only — the stored transcript is unchanged.
+// only, the stored transcript is unchanged.
 function collapseRepeatHallucination(s: string): string {
   const parts = s.match(/[^.!?…]+[.!?…]*\s*/gu);
   if (!parts || parts.length < 3) return s;

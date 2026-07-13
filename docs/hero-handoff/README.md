@@ -1,4 +1,4 @@
-# Corder Library — hero handoff
+# Corder Library, hero handoff
 
 This folder is a 1:1 dump of the actual Library window from the running
 Corder app. Use these files to recreate the hero block: everything here
@@ -9,14 +9,14 @@ description of the UI.
 
 | File | Contents |
 |---|---|
-| `library-window.html`        | Full DOM dump of `.app` taken from a live WKWebView. Open it in a browser to inspect — `styles.css` is referenced relatively, so the file renders standalone. |
-| `styles.css`                 | The real, full CSS file from `Web/src/styles.css` — every token, every component rule. Tokens are at the top (`:root { --bg: ...; --accent: ...; ... }`). |
-| `format.ts`                  | `formatDate`, `formatDuration`, `dateBucket` — the helpers that produce the localised labels you see (`Today, 17:09`, `12m 04s`, `TODAY`). |
+| `library-window.html`        | Full DOM dump of `.app` taken from a live WKWebView. Open it in a browser to inspect, `styles.css` is referenced relatively, so the file renders standalone. |
+| `styles.css`                 | The real, full CSS file from `Web/src/styles.css`, every token, every component rule. Tokens are at the top (`:root { --bg: ...; --accent: ...; ... }`). |
+| `format.ts`                  | `formatDate`, `formatDuration`, `dateBucket`, the helpers that produce the localised labels you see (`Today, 17:09`, `12m 04s`, `TODAY`). |
 | `components/MeetingView.tsx` | Header (breadcrumb · Boost switch · EN / Copy / Delete), wires the rest. |
 | `components/Sidebar.tsx`     | Meeting list with date buckets, participants count, status dot, preview line. |
 | `components/TranscriptPane.tsx` | Speaker grouping, search highlight, banner switching. |
 | `components/RightPanel.tsx`  | Audio scrubber + per-speaker timeline (the right column). |
-| `components/Donate.tsx`      | Floating "Buy me a coffee" FAB — bottom-right of the window. |
+| `components/Donate.tsx`      | Floating "Buy me a coffee" FAB, bottom-right of the window. |
 
 ## The typeface, since it gets guessed wrong
 
@@ -34,8 +34,7 @@ font-family:
 ```
 
 So on macOS users see San Francisco; the web hero will fall through to
-Inter (or whatever the landing already loads). No custom `@font-face` —
-nothing to ship in fonts/.
+Inter (or whatever the landing already loads). No custom `@font-face`, nothing to ship in fonts/.
 
 Other corrections vs. the brief:
 
@@ -49,12 +48,11 @@ Other corrections vs. the brief:
   height of the WKWebView, side by side with the main pane.
 - The right-panel timeline `.tl-bar` height is **20 px** with **2 px**
   ticks every ~220 ms of speech (the brief said something else
-  earlier — trust this).
+  earlier, trust this).
 - Search input height: **34 px** (font 13 + padding 8/8 + 1 border).
 - Toolbar icon button at the right of the search: **38 × 38**, circle.
 - Buy-Me-a-Coffee FAB lives at fixed bottom-right (44 × 44, 999 radius,
-  `--bg` fill, `--border-strong` outline). Render it for the hero too —
-  it's a real product surface, not landing-only chrome.
+  `--bg` fill, `--border-strong` outline). Render it for the hero too, it's a real product surface, not landing-only chrome.
 
 ## Tokens (verbatim from `styles.css :root`)
 
@@ -173,10 +171,10 @@ purple speaker-1 colour for the avatar.
 1. Open `library-window.html` in a browser. That's the live DOM exactly
    as Corder ships it. Use DevTools to grab any subtree you want.
 2. Strip out the parts you don't need (the Donate FAB and toast layer
-   are direct siblings of the sidebar — remove them if the hero shows
+   are direct siblings of the sidebar, remove them if the hero shows
    only the window).
 3. Inline `styles.css` (or scope it under the hero container if it
-   collides with the landing's tokens — they share `--accent`, etc.).
+   collides with the landing's tokens, they share `--accent`, etc.).
 4. Replace meeting / segment data with whatever you want the hero to
    read. Keep timestamps and speaker counts plausible.
 

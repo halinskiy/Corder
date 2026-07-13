@@ -8,7 +8,7 @@ interface Props {
   meetingId: string;
   /// The PERSISTED user choice (`expected_other_speakers`), or null if
   /// the user has never picked. We deliberately do NOT fall back to the
-  /// diarizer's auto-count here — a pre-highlighted guess nudges the
+  /// diarizer's auto-count here, a pre-highlighted guess nudges the
   /// user toward whatever the model decided. null = no pill active.
   /// Once the user picks, the backend stores it and this prop carries
   /// it back so the choice stays highlighted across the retranscribe
@@ -27,7 +27,7 @@ interface Props {
 /// user). Backend stores `expected_other_speakers` = total − 1, so the
 /// "Just me" option still maps to 0 and "2 people" maps to 1 etc.
 /// Discrete pills for the common small-call cases. "4+" is no longer a
-/// pill — it's a dropdown (see below) so the user picks the EXACT
+/// pill, it's a dropdown (see below) so the user picks the EXACT
 /// headcount for bigger calls instead of a fuzzy bucket.
 const OPTIONS: Array<{ othersValue: number; label: string }> = [
   { othersValue: 0, label: "just_me" },
@@ -64,7 +64,7 @@ export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onTo
       // Always release the spinner so the user can pick a different
       // option again (e.g. they hit "Just me" and immediately want to
       // try "2 people"). We deliberately keep the banner open after a
-      // selection — the active pill makes the current state obvious
+      // selection, the active pill makes the current state obvious
       // and switching is a single click.
       setBusy(false);
     }
@@ -97,7 +97,7 @@ export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onTo
             </button>
           );
         })}
-        {/* 4+ is a dropdown — click it and pick the exact headcount.
+        {/* 4+ is a dropdown, click it and pick the exact headcount.
             Same `SettingsSelect` widget as the theme picker, sized to a
             pill so it sits flush in the row. Shows "4+" until a value is
             picked (no matching option → literal fallback label), then the

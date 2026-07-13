@@ -4,8 +4,8 @@ import { StarsCanvas } from "./StarsCanvas";
 import { Lang, pickStrings } from "../i18n";
 
 /// Full-screen update modal rendered inside the Library WKWebView.
-/// State is pushed in by the Swift side via `window.corderUpdateState(...)`
-/// — exactly one piece of state at a time; React doesn't ask, it just
+/// State is pushed in by the Swift side via `window.corderUpdateState(...)`,
+/// exactly one piece of state at a time; React doesn't ask, it just
 /// displays. Actions go back through `window.webkit.messageHandlers.updateAction`.
 ///
 /// Why React + WebView instead of an NSWindow overlay: a CSS `position:
@@ -65,7 +65,7 @@ function postAction(action: "primary" | "dismiss" | "ready") {
 
 /// Tidy the release-notes blob before display. The Swift side hands us
 /// plain text already, but the changelog convention prefixes every
-/// entry with the version as a heading — which just duplicates the
+/// entry with the version as a heading, which just duplicates the
 /// modal title and leaves a stray blank line + indentation gap. Strip
 /// the leading version line, trim per-line indentation, and collapse
 /// runs of blank lines so the notes read as plain text, not a sparse
@@ -76,12 +76,12 @@ function cleanNotes(raw: string, version: string): string {
     .replace(/\r/g, "")
     .split("\n")
     // Trim each line, drop indentation, and strip ANY leading list
-    // marker (•, ·, -, *, –, —) + spaces — the notes must read as plain
+    // marker (•, ·, -, *, –,, ) + spaces, the notes must read as plain
     // text, never a bulleted list.
     .map((l) =>
       l
         .replace(/\s+$/g, "")
-        .replace(/^\s*[•·\-*–—]+\s+/, "")
+        .replace(/^\s*[•·\-*–, ]+\s+/, "")
         .replace(/^\s+/g, (m) => (m.length > 1 ? "" : m))
     );
   // Drop leading empty / version-only lines.
@@ -99,7 +99,7 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
   const [state, setState] = React.useState<UpdateModalState>(HIDDEN);
   const [notesOpen, setNotesOpen] = React.useState(false);
   // `leaving` is the brief window between Swift saying "hide" and the
-  // exit animation finishing — during it we keep the card mounted but
+  // exit animation finishing, during it we keep the card mounted but
   // toggle a `is-leaving` class so the CSS keyframes can scale + fade
   // it out before React unmounts.
   const [leaving, setLeaving] = React.useState(false);
@@ -118,7 +118,7 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
         setLeaving(false);
         setState({ ...HIDDEN, ...next });
       } else {
-        // Swift asked to hide — start the exit animation, only flip
+        // Swift asked to hide, start the exit animation, only flip
         // `visible=false` once the keyframes finish (200 ms here so
         // it lines up with the `update-card-out` keyframe).
         setLeaving(true);
@@ -139,19 +139,19 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
     return () => { delete window.corderUpdateState; };
   }, []);
 
-  // Card-tilt-on-cursor — same vocabulary as the hero cards on
+  // Card-tilt-on-cursor, same vocabulary as the hero cards on
   // marketing sites: track the pointer over the overlay, map it
   // into a small `rotateX / rotateY` pair, write the angles onto
   // CSS variables. A CSS transition smooths the snap so the
   // movement feels physical, not jittery on every mousemove. The
   // listener lives on the OVERLAY (not the card) so the effect
   // reads cursor position even when the cursor isn't directly over
-  // the card itself — feels more responsive on small modals.
+  // the card itself, feels more responsive on small modals.
   React.useEffect(() => {
     const overlay = document.querySelector(".update-overlay") as HTMLElement | null;
     const card = cardRef.current;
     if (!overlay || !card) return;
-    // Cache the rects — the modal is fixed/centered so they only change on
+    // Cache the rects, the modal is fixed/centered so they only change on
     // resize. Reading getBoundingClientRect on EVERY mousemove forced two
     // synchronous reflows per event, which was the main cause of the tilt
     // stutter. Recompute only on resize.
@@ -198,7 +198,7 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
     };
   }, [state.visible]);
 
-  // The primary button label is ALWAYS "Install" while at rest — never a
+  // The primary button label is ALWAYS "Install" while at rest, never a
   // frozen "Installing…" verb. At rest the button shows NO progress and
   // NO spinner; it only reacts once the user actually clicks Install and
   // real work begins. `busy` = Sparkle is actively working (the button is
@@ -206,7 +206,7 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
   // replaced by a centered spinner (the app's standard button loader);
   // for a real download we ALSO show a left-anchored fill that tracks the
   // genuine download progress. Install/extract have no byte signal, so
-  // they show only the spinner — never a fake "filling on its own" bar.
+  // they show only the spinner, never a fake "filling on its own" bar.
   const INSTALL_PHASES = ["available", "downloading", "extracting", "readyToInstall", "installing"];
   const isInstallPhase = INSTALL_PHASES.includes(state.phase);
   const working =
@@ -227,7 +227,7 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
     ? cleanNotes(state.releaseNotes!, state.version)
     : "No release notes attached to this update.";
 
-  // Click on the backdrop (outside the card) closes the modal —
+  // Click on the backdrop (outside the card) closes the modal
   // same as the in-card Later button. Click inside the card must
   // NOT dismiss, so the card stops propagation on its own click.
   return (
@@ -264,8 +264,7 @@ export function UpdateModalHost({ lang }: { lang: Lang }) {
         </div>
 
         <div className="update-actions">
-          {/* Primary button is hidden when Swift passes an empty label —
-              the no-update modal has nothing actionable so the only
+          {/* Primary button is hidden when Swift passes an empty label, the no-update modal has nothing actionable so the only
               affordance left is the secondary "Later" (= dismiss). */}
           {state.primaryLabel && (
             <button

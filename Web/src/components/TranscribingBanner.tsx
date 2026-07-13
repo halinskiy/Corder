@@ -14,7 +14,7 @@ import type { T } from "../i18n";
 
 /// One-shot random sparkle field generated on mount. Each entry is a
 /// `<span>` with its own position, font size, animation delay, and
-/// peak opacity — together they read as a natural twinkling cluster
+/// peak opacity, together they read as a natural twinkling cluster
 /// instead of the synchronous six-star ring the `.update-pill` uses.
 /// Memoized so a re-render (every 1 s from the timer) doesn't reshuffle
 /// the positions and re-trigger every animation.
@@ -45,7 +45,7 @@ interface Props {
   meetingId: string;
   /// Unix-ms timestamp the backend stamped when the pipeline first
   /// flipped this meeting into `transcribing`. The banner counter
-  /// elapses from this mark — that way the user sees real backend
+  /// elapses from this mark, that way the user sees real backend
   /// time, not "00:00" every time they open the meeting view.
   /// `null` for legacy rows; we fall back to "now" so the counter
   /// still ticks instead of going negative.
@@ -56,7 +56,7 @@ interface Props {
   /// Real transcription progress in [0, 1], polled from the backend
   /// (`MeetingDetail.transcribe_progress`). `null` when the backend
   /// hasn't reported yet (legacy rows / cloud providers that don't
-  /// stream per-window callbacks) — we then render an empty fill and
+  /// stream per-window callbacks), we then render an empty fill and
   /// rely on the spinner + elapsed counter for the "moving" signal.
   progress: number | null;
   /// On-device model download progress in [0, 1] while a transcription is
@@ -67,7 +67,7 @@ interface Props {
   /// True during the silent post-download phase (tokenizer staging + the
   /// one-time ANE Core ML compile). The byte progress is pinned at 0.99 then,
   /// so we swap the frozen "Downloading model · 99%" for a "Preparing model…"
-  /// indeterminate state — the compile can take minutes on a slow Mac and the
+  /// indeterminate state, the compile can take minutes on a slow Mac and the
   /// old label read as a stuck download.
   modelPreparing: boolean | null;
   onCancelled: () => void;
@@ -76,7 +76,7 @@ interface Props {
 }
 
 type UpsellKind = "speed" | "best" | "unlimited" | null;
-/// Just the concrete upsell variants — `null` is the "nothing to push"
+/// Just the concrete upsell variants, `null` is the "nothing to push"
 /// sentinel and isn't a valid map key. Split out so the snooze record
 /// can be typed as `Partial<Record<UpsellSlot, number>>` without
 /// TypeScript complaining about `null` in a key position.
@@ -86,18 +86,18 @@ type UpsellSlot = Exclude<UpsellKind, null>;
 /// snapshot. Returns `null` when nothing actionable is left to push.
 ///   • Free + whisperLocal       → "speed"     (push Pro for cloud speed)
 ///   • Paid + whisperLocal       → "best"      (flip provider to cloud,
-///                                              no tier upgrade — the user
+///                                              no tier upgrade, the user
 ///                                              already paid for cloud)
 ///   • Pro + cloud bucket spent  → "unlimited" (push Max)
 /// Note: we deliberately do NOT push Gemini. Whisper is cheaper per
 /// minute on our side, so moving a Pro user off Whisper costs us money
 /// without sharper output. The "best model" upsell flips a Max/Pro
 /// user from their manually-selected local model onto the cloud model
-/// they're already entitled to — same tier, better quality.
+/// they're already entitled to, same tier, better quality.
 /// 4-hour snooze per upsell kind. After the user hits ✕ on a given
 /// scenario (e.g. "speed") we save the timestamp into native
 /// UserDefaults via `setSettings({upsell_snooze: …})` and hide that
-/// scenario for the next 4 hours. The other two scenarios stay live —
+/// scenario for the next 4 hours. The other two scenarios stay live
 /// flipping plans or running out of cloud hours surfaces a fresh
 /// strip regardless of an old dismiss.
 const SNOOZE_MS = 4 * 60 * 60 * 1000;
@@ -132,9 +132,9 @@ function resolveUpsell(s: Settings | null, u: Usage | null): UpsellKind {
 }
 
 /// "Transcribing…" card. Shares the EXACT same shell as every other
-/// status / empty / clarify banner in the product —
+/// status / empty / clarify banner in the product
 /// `.trans-banner.clarify-banner` + `.clarify-text` (body + sub) +
-/// `.clarify-actions` — so the surface doesn't change size or layout
+/// `.clarify-actions`, so the surface doesn't change size or layout
 /// between recording / transcribing / failed / empty states. The
 /// spinner sits inline next to the headline so the "this is moving"
 /// signal is part of the title, not a separate row that grows the card.
@@ -151,7 +151,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   const preparing = downloadingModel && modelPreparing === true;
   const dlPct = Math.round(Math.max(0, Math.min(1, modelDownloadProgress ?? 0)) * 100);
   // While preparing the bar is indeterminate: pin the fill to 100% (a full
-  // green surface) and let the CSS pulse carry the "still working" signal —
+  // green surface) and let the CSS pulse carry the "still working" signal
   // no misleading percentage, since this phase has no real progress to report.
   const dlFillPct = preparing ? 100 : dlPct;
   const dlLabel = preparing
@@ -163,7 +163,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
         : (t.trans_downloading_model ?? "Downloading model…"))
     : t.trans_label;
   // Backend mark when the pipeline went into .transcribing. Falling
-  // back to Date.now() for legacy rows that don't carry the field —
+  // back to Date.now() for legacy rows that don't carry the field
   // keeps the timer monotonic rather than negative.
   const startedAt = startedAtMs ?? Date.now();
   const [now, setNow] = React.useState(Date.now());
@@ -172,7 +172,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   const [usage, setUsage] = React.useState<Usage | null>(null);
   // Dismiss is persisted server-side (UserDefaults via `/api/settings`)
   // so the cross actually MEANS something across launches and across
-  // meetings — Костя's case: clicked ✕, app restarted, the same upsell
+  // meetings, Костя's case: clicked ✕, app restarted, the same upsell
   // came back. We hydrate the timestamp map from `settings.upsell_snooze`
   // (opaque JSON the native side just round-trips) once settings land.
   // Snooze is 4 hours per upsell kind (SNOOZE_MS); after that we get another shot.
@@ -185,16 +185,16 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
 
   const persistSnooze = React.useCallback(async (next: Partial<Record<UpsellSlot, number>>) => {
     const json = JSON.stringify(next);
-    // Optimistic local update — write the new JSON onto the cached
+    // Optimistic local update, write the new JSON onto the cached
     // settings so subsequent reads of `upsellDismissedAt` see the
     // dismiss immediately, even before the POST round-trips.
     setSettingsState((cur) => cur ? { ...cur, upsell_snooze: json } : cur);
-    // Send ONLY the changed field — the backend treats absent fields as
+    // Send ONLY the changed field, the backend treats absent fields as
     // unchanged. Re-POSTing the whole cached `settings` snapshot would
     // revert any toggle the user changed in Settings since this banner
     // mounted (stale-snapshot clobber).
     try { await setSettings({ upsell_snooze: json }); }
-    catch { /* server write failed — next render will reconcile on the next /api/settings poll */ }
+    catch { /* server write failed, next render will reconcile on the next /api/settings poll */ }
   }, []);
 
   const sparkles = React.useMemo(() => makeSparkleField(28), []);
@@ -243,25 +243,25 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
     if (upsell === "best") {
       // Paid user sitting on the local model. Spec from Костя:
       //   1. flip the override to `auto` so paid tiers resolve to cloud
-      //   2. CANCEL the in-flight whisperLocal run, then stop —
+      //   2. CANCEL the in-flight whisperLocal run, then stop
       //      the user re-triggers transcribe themselves so they choose
       //      when the (now-cloud) run starts on the new model.
       // While cancellation propagates we put the visible Stop button
-      // into its busy state — that's the affordance Костя expects to
+      // into its busy state, that's the affordance Костя expects to
       // see "правда что-то идёт".
-      // Snooze the "best" upsell — the user just took the action it
+      // Snooze the "best" upsell, the user just took the action it
       // proposed, no reason to show it again on the next meeting.
       if (upsell) {
         void persistSnooze({ ...upsellDismissedAt, [upsell]: Date.now() });
       }
       setStopping(true);
       try {
-        // Only the changed field (see persistSnooze note) — never re-POST
+        // Only the changed field (see persistSnooze note), never re-POST
         // the whole cached snapshot.
         const next = await setSettings({ transcription_provider: "auto" });
         setSettingsState(next);
         await cancelTranscription(meetingId);
-        // Don't call onCancelled() — parent polls status every ~1 s,
+        // Don't call onCancelled(), parent polls status every ~1 s,
         // sees the pipeline flip to `.failed`, unmounts this banner.
       } catch {
         setStopping(false);
@@ -269,7 +269,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
       }
       return;
     }
-    // Pricing modal hidden for now — upgrade upsells route straight to
+    // Pricing modal hidden for now, upgrade upsells route straight to
     // the pricing section on getcorder.com (in-app modal disabled until
     // the purchase flow is finalised). Re-enable the in-app modal by
     // dispatching `corder-open-pricing` again.
@@ -279,7 +279,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   // English fallbacks live next to the consumer because i18n.ts marks
   // these keys optional (untranslated locales fall back to en at the
   // table level, but the table-level fallback only kicks in when the
-  // ENTIRE locale is absent — per-key gaps still need `??`).
+  // ENTIRE locale is absent, per-key gaps still need `??`).
   const upsellCopy =
     upsell === "speed"
       ? {
@@ -325,7 +325,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
           }
           style={downloadingModel ? ({ ["--wl-progress" as string]: `${dlFillPct}%` } as React.CSSProperties) : undefined}
           // While the model is downloading the button is a progress
-          // INDICATOR, not a Stop control — clicking it must do nothing
+          // INDICATOR, not a Stop control, clicking it must do nothing
           // (a click during the download was cancelling the whole run and
           // failing the meeting). It re-enables as the real Stop button
           // once the model lands and transcription proper begins.
@@ -338,7 +338,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
             // SAME button (identical size) temporarily showing the model
             // download instead of Stop. Reuses the green-fill + dual-label
             // mechanism from the Settings download pill (`wl-download-*`),
-            // so a normal user — who has no model picker — still sees what
+            // so a normal user, who has no model picker, still sees what
             // is happening. Reverts to "Stop transcription" once the model
             // lands and real transcription starts.
             <>
@@ -367,7 +367,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
         {downloadingModel && (
           <>
             {/* The model download/compile can take a while on a slow Mac. Let
-                the user start a NEW recording without waiting for it — the
+                the user start a NEW recording without waiting for it, the
                 current meeting keeps preparing in the background and transcribes
                 once the model lands. Secondary (outlined) so it never competes
                 with the primary progress button above. */}
@@ -385,7 +385,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
             {/* Explicit abort for a long/hot one-time setup. Previously the only
                 out during the 5-18 min compile was starting ANOTHER recording,
                 which reads as a trap on a slow/hot Mac. The Core ML compile is
-                OS-uncancellable so it keeps caching in the background — hence the
+                OS-uncancellable so it keeps caching in the background, hence the
                 copy promises it resumes from cache next time, not that it stops
                 the heat instantly. Tertiary text style so it stays below the two
                 buttons. Routes through onStop → cancel-transcription (writes

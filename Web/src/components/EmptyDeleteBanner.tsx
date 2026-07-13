@@ -5,7 +5,7 @@ import type { T } from "../i18n";
 
 interface Props {
   meetingId: string;
-  /// Parent's "tidy up" callback — fires AFTER `archiveMeeting`
+  /// Parent's "tidy up" callback, fires AFTER `archiveMeeting`
   /// returns. Removes the row from the sidebar list optimistically
   /// and shows the 5-second Undo toast. Wrapped in a Promise-aware
   /// caller here so the spinner stays up until the real archive HTTP
@@ -22,14 +22,14 @@ interface Props {
 
 type Busy = null | "transcribe" | "archive";
 
-/// Card shown when a meeting has nothing useful to read — either the model
+/// Card shown when a meeting has nothing useful to read, either the model
 /// produced zero segments (silent recording) or the pipeline failed
 /// outright. Same outline-card visual as the other banners.
 ///
 /// The Archive button OWNS the HTTP call (`archiveMeeting`) so the
 /// spinner stays visible until the server actually moves the row.
 /// Previously the parent ran `archiveMeeting` in the background and
-/// jumped to Dashboard the same tick — the spinner then either
+/// jumped to Dashboard the same tick, the spinner then either
 /// vanished too fast or, if the call hung, never went away because
 /// the banner re-mounted in a new context. Now: stay on this page,
 /// show the spinner, wait for confirmation, then call `onDeleted` to
@@ -37,7 +37,7 @@ type Busy = null | "transcribe" | "archive";
 export function EmptyDeleteBanner({ meetingId, onDeleted, failed, onRetranscribed, onToast, t }: Props) {
   const [busy, setBusy] = React.useState<Busy>(null);
 
-  /// `archiveMeeting` is a tiny local SQLite UPDATE — it returns in
+  /// `archiveMeeting` is a tiny local SQLite UPDATE, it returns in
   /// ~20 ms, faster than the eye can register a spinner. We pair it
   /// with a minimum-visible delay so the user sees "loading… done"
   /// instead of the page just jumping away on click. 350 ms reads as
@@ -53,7 +53,7 @@ export function EmptyDeleteBanner({ meetingId, onDeleted, failed, onRetranscribe
       await withMinDelay(archiveMeeting(meetingId));
       // Parent now does its post-archive housekeeping (soft-hide the
       // row, surface the Undo toast, navigate away). We don't reset
-      // `busy` — the banner unmounts a frame later.
+      // `busy`, the banner unmounts a frame later.
       onDeleted(meetingId);
     } catch {
       setBusy(null);

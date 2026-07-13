@@ -65,12 +65,12 @@ enum AudioMixer {
     }
 
     /// Shrink a retained WAV to the exact format ASR and playback actually
-    /// consume — 16 kHz MONO 16-bit PCM — reclaiming the disk the capture-time
+    /// consume, 16 kHz MONO 16-bit PCM, reclaiming the disk the capture-time
     /// 44.1/48 kHz stereo Float32 originals waste (a 44.1k mono f32 mic.wav is
     /// ~176 KB/s; 16k mono int16 is 32 KB/s → ~5.5x smaller; a 48k STEREO f32
     /// system.wav is ~12x). Lossless for our purposes: Whisper/Groq downsample
     /// to 16k mono anyway, and the playback mix is already 16k mono. Idempotent
-    /// (a file already 16 kHz/mono/int16 is skipped — the fast path), atomic
+    /// (a file already 16 kHz/mono/int16 is skipped, the fast path), atomic
     /// (temp file then swap), best-effort (on ANY error the original is left
     /// exactly as it was, so a bulk pass can never corrupt a recording).
     @discardableResult
@@ -109,7 +109,7 @@ enum AudioMixer {
             // replaceItemAt IS the atomic swap. If it fails, do NOT fall back to
             // remove-then-move: a move that fails after the remove would delete
             // the recording (data loss). Keep the original intact and drop the
-            // temp — this file simply stays uncompacted.
+            // temp, this file simply stays uncompacted.
             FileLogger.log("AudioMixer: compact swap failed for \(url.lastPathComponent), keeping original: \(error)")
             try? fm.removeItem(at: tmp)
             return false
@@ -118,7 +118,7 @@ enum AudioMixer {
         return true
     }
 
-    /// 16-bit little-endian PCM WAV settings — the format WKWebView's <audio>
+    /// 16-bit little-endian PCM WAV settings, the format WKWebView's <audio>
     /// element can actually decode (a float32 WAV cannot be played by the media
     /// element). Used for the playback mix and the float32→int16 rewrite.
     static func playbackInt16Settings(sampleRate: Double, channels: AVAudioChannelCount) -> [String: Any] {
@@ -135,7 +135,7 @@ enum AudioMixer {
 
     /// Rewrite a Float32 playback WAV in place as 16-bit PCM so WKWebView's
     /// <audio> can decode it. Idempotent: a file that's ALREADY PCM-integer is
-    /// left untouched (fast path — one header read). Best-effort: on any error
+    /// left untouched (fast path, one header read). Best-effort: on any error
     /// the original file is left exactly as it was. Streams in frame chunks so
     /// even a long recording doesn't balloon memory. Heals the existing
     /// installed base whose `audio.wav` was written as float32 before the fix.

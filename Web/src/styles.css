@@ -1,7 +1,7 @@
 :root {
   --bg: #ffffff;
   --bg-elev: #f7f7f6;
-  /* Hover/active fills tuned to be barely-perceptible — barely a tint
+  /* Hover/active fills tuned to be barely-perceptible, barely a tint
      above the white background of the toolbar buttons. */
   --bg-hover: #fafaf8;
   --bg-active: #f3f3f1;
@@ -11,8 +11,8 @@
   --fg: #212121;
   --fg-muted: #6b6b68;
   --fg-dim: #a0a09c;
-  /* Primary accent — Corder's green. Used for selected pills, CTA fills,
-     toggle ON states. NEVER use --fg (black) for those — black is just
+  /* Primary accent, Corder's green. Used for selected pills, CTA fills,
+     toggle ON states. NEVER use --fg (black) for those, black is just
      for text and icons. See corder-design-system memory. */
   --accent: #0e7c44;
   --accent-pressed: #0a5e34;
@@ -22,7 +22,7 @@
   --avatar-admin: #2563eb;
   /* Gold accent reserved for the Pro tier badge (and the existing
      "unseen meeting" title styling, which already hard-codes a similar
-     value inline — left untouched). Picked to sit between the warm
+     value inline, left untouched). Picked to sit between the warm
      amber of macOS system badges and a coin-yellow that read too
      juvenile in mocks; the muted hue keeps the badge dignified next
      to the green Max badge. */
@@ -35,7 +35,7 @@
   --status-ready: #1f7a4f;
   --status-warn: #b07b1a;
   --status-fail: #b8443c;
-  /* Recessed timeline channel — overridden in dark. */
+  /* Recessed timeline channel, overridden in dark. */
   --tl-track: rgba(33, 33, 33, 0.05);
 }
 
@@ -56,9 +56,9 @@
   --fg-dim: #6e6e6a;
   --accent: #1f9d59;
   --accent-pressed: #178048;
-  /* Admin-role avatar fill — lifted for legibility on the dark panel. */
+  /* Admin-role avatar fill, lifted for legibility on the dark panel. */
   --avatar-admin: #3b82f6;
-  /* Slightly cooler gold in dark — same intent (Pro tier badge) but
+  /* Slightly cooler gold in dark, same intent (Pro tier badge) but
      lifted so the chip stays legible on the dark panel surface. */
   --accent-gold: #e0b95a;
   --speaker-1: #9b7ce0;
@@ -78,9 +78,9 @@
 /* Sessions: lighter, clearly liftable hover. */
 .dark .meeting-item:hover { background: rgba(255, 255, 255, 0.055); }
 /* Settings rows: simpler/subtler than the border, like the old session
-   hover — not a strong fill. */
+   hover, not a strong fill. */
 .dark .settings-row:hover { background: var(--bg-hover); }
-/* Transcript line hover — noticeably lighter than other hovers so a
+/* Transcript line hover, noticeably lighter than other hovers so a
    line you're pointing at clearly lifts off the dark page. */
 .dark .segment-line:hover { background: rgba(255, 255, 255, 0.07); }
 .dark .meeting-item.active,
@@ -92,7 +92,7 @@
 }
 /* Children inside an active session set their OWN `color: var(--fg-…)`
    which beats the parent's `color: #fff`, leaving title/meta/preview as
-   muted grey on the green fill — unreadable. Force white for every text
+   muted grey on the green fill, unreadable. Force white for every text
    slot inside the active session in dark theme. */
 .dark .meeting-item.active .meeting-title,
 .dark .meeting-item.active .meeting-meta,
@@ -101,7 +101,7 @@
 .dark .meeting-item.active .meeting-people {
   color: #fff;
 }
-/* Unseen-title accent green also collapses on the green fill — fall
+/* Unseen-title accent green also collapses on the green fill, fall
    back to plain white so the bold weight stays visible. */
 .dark .meeting-item.unseen.active .meeting-title { color: #fff; }
 .dark .toolbar-icon-btn.active:hover {
@@ -127,7 +127,7 @@
 
    GPU-promoted elements (will-change, animation, transition,
    backdrop-filter, isolation) get composited LIVE on their own
-   layer above the snapshots — they pop instantly to the new theme
+   layer above the snapshots, they pop instantly to the new theme
    while the rest of the page is still revealing. The strip rule
    below neutralises those for the duration of the wipe so the entire
    DOM folds into the root snapshot. Layout-disturbing properties
@@ -138,7 +138,7 @@
    small enough that the eye doesn't catch the brief desync.
 
    `theme-anim` is added before the snapshot is captured and removed
-   only on `transition.finished` — both snapshots AND the live DOM
+   only on `transition.finished`, both snapshots AND the live DOM
    are promotion-free for the full wipe. */
 html.theme-anim *,
 html.theme-anim *::before,
@@ -162,7 +162,7 @@ html.theme-anim *::after {
    composites on its own layer regardless of the strip rule. Left as
    a "live leftover" it shows the playing frame above the wipe with
    the OLD-theme card chrome around it visible for a frame at the
-   start, then the NEW-theme chrome — visible "flash". Give the card
+   start, then the NEW-theme chrome, visible "flash". Give the card
    a `view-transition-name` so it's captured as its own snapshot
    group; with a short cross-fade we mask the live-layer flash. The
    playing frame freezes for the fade duration (the user accepts a
@@ -178,7 +178,7 @@ html.theme-anim *::after {
 }
 
 /* The video card USED to ride a named view-transition group of its own
-   (`corder-video-card`) — capturing the <video> as a frozen snapshot
+   (`corder-video-card`), capturing the <video> as a frozen snapshot
    suppressed the live-layer blink at the wipe's edges. The trade-off
    was a 700 ms freeze of the playing frame, which the user (rightly)
    found more visually disturbing than the original blink. The named
@@ -189,7 +189,7 @@ html.theme-anim *::after {
 
 * { box-sizing: border-box; }
 
-/* Explicit selection colour — the WebKit default washed out to an
+/* Explicit selection colour, the WebKit default washed out to an
    invisible near-white box on the dark theme. A translucent accent
    tint reads on both backgrounds; text keeps its own colour so
    contrast is preserved. */
@@ -225,7 +225,7 @@ button {
   font: inherit;
   font-size: 13px;
   padding: 8px 14px;
-  /* Pill — corners fully rounded so all controls in the header read as a
+  /* Pill, corners fully rounded so all controls in the header read as a
      family with the "Усилить" toggle. */
   border-radius: 999px;
   cursor: pointer;
@@ -264,10 +264,10 @@ summary,
 }
 .avatar-btn {
   padding: 0;
-  /* Slightly bigger glyph (36 vs 32) — the header is min-height 64 px
+  /* Slightly bigger glyph (36 vs 32), the header is min-height 64 px
      with 18 px vertical padding (= 28 px of room for chrome), so a
      36 px circle still clears the top/bottom bound and the header
-     doesn't grow. No outline either — the accent fill is the
+     doesn't grow. No outline either, the accent fill is the
      identity, the border just muddied it. Block layout (not flex)
      so the SVG child fills the circle 1:1. */
   width: 36px;
@@ -280,7 +280,7 @@ summary,
   cursor: pointer;
   flex-shrink: 0;
   /* Containing-block for the inner `.avatar-svg` (position:absolute;
-     inset:0) — without this the SVG would escape into the nearest
+     inset:0), without this the SVG would escape into the nearest
      positioned ancestor and end up rendered at random sizes. */
   position: relative;
   /* Soft hover for the borderless avatar: a tinted halo around the
@@ -290,7 +290,7 @@ summary,
 }
 .avatar-btn:hover {
   background: var(--bg-elev);
-  /* Tier-neutral halo — was accent-green, but Free avatars are
+  /* Tier-neutral halo, was accent-green, but Free avatars are
      outlined-only and a green ring on them advertised a tier the user
      hasn't bought. Soft fg-based halo reads as "interactive" without
      implying paid status. */
@@ -304,7 +304,7 @@ summary,
 .avatar-btn.is-empty:hover { background: var(--bg-elev); }
 .avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-fallback { color: var(--fg-muted); display: flex; }
-/* Generated avatar variant — uses the same .avatar-btn frame.
+/* Generated avatar variant, uses the same .avatar-btn frame.
    No baseline background: the SVG paints its own (accent for
    paid, transparent for free). Hard-coding `background: accent`
    here used to override the tier-aware SVG fill so a Free user's
@@ -312,7 +312,7 @@ summary,
 .avatar-btn-svg, .avatar-btn-svg:hover { padding: 0; background: transparent; }
 .avatar-svg {
   /* SVG itself carries width="100%" height="100%" as attributes
-     (see AvatarGlyph) — that's the canonical way to make WebKit
+     (see AvatarGlyph), that's the canonical way to make WebKit
      fill the parent regardless of flex context. CSS here only
      handles block flow + the hover scale transition. */
   display: block;
@@ -324,13 +324,13 @@ summary,
   transform: scale(1.08);
 }
 
-/* The header avatar inside the popover is also clickable — opens the
+/* The header avatar inside the popover is also clickable, opens the
    3×3 glyph picker below the header. Borderless, same accent halo on
    hover as the toolbar trigger so the two read as the same control. */
 .avatar-pickable {
   appearance: none;
   border: 0;
-  /* Same reasoning as `.avatar-btn-svg` — the SVG paints its own
+  /* Same reasoning as `.avatar-btn-svg`, the SVG paints its own
      background (accent for paid, transparent for free). Hard-
      coding accent here used to win against the tier-aware SVG
      fill and Free users still saw a green chip. */
@@ -346,7 +346,7 @@ summary,
   filter: brightness(1.05);
 }
 
-/* Shuffle overlay — the lucide Shuffle icon fades in over the glyph
+/* Shuffle overlay, the lucide Shuffle icon fades in over the glyph
    on hover so the user understands "click = new random glyph".
    Pointer-events:none means the click still goes to the parent
    button. */
@@ -356,7 +356,7 @@ summary,
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Translucent white wash so the underlying glyph still reads — the
+  /* Translucent white wash so the underlying glyph still reads, the
      overlay is a HINT ("click to shuffle"), not a curtain. Was a near-
      opaque dark-green plate that hid the avatar entirely. */
   background: rgba(255, 255, 255, 0.35);
@@ -372,7 +372,7 @@ summary,
 
 /* 3×3 grid picker that slides in between the popover head and the
    action items. Each cell is a round chip showing one of the nine
-   glyph variants; no resting outline — the accent fill is the
+   glyph variants; no resting outline, the accent fill is the
    identity, and a soft halo + scale handle hover/active state. */
 .avatar-picker {
   display: grid;
@@ -394,7 +394,7 @@ summary,
      paints its own circle (paid → accent, free → transparent ring),
      so the cell background must stay clear. */
   background: transparent;
-  /* Cell itself doesn't transform on hover — the inner .avatar-svg
+  /* Cell itself doesn't transform on hover, the inner .avatar-svg
      grows instead (see the shared rule above). Halo + brightness
      still come from the cell. Keeps the picker grid stable while
      each cell visibly "leans in" under the cursor. */
@@ -407,13 +407,13 @@ summary,
   filter: brightness(1.06);
 }
 .avatar-picker-cell.is-active {
-  /* Two-tone ring — solid accent + a soft outer halo — so the picked
+  /* Two-tone ring, solid accent + a soft outer halo, so the picked
      variant reads as locked-in without needing a border underneath. */
   box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .avatar-picker-cell .avatar-svg { display: block; width: 100%; height: 100%; }
 
-/* Language picker popover — wider than the profile popover (room for
+/* Language picker popover, wider than the profile popover (room for
    the native + English name columns), with a search field on top and
    a scrollable list below. Hosts the full LANGS list (20+ entries),
    filtered live by the search input. */
@@ -422,7 +422,7 @@ summary,
   padding: 6px;
 }
 /* Inside the LangPicker popover we just need a small bottom gap
-   between the search field and the list — the `.search-field` shell
+   between the search field and the list, the `.search-field` shell
    (used in transcript/sidebar/installed-apps picker too) handles the
    shape, the icon, and the input styling. */
 .lang-picker-search { margin-bottom: 6px; }
@@ -446,7 +446,7 @@ summary,
   align-items: center;
   gap: 10px;
 }
-/* SVG flag sprite from `flag-icons` — fixed size so all rows line up
+/* SVG flag sprite from `flag-icons`, fixed size so all rows line up
    regardless of which country code lands. The package paints flags
    as `display: inline-block` background-image; we just size + clip. */
 .lang-picker-flag {
@@ -463,16 +463,16 @@ summary,
   font-size: 11.5px;
   color: var(--fg-muted);
   /* Push the native name to the left, English subtitle right next to
-     it — overflow if very long is fine on a small popover. */
+     it, overflow if very long is fine on a small popover. */
   grid-column: 2;
   margin-top: 1px;
 }
 /* Single-row variant: when native and English happen to be identical
-   (English / Indonesian), the subtitle row is empty — still keeps the
+   (English / Indonesian), the subtitle row is empty, still keeps the
    12-px row height steady so the list reads as a uniform list. */
 .lang-picker-item.is-active { background: var(--bg-hover); }
 .lang-picker-check { color: var(--accent); justify-self: end; }
-/* Floating profile dropdown — fixed, above the modal layer (overlay is
+/* Floating profile dropdown, fixed, above the modal layer (overlay is
    z 70). */
 .profile-pop {
   position: fixed;
@@ -486,8 +486,7 @@ summary,
      Long names overflow ellipsis through `.profile-pop-name`. */
   width: 280px;
   /* Same shell as the Transcription-failed / promo blocks: plain --bg
-     with a single strong outline. Soft, two-layer elevation shadow —
-     a close 1 px contact + a wider, very faint halo. The previous
+     with a single strong outline. Soft, two-layer elevation shadow, a close 1 px contact + a wider, very faint halo. The previous
      single 0 16px 48px / .32 looked heavy under the bright dropdowns
      and made the menu feel like it was floating off-frame. */
   background: var(--bg);
@@ -501,7 +500,7 @@ summary,
   display: flex;
   align-items: center;
   gap: 11px;
-  /* 32 px to the right of the name/id stack — the head is the
+  /* 32 px to the right of the name/id stack, the head is the
      intrinsic-width driver for the whole popover (`width: max-content`
      on `.profile-pop`), so this padding literally defines how much
      air sits between the longest line of text and the menu's right
@@ -509,22 +508,22 @@ summary,
   padding: 8px 32px 10px 8px;
 }
 .avatar-img-lg {
-  /* Popover-head avatar — same glyph as the toolbar trigger, just at
+  /* Popover-head avatar, same glyph as the toolbar trigger, just at
      a larger physical size. 48 reads as "this is your profile" inside
      a 232 px popover without crowding the name + id beside it. The
      SVG inside is identical (viewBox 40×40), so the only thing that
-     changes is the pixel scale — width/colour/border stay equal. */
+     changes is the pixel scale, width/colour/border stay equal. */
   width: 48px;
   height: 48px;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  /* Same reasoning as `.avatar-btn-svg` and `.avatar-pickable` — the
+  /* Same reasoning as `.avatar-btn-svg` and `.avatar-pickable`, the
      SVG paints its own circle (accent for paid, transparent for free).
      Hard-coding accent here used to win against the tier-aware fill
      and Free users still saw a green chip in the popover head. */
   background: transparent;
-  /* No resting outline — matches the toolbar avatar (`.avatar-btn`)
+  /* No resting outline, matches the toolbar avatar (`.avatar-btn`)
      and the picker cells. `.avatar-pickable` paints its own hover
      halo on top. Block layout (not flex) so the SVG child fills the
      container 1:1 without flex auto-sizing surprises. */
@@ -555,7 +554,7 @@ summary,
      reads as a snug 2-line block, not a loose 3rd line under the title. */
   line-height: 1.3;
 }
-/* The signed-in email reads +2px vs the guest subtitle — it's the
+/* The signed-in email reads +2px vs the guest subtitle, it's the
    account identity, worth a touch more presence. Scoped so it doesn't
    touch the guest "Sign in to access…" copy. */
 .profile-pop-email {
@@ -568,7 +567,7 @@ summary,
      consistent breathing room above Dashboard and below Settings. The
      Sign-out row that sits below the second separator inherits the
      same gap, which keeps it visually isolated from the account group
-     without being visually buried — same spacing language as the rest
+     without being visually buried, same spacing language as the rest
      of the popover. */
   margin: 8px -8px;
 }
@@ -590,7 +589,7 @@ summary,
 .profile-pop-item svg { color: var(--fg-muted); flex-shrink: 0; }
 /* Sign-in is the guest popover's primary action: a compact green CTA that
    mirrors the Dashboard "Start recording" accent button (same
-   `.clarify-btn.accent` green + hover), shrunk to the 280px dropdown — full
+   `.clarify-btn.accent` green + hover), shrunk to the 280px dropdown, full
    width inside the 8px popover padding, centered label, no row icon. */
 .profile-pop-signin {
   width: 100%;
@@ -615,8 +614,7 @@ summary,
   background: color-mix(in srgb, var(--accent) 88%, #000);
   border-color: color-mix(in srgb, var(--accent) 88%, #000);
 }
-/* Sign out reuses the Sign-in geometry (full-width, squarish) but is RED —
-   it's a destructive exit, not a primary CTA. The red mirrors the old
+/* Sign out reuses the Sign-in geometry (full-width, squarish) but is RED, it's a destructive exit, not a primary CTA. The red mirrors the old
    `.profile-pop-item-danger` row colour, now as a filled button. */
 .profile-pop-signout {
   border-color: var(--danger);
@@ -632,7 +630,7 @@ summary,
 .profile-pop-foot {
   padding: 4px 0;
 }
-/* Destructive variant — same red palette as `.clarify-btn.danger`
+/* Destructive variant, same red palette as `.clarify-btn.danger`
    so destructive actions read consistently across modals + menus.
    Icon picks up the same red via currentColor by overriding the
    muted default. */
@@ -643,7 +641,7 @@ summary,
 .profile-pop-item-danger:hover {
   background: rgba(183, 68, 60, 0.10);
 }
-/* Accent variant — used by "Upgrade to Pro" row. Green so the
+/* Accent variant, used by "Upgrade to Pro" row. Green so the
    monetisation hook stands out from the neutral nav items above. */
 .profile-pop-item-accent {
   color: var(--accent);
@@ -653,7 +651,7 @@ summary,
 .profile-pop-item-accent:hover {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-/* Free/Pro/Max tier badge under the profile name — small uppercase
+/* Free/Pro/Max tier badge under the profile name, small uppercase
    pill. Colour varies by tier:
    • Free → neutral muted (default), reads as "no special status".
    • Pro  → gold fill, reads as "you're paying".
@@ -687,7 +685,7 @@ summary,
 /* Integrations category in the profile popover (moved out of Settings'
    "Coming soon"). Compact logo + title + inert SOON chip. */
 /* Matches `.settings-section-title` exactly (same section-label
-   convention) — just positioned for the popover. */
+   convention), just positioned for the popover. */
 .profile-pop-cat {
   font-size: 12px;
   font-weight: 600;
@@ -738,7 +736,7 @@ input[type="text"], input[type="search"] {
   /* Match the toolbar `button` proportions so search fields and buttons
      read as siblings (same height, same horizontal padding). */
   padding: 8px 14px;
-  /* Pill — same shape as the toolbar buttons. */
+  /* Pill, same shape as the toolbar buttons. */
   border-radius: 999px;
   outline: none;
 }
@@ -768,7 +766,7 @@ input[type="search"]::-webkit-search-decoration {
   background: #d8d8d4;
   border-radius: 4px;
   /* Without min-height the thumb collapses into a stubby pill that reads
-     as a dot rather than a scrollbar — see the transcript pane where
+     as a dot rather than a scrollbar, see the transcript pane where
      content overflow is small relative to the viewport. */
   min-height: 48px;
 }
@@ -776,8 +774,7 @@ input[type="search"]::-webkit-search-decoration {
 
 /* Custom overlay scrollbar (OverlayScrollbar.tsx). Containers that opt
    in carry `.ovsb-scroll` and lose their native bar entirely; the
-   shared component draws `.ovsb-thumb` centred ON the divider line —
-   the one thing a native WebKit scrollbar physically cannot do. */
+   shared component draws `.ovsb-thumb` centred ON the divider line, the one thing a native WebKit scrollbar physically cannot do. */
 .ovsb-scroll { scrollbar-width: none; }
 .ovsb-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
 /* Opaque, exactly the old native thumb colours (incl. no dark
@@ -793,7 +790,7 @@ input[type="search"]::-webkit-search-decoration {
 .ovsb-thumb:hover,
 .ovsb-thumb.dragging { background: #b8b8b4; }
 /* view-transition-name is set per instance via the `name` prop in
-   OverlayScrollbar (NOT here) — the class is shared by the sidebar and
+   OverlayScrollbar (NOT here), the class is shared by the sidebar and
    transcript panes and a duplicate name aborts the whole transition. */
 
 /* App layout */
@@ -812,7 +809,7 @@ input[type="search"]::-webkit-search-decoration {
 /* Sidebar */
 .sidebar {
   /* `min-height: 0` so the inner `.sidebar-list` can actually scroll
-     instead of stretching the sidebar past the grid row's edge — see the
+     instead of stretching the sidebar past the grid row's edge, see the
      long comment on `.transcript-wrap` for the same fix on the main pane. */
   min-height: 0;
   /* Single clean divider: the --bg-elev (sidebar) vs --bg (main) colour
@@ -837,7 +834,7 @@ input[type="search"]::-webkit-search-decoration {
    the search input's height (13px × line-height 1.5 + 16px padding + 2px border
    ≈ 38px), so the back button matches the input out of the box. (The earlier
    32px shrank it; an `aspect-ratio` attempt collapsed its width in flex.) */
-/* Ghost placeholder row shown in the empty library — `.meeting-item`
+/* Ghost placeholder row shown in the empty library, `.meeting-item`
    geometry, just faded and non-interactive. The user reads it as
    "this is where your recordings will appear", not as a separate
    help banner with mismatched paddings. */
@@ -845,11 +842,11 @@ input[type="search"]::-webkit-search-decoration {
   opacity: 0.55;
   pointer-events: none;
   cursor: default;
-  /* Dashed outline gives the row a "placeholder" reading — it's
+  /* Dashed outline gives the row a "placeholder" reading, it's
      visibly a slot for content, not a real recording. 1.5 px so the
      dashes are clearly visible at sidebar zoom, muted border colour
      so it doesn't fight the rest of the UI. Inner padding stays the
-     same (`.meeting-item` is 10 10) — the border draws outside the
+     same (`.meeting-item` is 10 10), the border draws outside the
      content box thanks to box-sizing:border-box on the row already. */
   border: 1.5px dashed var(--border-strong);
 }
@@ -857,7 +854,7 @@ input[type="search"]::-webkit-search-decoration {
 .meeting-item.ghost .meeting-preview {
   color: var(--fg-muted);
 }
-/* "Nothing matches your query" — inherits the search field's gutter so
+/* "Nothing matches your query", inherits the search field's gutter so
    the message lines up with the input above it, not the row padding. */
 .sidebar-no-match {
   padding: 12px 12px 16px;
@@ -870,9 +867,9 @@ input[type="search"]::-webkit-search-decoration {
 
    Left padding matches a toolbar `button`: 14 px from the field's edge to
    the icon (same as button left padding to its leading icon), then a 6 px
-   gap, then the placeholder/text — total left padding 14 + 14 + 6 = 34 px. */
+   gap, then the placeholder/text, total left padding 14 + 14 + 6 = 34 px. */
 .search-field { position: relative; display: flex; align-items: center; }
-/* Only the leading magnifier is the absolutely-positioned icon — scope to
+/* Only the leading magnifier is the absolutely-positioned icon, scope to
    the direct child so the cmd+F nav chevrons (nested in .search-nav) keep
    their normal flow layout. */
 .search-field > svg {
@@ -938,7 +935,7 @@ input[type="search"]::-webkit-search-decoration {
 .search-nav-btn:hover:not(:disabled) { background: var(--bg-elev); color: var(--fg); }
 .search-nav-btn:disabled { opacity: 0.4; cursor: default; }
 
-/* Active-recording card — same shape as IdleStatus / RecordingStatus in the
+/* Active-recording card, same shape as IdleStatus / RecordingStatus in the
    popover so the visual language matches across the menu-bar and Library. */
 .rec-banner {
   border: 1px solid var(--border-strong);
@@ -976,7 +973,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .rec-text { display: flex; flex-direction: column; gap: 1px; }
 .rec-label {
-  /* Same type as the sidebar's meeting-title (Today, 17:56) — quiet 13/500
+  /* Same type as the sidebar's meeting-title (Today, 17:56), quiet 13/500
      instead of the previous loud all-caps with wide tracking. */
   font-size: 13px;
   font-weight: 500;
@@ -989,8 +986,7 @@ input[type="search"]::-webkit-search-decoration {
   color: var(--fg);
 }
 .rec-stop {
-  /* Same proportions as the popover's primary "Остановить запись" button —
-     full-width row, generous vertical padding — but in red to mark a
+  /* Same proportions as the popover's primary "Остановить запись" button, full-width row, generous vertical padding, but in red to mark a
      destructive action inside the live-recording card. */
   background: #B7443C;
   color: #fff;
@@ -1017,7 +1013,7 @@ input[type="search"]::-webkit-search-decoration {
   display: inline-block;
 }
 
-/* Transcribing card — same shape as `.rec-banner`, but in our accent green
+/* Transcribing card, same shape as `.rec-banner`, but in our accent green
    so it visually says "work in progress, not destructive". Sits in the
    same slot inside `.transcript` while detail.status === 'transcribing'. */
 .trans-banner {
@@ -1029,7 +1025,7 @@ input[type="search"]::-webkit-search-decoration {
   gap: 12px;
   background: var(--bg);
   max-width: 360px;
-  /* Never let the flex column compress the card — it sits inside
+  /* Never let the flex column compress the card, it sits inside
      `.transcript` (flex, scrolls). Without this it gets squeezed and,
      with overflow:hidden on the clarify variant, the content is clipped
      so the banner looks like it "didn't open". */
@@ -1046,7 +1042,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .trans-text { display: flex; flex-direction: column; gap: 1px; }
 .trans-label {
-  /* Match `.rec-label` — same type family as meeting-title in the sidebar. */
+  /* Match `.rec-label`, same type family as meeting-title in the sidebar. */
   font-size: 13px;
   font-weight: 500;
   color: var(--fg-muted);
@@ -1058,7 +1054,7 @@ input[type="search"]::-webkit-search-decoration {
   color: var(--fg);
 }
 .trans-stop {
-  /* Same size & radius as before — only fill/border swapped to match the
+  /* Same size & radius as before, only fill/border swapped to match the
      header's outline buttons (EN / Copy / Delete). */
   background: transparent;
   color: var(--fg);
@@ -1094,7 +1090,7 @@ input[type="search"]::-webkit-search-decoration {
      scroll track doesn't run up against the sidebar's bottom edge. */
   margin-bottom: 16px;
 }
-/* Real in-flow element — WebKit reliably counts its height in
+/* Real in-flow element, WebKit reliably counts its height in
    `scrollHeight`, unlike the container's own `padding-bottom`. Just
    enough breathing room (24 px) so the last meeting card's preview
    line never reads as clipped. */
@@ -1157,7 +1153,7 @@ input[type="search"]::-webkit-search-decoration {
   /* Same right inset as the cards so the label (and the divider line
      on `.meeting-item + &`) stops before the edge scrollbar. */
   margin-right: 9px;
-  /* Same anti-selection rule as `.meeting-item` — shift-range selection
+  /* Same anti-selection rule as `.meeting-item`, shift-range selection
      drags through the header text otherwise. */
   -webkit-user-select: none;
   user-select: none;
@@ -1181,7 +1177,7 @@ input[type="search"]::-webkit-search-decoration {
   flex-direction: column;
   gap: 3px;
   transition: background 60ms ease;
-  /* Multi-select uses Shift-click for range selection — without this
+  /* Multi-select uses Shift-click for range selection, without this
      the browser also paints native text selection across every row in
      the range (date / duration text gets the accent highlight on top
      of our `.active` fill). Rows are clickable units, not text the
@@ -1215,7 +1211,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 /* Sidebar lives on `--bg-elev`, so a hover that uses the toolbar's
    `--bg-hover` (which is whiter than `--bg-elev`) actually makes items
-   *lighter* than the surrounding panel — invisible. Use explicit darker
+   *lighter* than the surrounding panel, invisible. Use explicit darker
    greys here so hover/active read clearly on the elevated surface. */
 .meeting-item:hover { background: #ececea; }
 .meeting-item.active { background: #e8e8e5; }
@@ -1248,7 +1244,7 @@ input[type="search"]::-webkit-search-decoration {
   align-items: center;
   color: #d04a3e;
 }
-/* Inline rename field — sits in place of the title, same metrics so
+/* Inline rename field, sits in place of the title, same metrics so
    the row doesn't jump when entering edit mode. */
 .meeting-title-edit {
   flex: 1;
@@ -1272,7 +1268,7 @@ input[type="search"]::-webkit-search-decoration {
 .meeting-date::before {
   content: "·";
   margin-right: 6px;
-  /* Was var(--border) — invisible on the sidebar surface, so it read
+  /* Was var(--border), invisible on the sidebar surface, so it read
      as "no separator between 1m 39s and 23:57". A dim foreground tone
      makes the dot visible without competing with the text. */
   color: var(--fg-dim);
@@ -1296,7 +1292,7 @@ input[type="search"]::-webkit-search-decoration {
   gap: 6px;
   align-items: center;
   /* Single line, always. When the sidebar is dragged narrow the row
-     must clip — never wrap the duration ("1m 39s") or status label
+     must clip, never wrap the duration ("1m 39s") or status label
      onto a second line (looked broken). */
   flex-wrap: nowrap;
   white-space: nowrap;
@@ -1314,8 +1310,7 @@ input[type="search"]::-webkit-search-decoration {
    Same shape as `.status-dot.recording`, but blinks via a JS-driven
    `.on` class instead of a CSS keyframe (RecordingBanner already
    computes a 1 Hz toggle from the elapsed timer). Without this
-   rule the span had no width/height/background and was invisible —
-   which is exactly what Костя caught in dark theme. */
+   rule the span had no width/height/background and was invisible, which is exactly what Костя caught in dark theme. */
 .rec-dot-inline {
   width: 8px;
   height: 8px;
@@ -1331,7 +1326,7 @@ input[type="search"]::-webkit-search-decoration {
   transform: scale(1.05);
 }
 /* "transcribing" rows used to wear a pulsing gold dot even after the
-   pipeline finished or stalled — confusing because the row visually
+   pipeline finished or stalled, confusing because the row visually
    claimed work was in flight when it wasn't. Use a hollow white
    circle with a thin border instead: reads as "no transcript yet"
    without falsely implying motion. */
@@ -1341,7 +1336,7 @@ input[type="search"]::-webkit-search-decoration {
   box-sizing: border-box;
 }
 .dark .status-dot.transcribing { border-color: rgba(255,255,255,0.35); }
-/* Softer-than-pure-red dot for failed rows — bright enough to spot in
+/* Softer-than-pure-red dot for failed rows, bright enough to spot in
    a list but doesn't shout. The previous 0.4-opacity dot read as
    "low priority". */
 .status-dot.failed { background: #d04a3e; }
@@ -1350,17 +1345,17 @@ input[type="search"]::-webkit-search-decoration {
    "failed" label keep their default colour) so the row reads as
    "this thing is broken" without the whole entry shouting. */
 .meeting-item.failed .meeting-title { color: #d04a3e; }
-/* Unseen meeting — the user hasn't opened this row yet. Title goes
+/* Unseen meeting, the user hasn't opened this row yet. Title goes
    gold (same palette as the pinned status-dot, just per theme) so it
    reads as "new and unread" without piling on a second indicator. */
-/* Unseen title is painted in the brand accent green — same colour as
-   the primary action button — so "new ready transcript" lines up with
+/* Unseen title is painted in the brand accent green, same colour as
+   the primary action button, so "new ready transcript" lines up with
    the rest of the brand language. Dark mode reads brighter so the
    green doesn't muddy under the page background. */
 .meeting-item.unseen .meeting-title { color: var(--accent); font-weight: 600; }
 .dark .meeting-item.unseen .meeting-title { color: #38b76a; }
 /* Pinned session: the existing status dot itself goes gold instead of
-   its normal green/red/amber. One indicator, not two — the dot is
+   its normal green/red/amber. One indicator, not two, the dot is
    already in the meta row, so reuse it rather than adding a second
    marker. The per-status rules above are (0,2,0); listing the
    variants under .meeting-item.pinned makes these (0,3,0) so they win
@@ -1382,7 +1377,7 @@ input[type="search"]::-webkit-search-decoration {
   background: #e3b950;
 }
 
-/* Breadcrumb in the main pane when viewing a failed meeting — same
+/* Breadcrumb in the main pane when viewing a failed meeting, same
    muted red so the user knows the open record is the problem one. */
 .breadcrumb-current.failed { color: #d04a3e; }
 @keyframes pulse {
@@ -1412,7 +1407,7 @@ input[type="search"]::-webkit-search-decoration {
   min-height: 64px;
   cursor: default;
 }
-/* Block text selection on EVERY child of the header — breadcrumb
+/* Block text selection on EVERY child of the header, breadcrumb
    span, title span, separators, the lot. WebKit's text-cursor routine
    still tries to claim the mousedown for selection on `cursor: text`
    spans (.breadcrumb-rename), so we also nuke the visual feedback:
@@ -1441,7 +1436,7 @@ input[type="search"]::-webkit-search-decoration {
   display: flex; align-items: center; gap: 8px;
 }
 .breadcrumb-current { color: var(--fg); font-weight: 600; }
-/* Root crumb (`Recordings`) is a real navigation affordance — click
+/* Root crumb (`Recordings`) is a real navigation affordance, click
    takes the user back to the dashboard. Subtle hover lift so the
    click target reads, but stays in muted-text weight when at rest. */
 .breadcrumb-root {
@@ -1457,7 +1452,7 @@ input[type="search"]::-webkit-search-decoration {
   /* `cursor: text` here was the silent killer of header dragging.
      WebKit's text-cursor routine claims the live mousedown on any
      span advertising a text caret, even when `user-select: none`
-     stops the visual selection — AppKit then never sees the event
+     stops the visual selection, AppKit then never sees the event
      and `performDrag` fails. `cursor: pointer` keeps the
      click-to-rename affordance (the row still feels clickable on
      hover) without hijacking the drag. */
@@ -1468,7 +1463,7 @@ input[type="search"]::-webkit-search-decoration {
   transition: background 80ms ease;
 }
 .breadcrumb-rename:hover { background: var(--bg-hover); }
-/* Profile-popover inline name editor — same hover/edit affordance as
+/* Profile-popover inline name editor, same hover/edit affordance as
    the header breadcrumb so the rename gesture reads identical. */
 .profile-pop-name-rename {
   cursor: pointer;
@@ -1512,11 +1507,11 @@ input[type="search"]::-webkit-search-decoration {
   gap: 6px;
 }
 /* Match the transcript-toolbar icon buttons (clarify/copy render their
-   lucide glyphs at 16) — the forced 14 here made header icons look
+   lucide glyphs at 16), the forced 14 here made header icons look
    undersized inside the same button shell. */
 .toolbar button svg { display: block; width: 16px; height: 16px; }
 
-/* Empty state (legacy — kept around because some surfaces still use
+/* Empty state (legacy, kept around because some surfaces still use
    `.empty-title` for "X is empty" rows; the new `Dashboard` replaces
    the no-meeting-selected slot entirely). */
 .empty {
@@ -1532,7 +1527,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .empty-title { color: var(--fg); font-weight: 500; font-size: 16px; }
 
-/* Dashboard — landing view (`activeId === null`). Lives in the SAME
+/* Dashboard, landing view (`activeId === null`). Lives in the SAME
    `.detail` / `.detail-tabs` / `.detail-body` shell as `MeetingView`,
    so the two-column 1 px-hairline divider and the tab row match a
    real meeting exactly. Visual primitives are reused 1:1:
@@ -1542,22 +1537,22 @@ input[type="search"]::-webkit-search-decoration {
      `.settings-row` items, so the right column has ONE outline, not
      N borders touching the panel edges. */
 /* Two-class selector to outrank the later `.transcript-wrap` rule,
-   which sets `overflow: hidden` — without bumping specificity here
+   which sets `overflow: hidden`, without bumping specificity here
    the dashboard column was clipping the Usage card off the bottom
    of the window with no way to scroll. Same OverlayScrollbar
-   pattern as the Transcript pane — `.ovsb-scroll` kills the
+   pattern as the Transcript pane, `.ovsb-scroll` kills the
    native bar, the `<OverlayScrollbar>` component renders the thumb. */
 .transcript-wrap.dashboard-left {
   overflow-y: auto;
   /* Pin to the grid row so content can't stretch the column past
-     the visible viewport — without this the column grew to fit
+     the visible viewport, without this the column grew to fit
      its content and OverlayScrollbar reported a thumb that
      extended past the visible area (up to the window header). */
   height: 100%;
   min-height: 0;
 }
 .dashboard-left-inner {
-  /* Left-aligned column (NOT centred) — matches `.transcript-wrap`'s
+  /* Left-aligned column (NOT centred), matches `.transcript-wrap`'s
      own content rhythm: 20 px from the column's left edge, blocks
      flow downward at their natural width. The previous `margin: auto`
      centred everything in a fat 480 px stripe with empty gutters,
@@ -1569,8 +1564,7 @@ input[type="search"]::-webkit-search-decoration {
   align-items: flex-start;
   width: 100%;
 }
-/* `.right-panel.dashboard-right` (TWO classes) is intentional —
-   `.right-panel` is defined LATER in this stylesheet, so a single-
+/* `.right-panel.dashboard-right` (TWO classes) is intentional, `.right-panel` is defined LATER in this stylesheet, so a single-
    class `.dashboard-right` selector loses the cascade and the panel
    keeps `.right-panel`'s `padding: 0 0 130px` (zero horizontal). That
    was the bug the user pointed at: "карточки прикованы к краю". The
@@ -1578,7 +1572,7 @@ input[type="search"]::-webkit-search-decoration {
    horizontal padding actually applies. 22 px mirrors `.settings-pane`
    exactly so Recent and Settings have the same edge breathing room. */
 .right-panel.dashboard-right {
-  /* 20 20 20 horizontal/top + 130 bottom — same 20 px as
+  /* 20 20 20 horizontal/top + 130 bottom, same 20 px as
      `.dashboard-left-inner` so the Stats and Longest columns share
      identical edge breathing room. 130 bottom keeps the last
      Recent card clear of the floating HUD (110 px tall + margin). */
@@ -1586,7 +1580,7 @@ input[type="search"]::-webkit-search-decoration {
   gap: 0;
 }
 
-/* Hero card — extends `.trans-banner.clarify-banner`. Keep the
+/* Hero card, extends `.trans-banner.clarify-banner`. Keep the
    built-in 420 px max-width: same look as EmptyDeleteBanner, just
    pinned to the left of the column with the stats card below. */
 .dash-banner {
@@ -1605,51 +1599,11 @@ input[type="search"]::-webkit-search-decoration {
   margin-top: 4px;
 }
 
-/* Stats card — one `.settings-rows` outlined frame, three label/value
+/* Stats card, one `.settings-rows` outlined frame, three label/value
    rows. Non-clickable: no hover, no cursor:pointer. Hairline dividers
    between rows match the Settings convention. */
-.dash-stats-card {
-  /* Stats spans the WHOLE left column — not capped at 420 px like the
-     hero banner. The user wanted the three rows to use the full width
-     of the column for readability of the label/value spread. */
-  width: 100%;
-}
-.dash-stat-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  cursor: default;
-}
-.dash-stat-row + .dash-stat-row {
-  border-top: 1px solid var(--border);
-}
-.dash-stat-row .settings-row-label {
-  /* Same type face as `.clarify-body` ("Ready when you are.") — 18 px
-     light, no uppercase, no letter-spacing tweaks. Stats labels and
-     the hero headline now read as the same voice. */
-  flex: 1;
-  min-width: 0;
-  font-size: 18px;
-  font-weight: 300;
-  line-height: 1.35;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--fg);
-}
-.dash-stat-value {
-  /* Match the label's 18 / 300 line so the row reads as one piece;
-     numbers keep tabular-nums so the column right-aligns crisply. */
-  flex-shrink: 0;
-  font-size: 18px;
-  font-weight: 300;
-  line-height: 1.35;
-  color: var(--fg);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.005em;
-}
 
-/* Recent meetings — vertical stack of INDIVIDUAL outlined SoloCard's,
+/* Recent meetings, vertical stack of INDIVIDUAL outlined SoloCard's,
    each its own `.settings-rows` shell with a single row of content
    inside. Matches the SoloCard pattern from Settings (the user's
    explicit reference). 10 px gap between cards lets each one read as
@@ -1660,7 +1614,7 @@ input[type="search"]::-webkit-search-decoration {
   gap: 10px;
   /* Fill the column width. In the Dashboard LEFT column
      (`.dashboard-left-inner` is `align-items:flex-start`) a stack with no
-     width would shrink to its content — the Upcoming cards looked
+     width would shrink to its content, the Upcoming cards looked
      narrower than full width. */
   width: 100%;
 }
@@ -1680,7 +1634,7 @@ input[type="search"]::-webkit-search-decoration {
   flex-shrink: 0;
   transition: background 80ms ease, border-color 80ms ease;
 }
-/* Ghost placeholder card on the Dashboard's Recent column — same
+/* Ghost placeholder card on the Dashboard's Recent column, same
    geometry as a real row, dashed outline + muted text so the
    surface reads as "this is where your first recording will land". */
 .dash-recent-card.ghost {
@@ -1731,7 +1685,7 @@ input[type="search"]::-webkit-search-decoration {
 /* No top border on the first row: the tabs header above already draws a
    full-width divider, so a first-row top border doubled it.
    The GLOBAL `button:hover` rule tints the background AND darkens
-   `border-color` (to #b8b8b4) — that was darkening the divider on hover.
+   `border-color` (to #b8b8b4), that was darkening the divider on hover.
    Neutralise it here so the separators never change. */
 .upcoming-row {
   display: flex;
@@ -1790,11 +1744,10 @@ input[type="search"]::-webkit-search-decoration {
 .dash-recent-people {
   /* `.meeting-people` already styles the chip the same way the sidebar
      does (gap, font-size, muted color, flex-shrink). The dashboard
-     copy just needs to inherit alignment with the title baseline —
-     handled by the parent `.dash-recent-title-row`. */
+     copy just needs to inherit alignment with the title baseline, handled by the parent `.dash-recent-title-row`. */
 }
 
-/* Sort selector — a `.tab.active` that doubles as a dropdown trigger.
+/* Sort selector, a `.tab.active` that doubles as a dropdown trigger.
    Rendered as <span role="button"> so the `.tab` styling matches
    the static Transcript / Summary tabs exactly: same font, same
    active underline, no native button chrome, no Safari focus ring
@@ -1831,7 +1784,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 /* Subtle accent-coloured glow under the green Start CTA so the
    button reads as the page's most-important action without resorting
-   to size or saturation tricks. Scoped to the accent variant — the
+   to size or saturation tricks. Scoped to the accent variant, the
    red Stop variant stays neutral so it doesn't read as "primary CTA"
    on the same card. */
 .dash-primary-btn.accent {
@@ -1846,7 +1799,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .dash-primary-spin { animation: spin 0.9s linear infinite; }
 /* Spinner inside the test-mode Upgrade / Downgrade button. Same
-   keyframe + cadence as the Dashboard primary button — keeps a
+   keyframe + cadence as the Dashboard primary button, keeps a
    single "loading" vocabulary across the app. The flex layout on
    `.tier-flip-btn` lets the spinner + label sit on one line. */
 .tier-flip-btn {
@@ -1897,7 +1850,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .news-banner-x:hover { background: var(--bg-hover); color: var(--fg); }
 
-/* Collapsed news state — full-width accent strip pinned across the
+/* Collapsed news state, full-width accent strip pinned across the
    top of the Stats column, edge-to-edge (negative margin lifts it
    out of the column's padding). Marquee text scrolls indefinitely;
    shimmer sweeps across; × at the right edge dismisses, click
@@ -2006,7 +1959,7 @@ input[type="search"]::-webkit-search-decoration {
   color: #ffffff;
 }
 /* "Settings" tab on the Dashboard right column when opened from the
-   profile menu — leading ChevronLeft + label, whole chip is the
+   profile menu, leading ChevronLeft + label, whole chip is the
    back-to-Recent target. Tighter gap than the sort trigger so the
    icon hugs the label. */
 .dash-settings-back {
@@ -2022,7 +1975,7 @@ input[type="search"]::-webkit-search-decoration {
    the active option read its state without colour-tinting the whole
    row. */
 .dash-sort-pop {
-  /* Override `.profile-pop`'s fixed 280px — that's sized for a user
+  /* Override `.profile-pop`'s fixed 280px, that's sized for a user
      name, far too wide for "Most speakers". Hug the longest option
      instead; `max-content` adapts automatically to every language's
      label, with a cap so a freak-long translation can't run off-screen. */
@@ -2044,7 +1997,7 @@ input[type="search"]::-webkit-search-decoration {
   justify-content: center;
   color: var(--accent);
 }
-/* Unseen recent — same accent green as `.meeting-item.unseen` in the
+/* Unseen recent, same accent green as `.meeting-item.unseen` in the
    sidebar so the two surfaces flag "new ready transcript" identically. */
 .dash-recent-title.unseen { color: var(--accent); font-weight: 600; }
 .dark .dash-recent-title.unseen { color: #38b76a; }
@@ -2060,7 +2013,7 @@ input[type="search"]::-webkit-search-decoration {
   padding: 32px 12px;
 }
 
-/* Detail layout — column-stack of (tabs row spanning both columns, body grid).
+/* Detail layout, column-stack of (tabs row spanning both columns, body grid).
    The tabs row hairline runs continuously from "Transcript" to "Recording";
    the vertical divider between the two columns extends through both rows. */
 .detail {
@@ -2085,7 +2038,7 @@ input[type="search"]::-webkit-search-decoration {
   gap: 14px;
 }
 .detail-tab-col-left {
-  /* 1 px hairline FLUSH to the right edge — must match
+  /* 1 px hairline FLUSH to the right edge, must match
      `.transcript-wrap` (the body column directly below, same grid
      template) EXACTLY, or the divider bends where the tab row meets
      the body. The old 3-4 px inset (for the native scrollbar) is gone:
@@ -2107,7 +2060,7 @@ input[type="search"]::-webkit-search-decoration {
 /* Dashboard uses the SAME `1fr | --right-w` two-column grid as MeetingView in
    EVERY state: the right column hosts the ghost recording preview (Welcome /
    Recent view) or the Settings pane. The old `.dashboard-solo` single-column
-   collapse is gone — it left the ghost panel with no grid cell to occupy, so it
+   collapse is gone, it left the ghost panel with no grid cell to occupy, so it
    wrapped to an implicit second row at the bottom of the main column (the bug
    the user pointed at: "Почему оно снизу??? Это же просто правая колонка должна
    быть"). The shared splitter (resizer-split, drags --right-w) resizes the right
@@ -2153,7 +2106,7 @@ input[type="search"]::-webkit-search-decoration {
 body.resizing .resizer-grip { opacity: 1; }
 body.resizing { cursor: col-resize; user-select: none; }
 
-/* Tabs row above transcript (kept for backwards compat — currently unused) */
+/* Tabs row above transcript (kept for backwards compat, currently unused) */
 .tabs {
   display: flex;
   gap: 24px;
@@ -2174,7 +2127,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 60ms ease;
-  /* No focus ring — the active state is the bottom border + bold text,
+  /* No focus ring, the active state is the bottom border + bold text,
      not the browser's default rounded outline on <button>. */
   outline: none;
   -webkit-tap-highlight-color: transparent;
@@ -2182,7 +2135,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .tab:focus,
 .tab:focus-visible { outline: none; box-shadow: none; }
 .tab:hover { color: var(--fg); }
-/* No font-weight change on active — bolder text is wider and shifted
+/* No font-weight change on active, bolder text is wider and shifted
    the layout when switching tabs. Active = colour + bottom border only,
    constant metrics. */
 .tab.active { color: var(--fg); border-bottom-color: var(--fg); }
@@ -2194,7 +2147,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Pin to the LEFT grid cell of `.detail-body` — Transcript and
+  /* Pin to the LEFT grid cell of `.detail-body`, Transcript and
      Summary share this column (each is its own `.transcript-wrap`
      sibling with `display: none/flex` driven by `leftTab`). Without
      an explicit grid-column the second `.transcript-wrap` lands in
@@ -2202,7 +2155,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   grid-column: 1;
   grid-row: 1;
   /* Critical: grid items default to `min-height: auto` which ignores
-     overflow on children — the inner `.transcript` then stretches to
+     overflow on children, the inner `.transcript` then stretches to
      its content size and the bottom of the meeting list is clipped by
      the grid row instead of being scrolled into. */
   min-height: 0;
@@ -2210,7 +2163,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   /* 1 px hairline FLUSH to the right edge. The custom overlay
      scrollbar centres its thumb on this box edge (like the sidebar
      thumb centres on the sidebar/main seam), so the line must BE the
-     edge — the old 3-4 px inset left the thumb sitting to the right
+     edge, the old 3-4 px inset left the thumb sitting to the right
      of the line ("перелетел вправо"). */
   background: linear-gradient(to right,
     var(--bg) 0,
@@ -2231,7 +2184,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .transcript-toolbar .search-field { flex: 1; min-width: 0; }
 /* The match-counter + prev/next chevrons OVERLAY the right edge of the field
    (absolute) instead of joining the flex row, so typing a query never shrinks
-   the text input — the box keeps the exact same width whether empty or
+   the text input, the box keeps the exact same width whether empty or
    searching. The input reserves a constant right padding for them so a long
    query can't slide under the counter. Scoped to the transcript toolbar; the
    sidebar/settings/summary search fields have no `.search-nav`. */
@@ -2243,7 +2196,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   transform: translateY(-50%);
 }
 
-/* Summary tab — Granola-style structured Markdown. Shares the left
+/* Summary tab, Granola-style structured Markdown. Shares the left
    column grid cell with `.transcript-wrap`, only one is visible at
    a time (driven by `leftTab` in MeetingView). The wrap mirrors
    `.transcript-wrap`'s own column layout (toolbar on top, scrollable
@@ -2262,14 +2215,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow-y: auto;
 }
 .summary-toolbar {
-  /* Same `.transcript-toolbar` rhythm — flex row with the iconbtn
+  /* Same `.transcript-toolbar` rhythm, flex row with the iconbtn
      pinned right. The spacer claims the empty width so the divider
      and button hug the right edge identical to Transcript. */
 }
 .summary-toolbar-spacer { flex: 1; min-width: 0; }
 .summary-content {
   /* Scrollable Markdown body. Padding mirrors `.transcript` exactly
-     (`padding: 8px 20px 0; margin-bottom: 16px`) — same surface, two
+     (`padding: 8px 20px 0; margin-bottom: 16px`), same surface, two
      views. */
   flex: 1;
   overflow-y: auto;
@@ -2283,7 +2236,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .summary-spin {
   animation: spin 0.9s linear infinite;
 }
-/* Search-match highlight inside rendered Markdown — identical to
+/* Search-match highlight inside rendered Markdown, identical to
    `.tp-hl` in the Transcript so both views read as one search
    surface (accent green tint, theme-independent). */
 .md-mark {
@@ -2293,7 +2246,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-radius: 2px;
 }
 
-/* Empty-state banner — extends `.trans-banner.clarify-banner` (no
+/* Empty-state banner, extends `.trans-banner.clarify-banner` (no
    custom dimensions, just an explainer line specific to Summary). */
 .summary-banner {}
 .summary-banner-sub {
@@ -2301,7 +2254,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   line-height: 1.5;
   color: var(--fg-muted);
 }
-/* Inline "report" link inside an AI-pane error card — green, bold,
+/* Inline "report" link inside an AI-pane error card, green, bold,
    underline on hover, clickable (sends the diagnostic log like the
    header bug-report button). */
 .report-link {
@@ -2332,7 +2285,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 /* Markdown rendering (Granola-style): `### Headings`, paragraphs and
    bulleted lists with optional nesting. Inline `**bold**` survives as
-   <strong>. Tight vertical rhythm — sections sit closer than blog
+   <strong>. Tight vertical rhythm, sections sit closer than blog
    spacing so a 30-min recap reads as one scannable surface. */
 .md-h2 {
   font-size: 18px;
@@ -2405,14 +2358,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   border: 1px solid var(--border-strong);
   color: var(--fg-muted);
   cursor: pointer;
-  /* Anchor reset — same component is used as both <button> and <a download>. */
+  /* Anchor reset, same component is used as both <button> and <a download>. */
   text-decoration: none !important;
   transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
   flex-shrink: 0;
 }
 .toolbar-icon-btn:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); border-color: #b8b8b4; }
 /* Leftmost header action: toggle recording. Same 38px circle as the toolbar
-   icons (inherits .toolbar-icon-btn geometry) but FILLED — green with a white
+   icons (inherits .toolbar-icon-btn geometry) but FILLED, green with a white
    plus at rest, RED with a white stop square while recording. NO border (the
    outline made the filled circle read a touch larger than the outlined toolbar
    icons), and only 4px before the title. Hover = darker shade, the same
@@ -2421,7 +2374,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   /* The header is a flex row with a global `gap: 12px`. A positive margin
      ADDS to that (12 + 4 = 16px, too far from the title). We want ~8px, so a
      NEGATIVE margin pulls the title back in: 12 + (-4) = 8px. Don't touch the
-     global gap — it spaces all the other toolbar controls. */
+     global gap, it spaces all the other toolbar controls. */
   margin-right: -4px;
   /* Deliberately smaller than the 38px toolbar icons (→ 30px): a SOLID filled
      green circle reads visually heavier than an outlined control, so a compact
@@ -2429,7 +2382,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   width: 30px;
   height: 30px;
   /* Match the audio play button EXACTLY (`.audio-btn-primary`): hardcoded
-     #1E7A50 at rest, #186439 on hover — NOT var(--accent)/color-mix, so the
+     #1E7A50 at rest, #186439 on hover, NOT var(--accent)/color-mix, so the
      two green circles read as the same button. */
   background: #1E7A50;
   border: none;
@@ -2445,10 +2398,10 @@ body.resizing { cursor: col-resize; user-select: none; }
    fill, so the green hover only sticks when scoped to .main-header AND placed
    after that rule. */
 .toolbar-icon-btn:disabled {
-  /* Nothing to copy / no transcript yet — kill ALL pointer interaction
+  /* Nothing to copy / no transcript yet, kill ALL pointer interaction
      so the button reads as inert. `pointer-events: none` is the only
      thing that fully suppresses `:hover` matching on disabled buttons
-     in WebKit — without it, scoped header rules (`.main-header
+     in WebKit, without it, scoped header rules (`.main-header
      .toolbar-icon-btn:hover` and friends) still lit a hover bg even
      while the `:not(:disabled)` guard above prevented the local one. */
   opacity: 0.45;
@@ -2488,9 +2441,9 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: var(--accent);
   color: var(--accent-pressed);
 }
-/* Active state — accent-green fill, white glyph, 2-px accent ring
+/* Active state, accent-green fill, white glyph, 2-px accent ring
    painted as an OUTSIDE outline via box-shadow. The ring is the same
-   colour as the fill so it reads as "the button just got bigger" — a
+   colour as the fill so it reads as "the button just got bigger", a
    clear "this is engaged, click again to close" affordance instead of
    the previous near-invisible #f4f4f0 grey delta. Hover stays alive
    even while active so the button still feels clickable; it just goes
@@ -2515,7 +2468,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    row is one family. */
 .main-header button.ghost { color: var(--fg-muted); }
 /* Header buttons rest MUTED (quiet, consistent) but light up clearly on
-   hover — the default #fafaf8 hover fill is invisible on white, which
+   hover, the default #fafaf8 hover fill is invisible on white, which
    read as "no hover". Use the app's own "engaged" fill (#f4f4f0) +
    full-contrast content + strong border so a hovered header button is
    unmistakably lit. Scoped to .main-header so other .toolbar-icon-btn
@@ -2530,7 +2483,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .dark .main-header button.ghost:not(.active):hover {
   background: var(--bg-active);
 }
-/* Header-scoped active:hover — accent-pressed wins over the generic
+/* Header-scoped active:hover, accent-pressed wins over the generic
    `.main-header .toolbar-icon-btn:hover` neutral fill above. */
 .main-header .toolbar-icon-btn.active:hover,
 .main-header button.ghost.active:hover {
@@ -2539,7 +2492,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: #fff;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-pressed) 35%, transparent);
 }
-/* Header record button hover — a FILLED green/red CTA, NOT the muted-grey
+/* Header record button hover, a FILLED green/red CTA, NOT the muted-grey
    `.main-header .toolbar-icon-btn:hover` fill. Scoped to `.main-header` and
    placed AFTER that rule so it wins (same/higher specificity, later in file);
    `.dark` variants mirror it so dark mode doesn't fall back to the grey
@@ -2565,13 +2518,13 @@ body.resizing { cursor: col-resize; user-select: none; }
    a rare event; their appearance without entrance motion is calm,
    not jarring. */
 
-/* SpeakersClarifyBanner — same outline card as `.trans-banner`, but without
+/* SpeakersClarifyBanner, same outline card as `.trans-banner`, but without
    the icon column. Body uses the same big-light type as the recording timer
    so all three banners (recording / transcribing / clarify) read as a family. */
 /* THE single source of truth for status-banner geometry. Every card
-   that uses this class — Dashboard hero, RecordingBanner, RecordingPlaceholder,
+   that uses this class, Dashboard hero, RecordingBanner, RecordingPlaceholder,
    TranscribingBanner, EmptyDeleteBanner, SpeakersClarifyBanner,
-   SummaryBanner — gets the same width. `width: 100%` makes them
+   SummaryBanner, gets the same width. `width: 100%` makes them
    stretch to the available column, `max-width: 420px` caps them so
    the card never goes wider than the design spec. Sets the family
    look: one fixed rectangle, only the contents change between
@@ -2584,7 +2537,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .clarify-dismiss {
   /* X button anchored to the top-right corner of the card. Outline-less,
-     muted hover — discreet because dismissing is a passive action. */
+     muted hover, discreet because dismissing is a passive action. */
   position: absolute;
   top: 10px;
   right: 10px;
@@ -2601,9 +2554,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .clarify-dismiss:hover { background: var(--bg-hover) !important; color: var(--fg); }
 /* Heading-to-subtitle gap is intentionally tight (3 px, not the 6 px
-   it used to be). The "Ready when you are." + helper-copy pair —
-   and every other banner that reuses this shell (EmptyDeleteBanner,
-   SummaryBanner, etc.) — read as one tighter typographic block now,
+   it used to be). The "Ready when you are." + helper-copy pair, and every other banner that reuses this shell (EmptyDeleteBanner,
+   SummaryBanner, etc.), read as one tighter typographic block now,
    so the headline visually belongs with the line below it instead
    of floating on its own. */
 .clarify-text { display: flex; flex-direction: column; gap: 3px; }
@@ -2642,7 +2594,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
   align-self: stretch;
 }
-/* "4+" headcount dropdown slot — sizes like a `.clarify-btn` pill so the
+/* "4+" headcount dropdown slot, sizes like a `.clarify-btn` pill so the
    SettingsSelect trigger sits flush next to the Just me / 2 / 3 pills.
    The trigger itself is width:100%, so the flex sizing lives here. */
 .clarify-people-slot { flex: 1 1 72px; min-width: 0; display: flex; }
@@ -2651,7 +2603,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .clarify-actions-stack { flex-direction: column; }
 /* `.clarify-btn` carries `flex: 1 1 72px` so it shares WIDTH in the
    horizontal clarify row. In the column stack that same flex-grow
-   stretches each button to fill the card's HEIGHT — the huge
+   stretches each button to fill the card's HEIGHT, the huge
    Re-transcribe / Archive Session blocks. Pin stacked buttons to
    their content height instead. */
 .clarify-actions-stack .clarify-btn { flex: 0 0 auto; }
@@ -2677,7 +2629,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   flex: 1 1 72px;
   min-width: 0;
   /* inline-flex content so an optional icon (Archive's Restore /
-     Delete forever) sits centred next to the label — matches the
+     Delete forever) sits centred next to the label, matches the
      `.trans-stop` button's icon+text layout. Text-only callers
      (EmptyDeleteBanner, SettingsPane bigbtn-full) are unaffected:
      a single child centres just the same. */
@@ -2696,15 +2648,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
 .clarify-btn:not(:disabled):hover { background: var(--bg-hover); border-color: #b8b8b4; }
-/* Disabled / "Soon" state: greyed, inert, no hover, default cursor —
-   the design-system convention for an inactive CTA. */
+/* Disabled / "Soon" state: greyed, inert, no hover, default cursor, the design-system convention for an inactive CTA. */
 .clarify-btn:disabled { opacity: 0.5; cursor: default; }
-/* Dark theme — secondary (non-accent / non-danger / non-active) buttons stay
+/* Dark theme, secondary (non-accent / non-danger / non-active) buttons stay
    TRANSPARENT + outlined, matching the SettingsSelect dropdown surface
    (`.settings-select-trigger`: transparent bg + `--border-strong`). They used
    to flip to a solid white fill, but that made the filled pills inconsistent
    with the product's many backgroundless controls (dropdowns, toolbar icons);
-   per design they now all read the same — backgroundless like a dropdown.
+   per design they now all read the same, backgroundless like a dropdown.
    Accent (green CTA), danger (red) and active (selected, green fill) unchanged. */
 .dark .clarify-btn:not(.accent):not(.danger):not(.active) {
   background: transparent;
@@ -2715,7 +2666,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-hover);
   border-color: var(--fg-muted);
 }
-/* Currently-selected option — auto-detected by the diarizer or picked
+/* Currently-selected option, auto-detected by the diarizer or picked
    by the user previously. Filled with the accent green so the choice
    is instantly readable. No hover treatment: it's already the answer,
    the affordance is "pick another or close with X". */
@@ -2732,7 +2683,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-color: var(--accent-pressed);
 }
 
-/* Destructive variant — used by EmptyDeleteBanner. Same shape as
+/* Destructive variant, used by EmptyDeleteBanner. Same shape as
    `.rec-stop` (red fill, white text) so all destructive primary actions
    read the same regardless of which card hosts them. */
 .clarify-btn.danger {
@@ -2746,12 +2697,11 @@ body.resizing { cursor: col-resize; user-select: none; }
    dark layer creeps across the red fill from the left, easing forward
    every 1 s tick, so a multi-minute transcribe reads as "moving" rather
    than a frozen spinner. Estimate-based (no byte-accurate signal), so it
-   approaches but never reaches the right edge — completion is signalled
+   approaches but never reaches the right edge, completion is signalled
    by the banner disappearing, never by the bar hitting 100%. */
 .trans-stop-btn { position: relative; overflow: hidden; }
 /* While the on-device model is still downloading, the Stop button is
-   temporarily replaced (SAME size) by a model-download progress button —
-   white surface, accent fill, dual label — reusing the `.wl-download-*`
+   temporarily replaced (SAME size) by a model-download progress button, white surface, accent fill, dual label, reusing the `.wl-download-*`
    spans from the Settings download pill. Reverts to the red Stop button
    once the model lands. */
 .trans-stop-btn--downloading {
@@ -2762,7 +2712,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .trans-stop-btn--downloading:hover { border-color: var(--accent); }
 /* Silent post-download "preparing" phase (tokenizer + ANE compile). There's no
-   real progress here — the byte bar is pinned full (100%) and we breathe its
+   real progress here, the byte bar is pinned full (100%) and we breathe its
    opacity so the button reads as "still working" rather than a frozen 99%. The
    label switches to "Optimizing for your Mac" (no percentage) in the markup. */
 .trans-stop-btn--preparing { animation: trans-prepare-pulse 1.6s ease-in-out infinite; }
@@ -2788,7 +2738,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   justify-content: center;
   gap: 8px;
 }
-/* Accent (green) fill — primary affirmative big card button: the
+/* Accent (green) fill, primary affirmative big card button: the
    "Transcribe now" action and every "+ Add" in Settings. Same shape as
    .danger, brand accent instead of red. */
 .clarify-btn.accent {
@@ -2802,7 +2752,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .clarify-btn.accent:disabled { opacity: 0.5; }
 
-/* In-app rating prompt (RatingBanner) — sits at the BOTTOM of a
+/* In-app rating prompt (RatingBanner), sits at the BOTTOM of a
    non-empty transcript, asks for 1-5 stars + optional comment +
    optional email. Same outline card family as `.clarify-banner`;
    adds a star row and a couple of inputs. The card is allowed to
@@ -2846,10 +2796,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 .rating-star:hover { color: var(--accent); }
 .rating-star.filled { color: var(--accent); }
 .rating-star:active { transform: scale(0.94); }
-/* Comment box + email field — inherit the input look used elsewhere
+/* Comment box + email field, inherit the input look used elsewhere
    in the app (Settings vocab textarea, Search inputs). 1 px border,
    `--bg` fill, no inner shadow, focus-ring matches `.search-input`. */
-/* Match the shared `input[type="text"|"search"]` base — same fill,
+/* Match the shared `input[type="text"|"search"]` base, same fill,
    border, font-size and pill radius as `Search the transcript…`. The
    email input picks the base styles up automatically (type="email"
    falls back to the unprefixed selector); the textarea has its own
@@ -2900,12 +2850,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-input);
 }
 .rating-email::placeholder { color: var(--fg-muted); }
-/* Rating Send / Skip — reuse the product's `.clarify-actions
+/* Rating Send / Skip, reuse the product's `.clarify-actions
    .clarify-actions-stack` + `.clarify-btn` system that
    EmptyDeleteBanner and SpeakersClarifyBanner already use, so the
    pair reads as the same primary/secondary CTA pattern (full-width,
    accent over outlined) as everywhere else in the app. No custom
-   shrunk pill style — the design-system check rule applies here. */
+   shrunk pill style, the design-system check rule applies here. */
 
 /* Full-width single big card button (Settings: the AppListEditor +Add).
    Fixed height so the label swapping never
@@ -2942,7 +2892,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   flex: 1;
   overflow-y: auto;
   padding: 8px 20px 0;
-  /* Stop the scroll track 16 px before the bottom — same trick as the
+  /* Stop the scroll track 16 px before the bottom, same trick as the
      sidebar's `.sidebar-list`. */
   margin-bottom: 16px;
   display: flex;
@@ -2950,7 +2900,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 28px;
   scroll-behavior: smooth;
 }
-/* Real in-flow spacer — WebKit ignores `padding-bottom` of an
+/* Real in-flow spacer, WebKit ignores `padding-bottom` of an
    `overflow: auto` container in `scrollHeight`. Mirrors the sidebar
    solution. 80 px = enough breathing room under the last segment so
    long paragraphs don't read as cropped on long meetings. */
@@ -3048,20 +2998,19 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg-muted);
 }
 
-/* Right pane (audio controls + timeline). No outer padding — children
+/* Right pane (audio controls + timeline). No outer padding, children
    manage their own spacing so the audio controls sit flush with the
    shared tabs row above, matching the transcript column on the left. */
 .right-panel {
   /* The WHOLE panel scrolls. The old design gave the timeline its own
-     cramped inner scroll with a hidden scrollbar — when a screen video
+     cramped inner scroll with a hidden scrollbar, when a screen video
      was present that box only fit ~2 speaker rows and silently clipped
      the rest, so a 3-speaker meeting looked like 2. Scrolling the panel
      as one keeps every speaker reachable. */
   overflow-y: auto;
   /* Hide the native scrollbar entirely so it NEVER takes layout width.
      A visible 7px native bar appeared only when the panel scrolled (long
-     timeline) and shrank the content — and the video preview with it —
-     from 342px to 335px. `scrollbar-gutter:stable` made it worse (the
+     timeline) and shrank the content, and the video preview with it, from 342px to 335px. `scrollbar-gutter:stable` made it worse (the
      whole panel width jittered). Killing the native bar keeps the panel
      content width constant in every state; scrolling still works via
      wheel/trackpad. Same treatment as the `.ovsb-scroll` panels. */
@@ -3072,7 +3021,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding: 0 0 130px;
   display: flex;
   flex-direction: column;
-  /* No flex gap — each child owns its own top margin so the video
+  /* No flex gap, each child owns its own top margin so the video
      case (when present) can have its own spacing rules without
      piling onto the audio-controls' inner padding-top. */
   gap: 0;
@@ -3080,20 +3029,20 @@ body.resizing { cursor: col-resize; user-select: none; }
   min-height: 0;
 }
 /* WebKit (the WKWebView) needs the explicit pseudo-element to actually
-   drop the bar — `scrollbar-width:none` alone is the Firefox standard. */
+   drop the bar, `scrollbar-width:none` alone is the Firefox standard. */
 .right-panel::-webkit-scrollbar { width: 0; height: 0; display: none; }
 /* Screen-capture preview that sits above the audio controls when the
    meeting has a video.mov. Audio is the master clock; this element is
    purely visual, kept in sync from JS.
    margin-top 20 px mirrors `.transcript-toolbar`'s padding-top on the
-   left column — keeps the "Recording" tab → video gap visually equal
+   left column, keeps the "Recording" tab → video gap visually equal
    to the "Transcript" tab → search input gap. */
 .screen-video-card {
   position: relative;
   margin: 20px 20px 0;
   border-radius: 8px;
   overflow: hidden;
-  /* The CARD is a FIXED-HEIGHT box, identical for every recording — not
+  /* The CARD is a FIXED-HEIGHT box, identical for every recording, not
      `aspect-ratio` (WKWebView proved unreliable at honouring it here,
      previews still came out at different heights) and not the <video>'s
      intrinsic size. A hard pixel height can't vary. The <video> fills it
@@ -3105,13 +3054,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   /* `.right-panel` is a flex column with `overflow-y:auto`. Without this,
      the card is a shrinkable flex item: a meeting with a tall speaker
      timeline below squeezed the video down (measured 150px vs 202px on
-     two recordings — the bug Kostya kept seeing). `flex-shrink:0` +
+     two recordings, the bug Kostya kept seeing). `flex-shrink:0` +
      min-height pins it to exactly 200px and lets the PANEL scroll. */
   flex-shrink: 0;
   min-height: 200px;
   /* THEME-INDEPENDENT chrome (intentional, localised exception to the
      token system). The <video> is a replaced element WebKit never folds
-     into the root View-Transition snapshot — left in the root flow it
+     into the root View-Transition snapshot, left in the root flow it
      pops/blinks at the wipe's edges. The card is just a media
      placeholder, not branded UI, so its chrome is neutral translucent
      grey that reads identically on both themes. */
@@ -3119,22 +3068,21 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: rgba(127, 127, 127, 0.10);
   /* `view-transition-name` captures the card (with its live <video>
      inside) as its own VT snapshot group, cross-faded over 80 ms by
-     the `corder-vc-hold-*` keyframes near the top of this file —
-     the brief frozen frame masks the live-layer flash that always
+     the `corder-vc-hold-*` keyframes near the top of this file, the brief frozen frame masks the live-layer flash that always
      happens around a replaced element. Card chrome is theme-
      independent so the cross-fade is invisible (identical
      before/after); the name is doing the masking work. */
   view-transition-name: corder-video-card;
 }
 /* When the video is present, the audio controls sit close to the
-   video — tighter than they'd be as a first child, and tighter than
+   video, tighter than they'd be as a first child, and tighter than
    the original flex-gap layout. */
 .screen-video-card + .audio-controls {
   padding-top: 12px;
 }
 .screen-video {
   /* Absolute fill of the card's fixed 16:10 box (the card owns the
-     aspect-ratio now — see above). `contain` shows the WHOLE captured
+     aspect-ratio now, see above). `contain` shows the WHOLE captured
      frame without cropping; leftover space letterboxes onto the card's
      neutral grey. This is what makes every preview the SAME size
      regardless of the recording's native resolution. */
@@ -3151,7 +3099,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 /* Ghost shimmer shown where the video will be until its first frame
-   decodes — so the Recording tab never shows an empty hole while the
+   decodes, so the Recording tab never shows an empty hole while the
    <video> loads (it now stays mounted across tab switches, but a fresh
    meeting still has to decode once). Same shimmer as the skeletons. */
 /* Cached-poster overlay shown the instant a meeting opens while the
@@ -3197,7 +3145,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    the button (or the surrounding card region, via the same click
    target) starts the audio master clock; the video sync effect on
    the React side mirrors the play onto the muted <video>. */
-/* Whole card is the click target while paused — hovering anywhere on
+/* Whole card is the click target while paused, hovering anywhere on
    the screenshot lights up the play affordance, not just the small
    circle. The button itself is purely visual (no onClick); clicks on
    it bubble to the card's onClick. */
@@ -3215,12 +3163,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-radius: 50%;
   /* No backdrop-filter on purpose. The frosted-glass blur was the
      single biggest theme-wipe casualty here: the theme-anim strip
-     kills it for the View Transition (necessary — backdrop-filter
+     kills it for the View Transition (necessary, backdrop-filter
      samples LIVE content behind it and would flicker through the
      wipe), and restoring it on transition.finished re-promotes the
      button to its own GPU layer with a visible blur "snap-in" that
      the user can't unsee. Slightly more opaque fill compensates for
-     the lost blur — the puck stays readable on a busy frame, hover
+     the lost blur, the puck stays readable on a busy frame, hover
      bumps it harder. */
   background: rgba(20, 20, 20, 0.46);
   color: #fff;
@@ -3231,13 +3179,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
 }
 .screen-video-play svg {
-  /* Optical centring — the SVG's geometric centre sits a touch right
+  /* Optical centring, the SVG's geometric centre sits a touch right
      of the visual centre of the triangle, so we nudge the glyph left
      to balance it inside the circle. */
   margin-left: -2px;
 }
 /* Hover anywhere on the card (not just the puck) bumps the play
-   button — gives a clearer "this whole thing is clickable" affordance. */
+   button, gives a clearer "this whole thing is clickable" affordance. */
 .screen-video-card.paused:hover .screen-video-play {
   background: rgba(20, 20, 20, 0.62);
   border-color: rgba(255, 255, 255, 0.4);
@@ -3258,7 +3206,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 8px;
-  /* No backdrop-filter — same reason as the play puck (see above). */
+  /* No backdrop-filter, same reason as the play puck (see above). */
   background: rgba(20, 20, 20, 0.58);
   color: #fff;
   display: inline-flex;
@@ -3303,7 +3251,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
-/* FLIP target. No CSS transition here — the open/close transforms +
+/* FLIP target. No CSS transition here, the open/close transforms +
    their transition are set imperatively in JS (transformToRect), so
    the box literally grows out of the card's on-screen rect and
    shrinks back into it. transform-origin centred so the scale maths
@@ -3333,8 +3281,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .video-fs-scrub {
   /* Pinned to the overlay's bottom rim (sibling of `.video-fs-inner`,
      not its child) so it always sits in-viewport regardless of how
-     tall the centred video resolves. The previous anchor —
-     `top: calc(100% + 14px)` of the inner — slid off-screen on tall
+     tall the centred video resolves. The previous anchor, `top: calc(100% + 14px)` of the inner, slid off-screen on tall
      videos because the inner's bottom edge could itself be at the
      viewport bottom. */
   position: absolute;
@@ -3394,7 +3341,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
   cursor: pointer;
 }
-/* Transient play/pause badge — pops in, lingers, fades out (the React
+/* Transient play/pause badge, pops in, lingers, fades out (the React
    side unmounts it after ~1.1s; this just handles the in/out feel). */
 .video-fs-hint {
   position: absolute;
@@ -3428,14 +3375,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   right: 18px;
   /* Above the FLIP-transformed video (which makes its own stacking
      context) and the scrubber, so it's never occluded and always
-     clickable — it was rendering behind the video before. */
+     clickable, it was rendering behind the video before. */
   z-index: 10002;
   width: 40px;
   height: 40px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 50%;
-  /* Solid, not see-through — at 0.12 alpha the video's desktop content
+  /* Solid, not see-through, at 0.12 alpha the video's desktop content
      bled through and it read as "behind the window". Opaque dark pill
      + blur + shadow so it unambiguously floats on top. */
   background: rgba(18, 18, 20, 0.82);
@@ -3453,7 +3400,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .video-fs-overlay.shown .video-fs-close { opacity: 1; }
 .video-fs-close:hover { background: rgba(38, 38, 42, 0.92); }
 
-/* Audio player — sits directly under the shared tabs row, no card wrapper
+/* Audio player, sits directly under the shared tabs row, no card wrapper
    any more; matches the transcript-toolbar's layout on the left so the
    two columns read as the same composition. Horizontal padding matches
    `.transcript-toolbar` (32 px). */
@@ -3480,7 +3427,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding: 0;
 }
 .audio-btn:hover { background: var(--bg-hover); }
-/* Primary (play/pause) — fully round green pill, brand colour. */
+/* Primary (play/pause), fully round green pill, brand colour. */
 .audio-btn-primary {
   background: #1E7A50;
   color: #fff;
@@ -3489,7 +3436,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   height: 36px;
 }
 .audio-btn-primary:hover { background: #186439; }
-/* Disabled state when there is nothing to play yet — flat neutral grey,
+/* Disabled state when there is nothing to play yet, flat neutral grey,
    no hover, no opacity-fade (we want a solid, intentional look, not a
    ghosted button). */
 .audio-btn-primary:disabled,
@@ -3502,7 +3449,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   color: var(--fg-muted);
-  /* Symmetric breathing room — left/right margins on top of the parent's
+  /* Symmetric breathing room, left/right margins on top of the parent's
      `gap: 6px`, so the visible space between the time label and its
      neighbours (play button on the left, scrub bar on the right) ends up
      identical (12 px on both sides). */
@@ -3562,7 +3509,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    "Ready when you are." home card's TYPOGRAPHY (heading `.clarify-body`, sub
    `.dash-sub`) + the green CTA (`.clarify-btn.accent`, no `.dash-primary-btn`
    glow → matches Start recording minus the shadow), but KEEPS its own GHOST
-   shell — a dashed outline over a barely-there fill — so it still reads as the
+   shell, a dashed outline over a barely-there fill, so it still reads as the
    "video not available yet" placeholder, not a solid card. When Screen Recording
    isn't granted it pitches the grant ("Capture your screen too" + Enable screen
    video); once granted it's a quiet "video shows here" note with no button. */
@@ -3575,7 +3522,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   /* 20px side + 20px top lines it up with the ghost audio/timeline below and
      the session video preview. */
   margin: 20px 20px 0;
-  /* Ghost shell — dashed outline over a TRANSPARENT fill (no faint tint, and
+  /* Ghost shell, dashed outline over a TRANSPARENT fill (no faint tint, and
      NOT the solid `.trans-banner` bg). `background: transparent` is explicit to
      override `.trans-banner`'s `var(--bg)`. This is the placeholder look. */
   border: 1px dashed var(--border-strong);
@@ -3650,10 +3597,10 @@ body.resizing { cursor: col-resize; user-select: none; }
      theme "by itself", out of sync). With neither, the card folds into
      the ROOT snapshot and is revealed by the exact same expanding
      circle as the rest of the UI. The old "rows flicker without a
-     layer" is now moot — `html.theme-anim *{transition:none}` freezes
+     layer" is now moot, `html.theme-anim *{transition:none}` freezes
      the inner colour transitions for the wipe. */
 }
-/* One row per speaker, all rendered — the right-panel scroll makes
+/* One row per speaker, all rendered, the right-panel scroll makes
    them reachable, so nothing is ever hidden. */
 .timeline-rows {
   display: flex;
@@ -3697,7 +3644,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-/* Recessed pill channel. No hard border — a faint inset fill reads as a
+/* Recessed pill channel. No hard border, a faint inset fill reads as a
    carved track, which is the quiet, slightly-futuristic look we want
    instead of the old bordered box full of ticks. */
 .tl-bar {
@@ -3767,7 +3714,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
 }
 /* Hairline section break inside `.settings-pane`. Acts as a visual
-   "from here, a different kind of setting" cue — marks the boundary
+   "from here, a different kind of setting" cue, marks the boundary
    between plain toggles and the trickier auto-detect / picker blocks. */
 .settings-divider {
   height: 1px;
@@ -3799,7 +3746,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden;
   /* CRITICAL: without flex-shrink:0 the parent `.settings-pane`
      (flex column, gap 26) shrinks each card down to its min-content,
-     and combined with `overflow:hidden` that's 0 — leaving just the
+     and combined with `overflow:hidden` that's 0, leaving just the
      1+1 px border as a thin stripe. Bug after the SoloCard refactor
      when there were suddenly 6 children competing for ≤730 px. */
   flex-shrink: 0;
@@ -3869,7 +3816,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    only the button is. Label takes the space, button sits compact on the right. */
 .settings-row-action { cursor: default; }
 .settings-row-action .settings-row-text { flex: 1 1 auto; min-width: 0; }
-/* Recordings-folder "Open" — full-width control that visually matches the
+/* Recordings-folder "Open", full-width control that visually matches the
    Microphone dropdown (same shell, same width). Inherits `.clarify-btn`'s
    transparent + outlined surface, so it reads exactly like a SettingsSelect. */
 .settings-open-btn { width: 100%; }
@@ -3918,12 +3865,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .set-switch.on { background: var(--accent); }
 .set-switch.on .set-switch-thumb { transform: translateX(16px); }
-/* Toggle row while settings are still loading — non-interactive, no
+/* Toggle row while settings are still loading, non-interactive, no
    hover lift, slightly dimmed so it doesn't look clickable yet. */
 .settings-row.is-loading { opacity: 0.55; pointer-events: none; }
 
 /* Native <select> used by the Microphone picker in Settings. Matches
-   the visual weight of a Toggle / button on the same row — outlined
+   the visual weight of a Toggle / button on the same row, outlined
    pill, 13.5 px text, chevron drawn as a background SVG (so the macOS
    double-arrow native chrome doesn't pop in and break the rhythm). */
 .settings-row-select {
@@ -3941,7 +3888,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding: 7px 28px 7px 12px;
   cursor: pointer;
   transition: border-color 100ms ease, background 100ms ease;
-  /* Chevron — inline SVG, neutralised in dark mode by re-declaring
+  /* Chevron, inline SVG, neutralised in dark mode by re-declaring
      the rule under `.dark .settings-row-select` below. */
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23555' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   background-repeat: no-repeat;
@@ -3963,7 +3910,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ── App white/black-list editor ─────────────────────────────────────
-   Built from the existing settings tokens/typography — no new visual
+   Built from the existing settings tokens/typography, no new visual
    language (consistency is priority #1). */
 /* Match `.settings-row` horizontal rhythm so the label/desc/list/add
    button all align with the toggle rows in neighbouring cards. */
@@ -3971,7 +3918,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .applist-block + .applist-block { border-top: 1px solid var(--border); }
 .applist {
   /* Picked-app rows are a quiet stack between the label/desc above
-     and the Add button below — 10 px breathers on each side, hairline
+     and the Add button below, 10 px breathers on each side, hairline
      border. Empty list = nothing rendered (no placeholder, no frame). */
   margin: 10px 0;
   border: 1px solid var(--border);
@@ -4017,7 +3964,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   line-height: 0;
 }
 .applist-x:hover { background: var(--bg-hover); color: var(--fg); }
-/* Picker dropdown — PORTALLED to <body>, fixed-positioned inline at
+/* Picker dropdown, PORTALLED to <body>, fixed-positioned inline at
    the +Add button's rect (so the overflow:hidden settings list can't
    clip it and it's never stacked under sibling cards). */
 /* Same popover shell + entrance as `.profile-pop` (border-strong,
@@ -4036,7 +3983,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   animation: donate-fade 140ms ease;
 }
 /* Reuses the shared `.search-field` component (same as the sidebar /
-   transcript search) — no bespoke search input. */
+   transcript search), no bespoke search input. */
 .apick-head { padding: 8px; border-bottom: 1px solid var(--border); }
 .apick-list { flex: 1; min-height: 0; max-height: 240px; overflow-y: auto; padding: 4px; }
 .apick-none { padding: 12px; font-size: 13px; color: var(--fg-muted); }
@@ -4076,10 +4023,10 @@ body.resizing { cursor: col-resize; user-select: none; }
    the mic picker, the admin model picker, and the download / tier blocks.
    Matches `.settings-row` horizontal rhythm so the label/desc align with
    the toggle rows above and below it (16 px inset). The `hk-` name is
-   legacy — it once headed the record-shortcut row, which has since been
+   legacy, it once headed the record-shortcut row, which has since been
    removed; the shell itself is generic. */
 .hk-block { padding: 14px 16px; }
-/* Microphone picker block — same shell as `.hk-block` (vertical
+/* Microphone picker block, same shell as `.hk-block` (vertical
    stack: label, desc, full-width control) so single-control settings
    rows all read identically. The select is styled to MATCH the
    neighbouring `+ Add` button (`.app-list-add-btn`): same height,
@@ -4129,15 +4076,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* ── Whisper Local download button ─────────────────────────────────
    Reuses `.clarify-btn.accent` (same chip the Dashboard's
    "Start recording" sits on) so the resting state is pixel-identical
-   to every other primary CTA in the product — same accent fill, same
+   to every other primary CTA in the product, same accent fill, same
    white label, same hover. We only override two things:
      • idle    → nothing (inherits .clarify-btn.accent verbatim,
                  including hover-darken on `var(--accent-hover)`).
      • loading → fill flips to white, outline stays accent, an inner
                  accent rectangle grows left→right as
                  `--wl-progress` advances. The label is rendered
-                 TWICE — once dark on the white background, once
-                 white clipped to the fill — so it stays readable
+                 TWICE, once dark on the white background, once
+                 white clipped to the fill, so it stays readable
                  whether the bar has reached it yet or not. */
 .wl-download-btn {
   position: relative;
@@ -4168,13 +4115,13 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* Two label layers, both centred via the parent's flex. The base
    layer is dark text on the white surface; the overlay is white text
-   clipped to the same width as the fill — i.e. visible exactly
+   clipped to the same width as the fill, i.e. visible exactly
    where the green bar has reached. Together they keep the label
    readable across both halves of the bar with no blend-mode hacks. */
 .wl-download-btn-label {
   position: relative;
   z-index: 1;
-  /* Inherits the button's `color` — `#fff` from `.clarify-btn.accent`
+  /* Inherits the button's `color`, `#fff` from `.clarify-btn.accent`
      in the idle state, then flipped to `var(--fg)` below when the
      button enters `.is-loading` (the surface becomes white and the
      label needs to read as dark text on the un-filled portion). */
@@ -4191,7 +4138,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   z-index: 2;
   /* `clip-path` over the same `--wl-progress` value as the fill
      means the white label is revealed exactly where the green has
-     painted — no animation drift, no off-by-one between the bar
+     painted, no animation drift, no off-by-one between the bar
      and the text colour switch. */
   clip-path: inset(0 calc(100% - var(--wl-progress, 0%)) 0 0);
   pointer-events: none;
@@ -4213,7 +4160,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .dash-prefetch-picker {
   width: 100%;
 }
-/* First-poll loader — muted, non-interactive, with a spinning glyph on
+/* First-poll loader, muted, non-interactive, with a spinning glyph on
    the right where the picker's chevron would sit. */
 .dash-prefetch-loading {
   width: 100%;
@@ -4276,7 +4223,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    (dark macOS context menu) with the same `.profile-pop` shell that
    LangPicker / ProfileMenu use, so every dropdown in the product
    reads as one design language. Trigger is a full-width outlined
-   pill — matches `.clarify-btn` proportions so it stacks visually
+   pill, matches `.clarify-btn` proportions so it stacks visually
    with the toggle rows around it. */
 .settings-select-trigger {
   display: flex;
@@ -4329,7 +4276,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .settings-select-chevron {
   flex-shrink: 0;
   color: var(--fg-muted);
-  /* Chevron stays fully visible on hover — the previous native-select
+  /* Chevron stays fully visible on hover, the previous native-select
      chrome painted the arrow into the background image, which the
      hover-state background quietly painted over. */
   transition: transform 120ms ease, color 80ms ease;
@@ -4348,12 +4295,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* Popover list — reuses `.profile-pop` shell (white card, 1 px
+/* Popover list, reuses `.profile-pop` shell (white card, 1 px
    outline, soft elevation, 12 px radius, 8 px padding). The trigger
    sets `width` inline so the popover hugs the trigger; option rows
    stretch full-width like ProfileMenu's. */
 .settings-select-pop {
-  /* `width` is set inline from the trigger's rect — leave the default
+  /* `width` is set inline from the trigger's rect, leave the default
      `.profile-pop` 280 px out of the way. */
   width: auto;
   min-width: 200px;
@@ -4394,7 +4341,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* "Coming soon" promo (extension / mobile / Telegram bot). Brand logo
    on the left, full-width text on the right, an inert grey SOON chip.
-   No CTA button — it used to squeeze the text into a thin column. */
+   No CTA button, it used to squeeze the text into a thin column. */
 /* Same shell as the recording / transcribing / failed banners:
    plain --bg with a single strong outline, no filled grey slab. */
 .promo {
@@ -4411,7 +4358,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   gap: 12px;
 }
-/* No tile any more — the bare brand mark sits directly on the card.
+/* No tile any more, the bare brand mark sits directly on the card.
    The freed space goes into a bigger logo. */
 .promo-logo {
   flex-shrink: 0;
@@ -4445,7 +4392,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-weight: 600;
   color: var(--fg);
 }
-/* Inert grey chip — deliberately reads as "not yet", not a CTA. */
+/* Inert grey chip, deliberately reads as "not yet", not a CTA. */
 .promo-soon {
   font-size: 10px;
   font-weight: 600;
@@ -4489,7 +4436,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   white-space: nowrap;
 }
-/* Darker than the toolbar `--bg-hover` — the context menu sits on the
+/* Darker than the toolbar `--bg-hover`, the context menu sits on the
    floating white panel and needs a perceptible hover. */
 .ctx-item:hover { background: #ececea; }
 .ctx-danger { color: var(--danger); }
@@ -4501,7 +4448,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   bottom: 20px;
   left: 50%;
   /* Default state is the resting position. Enter and exit are driven by
-     `.toast.entering` / `.toast.leaving` modifiers — clearer than a
+     `.toast.entering` / `.toast.leaving` modifiers, clearer than a
      CSS-only animation because we want different durations and easings. */
   transform: translate(-50%, 0);
   opacity: 1;
@@ -4527,7 +4474,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   opacity: 0;
 }
 /* Success / info toasts mimic the toolbar pill buttons (EN, Copy,
-   Delete) — white fill, hairline border, ink text. Keeps neutral state
+   Delete), white fill, hairline border, ink text. Keeps neutral state
    notifications visually quiet. */
 .toast-success {
   background: var(--bg);
@@ -4539,7 +4486,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: #fff;
   border: 1px solid #c4423a;
 }
-/* Inline action button (Undo). Adapts to the toast's surface — on the
+/* Inline action button (Undo). Adapts to the toast's surface, on the
    red error toast it's a light translucent pill; on the white success
    toast we need ink-on-grey instead, otherwise the white-on-white pill
    ends up invisible (the bug that prompted this rule). */
@@ -4553,14 +4500,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   transition: background 80ms ease, color 80ms ease;
 }
 .toast-error .toast-action {
-  /* Solid white pill with black text — the transparent white-on-red was hard
+  /* Solid white pill with black text, the transparent white-on-red was hard
      to read; this reads as the clear call-to-action on the red error toast. */
   background: #fff !important;
   color: #000 !important;
 }
 .toast-error .toast-action:hover { background: rgba(255, 255, 255, 0.85) !important; }
 .toast-success .toast-action {
-  /* Accent green pill — the success toast is "we archived this, hit
+  /* Accent green pill, the success toast is "we archived this, hit
      Undo if you didn't mean to". Undo is the bright call-to-action,
      so it gets the brand colour instead of the previous near-invisible
      grey-on-white. */
@@ -4616,7 +4563,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg) !important;
 }
 
-/* Floating donate button — bottom-right, white pill matching toolbar
+/* Floating donate button, bottom-right, white pill matching toolbar
    buttons (EN / Copy / Delete) so it doesn't compete with the action
    colour. Just an icon. */
 .donate-fab {
@@ -4666,7 +4613,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   width: 380px;
   display: flex;
   flex-direction: column;
-  /* explicit per-child margins below — title→body 8 px, body→amounts 20 px */
+  /* explicit per-child margins below, title→body 8 px, body→amounts 20 px */
   box-shadow: 0 24px 64px rgba(0,0,0,0.28);
 }
 .donate-card-title { margin-bottom: 4px; }
@@ -4722,8 +4669,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .donate-dismiss:hover { color: var(--fg); }
 
 /* ── Archive sidebar (inverted-sidebar replacement for the old modal) ── */
-/* Sits in the same `.sidebar` shell as the meeting list — width,
-   colours, scrollbar — and just rotates its contents to the archive
+/* Sits in the same `.sidebar` shell as the meeting list, width,
+   colours, scrollbar, and just rotates its contents to the archive
    list. Modal removed entirely: a popup over a hairline-heavy app
    like Corder always read as generic platform chrome. */
 /* Archive sidebar shares the `.sidebar` shell rhythm exactly: 8 px
@@ -4743,7 +4690,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: transparent;
   border: 0;
   border-radius: 8px;
-  /* Primary navigation affordance — use --fg, not muted. */
+  /* Primary navigation affordance, use --fg, not muted. */
   color: var(--fg);
   font-size: 13px;
   cursor: pointer;
@@ -4754,7 +4701,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   /* +12 px on top (4 → 16) so the "Archive" title doesn't sit
      glued to the macOS traffic-light area when the sidebar swaps
      into archive mode. The titlebar pad above is fixed-height 36
-     and there used to be a back button between them — without that
+     and there used to be a back button between them, without that
      button the title needs its own breathing room. */
   padding: 16px 12px 12px;
   border-bottom: 1px solid var(--border);
@@ -4786,14 +4733,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   line-height: 1.55;
 }
 /* Archive rows now use the existing `.meeting-item` shell verbatim
-   so the panel reads as the same component as the library sidebar —
-   per-row chrome, hover/active fills, dividers all match. Multi-
+   so the panel reads as the same component as the library sidebar, per-row chrome, hover/active fills, dividers all match. Multi-
    select happens via Cmd/Shift click; right-click on the selection
    opens a Restore / Delete-forever menu (no bottom action bar, no
    checkboxes, no "in N days" badges). */
 
 /* Inline "secondary view" pattern (Download inside the Recording
-   tab). NO card chrome — that's a generic-modal anti-pattern when
+   tab). NO card chrome, that's a generic-modal anti-pattern when
    the host pane is already on `--bg`. Just a flat stack that lives
    in the right-panel's regular rhythm: same 20 px horizontal margin
    as `.screen-video-card` / `.audio-controls`. */
@@ -4807,7 +4753,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 12px;
 }
 .inline-view-back {
-  /* Quiet breadcrumb-style "go back" — sits OUTSIDE the content
+  /* Quiet breadcrumb-style "go back", sits OUTSIDE the content
      stack visually because there's no card around it now. Uses
      `--fg` (not `--fg-muted`) so it reads as a real navigation
      affordance, not a label. */
@@ -4844,7 +4790,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
   margin-top: 4px;
 }
-/* Download view — single bordered card matching `.timeline-card` so
+/* Download view, single bordered card matching `.timeline-card` so
    it sits flush with the Recording-tab geometry (same 20 px outer
    margin, same 1 px outline, same 8 px radius). Internal padding
    mirrors `.hk-block` from Settings. Compact CTA gap so the block
@@ -4914,7 +4860,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-radius: 4px;
   animation: corder-shimmer 1.4s linear infinite;
 }
-/* Dark: a quiet elevated block with a faint light sweep — the light
+/* Dark: a quiet elevated block with a faint light sweep, the light
    value glared as near-white bars on the dark page. */
 .dark .skel-line, .dark .skel-pill, .dark .skel-circle {
   background-color: #242422;
@@ -4931,26 +4877,26 @@ body.resizing { cursor: col-resize; user-select: none; }
 .skel-pill-tab { width: 90px;  height: 16px; }
 .skel-circle   { display: inline-block; width: 36px; height: 36px; border-radius: 50%; }
 
-/* Sidebar list — fake meeting rows */
+/* Sidebar list, fake meeting rows */
 .sidebar-skeleton { padding: 4px 0; }
 .skeleton-item { cursor: default; }
 .skel-line-title   { width: 70%; height: 13px; }
 .skel-line-meta    { width: 45%; height: 10px; margin-top: 6px; }
 .skel-line-preview { width: 92%; height: 11px; margin-top: 8px; }
 
-/* Detail pane — fake transcript paragraphs */
+/* Detail pane, fake transcript paragraphs */
 .meeting-skeleton-transcript { padding: 16px 32px; }
 .skel-paragraph { margin-bottom: 20px; }
 .skel-line-meta-sm    { width: 30%; height: 10px; }
 .skel-line-text       { width: 95%; height: 12px; margin-top: 8px; }
 .skel-line-text-short { width: 70%; }
 
-/* Detail pane — fake audio card */
+/* Detail pane, fake audio card */
 .skel-line-input  { width: 100%; height: 32px; border-radius: 6px; }
 .skel-line-time   { width: 88px; height: 12px; }
 .skel-line-scrub  { width: 100%; height: 8px; border-radius: 999px; flex: 1; }
 
-/* Detail pane — fake speaker rows */
+/* Detail pane, fake speaker rows */
 .skel-line-name   { width: 100px; height: 12px; }
 .skel-line-stats  { width: 70px;  height: 10px; }
 .skel-line-bar    { width: 100%;  height: 20px; border-radius: 2px; }
@@ -4960,7 +4906,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    Same height + border-radius as the other pill buttons (8/14 padding,
    border-radius 999px) so it reads as a sibling, not a banner. Green
    accent fill with a slow diagonal shine sweep + a few twinkling
-   stars — borrowed from the corder-landing's pricing CTA pattern. */
+   stars, borrowed from the corder-landing's pricing CTA pattern. */
 .update-pill {
   /* Match the base `button` rule (8px 14px padding) so total height is
      identical to the Copy / Archive buttons next to it. */
@@ -4979,7 +4925,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden;
   isolation: isolate;
   transition: background 80ms ease, border-color 80ms ease, transform 80ms ease;
-  /* No font/family override — inherits the toolbar's sans-serif. */
+  /* No font/family override, inherits the toolbar's sans-serif. */
 }
 .update-pill:hover {
   background: var(--accent-pressed, #0a5e34);
@@ -5065,7 +5011,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   .update-pill-sparkles span { opacity: 0; }
 }
 
-/* Pill in busy state — after click, before Sparkle's dialog appears.
+/* Pill in busy state, after click, before Sparkle's dialog appears.
    No pulse/glow ring (Костя: «не должно вообще»); the dialog opening
    is the feedback. */
 .update-pill.busy {
@@ -5079,19 +5025,19 @@ body.resizing { cursor: col-resize; user-select: none; }
    delta is an extra 14 px top margin so the two cards read as
    siblings, not one fused block. Each row hosts a single pill in
    the SAME `.wl-download-btn.is-loading` style we use for the
-   Whisper model download bar — the user wanted bar parity, not a
+   Whisper model download bar, the user wanted bar parity, not a
    new bar shape. */
 .dash-usage-card {
-  /* No extra margin — `.dashboard-left-inner` already enforces an
+  /* No extra margin, `.dashboard-left-inner` already enforces an
      18 px gap between every card via its flex `gap`, same gap
      "Ready when you are." has down to Stats. Adding a top margin
      made the seam between Stats and Usage visibly larger than
      the one above it. */
 }
-/* Usage rows reuse `.dash-stat-row` directly — no extra geometry
+/* Usage rows reuse `.dash-stat-row` directly, no extra geometry
    needed. The card around them keeps a distinct header so the
    section is identifiable as "what's left this month". */
-/* Header band — same `.clarify-body` (18 / 300) headline + `.dash-sub`
+/* Header band, same `.clarify-body` (18 / 300) headline + `.dash-sub`
    muted line we use for "Ready when you are. / Start a recording in
    the background." so the Usage card opens with the same visual
    voice as the hero card above it. Sits on its own padding band
@@ -5101,7 +5047,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
-/* The pill inside the cell IS `.wl-download-btn.is-loading` — same
+/* The pill inside the cell IS `.wl-download-btn.is-loading`, same
    height, same accent fill, same dual-label readability across the
    filled/unfilled boundary as the Whisper download pill. We override
    only the cosmetics that don't apply in a non-interactive status
@@ -5121,11 +5067,11 @@ body.resizing { cursor: col-resize; user-select: none; }
    top (the only hot target), the body title below as a normal
    paragraph. Same `.md-h3`/`.md-p` rhythm Summary uses, so flipping
    between the two tabs reads as one surface. */
-/* Whole row is the click target — a chapter is one seek action, so
+/* Whole row is the click target, a chapter is one seek action, so
    the entire block lights up on hover, not just the time pill. */
 /* Each chapter is one clickable rounded row. An INSET hairline divider
    sits between rows (iOS-settings style) so the list doesn't read as
-   "floating" — short, inset 12px from both edges so it never touches the
+   "floating", short, inset 12px from both edges so it never touches the
    rounded hover highlight (the old full-width border clashed with the
    rounded corners; this doesn't). */
 .chapter-block {
@@ -5159,7 +5105,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .chapter-block.is-active::before,
 .chapter-block.is-active + .chapter-block::before { background: transparent; }
 .chapter-block:hover { background: var(--bg-hover); }
-/* Timestamp — same type as `.md-h3` (16/500, fg) so it sits at
+/* Timestamp, same type as `.md-h3` (16/500, fg) so it sits at
    section-heading weight. Tabular-nums keeps the column flush. */
 .chapter-time {
   font-size: 16px;
@@ -5175,7 +5121,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin: 0 0 6px -8px;
   border-radius: 6px;
 }
-/* Active chapter (the one playing right now) — green fill + white text
+/* Active chapter (the one playing right now), green fill + white text
    on the timecode, so the user can see where they are in the list. */
 .chapter-block.is-active .chapter-time {
   background: var(--accent);
@@ -5183,7 +5129,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   position: relative;
   overflow: hidden;
 }
-/* Progress THROUGH the active chapter — a darker-green layer creeps
+/* Progress THROUGH the active chapter, a darker-green layer creeps
    across the pill from the left, full by the time the next chapter
    takes over (same idea as the Stop-transcription button fill). */
 .chapter-time-fill {
@@ -5206,7 +5152,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 /* ── Sparkle update modal (in-WebView overlay) ────────────────────
    Rendered inside the Library WKWebView as a `position: fixed`
-   layer — that's what makes the backdrop reliably cover the WHOLE
+   layer, that's what makes the backdrop reliably cover the WHOLE
    Library viewport (it IS the WebView). Theme follows the page's
    own design tokens, no NSAppearance plumbing needed. */
 .update-overlay {
@@ -5216,7 +5162,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   display: flex;
   /* `safe center` keeps the card centred when it fits, but aligns it to the
      top (and lets `overflow-y` scroll) when the card is taller than the
-     viewport — otherwise a tall modal (e.g. the sign-in card on a short
+     viewport, otherwise a tall modal (e.g. the sign-in card on a short
      window) clips its top/bottom with no way to reach it. */
   align-items: safe center;
   justify-content: center;
@@ -5266,7 +5212,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   --tilt-shine-y: 50%;
   transform-style: preserve-3d;
   transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-  /* NO transition on the tracked transform — the tilt must follow the cursor
+  /* NO transition on the tracked transform, the tilt must follow the cursor
      directly. A transition here made the tilt lag and STUTTER behind the
      pointer (it kept restarting toward a moving target every mousemove).
      Smoothness now comes from the rAF-batched JS loop; a transition is applied
@@ -5276,7 +5222,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden;
   /* Pin the card to its OWN GPU compositing layer so the cursor tilt
      transforms a pre-rasterized layer instead of re-rasterizing the text
-     every frame — without this the text shimmered/rippled during the
+     every frame, without this the text shimmered/rippled during the
      rotateX/rotateY tilt (worse on macOS 26 WebKit). backface-visibility
      keeps the raster crisp through the 3D rotation. */
   will-change: transform;
@@ -5288,11 +5234,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .update-card.tilt-snap-back {
   transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-/* Sheen is a soft radial highlight that follows the cursor — and
+/* Sheen is a soft radial highlight that follows the cursor, and
    now sits ABOVE the card content (z-index: 2) so it actually lights
    up the Update button instead of being trapped under it. Alpha is
    low enough (≤ 22 %) that the white label on the accent-green CTA
-   still reads — the gradient just brightens what's beneath without
+   still reads, the gradient just brightens what's beneath without
    the `mix-blend-mode: plus-lighter` blow-out we used to have. */
 .update-card-sheen {
   pointer-events: none;
@@ -5315,7 +5261,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* Card content (title, status, buttons, notes) sits in its own
    stacking context below the sheen layer. The help button is
    absolutely positioned above EVERYTHING (sheen included) so the
-   selector excludes it — otherwise `position: relative` here would
+   selector excludes it, otherwise `position: relative` here would
    clobber its `position: absolute` and snap it back into flow. */
 .update-card > :not(.update-card-sheen):not(.update-help) {
   position: relative;
@@ -5323,7 +5269,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ---- In-app sign-in modal: shares .update-card (tilt + sheen, white
-   card) but no StarsCanvas. Guest treatment is intentional — neutral
+   card) but no StarsCanvas. Guest treatment is intentional, neutral
    white card + dark ink CTA, no brand-green (green/blue are for
    signed-in / admin). ---- */
 .auth-card { width: 400px; gap: 16px; }
@@ -5381,7 +5327,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .auth-switch:hover:not(:disabled) { color: var(--accent-pressed); }
 .auth-switch:disabled { opacity: 0.6; cursor: default; }
-/* "You can also Sign up" / "Already have one? Sign in" — moved below the
+/* "You can also Sign up" / "Already have one? Sign in", moved below the
    Later button (out of the header). Centered, muted, quiet. */
 .auth-switch-row {
   margin-top: 14px;
@@ -5394,7 +5340,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: color-mix(in srgb, var(--fg) 86%, #fff);
   border-color: color-mix(in srgb, var(--fg) 86%, #fff);
 }
-/* Neutral (not muted-green) disabled state — keep the guest modal free of
+/* Neutral (not muted-green) disabled state, keep the guest modal free of
    brand colour until the form is valid. */
 .auth-primary:disabled {
   background: color-mix(in srgb, var(--fg) 20%, transparent);
@@ -5444,7 +5390,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   width: 38px;
   height: 38px;
   /* Explicit padding:0 + box-sizing:border-box override the global
-     `button { padding: 8px 14px }` rule from line 221 — without
+     `button { padding: 8px 14px }` rule from line 221, without
      them the circle deforms into a pill. */
   padding: 0;
   box-sizing: border-box;
@@ -5514,7 +5460,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* Stacked vertically: primary (Update now / OK) on top, secondary
    (Later) below it. Both stretch to the full card width. Same
-   font-size / weight / padding so they read as siblings — the only
+   font-size / weight / padding so they read as siblings, the only
    difference is fill colour. */
 .update-actions {
   display: flex;
@@ -5534,7 +5480,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   transition: background 80ms ease, border-color 80ms ease;
 }
-/* No hover background-flip on either button — the global
+/* No hover background-flip on either button, the global
    `button:hover` rule (~line 228) would otherwise paint a near-
    white fill over the accent green and erase the white label.
    Explicit `:hover` selectors here re-pin the resting colours so
@@ -5558,7 +5504,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   justify-content: center;
 }
-/* Centered button loader while Sparkle works — same keyframe + cadence
+/* Centered button loader while Sparkle works, same keyframe + cadence
    as the Dashboard Start/Stop button (.dash-primary-spin), one shared
    "loading" vocabulary. Only rendered once the user clicks Install. */
 .update-primary-spin { animation: spin 0.9s linear infinite; }
@@ -5586,7 +5532,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg);
   border: 1px solid var(--border-strong);
 }
-/* Secondary CTA (Later / Close) is the dismiss path — a normal
+/* Secondary CTA (Later / Close) is the dismiss path, a normal
    light-grey hover reads as a real button without competing with
    the primary's accent fill. */
 .update-secondary:hover { background: var(--bg-hover); border-color: #b8b8b4; }
@@ -5608,7 +5554,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-style: italic;
 }
 
-/* Secondary button "pressed" state — used by the pricing modal's
+/* Secondary button "pressed" state, used by the pricing modal's
    "Details" toggle to read as active while the feature panel is up
    (same toggle vocabulary as the update modal's `?` help button). */
 .update-secondary.is-active {
@@ -5718,7 +5664,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg-muted);
   margin-top: 2px;
 }
-/* Feature list — plain text, NO grey panel, NO padding, NO scrollbar,
+/* Feature list, plain text, NO grey panel, NO padding, NO scrollbar,
    NO bullet/dash markers. Just lines, matching the landing page. */
 .pricing-detail {
   display: flex;
@@ -5772,7 +5718,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg);
 }
 /* The Loader2 inside Stop transcription gets a fresh `.trans-stop-spinner`
-   modifier — overrides the inherited accent-green colour (the spinner
+   modifier, overrides the inherited accent-green colour (the spinner
    class is also used on the title spinner) so it reads white on the
    red destructive surface. */
 .trans-stop-spinner {

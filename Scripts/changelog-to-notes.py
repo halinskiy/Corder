@@ -23,7 +23,7 @@ import sys
 def extract(version: str, changelog: str) -> list[str]:
     """Return the bullet items under `## [<version>]`, joining continuations."""
     lines = changelog.splitlines()
-    # Find the heading line for this exact version: `## [0.14.61] — date`.
+    # Find the heading line for this exact version: `## [0.14.61], date`.
     start = None
     head_re = re.compile(r"^##\s*\[" + re.escape(version) + r"\]")
     for i, ln in enumerate(lines):
@@ -35,12 +35,12 @@ def extract(version: str, changelog: str) -> list[str]:
 
     bullets: list[str] = []
     for ln in lines[start:]:
-        if ln.startswith("## "):  # next version section — stop
+        if ln.startswith("## "):  # next version section, stop
             break
         stripped = ln.strip()
         if not stripped:
             continue
-        if stripped.startswith("###"):  # Added / Changed / Fixed sub-headers — skip
+        if stripped.startswith("###"):  # Added / Changed / Fixed sub-headers, skip
             continue
         if stripped.startswith("- "):
             bullets.append(stripped[2:].strip())

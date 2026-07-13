@@ -9,7 +9,7 @@ protocol CaptureEngineDelegate: AnyObject {
     @MainActor func captureEngine(_ engine: CaptureEngine, didStartMeeting id: String)
     @MainActor func captureEngine(_ engine: CaptureEngine, didStopMeeting id: String)
     @MainActor func captureEngine(_ engine: CaptureEngine, didFailWithError error: Error)
-    /// The process tap exhausted its rebuilds on a Bluetooth route — the far end
+    /// The process tap exhausted its rebuilds on a Bluetooth route, the far end
     /// is being lost RIGHT NOW. Warn the user mid-recording so they can react.
     @MainActor func captureEngineFarEndUnavailable(_ engine: CaptureEngine)
 }
@@ -37,8 +37,8 @@ final class CaptureEngine: NSObject {
 
     private(set) var isRecording = false
     /// Latched synchronously at the top of `start()` (before the first
-    /// `await`) so a second concurrent `start()` — or a `start()` racing a
-    /// `stop()` during the ~300 ms permission/SCStream warm-up — is
+    /// `await`) so a second concurrent `start()`, or a `start()` racing a
+    /// `stop()` during the ~300 ms permission/SCStream warm-up, is
     /// rejected instead of stomping the first run's stream/tap/files.
     private var starting = false
     /// Set by `stop()` when it's called WHILE `start()` is mid-warm-up
@@ -49,7 +49,7 @@ final class CaptureEngine: NSObject {
     /// Set true the instant `stop()` begins, before the async teardown.
     /// The system-audio writers open their AVAudioFile LAZILY on the
     /// first buffer (a nil file means "not opened yet"). After stop,
-    /// `systemAudioFile`/`sckAudioFile` are also nil'd — so a late
+    /// `systemAudioFile`/`sckAudioFile` are also nil'd, so a late
     /// buffer whose main-actor `Task` lands AFTER stop would see nil
     /// and *re-create* the file with `AVAudioFile(forWriting:)`, which
     /// TRUNCATES the just-written recording to an empty file (root
@@ -68,7 +68,7 @@ final class CaptureEngine: NSObject {
     /// mach host clock, so their first-buffer timestamps are directly
     /// comparable. Without this, a writer that comes up LATE (the process
     /// tap can take 17 s while the BT watchdog rebuilds it) produces a file
-    /// whose frame 0 is a LATER real instant than the others' — and every
+    /// whose frame 0 is a LATER real instant than the others', and every
     /// consumer that overlays the tracks from frame 0 (`AudioMixer`, the
     /// per-track timing) then shifts the far end earlier, onto the user's
     /// voice. Latching one clock and padding each writer to it keeps frame 0
@@ -91,12 +91,12 @@ final class CaptureEngine: NSObject {
 
     private var stream: SCStream?
     private let outputQueue = DispatchQueue(label: "com.3mpq.corder.scstream", qos: .userInitiated)
-    /// Dedicated serial queue for ALL media file I/O — video `append` and
+    /// Dedicated serial queue for ALL media file I/O, video `append` and
     /// the synchronous `AVAudioFile.write` for system/SCK audio. Previously
     /// every video frame and system-audio buffer hopped to the MainActor and
     /// did its disk write there, so 31-86 audio buffers/sec (+ video) of
     /// synchronous I/O serialised on the main run loop WHILE it drove the
-    /// animated HUD — the "everything lags from the start" load that
+    /// animated HUD, the "everything lags from the start" load that
     /// Maksym-nocorny root-caused (issue #1, item 1). Writing here keeps the
     /// MainActor free; `stop()` drains this queue (`writeQueue.sync`) before
     /// closing files, and the sources are all stopped first, so no write
@@ -104,7 +104,7 @@ final class CaptureEngine: NSObject {
     /// now instead of stalling the main thread at record start.
     private let writeQueue = DispatchQueue(label: "com.3mpq.corder.mediawrite", qos: .userInitiated)
 
-    // Microphone via AVAudioEngine — runs on its own thread
+    // Microphone via AVAudioEngine, runs on its own thread
     private var audioEngine: AVAudioEngine?
     private var micFile: AVAudioFile?
     // Diagnostic: how many sample frames the tap actually delivered. If this
@@ -116,7 +116,7 @@ final class CaptureEngine: NSObject {
     // opened with (a headphones/AirPods mic ≠ the built-in mic). The normal
     // path never touches it (buffer.format == the file format → direct write).
     private var micConverter: AVAudioConverter?
-    // Observer for `AVAudioEngineConfigurationChange` — fires when the audio
+    // Observer for `AVAudioEngineConfigurationChange`, fires when the audio
     // route/device changes mid-recording (user switches Mac ↔ headphones), so
     // we re-tap the mic on the NEW device instead of the engine silently dying
     // (the "switched to headphones and lost the whole recording" bug).
@@ -129,7 +129,7 @@ final class CaptureEngine: NSObject {
     // new one starting, so mic.wav stays frame-aligned to system.wav.
     private var micRetapPending = false
 
-    // Video writer for screen capture. HEVC at 15fps + ~1.5 Mbps —
+    // Video writer for screen capture. HEVC at 15fps + ~1.5 Mbps
     // tuned for meeting recordings (mostly static UI, occasional cursor /
     // window motion). The first `.screen` sample's PTS becomes the
     // session start; subsequent samples are appended directly.
@@ -155,7 +155,7 @@ final class CaptureEngine: NSObject {
     /// Snapshot of whether the default OUTPUT was Bluetooth when this
     /// recording started. The process tap captures silence on a BT
     /// route, so if system.wav ends up silent AND this is true, the
-    /// remote side was lost to the BT limitation — RecordingController
+    /// remote side was lost to the BT limitation, RecordingController
     /// reads this post-stop to warn the user specifically. Survives
     /// stop() (cleared only on the next start()).
     private(set) var outputBluetoothAtStart = false
@@ -163,7 +163,7 @@ final class CaptureEngine: NSObject {
     // Secondary system-audio capture via SCStream's `.audio` output,
     // written to a SEPARATE system_sck.wav. This is a belt-and-braces
     // backup for the Core Audio process tap: the tap captures silence
-    // on a Bluetooth output route (AirPods / BT headset — the common
+    // on a Bluetooth output route (AirPods / BT headset, the common
     // case), whereas SCStream's audio tap captures the system mix in
     // that case. The two fail on opposite scenarios (SCStream is silent
     // on VPIO/WebRTC calls; the tap is silent on BT output), so writing
@@ -171,7 +171,7 @@ final class CaptureEngine: NSObject {
     // means a recording is only lost when BOTH fail. Strictly additive:
     // the tap path (system.wav) is never touched, so worst case is
     // today's behaviour with no regression. We deliberately do NOT feed
-    // RecordingLevelMeter from this path — the BT-warning heuristic in
+    // RecordingLevelMeter from this path, the BT-warning heuristic in
     // RecordingController keys off sessionMaxSystem reflecting the TAP
     // only; mixing SCK levels in would mask the very failure we warn on.
     nonisolated(unsafe) private var sckSystemURL: URL?
@@ -186,7 +186,7 @@ final class CaptureEngine: NSObject {
         // both pass and leak a stream/tap. `defer` clears the latch on
         // every exit; once `isRecording` is true the normal guard owns it.
         guard !isRecording, !starting else {
-            FileLogger.log("CaptureEngine.start: rejected — already \(isRecording ? "recording" : "starting")")
+            FileLogger.log("CaptureEngine.start: rejected, already \(isRecording ? "recording" : "starting")")
             throw CaptureError.alreadyRecording
         }
         starting = true
@@ -195,10 +195,10 @@ final class CaptureEngine: NSObject {
         tearingDown = false
         outputBluetoothAtStart = SystemAudioTap.defaultOutputIsBluetooth()
         if outputBluetoothAtStart {
-            FileLogger.log("CaptureEngine.start: default OUTPUT is Bluetooth — process tap may capture silence (remote side at risk)")
+            FileLogger.log("CaptureEngine.start: default OUTPUT is Bluetooth, process tap may capture silence (remote side at risk)")
         }
         // AVAudioEngine alone doesn't trigger the macOS Microphone TCC sheet.
-        // We ask AVCaptureDevice explicitly — but a LSUIElement app has to be
+        // We ask AVCaptureDevice explicitly, but a LSUIElement app has to be
         // .regular + active for the prompt to actually appear. Otherwise the
         // request resolves silently as "denied" and the user never sees the
         // dialog. We temporarily flip activation policy, ask, then restore.
@@ -220,7 +220,7 @@ final class CaptureEngine: NSObject {
                 }
             }
         } else if micStatus == .denied || micStatus == .restricted {
-            FileLogger.log("CaptureEngine.start: WARNING — mic permission denied/restricted; opening System Settings.")
+            FileLogger.log("CaptureEngine.start: WARNING, mic permission denied/restricted; opening System Settings.")
             // Surface the panel so the user can flip the toggle.
             await MainActor.run {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
@@ -230,11 +230,11 @@ final class CaptureEngine: NSObject {
         }
 
         guard !isRecording else {
-            FileLogger.log("CaptureEngine.start: rejected — already recording")
+            FileLogger.log("CaptureEngine.start: rejected, already recording")
             throw CaptureError.alreadyRecording
         }
 
-        // Latch t=0 for ALL audio writers HERE — after the (possibly slow,
+        // Latch t=0 for ALL audio writers HERE, after the (possibly slow,
         // first-run) mic-permission prompt has resolved but before any writer
         // is armed. Every writer's first-buffer host time is then >= this, so
         // each left-pads to one shared origin. Latched ONCE per recording and
@@ -260,7 +260,7 @@ final class CaptureEngine: NSObject {
         try? FileManager.default.removeItem(at: sckSystemURL)
 
         // Whether to run the SCStream session AT ALL. MEASURED: a running
-        // SCStream (full-display capture + audio) costs ~600 mW — and in
+        // SCStream (full-display capture + audio) costs ~600 mW, and in
         // audio-only mode capturing the screen was the single biggest source
         // of the "recording heats the Mac" load (audio-only drew ~the same
         // power as video). We need SCStream only for: (a) video frames, or
@@ -272,17 +272,17 @@ final class CaptureEngine: NSObject {
         // This same flag also gates SCREEN-RECORDING PERMISSION. SCShareableContent
         // and SCStream both require the Screen Recording TCC grant, but the Core
         // Audio process tap + the AVAudioEngine mic do NOT. So an audio-only,
-        // non-Bluetooth recording runs with NO Screen Recording permission at all
-        // — a brand-new user can record audio the instant they open Corder, and
+        // non-Bluetooth recording runs with NO Screen Recording permission at all,
+        // a brand-new user can record audio the instant they open Corder, and
         // we only ever prompt for Screen Recording when video is actually on
         // (RecordingController enforces the grant up-front in that case). If the
         // SCShareableContent call here still throws (permission revoked, or a
-        // race), we DON'T fail the recording — we degrade to audio-only, where
+        // race), we DON'T fail the recording, we degrade to audio-only, where
         // the process tap still captures the far end.
         // Video ON always needs SCStream (RecordingController prompts for
         // Screen Recording up-front in that case). For the Bluetooth-output
         // SCK audio BACKUP we only arm SCStream when Screen Recording is
-        // ALREADY granted — we must NOT trigger the macOS Screen Recording
+        // ALREADY granted, we must NOT trigger the macOS Screen Recording
         // prompt (which can only be satisfied by a restart) just for a backup
         // track that, empirically, is silent in ~100% of recordings: the
         // far end is captured by the Core Audio process tap regardless. So a
@@ -290,12 +290,12 @@ final class CaptureEngine: NSObject {
         // prompt, no Screen Recording wall.
         // SCStream (ScreenCaptureKit) is armed ONLY when we actually record
         // VIDEO. It used to ALSO arm on a Bluetooth output (`|| outputBluetoothAtStart`)
-        // to feed the SCK system-audio backup — but that backup is DEAD (SCStream
+        // to feed the SCK system-audio backup, but that backup is DEAD (SCStream
         // `.audio` is all-zero silence, `captureSCKBackup = false`, never
         // persisted since 0.15.22). So on a BT AUDIO call it started a
         // ScreenCaptureKit stream with NO outputs, purely lighting up macOS's
         // "Currently Sharing" / Screen-Recording indicator (and offering a
-        // "Stop Sharing" control that kills the stream but not the recording —
+        // "Stop Sharing" control that kills the stream but not the recording
         // user confusion, reported 2026-07-07). The far end is captured by the
         // Core Audio process tap regardless (the tap watchdog, not SCStream,
         // drives the far-end-unavailable warning), so dropping the BT arm loses
@@ -335,7 +335,7 @@ final class CaptureEngine: NSObject {
                 }
 
                 // 2. Configuration: source size + system audio.
-                // We deliberately leave sampleRate / channelCount at defaults — pinning
+                // We deliberately leave sampleRate / channelCount at defaults, pinning
                 // them to 48k stereo causes SCStream.startCapture to fail with
                 // "Stream failed to start audio" on devices where the actual output is
                 // mono (Bluetooth headsets, some external DACs, AirPods in HFP mode).
@@ -356,7 +356,7 @@ final class CaptureEngine: NSObject {
                 config.height = outH - (outH % 2)
                 // BGRA = the display framebuffer's NATIVE format. Requesting YUV here
                 // forced ScreenCaptureKit/WindowServer to run an RGB→YUV color
-                // conversion on EVERY captured frame — measured as the dominant cost
+                // conversion on EVERY captured frame, measured as the dominant cost
                 // (WindowServer pegged ~88% during recording, the encoder itself was
                 // cheap). Delivering BGRA straight through skips that conversion; the
                 // hardware H.264 encoder takes BGRA and does its own conversion in
@@ -364,14 +364,14 @@ final class CaptureEngine: NSObject {
                 // "recording heats the Mac" complaint (and matches Tracer/Loom).
                 config.pixelFormat = kCVPixelFormatType_32BGRA
                 config.queueDepth = 5
-                // 10 fps is plenty for meeting recordings — cursor and window
+                // 10 fps is plenty for meeting recordings, cursor and window
                 // motion read fine at that rate, and it's a third fewer frames for
                 // the encoder than 15 fps (less CPU, smaller file) with no
                 // perceptible loss on mostly-static screen content.
                 config.minimumFrameInterval = CMTime(value: 1, timescale: 10)
                 config.capturesAudio = true
                 // We deliberately do NOT use SCStream's `.microphone` output even on
-                // macOS 15+. It looks attractive — a single shared tap — but in
+                // macOS 15+. It looks attractive, a single shared tap, but in
                 // practice the system silently delivers zero frames whenever
                 // another app (Meet, Zoom, Discord, Telegram) holds the mic via
                 // WebRTC, or when the user is on Bluetooth headphones. Granola,
@@ -380,12 +380,12 @@ final class CaptureEngine: NSObject {
                 // through CoreAudio HAL where mic streams are shared, not exclusive.
 
                 // 3. AVAssetWriter for video.mov. HEVC at ~1.5 Mbps + 15 fps,
-                //    feeding the YUV samples SCStream already delivers — no
+                //    feeding the YUV samples SCStream already delivers, no
                 //    BGRA→YUV converter pass, which is the path that historically
                 //    flipped the writer to .failed with -16122 partway through.
                 //    Session start is deferred to the first sample we receive
                 //    (sample PTS, not zero) so SCStream's arbitrary clock origin
-                //    doesn't blow up the writer. Failures here are non-fatal —
+                //    doesn't blow up the writer. Failures here are non-fatal
                 //    audio capture continues, the frontend renders <audio> when
                 //    the .mov is missing.
                 // User can turn screen-video recording off (audio-only). Skipping
@@ -395,7 +395,7 @@ final class CaptureEngine: NSObject {
                 // The `.screen` SCStream output is still registered below (it
                 // keeps the audio-clock pacing intact regardless).
                 if !AppSettings.captureVideo {
-                    FileLogger.log("CaptureEngine.start: screen-video disabled in Settings — audio only")
+                    FileLogger.log("CaptureEngine.start: screen-video disabled in Settings, audio only")
                 } else {
                     do {
                         try? FileManager.default.removeItem(at: videoURL)
@@ -425,7 +425,7 @@ final class CaptureEngine: NSObject {
                         }
                         // CRASH-SAFE fragmented writing. A faststart writer buffers the
                         // whole movie and flushes moov+mdat only on finishWriting, so a hard
-                        // kill leaves a ZERO-byte video.mov (measured) — total video loss.
+                        // kill leaves a ZERO-byte video.mov (measured), total video loss.
                         // Fragmenting flushes a self-describing chunk to disk every few
                         // seconds, so an interrupted recording keeps the video up to the last
                         // flush. A fragmented file isn't WKWebView-progressive-loadable, so
@@ -450,7 +450,7 @@ final class CaptureEngine: NSObject {
                 //    track. The Core Audio process tap below is still the
                 //    primary system-audio source (it captures VPIO/WebRTC call
                 //    audio the SCStream mix misses). But the tap is silent when
-                //    the output route is Bluetooth — exactly when many users
+                //    the output route is Bluetooth, exactly when many users
                 //    record (AirPods). SCStream's audio tap captures the mix in
                 //    that case, so we keep `capturesAudio = true` and mirror its
                 //    `.audio` output into a SEPARATE system_sck.wav. The tap
@@ -463,7 +463,7 @@ final class CaptureEngine: NSObject {
                 // process tap deterministically zeros every PCM sample SCStream
                 // delivers (rms 0.00 across 6+ recordings, regardless of BT
                 // route). Apple docs say the property defaults to false, but
-                // empirically the deployed builds behaved like true — pinning
+                // empirically the deployed builds behaved like true, pinning
                 // it false explicitly restores the SCK audio path (m4 rms 0.072
                 // vs m5 0.000 in the isolated CLI matrix at /tmp/sck-test).
                 // The TranscriptionPipeline's voiced-energy chooser keeps SCK
@@ -474,16 +474,16 @@ final class CaptureEngine: NSObject {
                 // BT-SCO calls where Corder isn't making noise anyway.
                 config.excludesCurrentProcessAudio = false
                 let activeStream = SCStream(filter: filter, configuration: config, delegate: self)
-                // Subscribe to SCREEN frames only when actually recording video —
+                // Subscribe to SCREEN frames only when actually recording video
                 // in BT audio-only we keep the stream for SCK audio but never
                 // touch the screen.
                 if AppSettings.captureVideo {
                     try activeStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
                 }
                 // SCK (system_sck.wav) is the SCStream-`.audio` far-end backup for
-                // a Bluetooth output. Measured DEAD — all-zero buffers in 100% of
+                // a Bluetooth output. Measured DEAD, all-zero buffers in 100% of
                 // recordings, BT route included (see AGENTS "SCK is DEAD at the OS
-                // level") — yet it wrote a 48 kHz STEREO FLOAT32 file at ~384 KB/s
+                // level"), yet it wrote a 48 kHz STEREO FLOAT32 file at ~384 KB/s
                 // of pure silence: 596 MB on one real BT meeting, the single
                 // biggest file on disk. We no longer persist it. The track chooser
                 // (TranscriptionPipeline / RecordingController mix) already falls
@@ -508,24 +508,24 @@ final class CaptureEngine: NSObject {
                     }
                 } else {
                     self.sckSystemURL = nil
-                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart)) — SCK backup not persisted (dead 48k float32 silence), process tap only")
+                    FileLogger.log("CaptureEngine.start: SCStream configured (video=\(AppSettings.captureVideo), BT=\(outputBluetoothAtStart)), SCK backup not persisted (dead 48k float32 silence), process tap only")
                 }
                 do {
                     try await activeStream.startCapture()
                     FileLogger.log("CaptureEngine.start: SCStream.startCapture OK")
                 } catch {
-                    FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing — audio tap + mic still record; no video.")
+                    FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing, audio tap + mic still record; no video.")
                 }
                 self.stream = activeStream
             } catch {
-                // SCShareableContent / filter / .screen output threw — almost
+                // SCShareableContent / filter / .screen output threw, almost
                 // always "Screen Recording not granted yet". DON'T fail the whole
                 // recording: degrade to audio-only (process tap + mic). We lose
                 // video + the (empirically-silent) SCK backup, but the far end
                 // still comes from the process tap. RecordingController gates
                 // video-on behind an explicit Screen Recording grant, so this
                 // path is the safety net for a revoked grant / race.
-                FileLogger.log("CaptureEngine.start: SCStream unavailable (\(error)) — Screen Recording likely not granted; recording audio-only via process tap")
+                FileLogger.log("CaptureEngine.start: SCStream unavailable (\(error)), Screen Recording likely not granted; recording audio-only via process tap")
                 self.stream = nil
                 self.sckSystemURL = nil
                 self.videoWriter = nil
@@ -537,11 +537,11 @@ final class CaptureEngine: NSObject {
             // needs NO Screen Recording permission.
             self.stream = nil
             self.sckSystemURL = nil
-            FileLogger.log("CaptureEngine.start: audio-only + non-BT — skipping SCStream entirely (process tap handles system audio), ~600 mW saved")
+            FileLogger.log("CaptureEngine.start: audio-only + non-BT, skipping SCStream entirely (process tap handles system audio), ~600 mW saved")
         }
 
         // 5. Microphone via AVAudioEngine.installTap on the default input.
-        //    This is the only path now (no more SCStream.microphone) — see
+        //    This is the only path now (no more SCStream.microphone), see
         //    the comment on `capturesAudio` above for why.
         self.micURL = micURL
         self.micFile = nil
@@ -549,21 +549,21 @@ final class CaptureEngine: NSObject {
         let engine = AVAudioEngine()
         // If the user has picked a specific input device in Settings,
         // bind the engine's input AUHAL to that device BEFORE asking
-        // for the format — `outputFormat(forBus:)` queries the unit's
+        // for the format, `outputFormat(forBus:)` queries the unit's
         // currently bound device, so the order matters. When no UID
         // is saved (fresh install / "System default" choice / device
-        // unplugged), we leave AVAudioEngine on the system default —
+        // unplugged), we leave AVAudioEngine on the system default
         // identical to the pre-feature behaviour.
         FileLogger.log("CaptureEngine.start: system default input = \(AudioInputDevices.defaultInputSummary()), outputBT=\(outputBluetoothAtStart)")
         if let chosenUID = AppSettings.micDeviceUID {
             if let resolvedID = AudioInputDevices.apply(uid: chosenUID, to: engine) {
                 FileLogger.log("CaptureEngine.start: mic device set to UID=\(chosenUID) (AudioDeviceID=\(resolvedID))")
             } else {
-                FileLogger.log("CaptureEngine.start: saved mic UID=\(chosenUID) not found / apply failed — falling back to system default")
+                FileLogger.log("CaptureEngine.start: saved mic UID=\(chosenUID) not found / apply failed, falling back to system default")
             }
         }
         // NOTE: auto-forcing the BT headset mic here (apply the BT input when
-        // outputBluetoothAtStart) was tried and REVERTED — a freshly-applied
+        // outputBluetoothAtStart) was tried and REVERTED, a freshly-applied
         // Bluetooth input device throws AVAudioEngine error -10868
         // (kAudioUnitErr_FormatNotSupported) until it settles, and the START
         // path has no retry (unlike handleMicConfigChange's backoff), so it
@@ -572,7 +572,7 @@ final class CaptureEngine: NSObject {
         let inputNode = engine.inputNode
         // NOTE: macOS Voice Processing (AEC) was tried here to cancel
         // speaker→mic echo, but it puts the whole audio session into VoIP
-        // mode — on Bluetooth it forces the low-quality HFP/SCO route (the
+        // mode, on Bluetooth it forces the low-quality HFP/SCO route (the
         // far end hears your voice degrade) and handed back a bogus 5-channel
         // mic format that produced an unusable recording. Reverted. The
         // no-headphones echo is handled in the playback mix instead (duck
@@ -584,14 +584,14 @@ final class CaptureEngine: NSObject {
         // `inputNode.outputFormat` momentarily reports a 0 Hz / invalid
         // format. A single attempt hard-failed the whole recording with a
         // scary popup. Retry a few times with a short settle delay + an
-        // engine reset — the device almost always binds within a second.
+        // engine reset, the device almost always binds within a second.
         var micStarted = false
         var lastMicError: Error?
         var forcedBuiltIn = false
         for attempt in 1...4 {
-            // After a couple of failures on the default device — typically a
+            // After a couple of failures on the default device, typically a
             // flaky BT headset mic (AirPods in a half-connected / HFP-flapping
-            // state) that throws -10868 on every attempt — force the built-in
+            // state) that throws -10868 on every attempt, force the built-in
             // mic so a recording NEVER fails to start. A working built-in
             // capture beats the scary "couldn't start recording (-10868)"
             // popup. Skipped when the user has explicitly pinned a device.
@@ -604,11 +604,11 @@ final class CaptureEngine: NSObject {
             }
             let fmt = inputNode.outputFormat(forBus: 0)
             // 0 Hz / 0 ch = device not bound yet. Don't even try to open a
-            // file with a bogus format (that's what throws -10868) — wait.
+            // file with a bogus format (that's what throws -10868), wait.
             guard fmt.sampleRate > 0, fmt.channelCount > 0 else {
                 lastMicError = NSError(domain: "Corder.mic", code: -10868,
                     userInfo: [NSLocalizedDescriptionKey: "input device not ready (format \(fmt.sampleRate) Hz)"])
-                FileLogger.log("CaptureEngine.start: mic input not ready on attempt \(attempt) (format \(fmt.sampleRate) Hz) — settling + retry")
+                FileLogger.log("CaptureEngine.start: mic input not ready on attempt \(attempt) (format \(fmt.sampleRate) Hz), settling + retry")
                 try? await Task.sleep(nanoseconds: 450_000_000)
                 continue
             }
@@ -633,7 +633,7 @@ final class CaptureEngine: NSObject {
                 break
             } catch {
                 lastMicError = error
-                FileLogger.log("CaptureEngine.start: mic init attempt \(attempt) failed (\(error)) — reset + retry")
+                FileLogger.log("CaptureEngine.start: mic init attempt \(attempt) failed (\(error)), reset + retry")
                 inputNode.removeTap(onBus: 0)
                 if engine.isRunning { engine.stop() }
                 engine.reset()
@@ -645,7 +645,7 @@ final class CaptureEngine: NSObject {
             // All retries exhausted. By here the SCStream is ALREADY live, so a
             // bare throw would leak it (privacy indicator stuck on). Tear the
             // partial capture down before rethrowing so it fails cleanly.
-            FileLogger.log("CaptureEngine.start: mic init failed after retries — tearing down any already-armed SCStream to avoid a leaked live capture")
+            FileLogger.log("CaptureEngine.start: mic init failed after retries, tearing down any already-armed SCStream to avoid a leaked live capture")
             if let s = self.stream {
                 try? s.removeStreamOutput(self, type: .screen)
                 try? s.removeStreamOutput(self, type: .audio)
@@ -661,7 +661,7 @@ final class CaptureEngine: NSObject {
 
         // Watch for a mid-recording audio route/device change (user switches
         // Mac ↔ headphones). AVAudioEngine STOPS itself on this notification, so
-        // without re-tapping the mic goes silent for the rest of the session —
+        // without re-tapping the mic goes silent for the rest of the session
         // the "took a call, plugged in headphones, lost 90 minutes" bug. The
         // handler re-taps the new device + restarts the engine.
         if let observer = micConfigObserver {
@@ -688,7 +688,7 @@ final class CaptureEngine: NSObject {
         systemTap.onAudio = { [weak self] pcm, hostTime in
             // IOProc queue. Feed the level meter here (it hops to main
             // internally + is cheap), then hand the buffer to the
-            // main-actor writer — same pattern the old SCStream audio
+            // main-actor writer, same pattern the old SCStream audio
             // path used. AVAudioFile.write off a serial source is fine.
             // `hostTime` is the buffer's mach host time, threaded through so
             // the writer can left-pad system.wav to the capture-start clock.
@@ -697,12 +697,12 @@ final class CaptureEngine: NSObject {
                 self?.writeSystemAudioPCM(pcm, hostTime: hostTime)
             }
         }
-        // The tap watchdog gave up rebuilding (4× fail) — the far end is
+        // The tap watchdog gave up rebuilding (4× fail), the far end is
         // genuinely not being captured. Tell the user NOW so they can re-record,
         // instead of finding out at stop (or worse, only realising when a
         // 2-person call transcribes as one speaker). This fires on ANY output
         // route, NOT just Bluetooth (was BT-gated, which silently swallowed a
-        // non-BT tap failure — the exact "didn't record the other side" surprise
+        // non-BT tap failure, the exact "didn't record the other side" surprise
         // a tester hit). A give-up is a REAL capture failure, not normal solo
         // silence (a working tap delivers silent samples, it doesn't give up),
         // so warning here can't false-positive on a solo recording. Fires once
@@ -713,11 +713,11 @@ final class CaptureEngine: NSObject {
                 self.delegate?.captureEngineFarEndUnavailable(self)
             }
         }
-        // ALWAYS start the Core-Audio process tap — including on Bluetooth.
+        // ALWAYS start the Core-Audio process tap, including on Bluetooth.
         // Earlier (0.14.33) we skipped the tap on BT on the theory that the
         // live tap zeros SCStream .audio, so SCK could then capture the far
         // end. MEASURED WRONG: system_sck.wav is rms=0 (pure silence) on
-        // EVERY recording, with OR without the tap — SCStream .audio simply
+        // EVERY recording, with OR without the tap, SCStream .audio simply
         // doesn't capture system audio on this macOS, so it's never a real
         // backup. Meanwhile the tap DOES capture the far end on BT in many
         // sessions (e.g. 824320 voiced frames). Skipping it therefore
@@ -738,12 +738,12 @@ final class CaptureEngine: NSObject {
 
         FileLogger.log("CaptureEngine.start: recording state armed")
 
-        // If a stop() arrived while we were warming up, honour it now —
+        // If a stop() arrived while we were warming up, honour it now
         // otherwise the just-armed capture would run forever with nothing
         // ever calling stop() (the user already asked to stop / the Mac
         // went to sleep mid-start).
         if stopRequestedDuringStart {
-            FileLogger.log("CaptureEngine.start: stop was requested during warm-up — tearing down immediately")
+            FileLogger.log("CaptureEngine.start: stop was requested during warm-up, tearing down immediately")
             delegate?.captureEngine(self, didStartMeeting: meetingId)
             await stop()
             return
@@ -756,7 +756,7 @@ final class CaptureEngine: NSObject {
         // Called mid-warm-up: defer the real teardown to start()'s tail
         // (the stream/tap/files aren't fully armed yet to tear down safely).
         if starting, !isRecording {
-            FileLogger.log("CaptureEngine.stop: arrived during start warm-up — deferring to start() tail")
+            FileLogger.log("CaptureEngine.stop: arrived during start warm-up, deferring to start() tail")
             stopRequestedDuringStart = true
             return
         }
@@ -772,7 +772,7 @@ final class CaptureEngine: NSObject {
         // then stopCapture, then drop the reference. Without the
         // explicit removeStreamOutput calls, macOS keeps the
         // System-Audio-Recording privacy indicator (purple dot in
-        // Control Center) lit indefinitely after stop — the captured
+        // Control Center) lit indefinitely after stop, the captured
         // session is "completed" but the registered handlers count
         // as live consumers of system audio in TCC's view.
         if let stream = stream {
@@ -791,14 +791,14 @@ final class CaptureEngine: NSObject {
         systemTap.stop()
 
         // Stop watching for route/device changes before we tear the engine
-        // down — otherwise the config-change notification could fire during
+        // down, otherwise the config-change notification could fire during
         // teardown and re-tap a dying engine.
         if let observer = micConfigObserver {
             NotificationCenter.default.removeObserver(observer)
             micConfigObserver = nil
         }
 
-        // Stop microphone — removeTap before stop, then reset() so
+        // Stop microphone, removeTap before stop, then reset() so
         // the engine fully relinquishes its grip on the input device
         // (otherwise the orange mic indicator can also linger).
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -809,7 +809,7 @@ final class CaptureEngine: NSObject {
 
         // All buffer sources are now stopped (SCStream, process tap, mic), so
         // no NEW write is dispatched. Drain any writes still queued on the
-        // serial write queue before we close the files below — this is what
+        // serial write queue before we close the files below, this is what
         // makes closing them safe now that the writers run off the MainActor.
         writeQueue.sync { }
         FileLogger.log("CaptureEngine.stop: mic frames captured = \(micFramesWritten)")
@@ -943,7 +943,7 @@ extension CaptureEngine: SCStreamOutput {
                 if let d = b.mData { memset(d, 0, Int(b.mDataByteSize)) }
             }
             do { try file.write(from: buf) } catch {
-                FileLogger.log("CaptureEngine: leading-silence write failed — \(error)")
+                FileLogger.log("CaptureEngine: leading-silence write failed, \(error)")
                 return
             }
             remaining -= n
@@ -954,7 +954,7 @@ extension CaptureEngine: SCStreamOutput {
     /// `handleMicConfigChange` can RE-tap the (possibly new) device
     /// mid-recording without duplicating the padding / write / level-meter path.
     /// bufferSize 1024 (not 4096): the input runs at 16 kHz, so 4096 frames =
-    /// 256 ms = only ~4 level-meter updates/sec — the floating-HUD equalizer
+    /// 256 ms = only ~4 level-meter updates/sec, the floating-HUD equalizer
     /// looked stepped. 1024 = 64 ms ≈ 15.6 Hz, ~4x the spectrum frame rate,
     /// which the HUD's per-frame lerp turns into continuous motion. mic.wav is
     /// unaffected (same bytes, just written in smaller chunks).
@@ -969,13 +969,13 @@ extension CaptureEngine: SCStreamOutput {
             // the switched device's audio appends seamlessly.
             if !self.paddedMic, let micFile = self.micFile {
                 self.paddedMic = true
-                // Pad in the FILE's format, sized by the FILE's sample rate — NOT
+                // Pad in the FILE's format, sized by the FILE's sample rate, NOT
                 // the buffer's. If the first buffer arrives from a device whose
                 // rate differs from the file's (AirPods grabbed the mic before the
                 // built-in mic delivered its first buffer, so the file opened at
                 // 44.1k but the first audio is 16k), padding in buffer.format
                 // writes wrong-rate silence into the file and scrambles the whole
-                // timeline — the "sped-up voice" regression. Count the pad toward
+                // timeline, the "sped-up voice" regression. Count the pad toward
                 // micFramesWritten so the gap-fill below doesn't re-add it.
                 let fileFmt = micFile.processingFormat
                 let pad = when.isHostTimeValid
@@ -1013,7 +1013,7 @@ extension CaptureEngine: SCStreamOutput {
             // Normal path: the tap delivers buffers in the file's own format, so
             // we write straight through. ONLY after a mid-recording device
             // switch does the new device hand us a different format (a
-            // headphones/AirPods mic ≠ the built-in mic) — then convert to the
+            // headphones/AirPods mic ≠ the built-in mic), then convert to the
             // file's original format so mic.wav stays one continuous,
             // consistently-formatted file instead of dying silent.
             let target = micFile.processingFormat
@@ -1021,7 +1021,7 @@ extension CaptureEngine: SCStreamOutput {
             // straight through. Different format (a switch to a device with a
             // different rate/channels, e.g. AirPods 16k after built-in 44.1k):
             // RESAMPLE to the file's format. If the conversion fails, DROP the
-            // buffer — never write a raw wrong-rate buffer into the file, that is
+            // buffer, never write a raw wrong-rate buffer into the file, that is
             // exactly what plays back sped-up/garbled.
             var toWrite: AVAudioPCMBuffer? = (buffer.format == target) ? buffer : nil
             if buffer.format != target {
@@ -1037,7 +1037,7 @@ extension CaptureEngine: SCStreamOutput {
                         // `.noDataNow` (NOT `.endOfStream`) is load-bearing: the
                         // converter is REUSED across buffers, and `.endOfStream`
                         // finalises it so every buffer AFTER the first produces
-                        // zero output — a 16 kHz→44.1 kHz stream (AirPods) then
+                        // zero output, a 16 kHz→44.1 kHz stream (AirPods) then
                         // collapses to ~1/2.75 its length and plays sped-up.
                         // `.noDataNow` just says "no more input this call", keeps
                         // the converter's filter state, and resamples every buffer
@@ -1050,13 +1050,13 @@ extension CaptureEngine: SCStreamOutput {
                     if convErr == nil, out.frameLength > 0 {
                         toWrite = out
                     } else {
-                        FileLogger.log("CaptureEngine: mic format-convert after device switch failed (\(convErr?.localizedDescription ?? "0 frames")) — dropping buffer")
+                        FileLogger.log("CaptureEngine: mic format-convert after device switch failed (\(convErr?.localizedDescription ?? "0 frames")), dropping buffer")
                     }
                 } else {
-                    FileLogger.log("CaptureEngine: mic converter/out-buffer alloc failed for \(buffer.format.sampleRate)→\(target.sampleRate) — dropping buffer")
+                    FileLogger.log("CaptureEngine: mic converter/out-buffer alloc failed for \(buffer.format.sampleRate)→\(target.sampleRate), dropping buffer")
                 }
             }
-            // Log write failures and count frames only AFTER a successful write —
+            // Log write failures and count frames only AFTER a successful write
             // incrementing before the write (with the error swallowed) gave a
             // falsely-healthy counter.
             if let toWrite = toWrite {
@@ -1064,16 +1064,16 @@ extension CaptureEngine: SCStreamOutput {
                     try micFile.write(from: toWrite)
                     self.micFramesWritten &+= Int64(toWrite.frameLength)
                 } catch {
-                    FileLogger.log("CaptureEngine: mic.wav write failed — \(error)")
+                    FileLogger.log("CaptureEngine: mic.wav write failed, \(error)")
                 }
             }
-            // Push raw peak to the level meter — the floating HUD pill. Always
+            // Push raw peak to the level meter, the floating HUD pill. Always
             // the ORIGINAL buffer (real level), not the converted copy.
             RecordingLevelMeter.shared.ingestMic(buffer: buffer)
         }
     }
 
-    /// React to `AVAudioEngineConfigurationChange` — fires when the audio
+    /// React to `AVAudioEngineConfigurationChange`, fires when the audio
     /// route/device changes mid-recording (user switches Mac ↔ headphones). The
     /// engine STOPS itself on this notification and its input chain is left
     /// wedged (a bare `start()` on the same engine throws -10868, measured), so
@@ -1081,12 +1081,12 @@ extension CaptureEngine: SCStreamOutput {
     /// FRESH `AVAudioEngine` on the new device, REUSING the still-open micFile so
     /// mic.wav stays one continuous file (installMicTap's converter bridges a
     /// new-device format that differs from the file's; the tap's first buffer
-    /// gap-fills the switch gap). Never throws up — a not-yet-bound device
+    /// gap-fills the switch gap). Never throws up, a not-yet-bound device
     /// retries with backoff (the "took a call, plugged in headphones, lost 90
     /// minutes" bug this whole path fixes).
     private func handleMicConfigChange() {
         guard isRecording, !tearingDown else { micReconfigAttempts = 0; return }
-        // Retire the old engine first — holding it while a fresh engine binds the
+        // Retire the old engine first, holding it while a fresh engine binds the
         // same input device causes contention, and it's dead anyway.
         if let old = audioEngine {
             old.inputNode.removeTap(onBus: 0)
@@ -1099,11 +1099,11 @@ extension CaptureEngine: SCStreamOutput {
         }
         let inputNode = newEngine.inputNode
         let fmt = inputNode.outputFormat(forBus: 0)
-        // 0 Hz / 0 ch = new device not bound yet — the same transient start()
+        // 0 Hz / 0 ch = new device not bound yet, the same transient start()
         // retries. Keep the fresh engine as current so stop()/retry stay coherent.
         guard fmt.sampleRate > 0, fmt.channelCount > 0 else {
             audioEngine = newEngine
-            FileLogger.log("CaptureEngine: mic config change — new device not ready (\(fmt.sampleRate) Hz) — retry")
+            FileLogger.log("CaptureEngine: mic config change, new device not ready (\(fmt.sampleRate) Hz), retry")
             return scheduleMicReconfigRetry()
         }
         micConverter = nil          // rebuilt lazily for the new device's format
@@ -1116,7 +1116,7 @@ extension CaptureEngine: SCStreamOutput {
             audioEngine = newEngine
             inputNode.removeTap(onBus: 0)
             micRetapPending = false
-            FileLogger.log("CaptureEngine: mic config change — fresh engine start FAILED (\(error)) — retry")
+            FileLogger.log("CaptureEngine: mic config change, fresh engine start FAILED (\(error)), retry")
             return scheduleMicReconfigRetry()
         }
         audioEngine = newEngine
@@ -1136,7 +1136,7 @@ extension CaptureEngine: SCStreamOutput {
 
     /// Schedule another `handleMicConfigChange` attempt. Fast retries while the
     /// device settles, then a slow heartbeat so a device that only becomes
-    /// bindable later — or the user switching to a working one — still recovers
+    /// bindable later, or the user switching to a working one, still recovers
     /// instead of leaving the mic dead for the rest of the recording. Stops as
     /// soon as the recording ends.
     private func scheduleMicReconfigRetry() {
@@ -1158,7 +1158,7 @@ extension CaptureEngine: SCStreamOutput {
         guard let url = systemURL, let format = systemTap.format else { return }
         if systemAudioFile == nil {
             // nil + tearing down = file was already closed by stop().
-            // Reopening here truncates the finished recording — drop.
+            // Reopening here truncates the finished recording, drop.
             guard !tearingDown else { return }
             do {
                 let file = try AVAudioFile(forWriting: url,
@@ -1198,7 +1198,7 @@ extension CaptureEngine: SCStreamOutput {
     /// for the process tap). Mirrors writeSystemAudioPCM but takes the
     /// format from the sample buffer (SCStream picks 48 k stereo float)
     /// and copies via a retained block buffer. Intentionally does NOT
-    /// touch RecordingLevelMeter — see the sckSystemURL doc comment.
+    /// touch RecordingLevelMeter, see the sckSystemURL doc comment.
     nonisolated private func writeSCKAudio(_ sampleBuffer: CMSampleBuffer) {
         guard let url = sckSystemURL else { return }
         guard let fmtDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
@@ -1234,7 +1234,7 @@ extension CaptureEngine: SCStreamOutput {
         }
 
         if sckAudioFile == nil {
-            // Same teardown guard as the tap path — a late SCK buffer
+            // Same teardown guard as the tap path, a late SCK buffer
             // must not re-create (truncate) system_sck.wav after stop.
             guard !tearingDown else { return }
             do {

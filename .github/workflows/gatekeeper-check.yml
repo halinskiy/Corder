@@ -2,8 +2,8 @@ name: Gatekeeper check
 
 # Guardrail against the "won't launch on someone else's Mac" class of
 # bug. On every published GitHub release (and on demand), download the
-# release's notarized zip and assert that a FRESH Mac — on both the
-# current and previous macOS — would accept it: valid Developer ID
+# release's notarized zip and assert that a FRESH Mac, on both the
+# current and previous macOS, would accept it: valid Developer ID
 # signature, stapled notarization ticket, and a clean Gatekeeper verdict
 # even with the download (quarantine) flag set. CI runners are clean,
 # headless environments, so this is the closest automated stand-in for a
@@ -62,7 +62,7 @@ jobs:
 
       - name: Simulate a downloaded copy (quarantine)
         run: |
-          # This is the exact state a user's download is in — it's what
+          # This is the exact state a user's download is in, it's what
           # triggers the "Apple could not verify" dialog on a bad build.
           xattr -w com.apple.quarantine "0083;00000000;Safari;" "$APP"
 
@@ -88,12 +88,12 @@ jobs:
         timeout-minutes: 3
         run: |
           # The real-world failure is "user drags Corder to Applications,
-          # double-clicks, NOTHING happens" — a crash on launch, which the
+          # double-clicks, NOTHING happens", a crash on launch, which the
           # Gatekeeper checks above can never catch. Corder is a menu-bar
           # app (LSUIElement): no Dock window, so "still alive after 12s"
           # is the success signal; an immediate exit / a fresh crash report
           # is exactly the "nothing happens" bug. The runner is a clean Mac
-          # (no dev tools, fresh TCC) — the closest automated stand-in for
+          # (no dev tools, fresh TCC), the closest automated stand-in for
           # a new user's machine.
           #
           # Run the BINARY directly in the background (not `open`, which can
@@ -108,7 +108,7 @@ jobs:
             echo "✅ $(sw_vers -productVersion): launched and still alive after 12s"
             kill -9 "$PID" 2>/dev/null || true
           else
-            echo "::error::Corder exited within 12s of launch on $(sw_vers -productVersion) — this IS the 'nothing happens on open' crash"
+            echo "::error::Corder exited within 12s of launch on $(sw_vers -productVersion), this IS the 'nothing happens on open' crash"
             echo "===== launch stdout/stderr ====="; cat /tmp/corder-launch.out 2>/dev/null || true
             echo "===== /tmp/corder.log (tail) ====="; tail -40 /tmp/corder.log 2>/dev/null || true
             for f in $(ls -t "$DR"/Corder*.ips 2>/dev/null | head -2); do
