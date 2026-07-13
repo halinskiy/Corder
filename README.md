@@ -114,8 +114,6 @@ to obtain the keys safely.
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — first-time setup,
   build loop, common tasks, code style.
 - [`docs/RELEASE.md`](docs/RELEASE.md) — Sparkle update workflow.
-- [`NOTES.md`](NOTES.md) — single source of truth for AI agents
-  working on this repo.
 
 ## License
 

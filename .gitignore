@@ -43,11 +43,10 @@ secrets/
 dropbox.json
 gemini_key
 
-# Local editor overlays the user might keep next to the repo
-NOTES.local.md
-# Local tooling runtime: per-session caches, worktrees, transcripts.
-# Never commit these — they balloon the repo and leak chat content.
+# Local editor and tooling overlays kept next to the repo. Never
+# commit these: they balloon the repo and leak local context.
 .notes/
+scratch/
 
 # wrangler files
 .wrangler

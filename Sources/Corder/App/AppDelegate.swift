@@ -15,8 +15,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // launch, a Sparkle update, or a CorderRelaunch), so reap any older
         // Corder still running — otherwise two processes race the same
         // loopback port (which OAuth pins) and the per-account SQLite DB.
-        // (The code/NOTES.md long referred to a "duplicate-instance killer"
-        // that never actually existed; this is it.)
         Self.terminateOtherInstances()
         // One-time: force screen video OFF for the whole base (even users who
         // had it on). Runs before any capture reads `captureVideo`. Idempotent.
