@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.44] - 2026-07-14
+
+### Removed
+- The MCP token endpoint. `/api/account/mcp-token` handed out your live Supabase
+  token to any caller on the machine, and nothing in the app used it: the API
+  access card was pulled from Settings long ago. It is gone, along with the
+  unused frontend that called it.
+- The Dashboard statistics card (Recordings / Total recorded / This week). It was
+  behind a setting that defaulted to off and had no toggle anywhere in the app, so
+  no one ever saw it. Removing it also drops a settings poll that ran every five
+  seconds and a scan of every meeting you own.
+
 ## [0.15.43] - 2026-07-13
 
 ### Fixed
