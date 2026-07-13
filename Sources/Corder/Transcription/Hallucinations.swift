@@ -90,6 +90,26 @@ enum Hallucinations {
         "castingwords",
     ]
 
+    /// Bare caption words Whisper emits over silence: "자막" (Korean for
+    /// subtitles), "字幕" (Chinese/Japanese). Unlike the Amara watermark these
+    /// are ORDINARY words, so we must not drop every segment containing them —
+    /// a Korean speaker really can say "자막" in a meeting. We only drop a
+    /// segment that is NOTHING BUT these words (repeated and/or punctuated),
+    /// which is exactly the artefact: "자막: 자막:" on an empty track.
+    /// (Reported by Kostya: a silent second track transcribed as "자막: 자막:"
+    /// and surfaced as a phantom Speaker 2.)
+    static let captionWords: [String] = ["자막", "字幕"]
+
+    /// True when the segment consists solely of caption words plus punctuation
+    /// or whitespace, i.e. there is no real content left once they're removed.
+    static func isOnlyCaptionWords(_ text: String) -> Bool {
+        var t = text.lowercased()
+        for w in captionWords { t = t.replacingOccurrences(of: w, with: " ") }
+        guard text.lowercased() != t else { return false }   // no caption word at all
+        // Any remaining letter or digit means there WAS real speech around it.
+        return !t.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) }
+    }
+
     /// True when the WHOLE (raw) segment is a non-speech CAPTION: only music
     /// notes, or fully wrapped in `[...]` / `(...)`. Whisper emits "[Music]",
     /// "[Applause]", "(applause)", "[BLANK_AUDIO]", "♪ ♪" over silence; those
@@ -109,6 +129,9 @@ enum Hallucinations {
         // Bracket/music captions normalise to empty or a bare word, so check
         // the raw text first.
         if isNonSpeechCaption(text) { return true }
+        // A segment that is nothing but caption words ("자막: 자막:") is a
+        // silence artefact, never real speech.
+        if isOnlyCaptionWords(text) { return true }
         let lower = text.lowercased()
         let stripped = lower.unicodeScalars.filter {
             CharacterSet.alphanumerics.contains($0) || $0 == " "
@@ -143,6 +166,9 @@ enum Hallucinations {
     /// insert-time filter (`isHallucination`) still skips it.
     static func isExactHallucination(_ text: String) -> Bool {
         if isNonSpeechCaption(text) { return true }
+        // A segment that is nothing but caption words ("자막: 자막:") is a
+        // silence artefact, never real speech.
+        if isOnlyCaptionWords(text) { return true }
         let lower = text.lowercased()
         let stripped = lower.unicodeScalars.filter {
             CharacterSet.alphanumerics.contains($0) || $0 == " "

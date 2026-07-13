@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.43] — 2026-07-13
+
+### Fixed
+- A silent or near-silent track no longer produces a phantom speaker saying "자막:" (Korean for "subtitles"). Whisper emits bare caption words over silence, and they were slipping past the hallucination filter and showing up in transcripts as an extra participant. Segments made up of nothing but caption words are now dropped, while genuine speech that happens to contain the word is kept.
+
 ## [0.15.42] — 2026-07-12
 
 ### Fixed
