@@ -14,10 +14,10 @@ enum Routes {
         // start/stop/archive without ever reading the response. Such a
         // cross-origin request always carries a foreign `Origin` header; the
         // WKWebView app's own requests carry a loopback Origin (or none), and
-        // native / MCP clients send no Origin at all. So: reject any
+        // native clients send no Origin at all. So: reject any
         // state-changing request whose Origin is present AND not loopback.
-        // GET/HEAD pass through (the mcp-token GET is already SOP-protected by
-        // sending no CORS headers, so a cross-origin page can't read it).
+        // GET/HEAD pass through: no route hands out a credential, and we send
+        // no CORS headers, so a cross-origin page cannot read a response.
         server.middleware.append { req in
             let method = req.method.uppercased()
             guard method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"
@@ -230,7 +230,6 @@ enum Routes {
         }
         server.post["/api/account/signout"] = { _ in accountSignOut() }
         server.post["/api/account/delete"] = { _ in accountDelete() }
-        server.get["/api/account/mcp-token"] = { _ in mcpToken() }
         server.get["/api/account/usage"] = { _ in accountUsage(repo: repo) }
         // Supabase OAuth landing. The Welcome wizard configures
         // `redirectTo` pointed at this route on the local server, so
@@ -249,37 +248,6 @@ enum Routes {
     /// reads on next launch. After the call the React app reloads, the
     /// menu-bar app sees `onboardingCompleted = false`, and the Welcome
     /// wizard re-opens. Pre-existing recordings are NOT touched.
-    /// Reveal the signed-in user's Supabase access token so they can
-    /// plug Corder into MCP clients (Claude Desktop / Cursor / etc.)
-    /// or hit the public REST API directly. The token is the same
-    /// JWT the Supabase SDK already has in memory — we just surface
-    /// it to the UI. Expires ~1h; clients re-read this endpoint when
-    /// they get a 401. Returns 401 itself when signed out.
-    private static func mcpToken() -> HttpResponse {
-        let semaphore = DispatchSemaphore(value: 0)
-        var token: String?
-        Task { @MainActor in
-            defer { semaphore.signal() }
-            do {
-                let session = try await SupabaseClientHolder.shared.auth.session
-                token = session.accessToken
-            } catch {
-                FileLogger.log("mcpToken: no active session — \(error)")
-            }
-        }
-        // Bound the wait like every other semaphore-bridged handler here
-        // (notification-status, setTestTier, submitLogs): the @MainActor hop +
-        // a slow token refresh could otherwise pin this Swifter worker thread.
-        // A timeout leaves `token` nil → the 401 path below, which is correct.
-        _ = semaphore.wait(timeout: .now() + 8)
-        guard let token = token else {
-            return .raw(401, "Unauthorized", ["Content-Type": "application/json"]) {
-                try $0.write(Array(#"{"error":"not signed in"}"#.utf8))
-            }
-        }
-        return jsonResponse(["token": token])
-    }
-
     /// Supabase OAuth landing page (Google sign-in). Serves the
     /// styled "You're signed in" HTML and, in parallel, hands the
     /// callback URL to `Supabase.auth.session(from:)` so the wizard

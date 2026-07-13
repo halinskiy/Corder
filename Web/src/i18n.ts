@@ -87,13 +87,6 @@ interface Strings {
   /// "Delete account" row in Settings (danger zone).
   settings_delete_account_label?: string;
   settings_delete_account_desc?: string;
-  /// Strings for the API & MCP token reveal card in Settings.
-  settings_api_label?: string;
-  settings_api_desc?: string;
-  settings_api_reveal?: string;
-  settings_api_copy?: string;
-  settings_api_copied?: string;
-  settings_api_docs?: string;
   settings_sec_autodetect: string;
   settings_whitelist: string;
   settings_whitelist_desc: string;
@@ -486,12 +479,6 @@ const en: Strings = {
   settings_autosummary_desc: "Generate a structured recap as soon as the transcript is ready.",
   settings_delete_account_label: "Delete account",
   settings_delete_account_desc: "Permanently removes your account. This cannot be undone.",
-  settings_api_label: "API access",
-  settings_api_desc: "Use this token to connect Corder to MCP clients",
-  settings_api_reveal: "Reveal MCP token",
-  settings_api_copy: "Copy",
-  settings_api_copied: "Copied",
-  settings_api_docs: "API docs ↗",
   settings_sec_autodetect: "Call auto-detect",
   settings_whitelist: "Always offer to record",
   settings_whitelist_desc: "Apps Corder always offers to record when they take the microphone.",
