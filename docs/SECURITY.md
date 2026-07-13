@@ -225,7 +225,7 @@ a web page open in any browser can still issue "simple" cross-origin
 POSTs to `http://127.0.0.1:<port>/api/...` (e.g. start, stop, archive).
 A `server.middleware` rejects any state-changing request (POST / PUT /
 PATCH / DELETE) whose `Origin` header is present AND not loopback.
-GET / HEAD, requests with no `Origin` (native / MCP clients), and
+GET / HEAD, requests with no `Origin` (native clients), and
 loopback-Origin requests (the WKWebView Library window) pass. Loopback
 is matched exactly: `http://127.0.0.1` / `http://localhost` / `http://[::1]`
 followed by `:` or end-of-string, so an attacker-registrable

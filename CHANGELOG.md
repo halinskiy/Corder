@@ -1693,7 +1693,7 @@ behaviour, not internal refactors.
 
 ### Fixed
 - WhisperKit model-folder path was off by one segment; `isModelDownloaded` reported "ready" the instant WhisperKit created placeholder packages, before the bytes finished streaming. Now it checks the in-flight progress flag, looks for `.incomplete` markers, and requires all `.mlmodelc` packages to be non-empty.
-- `corder-mcp` published to npm. Install: `npx -y corder-mcp` (Claude Desktop / Cursor / Claude Code configs in the README).
+- `corder-mcp` published to npm. Install: `npx -y corder-mcp` (setup configs in the README).
 
 ## [0.13.2] — 2026-05-28
 
@@ -1712,7 +1712,7 @@ behaviour, not internal refactors.
 ## [0.13.0] — 2026-05-28
 
 ### Added
-- API access card in Settings: reveal your personal MCP token, copy it, open the API docs. Lets you plug Corder into Claude Desktop, Cursor, ChatGPT desktop or any MCP-aware client.
+- API access card in Settings: reveal your personal MCP token, copy it, open the API docs. Lets you plug Corder into any MCP-aware client.
 - `@corder/mcp` MCP server (Node, npm) — exposes `list_meetings`, `get_meeting`, `search_transcripts`, `get_summary`, `list_speakers` tools to any MCP client. Reads scoped to the signed-in user via Supabase row-level security.
 - Tooltips on toolbar buttons (Settings, Archive, Theme, Copy, Refresh, Fullscreen) — fast 350 ms delay, design-system styling.
 - Archive button in the toolbar is now disabled when there's nothing archived, with a "Archive is empty" tooltip.

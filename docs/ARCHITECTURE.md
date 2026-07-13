@@ -229,7 +229,7 @@ Server/
 │                           loopback (127.0.0.1 / localhost / [::1],
 │                           next char ':' or end so 127.0.0.1.evil.com
 │                           is NOT matched); GET/HEAD, no-Origin
-│                           (native/MCP) and loopback-Origin (WKWebView)
+│                           (native) and loopback-Origin (WKWebView)
 │                           pass. serveAsset / serveRoot standardize the
 │                           resolved URL and require containment under
 │                           the assets/web root (hasPrefix base+"/") to

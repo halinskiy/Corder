@@ -641,12 +641,3 @@ export async function deleteAccount(): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
-/** Reveal the signed-in user's Supabase JWT for use with the public
- *  REST API and MCP clients (Claude Desktop, Cursor, ...). Throws on
- *  401 when the user isn't signed in. */
-export async function getMcpToken(): Promise<string> {
-  const r = await fetch("/api/account/mcp-token");
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = await r.json();
-  return j.token as string;
-}

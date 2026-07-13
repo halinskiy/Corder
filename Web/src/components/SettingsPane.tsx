@@ -111,12 +111,11 @@ export function SettingsPane({
   const on = (k: keyof Settings) => (s?.[k] as boolean | undefined) ?? true;
 
   // General vs Advanced split: the "every-day" settings (notifications,
-  // mic, language, app lists, telemetry) live in
-  // General. Toggles that flip core capture / pipeline behaviour
-  // (video, auto-transcribe / -title / -summary / -chapters) and the
-  // API-token reveal live in Advanced. The tab strip itself is owned
-  // by the parent surface (MeetingView / Dashboard right-column
-  // header), so this pane just renders the selected slice.
+  // mic, language, app lists, telemetry) live in General. Toggles that
+  // flip core capture / pipeline behaviour (video, auto-transcribe /
+  // -title / -summary / -chapters) live in Advanced. The tab strip
+  // itself is owned by the parent surface (MeetingView / Dashboard
+  // right-column header), so this pane just renders the selected slice.
 
   return (
     <div
@@ -320,11 +319,6 @@ export function SettingsPane({
 
         {/* Transcription-language picker removed — transcription is always
             Auto-detect for everyone, so there's nothing to choose. */}
-
-        {/* API access (MCP/REST token) removed from Settings — the
-            MCP server / public API isn't a product surface we're
-            promoting. the `/mcp-token` endpoint stays server-side
-            for a future power-user reintroduction. */}
 
         <div className="settings-divider" />
         {/* "Always offer to record" (whitelist) block removed per request —

@@ -11,7 +11,7 @@ trust boundary is the macOS user account.
 > means exactly `http://127.0.0.1`, `http://localhost`, or `http://[::1]`,
 > optionally followed by `:` + port (the next char must be `:` or
 > end-of-string, so `http://127.0.0.1.evil.com` is NOT treated as
-> loopback). GET / HEAD, requests with no `Origin` (native / MCP
+> loopback). GET / HEAD, requests with no `Origin` (native
 > clients), and loopback-Origin requests (the WKWebView app's own
 > traffic) all pass. This closes cross-site POSTs from a browser tab to
 > `start` / `stop` / `archive` / etc. while the local port is up.
@@ -146,7 +146,6 @@ to `MainActor`.
 | GET    | `/api/account/usage`     | Guest session quota for the header "N left" counter (see below). |
 | POST   | `/api/account/signout`   | Invalidates the Supabase session + clears the local token, then relaunches. |
 | POST   | `/api/account/delete`    | Wipes cloud + local account state and relaunches. NOTE: the "Delete account" UI block was removed from Settings, so this route is no longer reachable from the app UI. |
-| GET    | `/api/account/mcp-token` | Mints a short-lived token for the local MCP server. |
 
 `GET /api/account/usage` returns the guest 5-session cap state:
 
