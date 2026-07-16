@@ -3454,13 +3454,15 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-family: var(--font-mono, ui-monospace, monospace);
   text-overflow: ellipsis;
 }
-/* Round green twin of the play button: `.toolbar-icon-btn`'s 38px circle for
-   geometry (same as the Share button this modal was opened from), filled with
-   `.audio-btn-primary`'s hardcoded #1E7A50 / #186439 — NOT var(--accent) — so
-   every green circle in the app reads as the same control. Icon-only: a round
-   button has no room for the old "Copy link" label, the title/aria-label
-   carry it instead. */
-.share-copy {
+/* Two round 38px actions right of the link, same circle as the Share button
+   this modal was opened from. Copy is the neutral outlined one (plain
+   `.toolbar-icon-btn`, no extra styling needed); Open is the primary, so it
+   carries the play button's hardcoded #1E7A50 / #186439 fill — NOT
+   var(--accent) — so every filled green circle in the app reads as the same
+   control. Icon-only: a round button has no room for a label, the
+   title/aria-label carry it. */
+.share-copy { flex-shrink: 0; }
+.share-open {
   flex-shrink: 0;
   width: 38px;
   height: 38px;
@@ -3475,7 +3477,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   transition: background 80ms ease;
 }
-.share-copy:hover { background: #186439; }
+.share-open:hover { background: #186439; }
 .audio-btn {
   background: transparent;
   border: none;

@@ -1,24 +1,24 @@
 import React from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, Copy, Check } from "lucide-react";
 import { shareMeeting } from "../api";
 import type { T } from "../i18n";
 
-/// Filled glyphs, not Lucide's outline ones: Copy is the green twin of the
-/// play button (`.audio-btn-primary`), and a stroked icon inside a solid green
-/// circle reads lighter than the filled triangle next to it. Same hand-rolled
-/// pattern as RightPanel's PlaySmall / PauseSmall.
-function CopyFilled() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden>
-      <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1z" />
-      <path d="M19 5H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2z" />
-    </svg>
-  );
+declare global {
+  interface Window {
+    corderOpenExternal?: (url: string) => void;
+  }
 }
-function CheckFilled() {
+
+/// Filled glyph, not Lucide's outline one: Open is the green twin of the play
+/// button (`.audio-btn-primary`), and a stroked icon inside a solid green
+/// circle reads lighter than the filled triangle next to it. Copy stays
+/// outline — it's the neutral, secondary action. Same hand-rolled pattern as
+/// AudioCard's PlaySmall / PauseSmall.
+function OpenFilled() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden>
-      <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+      <path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7z" />
+      <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
     </svg>
   );
 }
@@ -141,6 +141,16 @@ export function ShareModal({ meetingId, onClose, t }: Props) {
     } catch { /* ignore */ }
   };
 
+  // Straight to the browser. WKWebView won't open a target="_blank" itself, so
+  // the native bridge hands the URL to NSWorkspace; `window.open` is the
+  // `npm run dev` fallback.
+  const openLink = () => {
+    try {
+      if (window.corderOpenExternal) window.corderOpenExternal(url);
+      else window.open(url, "_blank", "noopener");
+    } catch { /* ignore */ }
+  };
+
   return (
     <div
       className={"update-overlay share-overlay" + (leaving ? " is-leaving" : "")}
@@ -195,12 +205,21 @@ export function ShareModal({ meetingId, onClose, t }: Props) {
             />
             <button
               type="button"
-              className="share-copy"
+              className="toolbar-icon-btn share-copy"
               onClick={copy}
               title={copied ? (t.share_copied ?? "Copied") : (t.share_copy ?? "Copy link")}
               aria-label={copied ? (t.share_copied ?? "Copied") : (t.share_copy ?? "Copy link")}
             >
-              {copied ? <CheckFilled /> : <CopyFilled />}
+              {copied ? <Check size={16} strokeWidth={2} /> : <Copy size={16} strokeWidth={2} />}
+            </button>
+            <button
+              type="button"
+              className="share-open"
+              onClick={openLink}
+              title={t.share_open ?? "Open link"}
+              aria-label={t.share_open ?? "Open link"}
+            >
+              <OpenFilled />
             </button>
           </div>
         )}

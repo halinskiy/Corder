@@ -215,6 +215,7 @@ interface Strings {
   share_retry?: string;
   share_done?: string;
   share_close?: string;
+  share_open?: string;
   share_btn_title?: string;
   share_clip_title?: string;
   ghost_video_title?: string;
@@ -616,6 +617,7 @@ const en: Strings = {
   share_retry: "Try again",
   share_done: "Done",
   share_close: "Close",
+  share_open: "Open link",
   share_btn_title: "Share a link",
   share_clip_title: "Share a clip (coming soon)",
   profile_title: "Profile",
