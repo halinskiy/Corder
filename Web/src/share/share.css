@@ -1,394 +1,384 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   share.getcorder.com — the public page.
+   share.getcorder.com — the page AROUND the window.
 
-   SELF-CONTAINED: styles.css is NOT imported here. It is 5800 lines dressing a
-   3-column Mac window, and it styles bare element selectors — `button` gets a
-   999px pill with a border — which silently reshaped this page's tabs. The two
-   things actually needed from it (the speaker palette, the spinner keyframe)
-   are copied below; everything else was noise on a public page.
+   The window itself is `hero-window.css`, vendored from the landing verbatim;
+   this file must not restate anything it already defines. What lives here:
+     · the page (dot-grid, blobs, nav pill, serif heading) — the landing's
+       hero, rebuilt from its globals.css / tokens.css values;
+     · the entry gate;
+     · the few deltas where the hero window is a MOCK and we have live data
+       (its scrub fill is a CSS keyframe; ours is driven by <audio>).
 
-   Dressed as the LANDING (getcorder.com), not as the app window and not as
-   the competition. Tokens below are lifted from the landing's tokens.css so
-   the two surfaces can't drift: accent #217a50, border #ececea, text #0e0e0d,
-   12px window radius, the 24px dot-grid, IBM Plex Sans + Serif. A share link
-   is the most-seen public surface of the product; it should read as the same
-   brand the visitor lands on when they click Download.
+   Every value here is the landing's. Nothing invented: the brand has shipped
+   these for months, and an earlier cut of this page that guessed its own
+   numbers looked exactly like a guess.
 
-   Two shapes were tried and rejected before this one:
-     · the app layout verbatim — the transcript tracked the window width and
-       ran ~150 characters a line at 2560 (twice the readable limit);
-     · a single 720px column — readable, but a long plain document with none
-       of the brand in it, and you had to scroll past the summary to reach the
-       transcript.
-
-   So: one window card that FITS THE VIEWPORT, player across the top, reading
-   column + summary rail inside it, and the scrolling happens in the columns —
-   the page itself never grows to the length of the transcript.
+   The app's styles.css is NOT imported: it dresses a 3-column Mac window in
+   5800 lines and styles bare elements (`button { border-radius: 999px }`),
+   which silently reshaped this page's controls.
    ───────────────────────────────────────────────────────────────────────── */
 
-.sp-page {
-  --sp-bg: #ffffff;
-  --sp-surface: #f7f7f6;
-  --sp-surface-2: #fafaf8;
-  --sp-border: #ececea;
-  --sp-border-strong: #d8d8d4;
-  --sp-ink: #0e0e0d;
-  --sp-muted: #6b6b68;
-  --sp-subtle: #a0a09c;
-  --sp-accent: #217a50;
-  --sp-accent-hover: #0a5e34;
-  --sp-accent-subtle: rgba(33, 122, 80, 0.08);
-  --sp-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
-  --sp-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
-  --sp-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sp-window: 12px;
-  /* Speaker palette, copied from styles.css :root (light values) — the only
-     colour the transcript shares with the app. */
-  --speaker-1: #5a3aa6;
-  --speaker-2: #1f7a4f;
-  --speaker-3: #b03a3a;
-  --speaker-4: #1a4f8a;
+/* ── Tokens: corder-landing/tokens.css ── */
+:root {
+  --color-accent: #217a50;
+  --color-accent-hover: #0a5e34;
+  --color-accent-deep: #0e3d28;
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f6;
+  --color-border: #ececea;
+  --color-border-strong: #d8d8d4;
+  --color-text: #0e0e0d;
+  --color-text-muted: #6b6b68;
+  --color-text-subtle: #a0a09c;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-serif: "IBM Plex Serif", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-pill: 999px;
+  --lh-display: 1.05;
+  --lh-body: 1.6;
+  --ls-display: -0.018em;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+::selection { background: rgba(33, 122, 80, 0.22); color: inherit; }
 
+* { box-sizing: border-box; }
+body { margin: 0; }
+.sp-spin { animation: sp-spin 0.9s linear infinite; }
+@keyframes sp-spin { to { transform: rotate(360deg); } }
+
+.sp-page {
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: var(--sp-bg);
-  /* The landing's hero atmosphere. */
-  background-image: radial-gradient(circle, var(--sp-border) 1px, transparent 1px);
-  background-size: 24px 24px;
-  color: var(--sp-ink);
-  font-family: var(--sp-sans);
+  overflow-x: clip;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
 }
-.sp-page--center { align-items: center; justify-content: center; padding: 24px; }
+.sp-page--center { display: flex; align-items: center; justify-content: center; padding: 24px; }
 
-/* Minimal reset. Vite's page has no CSS reset of its own once styles.css is
-   gone, and the browser defaults (body margin, button chrome) would show. */
-* { box-sizing: border-box; }
-body { margin: 0; }
-button { font: inherit; }
-.summary-spin { animation: sp-spin 0.9s linear infinite; }
-@keyframes sp-spin { to { transform: rotate(360deg); } }
-
-/* Soft accent blobs, same trick as the landing hero: they sit under the
-   dot-grid and give the white page some depth. */
-.sp-atmos { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
-.sp-blob { position: absolute; border-radius: 50%; filter: blur(8px); }
-.sp-blob--a {
-  top: -220px; left: -160px; width: 760px; height: 760px;
-  background: radial-gradient(circle at 30% 30%, rgba(33, 122, 80, 0.07), transparent 62%);
+/* ── Atmosphere: the landing's hero, exactly ──
+   The blobs carry NO blur. They were blurred + animated until 2026-05-22, when
+   six animated blurred fills held Speed Index at 12.9s; they're shape-morphed
+   ovals now, filled rgba(33,122,80,0.06). */
+.sp-atmos { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: clip; }
+.sp-blob {
+  position: absolute;
+  border-radius: 58% 42% 55% 45% / 55% 50% 50% 45%;
+  background: rgba(33, 122, 80, 0.06);
 }
-.sp-blob--b {
-  top: -160px; right: -220px; width: 680px; height: 680px;
-  background: radial-gradient(circle at 70% 30%, rgba(33, 122, 80, 0.05), transparent 62%);
+.sp-blob--tr { top: 60px; right: -140px; width: 620px; height: 540px; }
+.sp-blob--bl {
+  top: 120px; left: -160px; width: 560px; height: 500px;
+  border-radius: 52% 48% 48% 52% / 48% 56% 44% 52%;
+}
+.sp-dots {
+  position: absolute;
+  inset: 128px 0 0 0;
+  background-image: radial-gradient(circle, var(--color-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.6) 18%, rgba(0,0,0,0.6) 82%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.6) 18%, rgba(0,0,0,0.6) 82%, transparent 100%);
+}
+@media (max-width: 768px) {
+  .sp-blob--tr { top: 48px; right: -100px; width: 420px; height: 360px; }
+  .sp-blob--bl { top: 100px; left: -120px; width: 380px; height: 340px; }
 }
 
-/* ── Floating pill nav — the landing's silhouette ── */
+/* ── Nav pill: corder-landing/src/components/sections/Nav.tsx ── */
+.sp-nav-wrap {
+  position: relative; z-index: 3;
+  display: flex; justify-content: center;
+  padding: 16px 16px 0;
+}
 .sp-nav {
-  position: relative;
-  z-index: 2;
-  align-self: center;
-  margin: 20px 16px 0;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: calc(100vw - 32px);
-  padding: 7px 7px 7px 16px;
-  background: rgba(255, 255, 255, 0.86);
+  display: flex; align-items: center; gap: 8px;
+  height: 56px; max-width: 100%;
+  padding-left: 16px; padding-right: 8px;
+  border-radius: var(--radius-pill);
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid var(--sp-border);
-  border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 28px -20px rgba(14, 14, 13, 0.3);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.08);
 }
-.sp-nav-brand { display: inline-flex; text-decoration: none; }
-/* The app icon's silhouette: two stacked capsules in a squircle. */
-.sp-mark {
-  position: relative;
-  width: 22px; height: 22px;
-  border-radius: 6px;
-  background: var(--sp-ink);
-  flex-shrink: 0;
+.sp-nav-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+.sp-nav-brand img { display: block; }
+.sp-nav-word {
+  font-family: var(--font-serif);
+  font-size: 18px; font-weight: 500; letter-spacing: -0.01em;
+  color: var(--color-text);
 }
-.sp-mark::before, .sp-mark::after {
-  content: ""; position: absolute; left: 5px;
-  height: 3px; border-radius: 2px; background: #fff;
-}
-.sp-mark::before { top: 7px;  width: 12px; }
-.sp-mark::after  { top: 12px; width: 8px; }
-.sp-nav-sep { width: 1px; height: 18px; background: var(--sp-border); }
-.sp-nav-note { font-size: 13px; color: var(--sp-muted); white-space: nowrap; }
-.sp-nav-note b { color: var(--sp-ink); font-weight: 600; }
+.sp-nav-sep { width: 1px; height: 20px; margin: 0 8px; background: rgba(0, 0, 0, 0.1); flex-shrink: 0; }
+.sp-nav-note { font-size: 15px; color: var(--color-text-muted); white-space: nowrap; }
+.sp-nav-note b { color: var(--color-text); font-weight: 500; }
 
-/* ── Buttons ── */
-.sp-btn {
+/* ── CTAs: the landing's .cta-pill / .nav-cta ── */
+.sp-cta {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 40px; padding: 0 20px;
-  border: 1px solid transparent; border-radius: 999px;
-  font-family: var(--sp-sans); font-size: 14px; font-weight: 500;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans); font-weight: 500;
   text-decoration: none; cursor: pointer; white-space: nowrap;
-  transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms;
+  transition:
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
 }
-.sp-btn--sm { height: 32px; padding: 0 15px; font-size: 13px; }
-.sp-btn--primary { background: var(--sp-accent); color: #fff; }
-.sp-btn--primary:hover { background: var(--sp-accent-hover); box-shadow: 0 4px 12px rgba(33, 122, 80, 0.18); }
+.sp-cta:active { transform: scale(0.98); }
+/* .cta-pill--primary at the hero's geometry: 56px tall, 17px/500, min 260px. */
+.sp-cta--primary {
+  height: 56px; padding: 0 36px; min-width: 260px;
+  font-size: 17px;
+  background-color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: var(--color-bg);
+}
+.sp-cta--primary:hover {
+  background-color: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+/* Nav CTA, shipped in its scrolled state (this page's window doesn't scroll,
+   so the landing's transparent-at-top state would never resolve). */
+.sp-nav-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 40px; padding: 0 20px 0 14px; margin-left: 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-accent);
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 15px; font-weight: 500;
+  text-decoration: none; white-space: nowrap;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+.sp-nav-cta:hover { background-color: var(--color-accent-deep); border-color: var(--color-accent-deep); }
+.sp-nav-cta:active { transform: scale(0.98); }
+/* Inside the window's header strip: the app's scale, not the page's. */
+.sp-cta--nav {
+  height: 32px; padding: 0 14px 0 11px;
+  font-size: 13px;
+  background-color: var(--hl-accent);
+  border: 1px solid var(--hl-accent);
+  color: #fff;
+}
+.sp-cta--nav:hover { background-color: var(--hl-accent-pressed); border-color: var(--hl-accent-pressed); }
 
-/* ── Hero: serif display heading, exactly the landing's voice ── */
-.sp-hero {
+/* ── Container + heading ──
+   .page-container is 1260 = the 1180 window + 2×40 padding, so the heading
+   lines up with the window's edges exactly as the landing's sections do. */
+.sp-container {
   position: relative; z-index: 1;
-  text-align: center;
-  padding: 30px 24px 22px;
+  width: 100%; max-width: 1260px;
+  margin-inline: auto;
+  padding: 40px 16px 56px;
 }
-.sp-hero-title {
+@media (min-width: 768px)  { .sp-container { padding-inline: 32px; } }
+@media (min-width: 1024px) { .sp-container { padding-inline: 40px; } }
+
+.sp-head { text-align: center; margin-bottom: 36px; }
+.sp-title {
   margin: 0;
-  font-family: var(--sp-serif);
-  font-size: clamp(26px, 3.2vw, 40px);
-  line-height: 1.12;
-  font-weight: 400;
-  letter-spacing: -0.015em;
+  font-family: var(--font-serif); font-weight: 500;
+  /* The hero's h1 is clamp(36px, 5.2vw, 72px) for three words. A meeting title
+     is longer, so it sits one step down the same scale. */
+  font-size: clamp(30px, 3.6vw, 52px);
+  line-height: var(--lh-display);
+  letter-spacing: var(--ls-display);
+  color: var(--color-text);
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
-.sp-hero-meta {
-  display: flex; align-items: center; justify-content: center;
-  flex-wrap: wrap; gap: 8px;
-  margin-top: 10px;
-  font-size: 13.5px; color: var(--sp-muted);
+.sp-sub {
+  margin: 12px auto 0; max-width: 640px;
+  font-size: 18px; line-height: var(--lh-body);
+  color: var(--color-text-muted);
 }
-.sp-hero-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--sp-border-strong); }
-
-/* ── The window ──
-   Height is bounded by the viewport, not by the transcript: 100dvh minus the
-   nav, hero and footer. That's what keeps the whole meeting on one screen. */
-.sp-window {
-  position: relative; z-index: 1;
-  width: min(1180px, calc(100vw - 48px));
-  margin: 0 auto;
-  height: min(720px, calc(100dvh - 250px));
-  min-height: 380px;
-  display: flex; flex-direction: column;
-  background: var(--sp-bg);
-  border: 1px solid var(--sp-border);
-  border-radius: var(--sp-window);
-  box-shadow: 0 22px 48px -16px rgba(14, 14, 13, 0.22);
-  overflow: hidden;
+.sp-hint {
+  margin: 24px 0 0;
+  font-size: 14px; line-height: 1.45;
+  color: var(--color-text-subtle); text-align: center;
 }
 
-/* ── Player: one strip across the top of the window ── */
-.sp-player {
-  flex-shrink: 0;
-  display: flex; align-items: center; gap: 14px;
-  padding: 12px 16px;
-  background: var(--sp-surface-2);
-  border-bottom: 1px solid var(--sp-border);
-}
-.sp-play {
-  flex-shrink: 0;
-  width: 34px; height: 34px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%;
-  background: var(--sp-accent); color: #fff; cursor: pointer;
-  transition: background 150ms;
-}
-.sp-play:hover { background: var(--sp-accent-hover); }
-.sp-time {
-  flex-shrink: 0; min-width: 84px;
-  font-family: var(--sp-mono); font-size: 12px;
-  color: var(--sp-muted);
-}
-.sp-track-wrap { flex: 1; min-width: 0; }
-.sp-track {
-  position: relative; height: 5px;
-  border-radius: 999px; background: var(--sp-border);
-  cursor: pointer;
-}
-/* A 5px bar is an unhittable target; widen the hit area, not the bar. */
-.sp-track::after { content: ""; position: absolute; inset: -10px 0; }
-.sp-track-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--sp-accent); }
-.sp-track-head {
-  position: absolute; top: 50%;
-  width: 11px; height: 11px; margin-left: -5.5px;
-  transform: translateY(-50%);
-  border-radius: 50%; background: var(--sp-accent);
-  box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(0, 0, 0, 0.2);
-  pointer-events: none;
-}
-.sp-track-tip {
-  position: absolute; bottom: 15px; transform: translateX(-50%);
-  padding: 3px 7px; border-radius: 5px;
-  background: var(--sp-ink); color: #fff;
-  font-family: var(--sp-mono); font-size: 11px;
-  pointer-events: none; white-space: nowrap;
-}
+/* ── Window deltas ──
+   The hero window is a MOCK; below are the only places live data needs it to
+   move. Everything else comes from hero-window.css untouched. */
 
-/* ── Body: reading column + summary rail ──
-   The rail is what makes the two columns worth it: the transcript keeps a
-   readable measure while the summary stays visible beside it, instead of the
-   reader scrolling past one to reach the other. */
-.sp-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
-.sp-body--solo { grid-template-columns: minmax(0, 1fr); }
-.sp-main { min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--sp-border); }
-.sp-body--solo .sp-main { border-right: none; }
+/* No sidebar: it lists YOUR meetings, and a visitor has none. */
+.sp-app { grid-template-columns: 1fr; }
+/* `.hl-main` is a grid child in the hero; here it's the only column. */
+.sp-demo .hl-main { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+/* The titlebar floats over the content and the sidebar normally pads it; with
+   no sidebar the header strip has to clear it itself. */
+.sp-demo .hl-main-header { padding-top: 32px; min-height: 78px; }
 
-.sp-pane-head {
-  flex-shrink: 0;
-  height: 44px;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 8px 0 14px;
-  border-bottom: 1px solid var(--sp-border);
-}
-.sp-tabs { display: flex; align-items: center; gap: 2px; }
-.sp-tab {
-  height: 44px; padding: 0 10px;
-  border: none; background: none;
-  font-family: var(--sp-sans); font-size: 13px; font-weight: 500;
-  color: var(--sp-muted); cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color 120ms;
-}
-.sp-tab:hover { color: var(--sp-ink); }
-.sp-tab.is-on { color: var(--sp-ink); border-bottom-color: var(--sp-accent); }
-/* The summary is a rail on desktop, so its tab only exists on narrow screens. */
-.sp-tab--mobile { display: none; }
-.sp-icon-btn {
-  width: 32px; height: 32px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--sp-border); border-radius: 8px;
-  background: #fff; color: var(--sp-muted); cursor: pointer;
-  transition: color 120ms, border-color 120ms;
-}
-.sp-icon-btn:hover { color: var(--sp-ink); border-color: var(--sp-border-strong); }
+/* The mock's scrub fill runs a 18%→86% keyframe; ours is the audio's position,
+   so the animation must not fight the inline width. */
+.sp-scrub { cursor: pointer; }
+.sp-scrub-fill { animation: none !important; transition: width 120ms linear; }
+.sp-cursor { animation: none !important; }
 
-.sp-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.sp-search {
-  flex-shrink: 0;
-  display: flex; align-items: center; gap: 8px;
-  margin: 12px 16px 6px;
-  height: 34px; padding: 0 11px;
-  background: var(--sp-surface); border: 1px solid transparent; border-radius: 8px;
-  color: var(--sp-subtle);
-  transition: border-color 120ms, background 120ms;
+/* The mock shows a fixed slice and never scrolls; a real transcript does. */
+.sp-transcript { overflow-y: auto !important; scroll-behavior: smooth; }
+.sp-transcript::-webkit-scrollbar { width: 10px; }
+.sp-transcript::-webkit-scrollbar-thumb {
+  background: var(--hl-border-strong); border: 3px solid var(--hl-bg); border-radius: 999px;
 }
-.sp-search:focus-within { background: #fff; border-color: var(--sp-border-strong); }
-.sp-search input {
-  flex: 1; min-width: 0;
-  border: none; outline: none; background: transparent;
-  font-family: var(--sp-sans); font-size: 13.5px; color: var(--sp-ink);
-}
-.sp-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
-.sp-search-count { font-family: var(--sp-mono); font-size: 11px; color: var(--sp-subtle); }
+/* Lines seek the audio here, so they must read as clickable. */
+.sp-transcript .hl-segment-line { cursor: pointer; }
+.sp-empty-line { padding: 24px 0; font-size: 14px; color: var(--hl-fg-muted); }
+.sp-mark { background: rgba(255, 214, 0, 0.4); color: inherit; border-radius: 3px; }
 
-/* The only scrollers on the page. */
-.sp-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 16px 20px; }
-.sp-scroll::-webkit-scrollbar { width: 10px; }
-.sp-scroll::-webkit-scrollbar-thumb { background: #e3e3e0; border: 3px solid #fff; border-radius: 999px; }
-.sp-scroll::-webkit-scrollbar-thumb:hover { background: var(--sp-border-strong); }
-
-/* ── Transcript lines ── */
-.sp-line { display: flex; gap: 12px; padding: 4px 8px; margin: 0 -8px; border-radius: 7px; }
-.sp-line.is-turn { margin-top: 10px; }
-.sp-line.is-turn:first-child { margin-top: 0; }
-.sp-line.is-active { background: var(--sp-accent-subtle); }
-.sp-stamp {
-  flex-shrink: 0; width: 42px;
-  padding: 0; border: none; background: none;
-  font-family: var(--sp-mono); font-size: 11.5px;
-  color: var(--sp-subtle); text-align: right; line-height: 1.7;
-  cursor: pointer;
-  transition: color 120ms;
-}
-.sp-stamp:hover { color: var(--sp-accent); }
-.sp-line.is-active .sp-stamp { color: var(--sp-accent); }
-.sp-say { min-width: 0; flex: 1; }
-.sp-who { font-size: 12.5px; font-weight: 600; line-height: 1.7; }
-.sp-text {
-  margin: 0;
-  /* ~15.5/1.7 inside an ~780px column ≈ 85 characters — the readable band. */
-  font-size: 15.5px; line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-.sp-text mark { background: rgba(255, 214, 0, 0.4); color: inherit; border-radius: 3px; padding: 0 1px; }
-.sp-none { padding: 32px 0; text-align: center; font-size: 13.5px; color: var(--sp-muted); }
-
-/* ── Summary rail ── */
-.sp-rail { min-width: 0; display: flex; flex-direction: column; background: var(--sp-surface-2); }
-.sp-pane-head--rail { padding-left: 16px; }
-.sp-rail-title {
-  font-size: 11.5px; font-weight: 600;
-  letter-spacing: 0.07em; text-transform: uppercase;
-  color: var(--sp-subtle);
-}
+/* Summary rides in the transcript column, at the window's scale. */
 .sp-summary-body {
-  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  padding: 14px 16px 24px;
-  font-size: 13.5px; line-height: 1.65;
-}
-.sp-summary-body::-webkit-scrollbar { width: 10px; }
-.sp-summary-body::-webkit-scrollbar-thumb {
-  background: #e3e3e0; border: 3px solid var(--sp-surface-2); border-radius: 999px;
-}
-/* renderMarkdown emits `md-*` classes (styles.css dresses them for the app's
-   pane); restyle them for the rail. */
-.sp-summary-body .md-h3 {
-  margin: 16px 0 6px;
-  font-family: var(--sp-serif); font-size: 15px; font-weight: 500;
-  line-height: 1.35;
-  color: var(--sp-ink);
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 8px 20px 16px;
+  font-size: 15px; line-height: 1.7; color: var(--hl-fg);
 }
 .sp-summary-body > :first-child { margin-top: 0; }
-.sp-summary-body .md-p { margin: 0 0 10px; color: var(--sp-muted); }
-.sp-summary-body .md-ul { margin: 0 0 10px; padding-left: 16px; }
-.sp-summary-body .md-ul-nested { margin: 4px 0 0; }
-.sp-summary-body .md-li { margin-bottom: 5px; color: var(--sp-muted); }
-.sp-summary-body strong { color: var(--sp-ink); font-weight: 600; }
-.sp-summary-body .md-mark { background: rgba(255, 214, 0, 0.4); border-radius: 3px; }
-
-/* ── Footer ── */
-.sp-foot {
-  position: relative; z-index: 1;
-  padding: 18px 24px 26px;
-  text-align: center;
-  font-size: 12.5px; color: var(--sp-subtle);
+.sp-summary-body .md-h3 {
+  margin: 20px 0 8px;
+  font-size: 15px; font-weight: 600; line-height: 1.4;
+  color: var(--hl-fg);
 }
-.sp-foot a { color: var(--sp-muted); text-decoration: none; border-bottom: 1px solid var(--sp-border-strong); }
-.sp-foot a:hover { color: var(--sp-accent); border-bottom-color: var(--sp-accent); }
+.sp-summary-body .md-p { margin: 0 0 12px; }
+.sp-summary-body .md-ul { margin: 0 0 12px; padding-left: 18px; }
+.sp-summary-body .md-ul-nested { margin: 6px 0 0; }
+.sp-summary-body .md-li { margin-bottom: 6px; }
+.sp-summary-body strong { font-weight: 600; }
+
+/* ── Entry gate ── */
+.sp-gate {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(14, 14, 13, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: sp-fade-in 240ms var(--ease-out);
+}
+.sp-gate.is-leaving { animation: sp-fade-out 200ms var(--ease-out) forwards; }
+.sp-gate-card {
+  width: 100%; max-width: 480px;
+  padding: 40px 40px 28px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08), 0 30px 60px rgba(0, 0, 0, 0.12);
+  text-align: center;
+  animation: sp-card-in 420ms var(--ease-out);
+}
+.sp-gate-card.is-leaving { animation: sp-card-out 200ms var(--ease-out) forwards; }
+.sp-gate-mark { display: block; margin: 0 auto 20px; }
+.sp-gate-title {
+  margin: 0;
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 26px; line-height: 1.25; letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.sp-gate-title span { color: var(--color-accent); }
+.sp-gate-body {
+  margin: 12px 0 26px;
+  font-size: 16px; line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+.sp-gate-cta { width: 100%; min-width: 0; }
+.sp-gate-skip {
+  margin-top: 6px; padding: 12px; width: 100%;
+  border: none; background: none;
+  font-family: var(--font-sans); font-size: 15px;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  transition: color 150ms var(--ease-out);
+}
+.sp-gate-skip:hover { color: var(--color-text); }
+
+@keyframes sp-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sp-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sp-card-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes sp-card-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
 
 /* ── Expired / error ── */
 .sp-notice {
   position: relative; z-index: 1;
-  max-width: 400px; padding: 34px 30px;
-  background: var(--sp-bg); border: 1px solid var(--sp-border);
-  border-radius: var(--sp-window);
-  box-shadow: 0 22px 48px -16px rgba(14, 14, 13, 0.22);
+  max-width: 460px; padding: 40px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05), 0 18px 40px rgba(0, 0, 0, 0.07);
   text-align: center;
 }
-.sp-notice-title { margin: 0; font-family: var(--sp-serif); font-size: 23px; font-weight: 400; }
-.sp-notice-body { margin: 10px 0 22px; font-size: 14px; line-height: 1.55; color: var(--sp-muted); }
+.sp-notice-title { margin: 0; font-family: var(--font-serif); font-weight: 500; font-size: 30px; line-height: 1.15; }
+.sp-notice-body { margin: 12px 0 28px; font-size: 16px; line-height: var(--lh-body); color: var(--color-text-muted); }
 
 /* ── Narrow ──
-   The rail can't survive here, so the summary becomes a tab and the window
-   gives up its fixed height: on a phone a page that scrolls is right, and a
-   360px-tall inner scroller inside a scrolling page is not. */
-@media (max-width: 900px) {
-  .sp-window {
-    width: calc(100vw - 24px);
-    height: auto; min-height: 0;
-    margin-bottom: 8px;
-  }
-  .sp-body { grid-template-columns: minmax(0, 1fr); }
-  .sp-main { border-right: none; }
-  .sp-tab--mobile { display: inline-flex; }
-  .sp-rail { display: none; border-top: 1px solid var(--sp-border); }
-  .sp-rail.is-shown { display: flex; }
-  .sp-rail .sp-pane-head { display: none; }
-  .sp-scroll, .sp-summary-body { overflow-y: visible; }
-  .sp-nav-note { display: none; }
-  .sp-nav { gap: 10px; padding-left: 12px; }
-  .sp-nav-sep { display: none; }
-  .sp-hero { padding: 22px 18px 16px; }
-  .sp-time { min-width: 0; font-size: 11px; }
-  .sp-line { gap: 9px; }
-  .sp-stamp { width: 36px; font-size: 11px; }
-  .sp-text { font-size: 15px; }
+   The landing simply hides its demo window under 640px and keeps hero text.
+   We can't: the window IS the content. So it gives up its aspect-ratio, the
+   rail drops away, and the page scrolls like a document. */
+@media (max-width: 1023px) {
+  /* The window is built to a fixed 1180:720 with `height: 100%` inside it and
+     `overflow: hidden` on the body — a self-contained box that never grows.
+     Narrow, that has to invert: the box grows with the transcript and the PAGE
+     scrolls, so every height/overflow lock in the chain has to come off, not
+     just the aspect-ratio. */
+  .sp-demo { aspect-ratio: auto; height: auto; }
+  .sp-demo .hl-app { height: auto; }
+  .sp-demo .hl-detail-tabs,
+  .sp-demo .hl-detail-body { grid-template-columns: minmax(0, 1fr); }
+  .sp-demo .hl-detail-body { overflow: visible; }
+  .sp-demo .hl-detail-tabs .hl-detail-tab-col:last-child,
+  .sp-demo .hl-right-panel { display: none; }
+  .sp-demo .hl-transcript-wrap { overflow: visible; }
+  .sp-transcript { overflow-y: visible !important; margin-bottom: 0; padding-bottom: 20px; }
+  .sp-summary-body { overflow-y: visible; }
+}
+/* ── Undoing the mock's mobile behaviour ──
+   The vendored file is a DEMO, and narrow it does demo things that are fatal
+   for real data:
+     .hl-transcript { max-height: 220px; overflow: hidden }
+     .hl-transcript > .hl-segment-group:nth-of-type(n+3) { display: none }
+   i.e. it caps the pane and HIDES every turn past the second ("the idea lands
+   in two turns"). On a real shared meeting that silently truncates the
+   transcript to two lines. Same story with `min-height: 460px` and the 12px
+   font-size it drops to. Overridden here rather than edited there, so the file
+   stays a straight re-copy. */
+@media (max-width: 879px) {
+  .sp-demo { min-height: 0; font-size: 14px; }
+  .sp-transcript { max-height: none !important; overflow-y: visible !important; }
+  .sp-transcript > .hl-segment-group:nth-of-type(n + 3) { display: flex !important; }
+}
+
+/* The vendored file hides the window entirely under 640px:
+     .hero-library-demo { display: none !important }
+   On the landing that's right — the window is decoration there, and the hero
+   works as text alone. Here the window IS the content, so the rule has to be
+   overridden rather than the file edited (it stays re-copyable). */
+@media (max-width: 640px) {
+  .sp-page .hero-library-demo.sp-demo { display: block !important; }
+}
+
+@media (max-width: 767px) {
+  .sp-nav-note, .sp-nav-sep { display: none; }
+  .sp-nav { gap: 8px; padding-left: 12px; }
+  .sp-nav-cta { margin-left: 0; }
+  .sp-container { padding-top: 28px; }
+  .sp-head { margin-bottom: 24px; }
+  .sp-sub { font-size: 16px; }
+  .sp-demo .hl-main-header .sp-cta--nav { display: none; }
+  .sp-gate-card { padding: 32px 24px 20px; }
+  .sp-gate-title { font-size: 22px; }
+  .sp-cta--primary { min-width: 0; width: 100%; padding: 0 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-gate, .sp-gate-card { animation: none; }
+  .sp-transcript { scroll-behavior: auto; }
 }

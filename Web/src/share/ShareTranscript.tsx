@@ -1,42 +1,58 @@
 import React from "react";
 import { Search } from "lucide-react";
-import type { MeetingDetail } from "../api";
+import type { MeetingDetail, SegmentDTO } from "../api";
 import { displaySpeakerName } from "../format";
 
-/// Transcript for the share page — a readable document, not the app's pane.
+/// Transcript inside the hero window.
 ///
-/// The app's TranscriptPane groups a speaker's consecutive lines into one
-/// paragraph and shows no timestamps, which works inside the window because
-/// the right rail carries the timeline. On a public page the timestamp IS the
-/// navigation, so every line gets a clickable time in a left gutter (Loom's
-/// pattern) and the line currently being spoken is highlighted, so a reader can
-/// follow along or jump into the audio anywhere.
+/// Structure and classes are the landing's (`.hl-transcript-wrap`,
+/// `.hl-segment-group`, `.hl-speaker-avatar`, `.hl-segment-line`), so the type
+/// scale, the 24px gap between speakers and the hover/active treatments are the
+/// ones the brand ships. What's added here is what a public page needs and the
+/// hero mock doesn't have: real search, and lines that seek the audio.
+///
+/// Like the app, consecutive lines from one speaker are grouped under a single
+/// avatar+name head rather than repeating the name on every line.
 export function ShareTranscript({
-  detail, currentTimeSec, onSeek, hidden,
+  detail, currentTimeSec, onSeek,
 }: {
   detail: MeetingDetail;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
-  hidden?: boolean;
 }) {
   const [query, setQuery] = React.useState("");
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const activeRef = React.useRef<HTMLDivElement>(null);
+  const activeRef = React.useRef<HTMLSpanElement>(null);
 
   const speakerById = React.useMemo(() => {
-    const m = new Map<string, { name: string; idx: number }>();
-    detail.speakers.forEach((s, i) =>
-      m.set(s.id, { name: displaySpeakerName(s.custom_name, s.label, null), idx: i }));
+    const m = new Map<string, { name: string; initials: string; color: string }>();
+    // The hero window's speaker palette, in its own order.
+    const palette = ["var(--hl-speaker-purple)", "var(--hl-accent)", "var(--hl-speaker-self)", "var(--hl-avatar-admin)"];
+    detail.speakers.forEach((s, i) => {
+      const name = displaySpeakerName(s.custom_name, s.label, null);
+      m.set(s.id, { name, initials: initialsOf(name), color: palette[i % palette.length] });
+    });
     return m;
   }, [detail.speakers]);
 
   const q = query.trim().toLowerCase();
-  const shown = React.useMemo(
+  const segments = React.useMemo(
     () => (q ? detail.segments.filter((s) => s.text.toLowerCase().includes(q)) : detail.segments),
     [detail.segments, q],
   );
 
-  // The line being spoken now. Segments are sorted by start_ms (shareApi sorts
+  // Consecutive lines from the same speaker share one head.
+  const groups = React.useMemo(() => {
+    const out: { speakerId: string; segs: SegmentDTO[] }[] = [];
+    for (const s of segments) {
+      const last = out[out.length - 1];
+      if (last && last.speakerId === s.speaker_id) last.segs.push(s);
+      else out.push({ speakerId: s.speaker_id, segs: [s] });
+    }
+    return out;
+  }, [segments]);
+
+  // The line being spoken now: segments are sorted by start_ms (shareApi sorts
   // defensively), so it's the last one that started before "now".
   const activeId = React.useMemo(() => {
     const ms = currentTimeSec * 1000;
@@ -47,62 +63,58 @@ export function ShareTranscript({
     return found;
   }, [detail.segments, currentTimeSec]);
 
-  // Follow the audio, but only within this scroller — `scrollIntoView` on the
-  // element would drag the whole page when the card is taller than the window.
+  // Follow the audio within this scroller only — scrollIntoView would drag the
+  // whole page.
   React.useEffect(() => {
     const el = activeRef.current, box = scrollRef.current;
     if (!el || !box || q) return;
     const top = el.offsetTop - box.offsetTop;
-    const visible = top >= box.scrollTop && top + el.offsetHeight <= box.scrollTop + box.clientHeight;
-    if (!visible) box.scrollTo({ top: top - box.clientHeight / 2.5, behavior: "smooth" });
+    if (top < box.scrollTop || top > box.scrollTop + box.clientHeight - 40) {
+      box.scrollTo({ top: top - box.clientHeight / 2.5, behavior: "smooth" });
+    }
   }, [activeId, q]);
 
   return (
-    <div className="sp-pane" style={hidden ? { display: "none" } : undefined}>
-      <div className="sp-search">
-        <Search size={14} strokeWidth={2} aria-hidden />
-        <input
-          type="search"
-          placeholder="Search the transcript…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {!!q && <span className="sp-search-count">{shown.length}</span>}
+    <div className="hl-transcript-wrap">
+      <div className="hl-transcript-toolbar">
+        <label className="hl-search-field">
+          <Search aria-hidden />
+          <input
+            type="search"
+            placeholder="Search the transcript"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
       </div>
 
-      <div className="sp-scroll" ref={scrollRef}>
-        {shown.length === 0 ? (
-          <div className="sp-none">Nothing matches “{query}”.</div>
+      <div className="hl-transcript sp-transcript" ref={scrollRef}>
+        {groups.length === 0 ? (
+          <div className="sp-empty-line">Nothing matches “{query}”.</div>
         ) : (
-          shown.map((s, i) => {
-            const sp = speakerById.get(s.speaker_id);
-            const prev = i > 0 ? shown[i - 1] : null;
-            // Repeat the name only when the speaker changes: a label on every
-            // line turns the transcript into a wall of names.
-            const newSpeaker = !prev || prev.speaker_id !== s.speaker_id;
-            const isActive = s.id === activeId;
+          groups.map((g, gi) => {
+            const sp = speakerById.get(g.speakerId);
             return (
-              <div
-                key={s.id}
-                ref={isActive ? activeRef : undefined}
-                className={"sp-line" + (isActive ? " is-active" : "") + (newSpeaker ? " is-turn" : "")}
-              >
-                <button
-                  type="button"
-                  className="sp-stamp"
-                  onClick={() => onSeek(s.start_ms / 1000)}
-                  title="Jump to this moment"
-                >
-                  {stamp(s.start_ms)}
-                </button>
-                <div className="sp-say">
-                  {newSpeaker && sp && (
-                    <div className="sp-who" style={{ color: `var(--speaker-${(sp.idx % 4) + 1})` }}>
-                      {sp.name}
-                    </div>
-                  )}
-                  <p className="sp-text">{highlight(s.text, q)}</p>
+              <div className="hl-segment-group" key={`${g.speakerId}-${gi}`}>
+                <div className="hl-segment-head">
+                  <span className="hl-speaker-avatar" style={{ background: sp?.color }}>
+                    {sp?.initials}
+                  </span>
+                  <span className="hl-speaker-name">{sp?.name}</span>
                 </div>
+                <p className="hl-segment-paragraph">
+                  {g.segs.map((s) => (
+                    <span
+                      key={s.id}
+                      ref={s.id === activeId ? activeRef : undefined}
+                      className={"hl-segment-line" + (s.id === activeId ? " active" : "")}
+                      onClick={() => onSeek(s.start_ms / 1000)}
+                      title={stamp(s.start_ms)}
+                    >
+                      {highlight(s.text, q)}{" "}
+                    </span>
+                  ))}
+                </p>
               </div>
             );
           })
@@ -112,14 +124,18 @@ export function ShareTranscript({
   );
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function stamp(ms: number): string {
   const total = Math.floor(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
+  const m = Math.floor(total / 60);
   const s = total % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function highlight(text: string, q: string): React.ReactNode {
@@ -129,7 +145,7 @@ function highlight(text: string, q: string): React.ReactNode {
   let from = 0;
   for (let at = lower.indexOf(q, from); at !== -1; at = lower.indexOf(q, from)) {
     if (at > from) out.push(text.slice(from, at));
-    out.push(<mark key={at}>{text.slice(at, at + q.length)}</mark>);
+    out.push(<mark className="sp-mark" key={at}>{text.slice(at, at + q.length)}</mark>);
     from = at + q.length;
   }
   out.push(text.slice(from));

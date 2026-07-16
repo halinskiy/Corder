@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { SharePage } from "./SharePage";
+import "./hero-window.css";
 import "./share.css";
 
 // Light only, on purpose. Measured across the category (2026-07-16): Loom,
