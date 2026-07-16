@@ -95,6 +95,9 @@ enum Routes {
         server.post["/api/meetings/:id/rename"] = { req in
             renameMeeting(req: req, repo: repo)
         }
+        server.post["/api/meetings/:id/share"] = { req in
+            shareMeeting(id: req.params[":id"] ?? "", repo: repo)
+        }
         server.post["/api/meetings/:id/retranscribe"] = { req in
             retranscribe(id: req.params[":id"] ?? "", repo: repo)
         }
@@ -1137,6 +1140,33 @@ enum Routes {
     /// long-dead issues as "critical"). Scoping to this launch keeps the
     /// report, and its summary, about what's actually happening now.
     private static let sessionMarker = "applicationDidFinishLaunching"
+
+    /// Create a public share link for a meeting. Bridges the async
+    /// `ShareService` (which verifies the transcript is in the cloud, uploads
+    /// the compact .m4a, and records the share via the Worker) to Swifter's
+    /// blocking handler via a semaphore. Returns `{ok:true,url}` or, on any
+    /// failure, `{ok:false,error}` with a user-facing message for the toast.
+    private static func shareMeeting(id: String, repo: MeetingRepository) -> HttpResponse {
+        let sem = DispatchSemaphore(value: 0)
+        var url: String?
+        var errorMsg: String?
+        Task { @MainActor in
+            defer { sem.signal() }
+            do {
+                url = try await ShareService.createShare(meetingId: id, repo: repo).absoluteString
+            } catch {
+                errorMsg = (error as? ShareService.ShareError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+        }
+        // Sharing does a verified re-push + an audio upload + a Worker call, so
+        // give it generous room (a long meeting's .m4a can take a moment).
+        _ = sem.wait(timeout: .now() + 60)
+        if let url {
+            return jsonResponse(["ok": true, "url": url])
+        }
+        return jsonResponse(["ok": false, "error": errorMsg ?? "Could not create the link."])
+    }
 
     private static func submitLogs() -> HttpResponse {
         let tail = bugEventLog()
