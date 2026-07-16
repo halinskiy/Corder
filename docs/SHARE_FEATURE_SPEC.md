@@ -39,15 +39,26 @@ Remove the RightPanel download chooser UI; the Swift routes
 (`serveExport`/`transcriptExport`/`bundleZip`, `Routes.swift:753/809/2063`) are
 only reached by that chooser (review §6) so they can be dropped too.
 
-## Video on the share page (in Phase 1 now)
+## Audio storage — Supabase Storage, no R2, no card (owner decision)
 
-Upload the faststart-remuxed `video.mov` (`VideoRemux` output) to R2 alongside
-the audio, ONLY when the meeting has video (`captureVideo` was on / `video.mov`
-exists). The share page shows a video player pointing at the Worker-proxied R2
-video; audio-only meetings show no video block. Storage note: 720p H.264
-(~1.4 Mbps) ≈ 315 MB per 30-min meeting — bigger than audio, but R2 free (10 GB
-+ free egress) with 30-day expiry covers the current user count. Revisit a
-downscale/transcode only if volume grows.
+Phase 1 is AUDIO-ONLY. Video needs files in the hundreds of MB, which exceed
+Supabase Storage's 50 MB free-tier per-file cap and would force R2 (which
+requires enabling R2 + a card). To ship without a card, audio only.
+
+Audio is uploaded as a compact **AAC `.m4a`** produced by the existing
+`MediaExporter.exportAudioM4A` (`MediaExporter.swift:60`, ~10× smaller than the
+WAV mix). Even a 2-hour meeting m4a (~28 MB) fits Supabase's 50 MB free cap. The
+app uploads it to a private Supabase Storage `shares` bucket at
+`<uid>/<meeting_id>.m4a` (owner-write via JWT/RLS, same shape as the existing
+`uploadRecording`). The Worker, on the public audio route, mints a short-lived
+signed URL for it (service role).
+
+## Video — deferred to Phase 1.5 (drop-in)
+
+The `shares` table already carries a `video_key` column. When the owner later
+enables R2 + a card, video becomes a drop-in: upload the faststart-remuxed
+`video.mov` to R2, set `video_key`, and un-hide the video slot on the share
+page. No rework of Phase 1.
 
 ## Out of scope (Phase 2)
 
@@ -135,22 +146,23 @@ share.getcorder.com  (Web/src, read-only share mode)
 
 ### 3. Cloudflare Worker (`corder-api/src/index.ts`)
 
-- **NET-NEW infra:** add R2 binding `SHARE_BUCKET` to `wrangler.toml` (first R2
-  bucket on the account); add a `scheduled()` export + `[triggers] crons` (the
-  Worker currently exports only `{ async fetch }`, no cron surface).
+- **NET-NEW infra:** add a `scheduled()` export + `[triggers] crons` (the
+  Worker currently exports only `{ async fetch }`, no cron surface). No R2 —
+  audio lives in Supabase Storage (no card).
 - `POST /share/create` (JWT): verify caller owns meeting_id
   (`select meetings where id=? and user_id=<jwt.sub>` via service key,
-  `supaFetch` pattern `index.ts:397-415`), generate token, insert `shares`,
-  return `{ token, url }`.
-- `PUT /share/audio/<meeting_id>` (JWT): stream the mix into R2 at
-  `<uid>/<mid>/mix.wav`, return the key. Body cap.
+  `supaFetch` pattern `index.ts:397-415`), generate token, insert `shares`
+  (with `audio_key` = the m4a path the app uploaded), return `{ token, url }`.
+  Audio is uploaded by the APP directly to Supabase Storage (owner JWT), so no
+  Worker upload route is needed.
 - `GET /share/<token>` (PUBLIC): 410 if missing/expired (read-time check);
   else read meetings/speakers/segments/summaries via service key, **every
   sub-query scoped by the token's resolved `meeting_id`**, never a client id;
-  return `{ meeting, speakers, segments, summary, owner_name, expires_at }`.
-- `GET /share/<token>/audio` (PUBLIC): stream the R2 object directly from the
-  binding (default; simpler + safer than S3-style presigned URLs).
-- `scheduled()` cron nightly: delete expired `shares` rows + their R2 objects.
+  return `{ meeting, speakers, segments, summary, owner_name, expires_at,
+  audio_url }` where `audio_url` is a short-lived Supabase Storage signed URL
+  minted with the service role.
+- `scheduled()` cron nightly: delete expired `shares` rows + their Storage
+  objects.
 - **CORS:** the simple `GET /share/<token>` works under `Access-Control-Allow-Origin: *`
   (`index.ts:78-80`). If `shareApi` ever sends a custom header the browser
   preflights and `corsOrigin()` (`index.ts:106-109`) rejects unknown origins →
