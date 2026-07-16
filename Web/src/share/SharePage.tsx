@@ -1,25 +1,41 @@
 import React from "react";
-import { Loader2 } from "lucide-react";
-import { TranscriptPane } from "../components/TranscriptPane";
-import { SummaryPane } from "../components/SummaryPane";
-import { AudioCard } from "../components/AudioCard";
-import { SpeakerTimeline } from "../components/RightPanel";
-import { pickStrings } from "../i18n";
+import { Loader2, Copy, Check } from "lucide-react";
+import { ShareTranscript } from "./ShareTranscript";
+import { ShareSummary } from "./ShareSummary";
+import { SharePlayer } from "./SharePlayer";
 import { formatDuration } from "../format";
 import { fetchShare, tokenFromLocation, ShareGone, type Share } from "./shareApi";
 
 const DOWNLOAD_URL = "https://getcorder.com";
 
-/// The public share page: the real Corder panes, fed by one public GET instead
-/// of the local app server. Everything that writes, polls, or talks to a local
-/// Corder is off (see the `readOnly` props); what's left is exactly what a
-/// viewer should get — the transcript, the summary, and the audio.
+/// The public share page.
+///
+/// Built to look like getcorder.com, not like the app window and not like the
+/// competition: the landing presents Corder as a floating "window" card over a
+/// dot-grid, under a serif display heading and a pill nav — so a share link,
+/// which is the product's most-seen public surface, does the same.
+///
+/// Two things it is deliberately NOT:
+///  - not the app's layout (that ran the transcript to the full window width;
+///    at 2560 it was ~150 characters a line, twice the readable limit);
+///  - not a long single column either (that read as a plain document with
+///    nothing of the brand in it).
+///
+/// Instead the whole meeting lives in ONE window card that fits the viewport:
+/// player across the top, transcript in the reading column, summary in the
+/// side rail. Scrolling happens INSIDE the card's columns, so the page itself
+/// doesn't grow to the length of the transcript.
+///
+/// Light-only, like every measured page of the category (Loom, Granola, Otter,
+/// tl;dv) and like the landing itself. It briefly followed the visitor's OS
+/// theme, which nobody does — a share link is a page of the product, not a
+/// mirror of the reader's system.
 export function SharePage() {
-  const t = pickStrings("en");
   const [share, setShare] = React.useState<Share | null>(null);
   const [state, setState] = React.useState<"loading" | "ready" | "gone" | "error">("loading");
-  const [leftTab, setLeftTab] = React.useState<"transcript" | "summary">("transcript");
+  const [tab, setTab] = React.useState<"transcript" | "summary">("transcript");
   const [currentTimeSec, setCurrentTimeSec] = React.useState(0);
+  const [copied, setCopied] = React.useState(false);
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
   React.useEffect(() => {
@@ -34,36 +50,32 @@ export function SharePage() {
 
   const seek = (sec: number) => {
     const a = audioRef.current;
-    if (a) { try { a.currentTime = sec; } catch { /* not seekable yet */ } }
+    if (!a) return;
+    try { a.currentTime = sec; void a.play(); } catch { /* not seekable yet */ }
   };
 
   if (state === "loading") {
     return (
-      <div className="share-page share-page-center">
+      <div className="sp-page sp-page--center">
         <Loader2 size={22} strokeWidth={2.5} className="summary-spin" aria-hidden />
       </div>
     );
   }
+
   if (state === "gone" || state === "error" || !share) {
     const gone = state === "gone";
     return (
-      <div className="share-page share-page-center">
-        <div className="trans-banner clarify-banner share-gone-card">
-          <div className="clarify-text">
-            <div className="clarify-body">
-              {gone ? "This link has expired" : "Something went wrong"}
-            </div>
-            <div className="dash-sub">
-              {gone
-                ? "Shared links last 30 days. Ask for a fresh one."
-                : "The link could not be loaded. Try again in a moment."}
-            </div>
-          </div>
-          <div className="clarify-actions clarify-actions-stack">
-            <a className="clarify-btn accent" href={DOWNLOAD_URL}>
-              <span>Get Corder</span>
-            </a>
-          </div>
+      <div className="sp-page sp-page--center">
+        <div className="sp-notice">
+          <h1 className="sp-notice-title">
+            {gone ? "This link has expired" : "Something went wrong"}
+          </h1>
+          <p className="sp-notice-body">
+            {gone
+              ? "Shared links last 30 days. Ask whoever sent it for a fresh one."
+              : "The link could not be loaded. Try again in a moment."}
+          </p>
+          <a className="sp-btn sp-btn--primary" href={DOWNLOAD_URL}>Get Corder</a>
         </div>
       </div>
     );
@@ -73,99 +85,105 @@ export function SharePage() {
   const hasSummary = !!(detail.summary && detail.summary.trim());
   const started = new Date(detail.started_at);
 
+  const copyLink = () => {
+    try {
+      navigator.clipboard?.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard blocked */ }
+  };
+
   return (
-    <div className="share-page">
-      <header className="share-top">
-        <div className="share-top-meta">
-          <div className="share-owner">
-            {ownerName ? `${ownerName} shared this with you` : "Shared with you"}
-          </div>
-          <h1 className="share-title">{detail.title || "Untitled meeting"}</h1>
-          <div className="share-sub">
-            {started.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
-            {detail.duration_ms ? ` · ${formatDuration(detail.duration_ms)}` : ""}
-          </div>
-        </div>
-        <a className="clarify-btn accent share-cta" href={DOWNLOAD_URL}>
-          <span>Download Corder</span>
+    <div className="sp-page">
+      <div className="sp-atmos" aria-hidden>
+        <span className="sp-blob sp-blob--a" />
+        <span className="sp-blob sp-blob--b" />
+      </div>
+
+      {/* The landing's floating pill nav, same silhouette. */}
+      <nav className="sp-nav">
+        <a className="sp-nav-brand" href={DOWNLOAD_URL} aria-label="Corder">
+          <span className="sp-mark" aria-hidden />
         </a>
+        <span className="sp-nav-sep" aria-hidden />
+        <span className="sp-nav-note">
+          {ownerName ? <><b>{ownerName}</b> shared this recording</> : "Shared with you"}
+        </span>
+        <a className="sp-btn sp-btn--primary sp-btn--sm" href={DOWNLOAD_URL}>Download</a>
+      </nav>
+
+      <header className="sp-hero">
+        <h1 className="sp-hero-title">{detail.title || "Untitled meeting"}</h1>
+        <div className="sp-hero-meta">
+          <span>{started.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>
+          {!!detail.duration_ms && <><i aria-hidden /> <span>{formatDuration(detail.duration_ms)}</span></>}
+          {detail.speakers.length > 0 && (
+            <><i aria-hidden /> <span>{detail.speakers.length} {detail.speakers.length === 1 ? "speaker" : "speakers"}</span></>
+          )}
+        </div>
       </header>
 
-      <div className="detail share-detail">
-        <div className="detail-tabs">
-          <div className="detail-tab-col detail-tab-col-left">
-            <span
-              className={"tab" + (leftTab === "transcript" ? " active" : "")}
-              onClick={() => setLeftTab("transcript")}
-            >
-              {t.tab_transcript}
-            </span>
-            {hasSummary && (
-              <span
-                className={"tab" + (leftTab === "summary" ? " active" : "")}
-                onClick={() => setLeftTab("summary")}
-              >
-                {t.tab_summary}
-              </span>
-            )}
-          </div>
-          <div className="detail-tab-col detail-tab-col-right">
-            <span className="tab active">{t.audio_card_title}</span>
-          </div>
-        </div>
+      {/* One window, sized to the viewport. The columns scroll inside it, so
+          the page never grows to the length of the transcript. */}
+      <div className="sp-window">
+        {!!audioUrl && (
+          <SharePlayer
+            audioRef={audioRef}
+            audioUrl={audioUrl}
+            durationMs={detail.duration_ms ?? 0}
+            currentTimeSec={currentTimeSec}
+            onTimeUpdate={setCurrentTimeSec}
+            onSeek={seek}
+          />
+        )}
 
-        <div className="detail-body share-body">
-          <div
-            className="transcript-wrap"
-            style={{ display: leftTab === "transcript" ? "flex" : "none" }}
-          >
-            <TranscriptPane
-              detail={detail}
-              currentTimeSec={currentTimeSec}
-              onSeek={seek}
-              query=""
-              boostOn={false}
-              recordingState={{ active: false }}
-              clarifyOpen={false}
-              readOnly
-              // Every callback below drives app-only state (sidebar refresh,
-              // toasts, the clarify flow). There is no app here.
-              onSpeakersUpdated={() => {}}
-              onRecordingStopped={() => {}}
-              onDeleted={() => {}}
-              onClarifyDismiss={() => {}}
-              onClarifyChosen={() => {}}
-              onToast={() => {}}
-              t={t}
-            />
-          </div>
-          {hasSummary && (
-            <div
-              className="transcript-wrap summary-wrap-host"
-              style={{ display: leftTab === "summary" ? "flex" : "none" }}
-            >
-              <SummaryPane detail={detail} readOnly t={t} />
+        <div className={"sp-body" + (hasSummary ? "" : " sp-body--solo")}>
+          <section className="sp-main">
+            <div className="sp-pane-head">
+              <div className="sp-tabs">
+                <button
+                  type="button"
+                  className={"sp-tab" + (tab === "transcript" ? " is-on" : "")}
+                  onClick={() => setTab("transcript")}
+                >
+                  Transcript
+                </button>
+                {hasSummary && (
+                  <button
+                    type="button"
+                    className={"sp-tab sp-tab--mobile" + (tab === "summary" ? " is-on" : "")}
+                    onClick={() => setTab("summary")}
+                  >
+                    Summary
+                  </button>
+                )}
+              </div>
+              <button type="button" className="sp-icon-btn" onClick={copyLink} title="Copy link">
+                {copied ? <Check size={15} strokeWidth={2} /> : <Copy size={15} strokeWidth={2} />}
+              </button>
             </div>
-          )}
-
-          <div className="right-panel share-right">
-            <AudioCard
-              detail={detail}
-              audioRef={audioRef}
-              onTimeUpdate={setCurrentTimeSec}
-              audioUrl={audioUrl ?? undefined}
-              t={t}
-            />
-            <SpeakerTimeline
+            <ShareTranscript
               detail={detail}
               currentTimeSec={currentTimeSec}
               onSeek={seek}
-              t={t}
-              lang="en"
+              hidden={tab !== "transcript"}
             />
-          </div>
+          </section>
+
+          {hasSummary && (
+            <aside className={"sp-rail" + (tab === "summary" ? " is-shown" : "")}>
+              <div className="sp-pane-head sp-pane-head--rail">
+                <span className="sp-rail-title">Summary</span>
+              </div>
+              <ShareSummary markdown={detail.summary!} />
+            </aside>
+          )}
         </div>
       </div>
+
+      <footer className="sp-foot">
+        <span>Recorded with <a href={DOWNLOAD_URL}>Corder</a> — meeting transcripts that stay on your Mac.</span>
+      </footer>
     </div>
   );
 }

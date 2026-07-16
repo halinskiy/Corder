@@ -279,12 +279,12 @@ function SummaryBanner({
 
 /// Treat pre-Granola plain-prose summaries as "no summary" so the
 /// auto-trigger above re-renders them in the new structured format.
-function pickStructured(s: string | null): string | null {
+export function pickStructured(s: string | null): string | null {
   if (!s) return null;
   const trimmed = s.trim();
   if (!trimmed) return null;
   const looksStructured =
-    /(^|\n)###\s/.test(trimmed) || /(^|\n)-\s/.test(trimmed);
+    /(^|\n)###\s/.test(trimmed) || /(^|\n)[-*]\s/.test(trimmed);
   return looksStructured ? trimmed : null;
 }
 
@@ -303,7 +303,7 @@ interface ListItem {
   children: ListItem[];
 }
 
-function renderMarkdown(md: string, query: string): JSX.Element[] {
+export function renderMarkdown(md: string, query: string): JSX.Element[] {
   const lines = md.replace(/\r\n?/g, "\n").split("\n");
   const blocks: Block[] = [];
   let i = 0;
@@ -314,7 +314,7 @@ function renderMarkdown(md: string, query: string): JSX.Element[] {
     if (h3) { blocks.push({ kind: "h3", text: h3[1] }); i++; continue; }
     const h2 = /^##\s+(.*)$/.exec(line);
     if (h2) { blocks.push({ kind: "h2", text: h2[1] }); i++; continue; }
-    if (/^\s*-\s+/.test(line)) {
+    if (/^\s*[-*]\s+/.test(line)) {
       const [items, consumed] = parseList(lines, i, 0);
       blocks.push({ kind: "list", items });
       i = consumed;
@@ -326,7 +326,7 @@ function renderMarkdown(md: string, query: string): JSX.Element[] {
       const l = lines[j];
       if (!l.trim()) break;
       if (/^#{2,3}\s/.test(l)) break;
-      if (/^\s*-\s+/.test(l)) break;
+      if (/^\s*[-*]\s+/.test(l)) break;
       buf.push(l);
       j++;
     }
@@ -344,10 +344,10 @@ function parseList(lines: string[], start: number, indent: number): [ListItem[],
     const line = lines[i];
     if (!line.trim()) {
       const next = lines[i + 1] ?? "";
-      if (/^\s*-\s+/.test(next)) { i++; continue; }
+      if (/^\s*[-*]\s+/.test(next)) { i++; continue; }
       break;
     }
-    const m = /^(\s*)-\s+(.*)$/.exec(line);
+    const m = /^(\s*)[-*]\s+(.*)$/.exec(line);
     if (!m) break;
     const thisIndent = m[1].length;
     if (thisIndent !== indent) break;
@@ -355,7 +355,7 @@ function parseList(lines: string[], start: number, indent: number): [ListItem[],
     i++;
     let children: ListItem[] = [];
     if (i < lines.length) {
-      const nm = /^(\s*)-\s+/.exec(lines[i]);
+      const nm = /^(\s*)[-*]\s+/.exec(lines[i]);
       if (nm && nm[1].length > thisIndent) {
         const [kids, consumed] = parseList(lines, i, nm[1].length);
         children = kids;
