@@ -141,6 +141,18 @@ body { margin: 0; }
   border-color: var(--color-accent-hover);
   transform: translateY(-1px);
 }
+.sp-cta--ghost {
+  height: 56px; padding: 0 36px; min-width: 220px;
+  font-size: 17px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.sp-cta--ghost:hover {
+  border-color: var(--color-text);
+  background-color: var(--color-surface);
+}
+
 /* Nav CTA, shipped in its scrolled state (this page's window doesn't scroll,
    so the landing's transparent-at-top state would never resolve). */
 .sp-nav-cta {
@@ -250,10 +262,13 @@ body { margin: 0; }
 .sp-summary-body strong { font-weight: 600; }
 
 /* ── Entry gate ── */
+/* Geometry + motion are the app's `.update-overlay` / `.update-card`: the
+   perspective lives on the overlay, the tracked rotation on the card. */
 .sp-gate {
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
+  perspective: 900px;
   background: rgba(14, 14, 13, 0.32);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -261,6 +276,7 @@ body { margin: 0; }
 }
 .sp-gate.is-leaving { animation: sp-fade-out 200ms var(--ease-out) forwards; }
 .sp-gate-card {
+  position: relative;
   width: 100%; max-width: 480px;
   padding: 40px 40px 28px;
   background: var(--color-bg);
@@ -268,9 +284,39 @@ body { margin: 0; }
   border-radius: 16px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08), 0 30px 60px rgba(0, 0, 0, 0.12);
   text-align: center;
+  overflow: hidden;
+
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --tilt-shine-x: 50%;
+  --tilt-shine-y: 50%;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transform-origin: center 70%;
+  /* NO transition on the tracked transform: it would lag and stutter behind a
+     moving target, restarting on every mousemove. Smoothness comes from the
+     rAF-batched JS; a transition is added ONLY on cursor-leave. */
   animation: sp-card-in 420ms var(--ease-out);
+  /* Pin the card to its own GPU layer, or the text re-rasterises every frame
+     of the tilt and shimmers (worse on macOS 26 WebKit). */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
+.sp-gate-card.tilt-snap-back { transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .sp-gate-card.is-leaving { animation: sp-card-out 200ms var(--ease-out) forwards; }
+/* Sheen sits ABOVE the content (z-index 2) so it actually lights the CTA;
+   alpha stays low enough that white-on-green still reads. */
+.sp-gate-sheen {
+  pointer-events: none;
+  position: absolute; inset: 0; z-index: 2;
+  background: radial-gradient(
+    320px circle at var(--tilt-shine-x) var(--tilt-shine-y),
+    rgba(255, 255, 255, 0.22),
+    transparent 65%
+  );
+}
+.sp-gate-card > :not(.sp-gate-sheen) { position: relative; z-index: 1; }
 .sp-gate-mark { display: block; margin: 0 auto 20px; }
 .sp-gate-title {
   margin: 0;
@@ -285,25 +331,17 @@ body { margin: 0; }
   color: var(--color-text-muted);
 }
 .sp-gate-cta { width: 100%; min-width: 0; }
-.sp-gate-skip {
-  margin-top: 6px; padding: 12px; width: 100%;
-  border: none; background: none;
-  font-family: var(--font-sans); font-size: 15px;
-  color: var(--color-text-subtle);
-  cursor: pointer;
-  transition: color 150ms var(--ease-out);
-}
-.sp-gate-skip:hover { color: var(--color-text); }
+.sp-gate-skip { margin-top: 10px; width: 100%; min-width: 0; }
 
 @keyframes sp-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sp-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes sp-card-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: perspective(900px) rotateX(10deg) scale(0.9); }
+  to   { opacity: 1; transform: perspective(900px) rotateX(0) scale(1); }
 }
 @keyframes sp-card-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to   { opacity: 0; transform: translateY(8px) scale(0.98); }
+  from { opacity: 1; transform: perspective(900px) rotateX(0) scale(1); }
+  to   { opacity: 0; transform: perspective(900px) rotateX(6deg) scale(0.96); }
 }
 
 /* ── Expired / error ── */

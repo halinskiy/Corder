@@ -4,14 +4,17 @@ import React from "react";
 /// meeting, the product introduces itself, and you dismiss it.
 ///
 /// This is the highest-intent moment the page has — a visitor just got a Corder
-/// link from someone they know and is about to see what it produces. Granola
-/// puts a card here for exactly that reason. It was left out of the first cut
-/// on the theory that a modal reads pushy for a privacy product; that was the
-/// wrong call, since it's also the only place the page ever asks for anything.
+/// link from someone they know and is about to see what it produces. It was
+/// left out of the first cut on the theory that a modal reads pushy for a
+/// privacy product; wrong call, since it's also the only place the page ever
+/// asks for anything.
 ///
-/// Dismissed by the button, Esc, or clicking the backdrop, and it never blocks
-/// twice: the choice is remembered per browser, so a second link doesn't
-/// re-pitch someone who already said "maybe later".
+/// The card carries the app's cursor-tilt parallax, the same one the update and
+/// sign-in modals use — Corder's modals move, so this one does too.
+///
+/// Dismissed by the button, Esc, or the backdrop, and it never blocks twice:
+/// the choice is remembered per browser, so a second link doesn't re-pitch
+/// someone who already said "maybe later".
 const SEEN_KEY = "corder.share.gateSeen";
 
 export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null; downloadUrl: string }) {
@@ -19,6 +22,8 @@ export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null
     try { return localStorage.getItem(SEEN_KEY) !== "1"; } catch { return true; }
   });
   const [leaving, setLeaving] = React.useState(false);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  const overlayRef = React.useRef<HTMLDivElement | null>(null);
 
   const close = React.useCallback(() => {
     if (leaving) return;
@@ -31,7 +36,6 @@ export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("keydown", onKey);
-    // The page behind must not scroll while the gate is up.
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -40,6 +44,61 @@ export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null
     };
   }, [open, close]);
 
+  // Cursor-tilt parallax, lifted from the app's modals (SignInModal /
+  // UpdateModal). The details that matter, all learned there:
+  //  · rects are CACHED and only remeasured on resize — reading
+  //    getBoundingClientRect on every mousemove forced two synchronous
+  //    reflows per event, which is what made the tilt stutter;
+  //  · writes are coalesced into ONE per frame via rAF;
+  //  · the tracked transform carries NO transition (it would lag behind a
+  //    moving target); `tilt-snap-back` adds one only on cursor-leave.
+  React.useEffect(() => {
+    if (!open) return;
+    const overlay = overlayRef.current;
+    const card = cardRef.current;
+    if (!overlay || !card) return;
+
+    let oRect = overlay.getBoundingClientRect();
+    let cRect = card.getBoundingClientRect();
+    const remeasure = () => { oRect = overlay.getBoundingClientRect(); cRect = card.getBoundingClientRect(); };
+    let raf = 0;
+    let px = 0, py = 0;
+    const max = 4;   // gentle, same as the sign-in card
+
+    const apply = () => {
+      raf = 0;
+      const nx = ((px - oRect.left) / oRect.width) * 2 - 1;
+      const ny = ((py - oRect.top) / oRect.height) * 2 - 1;
+      card.style.setProperty("--tilt-x", `${(-ny * max).toFixed(2)}deg`);
+      card.style.setProperty("--tilt-y", `${(nx * max).toFixed(2)}deg`);
+      card.style.setProperty("--tilt-shine-x", `${(((px - cRect.left) / cRect.width) * 100).toFixed(1)}%`);
+      card.style.setProperty("--tilt-shine-y", `${(((py - cRect.top) / cRect.height) * 100).toFixed(1)}%`);
+    };
+    const onMove = (e: MouseEvent) => {
+      px = e.clientX; py = e.clientY;
+      card.classList.remove("tilt-snap-back");
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    const reset = () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      card.classList.add("tilt-snap-back");
+      card.style.setProperty("--tilt-x", "0deg");
+      card.style.setProperty("--tilt-y", "0deg");
+      card.style.setProperty("--tilt-shine-x", "50%");
+      card.style.setProperty("--tilt-shine-y", "50%");
+    };
+
+    overlay.addEventListener("mousemove", onMove);
+    overlay.addEventListener("mouseleave", reset);
+    window.addEventListener("resize", remeasure);
+    return () => {
+      overlay.removeEventListener("mousemove", onMove);
+      overlay.removeEventListener("mouseleave", reset);
+      window.removeEventListener("resize", remeasure);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -47,9 +106,11 @@ export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null
       className={"sp-gate" + (leaving ? " is-leaving" : "")}
       role="dialog"
       aria-modal="true"
+      ref={overlayRef}
       onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}
     >
-      <div className={"sp-gate-card" + (leaving ? " is-leaving" : "")}>
+      <div className={"sp-gate-card" + (leaving ? " is-leaving" : "")} ref={cardRef}>
+        <div className="sp-gate-sheen" aria-hidden />
         <img className="sp-gate-mark" src="/brand-mark-128.png" width={64} height={64} alt="" aria-hidden />
         <h2 className="sp-gate-title">
           {ownerName ? <><span>{ownerName}</span> shared a recording with you.</> : "A recording was shared with you."}
@@ -62,7 +123,7 @@ export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null
           <AppleMark />
           Download Corder
         </a>
-        <button type="button" className="sp-gate-skip" onClick={close}>
+        <button type="button" className="sp-cta sp-cta--ghost sp-gate-skip" onClick={close}>
           Maybe later
         </button>
       </div>
