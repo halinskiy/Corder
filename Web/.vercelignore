@@ -1,0 +1,4 @@
+# The in-app bundle + build outputs; Vercel builds the share page from source.
+dist
+dist-share
+node_modules

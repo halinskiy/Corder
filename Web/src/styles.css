@@ -3412,10 +3412,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* Download button sits right of the scrub bar with an extra 8 px so the
    pill of the scrub doesn't crowd the round button. */
+/* Share sits 8px right of the scrubber (like the old download button did);
+   the clip placeholder sits at the `.audio-controls` flex gap (6px), matching
+   the header's inter-button spacing, so no extra margin. */
 .audio-share-btn { margin-left: 8px; }
-.audio-clip-btn { margin-left: 4px; }
-/* The clip button is a disabled placeholder for the upcoming "share a clip"
-   feature: muted, no hover, not clickable. */
+.audio-clip-btn { margin-left: 0; }
 .audio-clip-btn:disabled,
 .audio-clip-btn[disabled] {
   opacity: 0.4;
@@ -3424,52 +3425,57 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ── Share modal ─────────────────────────────────────────────────────────
-   Reuses the .update-overlay / .update-card semi-3D shell; only the body
-   layout is share-specific. */
+   Reuses the .update-card shell + its .update-head / .update-actions rhythm
+   exactly, so it reads as the same family as the update / sign-in modals.
+   Only the link row is share-specific. */
 .share-card { width: 420px; }
-.share-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 6px;
-}
-.share-loading {
-  flex-direction: row;
+.share-status-loading {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: var(--fg-muted);
-  padding: 12px 0;
+  gap: 8px;
+  justify-content: center;
 }
 .share-link-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 14px;
 }
 .share-link-input {
   flex: 1;
   min-width: 0;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-input);
   color: var(--fg);
   font-size: 13px;
   font-family: var(--font-mono, ui-monospace, monospace);
   text-overflow: ellipsis;
 }
-.share-copy { flex-shrink: 0; }
-.share-note {
-  font-size: 12.5px;
-  color: var(--fg-muted);
-  line-height: 1.4;
+/* Round green twin of the play button: `.toolbar-icon-btn`'s 38px circle for
+   geometry (same as the Share button this modal was opened from), filled with
+   `.audio-btn-primary`'s hardcoded #1E7A50 / #186439 — NOT var(--accent) — so
+   every green circle in the app reads as the same control. Icon-only: a round
+   button has no room for the old "Copy link" label, the title/aria-label
+   carry it instead. */
+.share-copy {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: #1E7A50;
+  color: #fff;
+  cursor: pointer;
+  transition: background 80ms ease;
 }
-.share-error { gap: 10px; }
-.share-error-msg {
-  font-size: 13.5px;
-  color: var(--fg);
-  line-height: 1.5;
-}
+.share-copy:hover { background: #186439; }
 .audio-btn {
   background: transparent;
   border: none;
@@ -5316,14 +5322,19 @@ body.resizing { cursor: col-resize; user-select: none; }
   );
 }
 /* Card content (title, status, buttons, notes) sits in its own
-   stacking context below the sheen layer. The help button is
-   absolutely positioned above EVERYTHING (sheen included) so the
-   selector excludes it, otherwise `position: relative` here would
-   clobber its `position: absolute` and snap it back into flow. */
-.update-card > :not(.update-card-sheen):not(.update-help) {
+   stacking context below the sheen layer. The help button and the
+   corner dismiss X are absolutely positioned above EVERYTHING (sheen
+   included) so the selector excludes them, otherwise `position: relative`
+   here would clobber their `position: absolute` and snap them back into
+   flow — which is exactly what turned the share modal's X into a
+   full-width pill. */
+.update-card > :not(.update-card-sheen):not(.update-help):not(.clarify-dismiss) {
   position: relative;
   z-index: 1;
 }
+/* Reused verbatim from the banner cards (RatingBanner / SpeakersClarify),
+   only lifted above the sheen so the cursor highlight doesn't wash it out. */
+.update-card > .clarify-dismiss { z-index: 3; }
 
 /* ---- In-app sign-in modal: shares .update-card (tilt + sheen, white
    card) but no StarsCanvas. Guest treatment is intentional, neutral
@@ -5834,4 +5845,99 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .trans-upsell-sparkles span { animation: none; opacity: 0; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Public share page (share.getcorder.com)
+
+   Everything below is layout-only: the panes inside are the SAME
+   components the app renders, so they bring their own styling. The
+   share page just supplies the shell the app's window normally does
+   (a header strip instead of the sidebar + MainHeader) and re-uses
+   `.detail` / `.detail-body`'s two-column grid verbatim.
+   ───────────────────────────────────────────────────────────────── */
+.share-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;   /* mobile browsers: exclude the URL bar */
+  background: var(--bg);
+  color: var(--fg);
+}
+.share-page-center {
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+.share-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.share-top-meta { min-width: 0; }
+.share-owner {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.share-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+/* The CTA is the page's only real action, so it keeps the green accent
+   fill. `.clarify-btn` carries `flex: 1 1 72px` (it's built to share a
+   card's action row), which in this header row made it eat every spare
+   pixel; pin it to its label instead. */
+.share-cta {
+  flex: 0 0 auto;
+  width: auto;
+}
+/* Anchor reset: on this page the CTAs are real links (they leave for
+   getcorder.com), and `.clarify-btn` was only ever styled as a <button>, so
+   the underline showed through the green fill. */
+.share-page a.clarify-btn { text-decoration: none; }
+.share-gone-card { max-width: 380px; }
+
+/* `--right-w` is a resizable variable in-app (the splitter writes it).
+   There is no splitter here, so pin it. */
+.share-detail { --right-w: 380px; }
+
+/* `.right-panel` reserves 130px at the bottom for the floating record blob.
+   There is no blob on a share page, so that reservation is just dead space
+   (very visible on mobile, where the panel sits above the transcript). */
+.share-right { padding-bottom: 16px; }
+
+@media (max-width: 860px) {
+  /* One column: the transcript IS the content on a phone, and a 380px
+     right rail would leave it unreadable. The player moves above it,
+     stays put, and the transcript scrolls under. */
+  .share-detail { --right-w: 0px; }
+  .share-body {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+  }
+  .share-right {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-tab-col-right { display: none; }
+  .share-top { padding: 14px 16px; }
+  .share-title { font-size: 17px; white-space: normal; }
 }

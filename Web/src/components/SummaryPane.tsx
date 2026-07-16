@@ -14,6 +14,11 @@ declare global {
 interface Props {
   detail: MeetingDetail;
   onToast?: (msg: string, kind?: "success" | "error") => void;
+  /// Public share page: show the summary the owner already generated, but
+  /// nothing that would call home. Generating/regenerating bills the OWNER's
+  /// account and needs their JWT, so those actions are hidden outright rather
+  /// than left to fail; with no summary the pane renders nothing at all.
+  readOnly?: boolean;
   t: T;
 }
 
@@ -35,7 +40,7 @@ interface Props {
 /// when the user opted in). The frontend does NOT auto-fire: clicking
 /// the Summary tab on a meeting with no cached summary shows the
 /// banner with a "Generate" button, predictable, no surprise spend.
-export function SummaryPane({ detail, onToast, t }: Props) {
+export function SummaryPane({ detail, onToast, readOnly = false, t }: Props) {
   const initial = pickStructured(detail.summary ?? null);
   const [summary, setSummary] = useState<string | null>(initial);
   const [loading, setLoading] = useState(false);
@@ -158,7 +163,7 @@ export function SummaryPane({ detail, onToast, t }: Props) {
         <SummaryBanner
           title={t.summary_empty_title}
           body={errorBody}
-          action={{
+          action={readOnly ? undefined : {
             label: t.summary_generate, onClick: () => generate(false),
             disabled: loading, accent: true,
           }}
@@ -171,8 +176,8 @@ export function SummaryPane({ detail, onToast, t }: Props) {
       <div className="summary-wrap summary-wrap-empty">
         <SummaryBanner
           title={t.summary_empty_title}
-          body={t.summary_empty_body}
-          action={{
+          body={readOnly ? (t.summary_no_transcript ?? "") : t.summary_empty_body}
+          action={readOnly ? undefined : {
             label: t.summary_generate, onClick: () => generate(false),
             disabled: loading, accent: true,
           }}
@@ -214,16 +219,18 @@ export function SummaryPane({ detail, onToast, t }: Props) {
             <Copy size={16} strokeWidth={2} />
           </button>
         </Tooltip>
-        <Tooltip label={t.summary_regenerate}>
-          <button
-            className="toolbar-icon-btn"
-            onClick={() => generate(true)}
-            disabled={loading}
-            aria-label={t.summary_regenerate}
-          >
-            <RefreshCw size={16} strokeWidth={2} className={loading ? "summary-spin" : ""} />
-          </button>
-        </Tooltip>
+        {!readOnly && (
+          <Tooltip label={t.summary_regenerate}>
+            <button
+              className="toolbar-icon-btn"
+              onClick={() => generate(true)}
+              disabled={loading}
+              aria-label={t.summary_regenerate}
+            >
+              <RefreshCw size={16} strokeWidth={2} className={loading ? "summary-spin" : ""} />
+            </button>
+          </Tooltip>
+        )}
       </div>
       <div className="summary-content ovsb-scroll" ref={contentRef}>
         {renderMarkdown(summary, search)}

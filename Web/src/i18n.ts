@@ -213,6 +213,8 @@ interface Strings {
   share_copied?: string;
   share_note?: string;
   share_retry?: string;
+  share_done?: string;
+  share_close?: string;
   share_btn_title?: string;
   share_clip_title?: string;
   ghost_video_title?: string;
@@ -612,6 +614,8 @@ const en: Strings = {
   share_copied: "Copied",
   share_note: "Anyone with the link can view. Expires in 30 days.",
   share_retry: "Try again",
+  share_done: "Done",
+  share_close: "Close",
   share_btn_title: "Share a link",
   share_clip_title: "Share a clip (coming soon)",
   profile_title: "Profile",

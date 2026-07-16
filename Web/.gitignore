@@ -1,2 +1,5 @@
 # tsc never emits with noEmit:true, but guard against stale .js
 src/**/*.js
+.vercel
+# Share-page build output (Vercel builds it from source; see vercel.json).
+dist-share

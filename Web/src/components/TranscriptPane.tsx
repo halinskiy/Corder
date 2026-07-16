@@ -109,10 +109,16 @@ interface Props {
   onClarifyDismiss: () => void;
   onClarifyChosen: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
+  /// Public share page: someone else's meeting, viewed in a browser with no
+  /// local Corder behind it. Kills every write path (segment editing, speaker
+  /// rename), the rating prompt (a stranger must not be asked to rate an app
+  /// they may not even have), and the `/api/settings` fetch (no local server
+  /// to answer it).
+  readOnly?: boolean;
   t: T;
 }
 
-export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, activeMatchId, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, t }: Props) {
+export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, activeMatchId, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, readOnly = false, t }: Props) {
   const speakerById = React.useMemo(() => {
     const map = new Map<string, SpeakerDTO>();
     detail.speakers.forEach((s) => map.set(s.id, s));
@@ -125,10 +131,11 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // user's real identity, not a placeholder.
   const [profileName, setProfileName] = React.useState<string | null>(null);
   React.useEffect(() => {
+    if (readOnly) return;   // no local server to ask, and it isn't our profile
     let alive = true;
     getSettings().then((s) => { if (alive) setProfileName((s.user_name ?? "").trim() || null); }).catch(() => {});
     return () => { alive = false; };
-  }, [detail.id]);
+  }, [detail.id, readOnly]);
 
   // ── Right-click transcript editing ──────────────────────────────
   // Single action: right-click a line to edit its text. Speaker
@@ -136,8 +143,8 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // "Speaker 2/3/4" the user can't tell which is which, so those actions
   // only created confusion.
   const [editing, setEditing] = React.useState<{ segId: number; value: string } | null>(null);
-  // Editing only makes sense on a finished transcript.
-  const canEdit = detail.status === "ready";
+  // Editing only makes sense on a finished transcript you actually own.
+  const canEdit = detail.status === "ready" && !readOnly;
   const startEdit = (e: React.MouseEvent, segId: number, currentText: string) => {
     if (!canEdit) return;
     e.preventDefault(); e.stopPropagation();
@@ -160,6 +167,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // the source of truth across sessions.
   const [ratingState, setRatingState] = React.useState<RatingState>(() => readRatingState());
   React.useEffect(() => {
+    if (readOnly) return;
     if (detail.status !== "ready" || detail.segments.length === 0) return;
     const seen = readSeenIds();
     if (seen.has(detail.id)) return;
@@ -173,9 +181,9 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
       writeRatingState(next);
       return next;
     });
-  }, [detail.id, detail.status, detail.segments.length]);
+  }, [detail.id, detail.status, detail.segments.length, readOnly]);
 
-  const showRating = shouldShowRatingBanner(ratingState, detail.id);
+  const showRating = !readOnly && shouldShowRatingBanner(ratingState, detail.id);
 
   const handleRatingSubmit = React.useCallback((rating: number, comment: string) => {
     // Fire-and-forget so the UI flips instantly. The signed-in
@@ -389,6 +397,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
                 speaker={sp}
                 display={name === "you" ? t.speaker_self : name}
                 onUpdated={onSpeakersUpdated}
+                readOnly={readOnly}
                 t={t}
               />
             </div>
@@ -527,17 +536,20 @@ interface SpeakerNameProps {
   speaker: SpeakerDTO | undefined;
   display: string;
   onUpdated: () => void;
+  /// Share page: render as plain text, renaming would POST to a server that
+  /// isn't there and it isn't the viewer's meeting to rename anyway.
+  readOnly?: boolean;
   t: T;
 }
 
-function SpeakerName({ meetingId, speaker, display, onUpdated, t }: SpeakerNameProps) {
+function SpeakerName({ meetingId, speaker, display, onUpdated, readOnly = false, t }: SpeakerNameProps) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(speaker?.custom_name || "");
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
 
-  if (!speaker) return <span className="speaker-name">{display}</span>;
+  if (!speaker || readOnly) return <span className="speaker-name">{display}</span>;
 
   if (editing) {
     return (

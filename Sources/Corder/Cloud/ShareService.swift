@@ -33,6 +33,8 @@ enum ShareService {
 
     private static let createEndpoint =
         URL(string: "https://corder-api.empqwork.workers.dev/share/create")!
+    private static let uploadURLEndpoint =
+        URL(string: "https://corder-api.empqwork.workers.dev/share/upload-url")!
 
     /// Create (or refresh) a share for `meetingId` and return the public URL.
     static func createShare(meetingId: String, repo: MeetingRepository) async throws -> URL {
@@ -41,7 +43,6 @@ enum ShareService {
         guard let session = SupabaseClientHolder.shared.auth.currentSession else {
             throw ShareError.notSignedIn
         }
-        guard let uid = SupabaseSync.userId() else { throw ShareError.notSignedIn }
         let jwt = session.accessToken
 
         // 2. Ready + has transcript. A share page with no segments is empty.
@@ -58,24 +59,30 @@ enum ShareService {
             throw ShareError.syncFailed(error)
         }
 
-        // 4. Compact .m4a. For a `.ready` meeting `audio.wav` exists (produced at
-        //    transcribe / stop), so the export finds it. A Dropbox-archived
-        //    meeting whose sources are off-disk yields nil → audioUnavailable.
-        guard let m4aURL = MediaExporter.audioM4A(meetingId: meetingId) else {
-            throw ShareError.audioUnavailable
-        }
-
-        // 5. Upload to the private `shares` bucket at <uid>/<mid>.m4a.
-        //    Lowercased UUID to match the storage.objects RLS folder check.
-        let audioKey = "\(uid.uuidString.lowercased())/\(meetingId).m4a"
-        do {
-            let data = try Data(contentsOf: m4aURL)
-            _ = try await SupabaseClientHolder.shared.storage
-                .from("shares")
-                .upload(audioKey, data: data,
-                        options: FileOptions(cacheControl: "3600", upsert: true))
-        } catch {
-            throw ShareError.uploadFailed(error)
+        // 4-5. Audio is BEST-EFFORT. For a normal `.ready` meeting `audio.wav`
+        //    exists (produced at transcribe / stop) and the compact .m4a uploads
+        //    fine. But a meeting whose source streams were deleted/archived has
+        //    no audio to rebuild (audioM4A → nil), and a transcript is still
+        //    perfectly shareable — so we share text-only rather than blocking
+        //    the whole link. The share page hides the player when there is no
+        //    audio.
+        //
+        //    The upload goes through a Worker-minted SIGNED URL, not the client
+        //    session: writing to the `shares` bucket with the user's own JWT is
+        //    rejected by Storage RLS (measured: 403 "new row violates
+        //    row-level security policy"). The Worker also DERIVES the object key
+        //    from the JWT, so the client never names its own path.
+        var hasAudio = false
+        if let m4aURL = MediaExporter.audioM4A(meetingId: meetingId) {
+            do {
+                let data = try Data(contentsOf: m4aURL)
+                try await uploadAudio(data: data, meetingId: meetingId, jwt: jwt)
+                hasAudio = true
+            } catch {
+                FileLogger.log("ShareService: audio upload failed for \(meetingId), sharing text-only: \(error)")
+            }
+        } else {
+            FileLogger.log("ShareService: no audio on disk for \(meetingId), sharing text-only")
         }
 
         // 6. Record the share via the Worker (JWT-authed).
@@ -86,7 +93,7 @@ enum ShareService {
         req.timeoutInterval = 30
         let payload: [String: Any] = [
             "meeting_id": meetingId,
-            "audio_key": audioKey,
+            "has_audio": hasAudio,
             "owner_name": AppSettings.userName ?? AppSettings.userEmail ?? "",
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
@@ -103,5 +110,49 @@ enum ShareService {
         }
         FileLogger.log("ShareService: created share for \(meetingId) -> \(urlStr)")
         return url
+    }
+
+    /// Ask the Worker for a one-shot signed upload URL and PUT the audio to it.
+    /// Throws on any failure; the caller treats audio as best-effort.
+    private static func uploadAudio(data: Data, meetingId: String, jwt: String) async throws {
+        var req = URLRequest(url: uploadURLEndpoint)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 30
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["meeting_id": meetingId])
+
+        let (signData, signResp) = try await URLSession.shared.data(for: req)
+        guard let signHTTP = signResp as? HTTPURLResponse,
+              (200..<300).contains(signHTTP.statusCode) else {
+            let body = String(data: signData, encoding: .utf8) ?? ""
+            throw ShareError.uploadFailed(
+                NSError(domain: "ShareService", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "sign: \(body.prefix(200))"]))
+        }
+        struct SignResp: Decodable { let ok: Bool; let upload_url: String? }
+        guard let signed = try? JSONDecoder().decode(SignResp.self, from: signData),
+              signed.ok, let urlStr = signed.upload_url, let putURL = URL(string: urlStr) else {
+            throw ShareError.uploadFailed(
+                NSError(domain: "ShareService", code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "sign: unexpected response"]))
+        }
+
+        var put = URLRequest(url: putURL)
+        put.httpMethod = "PUT"
+        put.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
+        put.setValue("3600", forHTTPHeaderField: "cache-control")
+        // A long meeting's .m4a is a few tens of MB on a possibly slow uplink.
+        put.timeoutInterval = 300
+        let (putData, putResp) = try await URLSession.shared.upload(for: put, from: data)
+        guard let putHTTP = putResp as? HTTPURLResponse,
+              (200..<300).contains(putHTTP.statusCode) else {
+            let body = String(data: putData, encoding: .utf8) ?? ""
+            throw ShareError.uploadFailed(
+                NSError(domain: "ShareService", code: 3,
+                        userInfo: [NSLocalizedDescriptionKey:
+                            "put \((putResp as? HTTPURLResponse)?.statusCode ?? -1): \(body.prefix(200))"]))
+        }
+        FileLogger.log("ShareService: uploaded audio for \(meetingId) (\(data.count / 1024) KB)")
     }
 }
