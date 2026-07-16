@@ -578,6 +578,63 @@ enum SupabaseSync {
         FileLogger.log("SupabaseSync.backfill: complete")
     }
 
+    // MARK: - Share (awaitable, verified push)
+
+    enum ShareSyncError: Error { case notSignedIn, meetingMissing, noSegments }
+
+    /// AWAITABLE, THROWING re-push of ONE meeting's transcript to Supabase,
+    /// used by the Share flow. A share link must NEVER be handed out for a
+    /// meeting whose rows never reached the cloud: the fire-and-forget
+    /// `push {}` helpers (`upsertMeeting`/`replaceSpeakers…`/`setSummary`) run
+    /// `Task.detached { try? … }` and swallow errors, so they cannot guarantee
+    /// the data landed. This mirrors the synchronous chain in
+    /// `backfillIfNeeded` (meeting → speakers → segments → summary) but for a
+    /// single meeting and it THROWS on any failure, so `ShareService` only
+    /// mints a link after the rows are verified in place. Audio is uploaded
+    /// separately by the Share flow (to R2), not here.
+    static func pushForShare(meetingId: String, repo: MeetingRepository) async throws {
+        guard userId() != nil else { throw ShareSyncError.notSignedIn }
+        guard let m = try repo.meeting(id: meetingId), let row = toRow(m) else {
+            throw ShareSyncError.meetingMissing
+        }
+        // 1. meeting first (speakers/segments FK-depend on it).
+        try await SupabaseClientHolder.shared
+            .from("meetings").upsert(row, onConflict: "id").execute()
+        // 2. speakers (replace).
+        let speakers = (try? repo.speakers(forMeeting: meetingId)) ?? []
+        var speakerUUIDs: [String: UUID] = [:]
+        for s in speakers { speakerUUIDs[s.id] = UUID(uuidString: s.id) ?? UUID() }
+        try await SupabaseClientHolder.shared
+            .from("speakers").delete().eq("meeting_id", value: meetingId).execute()
+        if !speakers.isEmpty {
+            let rows: [SpeakerRow] = speakers.enumerated().map { idx, s in
+                SpeakerRow(id: speakerUUIDs[s.id]!, meeting_id: meetingId,
+                           label: s.label, display_name: s.customName,
+                           kind: s.label == "user" ? "user" : "other", position: idx)
+            }
+            try await SupabaseClientHolder.shared.from("speakers").insert(rows).execute()
+        }
+        // 3. segments (replace). A share with no segments would render an empty
+        //    page, so treat "no segments" as a hard error the caller can gate on.
+        let segments = (try? repo.segments(forMeeting: meetingId)) ?? []
+        try await SupabaseClientHolder.shared
+            .from("segments").delete().eq("meeting_id", value: meetingId).execute()
+        let segRows: [SegmentRow] = segments.enumerated().compactMap { idx, s in
+            guard let spk = speakerUUIDs[s.speakerId] else { return nil }
+            return SegmentRow(id: UUID(), meeting_id: meetingId, speaker_id: spk,
+                              start_ms: s.startMs, end_ms: s.endMs, text: s.text, position: idx)
+        }
+        guard !segRows.isEmpty else { throw ShareSyncError.noSegments }
+        try await SupabaseClientHolder.shared.from("segments").insert(segRows).execute()
+        // 4. summary (optional — a meeting may not have one yet).
+        if let md = m.summary, !md.isEmpty {
+            let srow = SummaryRow(meeting_id: meetingId, markdown: md, model: nil)
+            try await SupabaseClientHolder.shared
+                .from("summaries").upsert(srow, onConflict: "meeting_id").execute()
+        }
+        FileLogger.log("SupabaseSync.pushForShare: \(meetingId) synced (\(speakers.count) speakers, \(segRows.count) segments)")
+    }
+
     // MARK: - Pull on sign-in
 
     /// Replace the local meetings cache with whatever the server has
