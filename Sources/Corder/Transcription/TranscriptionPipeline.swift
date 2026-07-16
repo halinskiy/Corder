@@ -1955,6 +1955,37 @@ final class TranscriptionPipeline {
                     throw WhisperTranscriber.WhisperError.tierRequired
                 }
             }
+            // FIRST-TRANSCRIPT RESCUE. The Turbo model is ~1.5 GB and is
+            // prefetched at launch, so a user who records and transcribes
+            // within the first minutes hits `ensureModelReady`, which then
+            // BLOCKS on the in-flight prefetch. Measured on a real user
+            // (0.15.44, launch day): he waited 4 minutes staring at
+            // "Downloading model…" and cancelled — the first transcript, on
+            // the first run, never arrived. So when the model isn't on disk
+            // yet, don't wait for it: transcribe THIS track in the cloud and
+            // let the download finish in the background. From the next
+            // transcript on, the model is local and nothing leaves the Mac.
+            //
+            // Signed-in only: the Worker authenticates by JWT (and meters the
+            // free monthly cloud budget), so a guest has no cloud to fall back
+            // to and waits for the model exactly as before.
+            let localVariant = AppSettings.whisperLocalVariant
+            if !LocalWhisperTranscriber.isModelDownloaded(localVariant), AppSettings.isSignedIn {
+                let pct = LocalWhisperTranscriber.currentProgress(localVariant).map { Int($0 * 100) }
+                FileLogger.log("LocalWhisper: model still downloading (\(pct.map { "\($0)%" } ?? "queued")), transcribing this track in the cloud so the first transcript isn't blocked")
+                do {
+                    let prompt = AppVocabulary.current.nilIfEmpty
+                    return try await WhisperTranscriber.transcribe(
+                        audioURL: wavURL, mode: .single, initialPrompt: prompt,
+                        backend: .groq, onProgress: onProgress)
+                } catch {
+                    // Cloud refused (over the free budget, no network, Worker
+                    // down). Fall through to the local path and wait for the
+                    // model — slow, but it still produces a transcript.
+                    FileLogger.log("LocalWhisper: cloud bridge failed (\(error)), waiting for the on-device model instead")
+                }
+            }
+
             do {
                 // Same vocabulary lever as cloud Whisper, but
                 // LocalWhisperTranscriber tokenises the prompt itself
@@ -1962,7 +1993,7 @@ final class TranscriptionPipeline {
                 // is the user's picked size (turbo/small/base/tiny);
                 // ensureModelReady downloads on demand if the picked
                 // variant isn't on disk yet.
-                let variant = AppSettings.whisperLocalVariant
+                let variant = localVariant
                 try await LocalWhisperTranscriber.ensureModelReady(variant)
                 let prompt = AppVocabulary.current.nilIfEmpty
                 return try await LocalWhisperTranscriber.transcribe(

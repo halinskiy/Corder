@@ -360,8 +360,23 @@ enum LocalWhisperTranscriber {
             // and the transcription never spins forever on a wedged fetch.
             var lastProg = currentProgress(variant) ?? 0
             var lastAdvance = Date()
+            // Heartbeat the download into the log. Bug reports are just this
+            // log, and a user who gave up waiting produced NOTHING between
+            // "prewarm in flight" and his cancel — so we couldn't tell a
+            // 2 MB/s link from a stalled one, which is exactly what we needed
+            // to know. One line per 10% (or per 15 s of silence) is enough to
+            // reconstruct the wait afterwards.
+            let waitStart = Date()
+            var lastLoggedDecile = -1
+            var lastLogAt = Date()
             while let p = currentProgress(variant) {
                 if p > lastProg { lastProg = p; lastAdvance = Date() }
+                let decile = Int(p * 10)
+                if decile > lastLoggedDecile || Date().timeIntervalSince(lastLogAt) >= 15 {
+                    lastLoggedDecile = decile
+                    lastLogAt = Date()
+                    FileLogger.log("LocalWhisper: waiting on prewarm \(Int(p * 100))% after \(Int(Date().timeIntervalSince(waitStart)))s")
+                }
                 if Date().timeIntervalSince(lastAdvance) >= 120 {
                     FileLogger.log("LocalWhisper: prewarm download stalled 120s (\(Int(lastProg * 100))%), proceeding without it")
                     break
