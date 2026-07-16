@@ -276,6 +276,17 @@ export async function retranscribe(id: string): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+/// Create a public share link for a meeting. The backend verifies the
+/// transcript is in the cloud, uploads the compact audio, and records the
+/// share via the Worker; returns the public URL. Throws with a user-facing
+/// message on any failure (surfaced in the Share modal).
+export async function shareMeeting(id: string): Promise<string> {
+  const r = await fetch(`/api/meetings/${id}/share`, { method: "POST" });
+  const j = (await r.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
+  if (!r.ok || !j.ok || !j.url) throw new Error(j.error || `HTTP ${r.status}`);
+  return j.url;
+}
+
 /// Returns the cached summary or generates one on the spot (the
 /// backend blocks on the Gemini call, so this request can take a few
 /// seconds the first time per meeting). Pass `force=true` to skip the

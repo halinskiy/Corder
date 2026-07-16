@@ -207,6 +207,14 @@ interface Strings {
   download_format_desc?: string;
   download_nothing?: string;
   download_title: string;
+  share_title?: string;
+  share_creating?: string;
+  share_copy?: string;
+  share_copied?: string;
+  share_note?: string;
+  share_retry?: string;
+  share_btn_title?: string;
+  share_clip_title?: string;
   ghost_video_title?: string;
   ghost_video_sub?: string;
   ghost_video_cta?: string;
@@ -598,6 +606,14 @@ const en: Strings = {
   download_markdown: "Transcript as Markdown",
   download_json: "Transcript as JSON",
   download_all: "Everything as one archive",
+  share_title: "Share this meeting",
+  share_creating: "Creating link…",
+  share_copy: "Copy link",
+  share_copied: "Copied",
+  share_note: "Anyone with the link can view. Expires in 30 days.",
+  share_retry: "Try again",
+  share_btn_title: "Share a link",
+  share_clip_title: "Share a clip (coming soon)",
   profile_title: "Profile",
   profile_name: "Kostiantyn Halynskyi",
   profile_sub: "id #012103",

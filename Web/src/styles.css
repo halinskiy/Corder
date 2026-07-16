@@ -3412,7 +3412,64 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* Download button sits right of the scrub bar with an extra 8 px so the
    pill of the scrub doesn't crowd the round button. */
-.audio-download-btn { margin-left: 8px; }
+.audio-share-btn { margin-left: 8px; }
+.audio-clip-btn { margin-left: 4px; }
+/* The clip button is a disabled placeholder for the upcoming "share a clip"
+   feature: muted, no hover, not clickable. */
+.audio-clip-btn:disabled,
+.audio-clip-btn[disabled] {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ── Share modal ─────────────────────────────────────────────────────────
+   Reuses the .update-overlay / .update-card semi-3D shell; only the body
+   layout is share-specific. */
+.share-card { width: 420px; }
+.share-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+.share-loading {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg-muted);
+  padding: 12px 0;
+}
+.share-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.share-link-input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: 13px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-overflow: ellipsis;
+}
+.share-copy { flex-shrink: 0; }
+.share-note {
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.4;
+}
+.share-error { gap: 10px; }
+.share-error-msg {
+  font-size: 13.5px;
+  color: var(--fg);
+  line-height: 1.5;
+}
 .audio-btn {
   background: transparent;
   border: none;

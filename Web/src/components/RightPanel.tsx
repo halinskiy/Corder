@@ -1,14 +1,13 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { Download, Maximize2, X, Play } from "lucide-react";
+import { Share2, Scissors, Maximize2, X, Play } from "lucide-react";
 import {
-  MeetingDetail, audioSrc, videoSrc, videoWithAudioSrc, audioM4ASrc,
-  transcriptSrc, transcriptMdSrc, transcriptJsonSrc, bundleSrc,
+  MeetingDetail, audioSrc, videoSrc,
 } from "../api";
+import { ShareModal } from "./ShareModal";
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
 import { Tooltip } from "./Tooltip";
-import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { displaySpeakerName } from "../format";
 import { getSettings, requestScreenRecording } from "../api";
 
@@ -18,16 +17,14 @@ interface Props {
   onTimeUpdate: (sec: number) => void;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
-  /// Download mode is a sibling of "Recording" inside this column
-  /// state lives in the parent so the tab strip's `← Download`
-  /// back-chip can drive it without a ref-chain.
-  downloadOpen: boolean;
-  onDownloadChange: (open: boolean) => void;
   t: T;
   lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, downloadOpen, onDownloadChange, t, lang = "en" }: Props) {
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "en" }: Props) {
+  // Share opens a modal (create link + copy), replacing the old inline
+  // download chooser.
+  const [shareOpen, setShareOpen] = React.useState(false);
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   // Whether macOS Screen Recording is granted. When it isn't, video capture is
@@ -70,20 +67,15 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
   const isRecording = detail.status === "recording";
   // A finalised, playable video file (ready meeting with a video).
   const hasFinalisedVideo = detail.has_video && !isRecording;
-  // The whole VIDEO SLOT (real player / ghost pitch / "shows here" placeholder)
-  // stays put when the Download view opens, it does NOT gate on downloadOpen.
-  // Only the bottom section swaps (Timeline ↔ Download chooser), so the top of
-  // the panel never jumps. (The video used to vanish on download, which read as
-  // a bug.)
+  // The video slot (real player / ghost pitch / "shows here" placeholder) sits
+  // above the audio scrubber and the speaker timeline; it stays mounted so
+  // playback never stops.
   const showScreenVideo = hasFinalisedVideo;
   const wantVideoSlot = captureVideo && !hasFinalisedVideo;
   const showGhostVideo = wantVideoSlot && screenGranted === false;
   const showVideoPlaceholder = wantVideoSlot && screenGranted === true && isRecording;
   return (
     <div className="right-panel">
-      {/* Download is its own view for the BOTTOM section only (Timeline ↔
-          Download chooser). The video slot + audio scrubber stay mounted above
-          it so playback never stops and the panel top doesn't jump. */}
       {showScreenVideo && (
         <ScreenVideo
           detail={detail}
@@ -98,13 +90,13 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
         detail={detail}
         audioRef={audioRef}
         onTimeUpdate={onTimeUpdate}
-        downloadOpen={downloadOpen}
-        onToggleDownload={() => onDownloadChange(!downloadOpen)}
+        onShare={() => setShareOpen(true)}
         t={t}
       />
-      {downloadOpen
-        ? <DownloadView detail={detail} t={t} />
-        : <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />}
+      <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
+      {shareOpen && (
+        <ShareModal meetingId={detail.id} onClose={() => setShareOpen(false)} t={t} />
+      )}
     </div>
   );
 }
@@ -206,105 +198,6 @@ export function GhostRecordingPanel({ t, recording = false }: { t: T; recording?
         <div className="ghost-timeline-label">Timeline</div>
         <div className="ghost-timeline-row"><span className="ghost-timeline-name" /><div className="ghost-timeline-bar" /></div>
         <div className="ghost-timeline-row"><span className="ghost-timeline-name" /><div className="ghost-timeline-bar" /></div>
-      </div>
-    </div>
-  );
-}
-
-/// Inline download chooser: replaces the Recording-tab content in
-/// place. Same `.clarify-btn` outline-card vocabulary as the rest of
-/// the design system, no icons (consistency with the other inline
-/// banners). The audio element lives a sibling level up and stays
-/// mounted while this view is on screen, so playback continues.
-/// Solid Download glyph for the active-state Download button on the
-/// audio scrubber, same Heroicons Solid path used by SettingsFilled /
-/// ArchiveFilled in MainHeader. Inline so we don't pull a fresh
-/// dependency for a single icon.
-function DownloadFilled({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden
-    >
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Zm-9 13.5a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" />
-    </svg>
-  );
-}
-
-function DownloadView({
-  detail, t,
-}: {
-  detail: MeetingDetail;
-  t: T;
-}) {
-  // Gate each option on whether its content actually exists, so the Download
-  // CTA is never a live green button when there's nothing to save (a failed or
-  // empty meeting). `duration_ms > 0` means a real recording with audio.
-  const hasAudio = (detail.duration_ms ?? 0) > 0;
-  const hasTranscript = detail.segments.length > 0;
-  // The "everything as one archive" zip only makes sense when it would bundle
-  // MORE THAN ONE artefact. With a single thing to save (e.g. only Audio), the
-  // zip is redundant with that one option, so hide it.
-  const artifactCount = [!!detail.has_video, hasAudio, hasTranscript].filter(Boolean).length;
-  type Row = { value: string; label: string; href: string; file: string; show: boolean };
-  const rows: Row[] = [
-    // Video is offered ONLY muxed with audio, a silent .mov download was
-    // useless and huge (it has no audio track; we capture sound
-    // separately). Audio-only is the compressed AAC .m4a, not the
-    // half-gigabyte raw .wav.
-    { value: "video",      label: t.download_video,      href: videoWithAudioSrc(detail.id), file: `corder-${detail.id}.mp4`,  show: !!detail.has_video },
-    { value: "audio",      label: t.download_audio,      href: audioM4ASrc(detail.id),       file: `corder-${detail.id}.m4a`,  show: hasAudio },
-    { value: "transcript", label: t.download_transcript, href: transcriptSrc(detail.id),    file: `corder-${detail.id}.txt`,  show: hasTranscript },
-    { value: "markdown",   label: t.download_markdown,   href: transcriptMdSrc(detail.id),  file: `corder-${detail.id}.md`,   show: hasTranscript },
-    { value: "json",       label: t.download_json,       href: transcriptJsonSrc(detail.id),file: `corder-${detail.id}.json`, show: hasTranscript },
-    { value: "bundle",     label: t.download_all,        href: bundleSrc(detail.id),        file: `corder-${detail.id}.zip`,  show: artifactCount >= 2 },
-  ];
-  const visible = rows.filter((r) => r.show);
-  const isEmpty = visible.length === 0;
-  const [picked, setPicked] = React.useState<string>(visible[0]?.value ?? "audio");
-  const active = visible.find((r) => r.value === picked) ?? visible[0];
-  const options: SettingsSelectOption<string>[] = visible.map((r) => ({
-    value: r.value,
-    label: r.label,
-  }));
-  return (
-    <div className="inline-view download-view">
-      <div className="hk-block mic-block download-block" aria-label={t.download_title}>
-        <div className="settings-row-label">{t.download_title}</div>
-        <div className="settings-row-desc">
-          {isEmpty
-            ? (t.download_nothing ?? "Nothing to export yet.")
-            : (t.download_format_desc ?? "Pick which file to save.")}
-        </div>
-        {!isEmpty && (
-          <SettingsSelect
-            value={picked}
-            options={options}
-            onChange={setPicked}
-            ariaLabel={t.download_title}
-          />
-        )}
-        <button
-          type="button"
-          className="clarify-btn accent bigbtn-full download-cta"
-          onClick={() => {
-            if (!active?.href) return;
-            // `<a href download>` in WKWebView silently no-ops on
-            // some macOS versions, the `download` attribute isn't
-            // honoured. Forcing a navigation to the same-origin file
-            // endpoint is the path that DOES reliably trip
-            // `WebDownloadDelegate.decidePolicyFor → .download` and
-            // opens the native Save panel.
-            window.location.assign(active.href);
-          }}
-          disabled={isEmpty || !active}
-        >
-          {t.download_title}
-        </button>
       </div>
     </div>
   );
@@ -822,13 +715,12 @@ function FsScrubber({
  *  time / duration, and a clickable scrub line. The native <audio>
  *  element is kept hidden, we drive it through React state. */
 function AudioCard({
-  detail, audioRef, onTimeUpdate, downloadOpen, onToggleDownload, t,
+  detail, audioRef, onTimeUpdate, onShare, t,
 }: {
   detail: MeetingDetail;
   audioRef: React.RefObject<HTMLAudioElement>;
   onTimeUpdate: (sec: number) => void;
-  downloadOpen: boolean;
-  onToggleDownload: () => void;
+  onShare: () => void;
   t: T;
 }) {
   const [playing, setPlaying] = React.useState(false);
@@ -918,16 +810,25 @@ function AudioCard({
             </div>
           )}
         </div>
+        {/* Share replaces the old per-file download chooser: one link that
+            carries the whole meeting (transcript + audio + summary). The
+            Scissors button to its right is a placeholder for the upcoming
+            "share a clip" feature (select a segment); it does nothing yet. */}
         <button
-          className={"toolbar-icon-btn audio-download-btn" + (downloadOpen ? " active" : "")}
-          onClick={onToggleDownload}
-          title={t.download_title}
-          aria-label={t.download_title}
-          aria-pressed={downloadOpen}
+          className="toolbar-icon-btn audio-share-btn"
+          onClick={onShare}
+          title={t.share_btn_title ?? "Share a link"}
+          aria-label={t.share_btn_title ?? "Share a link"}
         >
-          {downloadOpen
-            ? <DownloadFilled size={16} />
-            : <Download size={16} strokeWidth={2} />}
+          <Share2 size={16} strokeWidth={2} />
+        </button>
+        <button
+          className="toolbar-icon-btn audio-clip-btn"
+          title={t.share_clip_title ?? "Share a clip (coming soon)"}
+          aria-label={t.share_clip_title ?? "Share a clip (coming soon)"}
+          disabled
+        >
+          <Scissors size={16} strokeWidth={2} />
         </button>
       </div>
       <audio

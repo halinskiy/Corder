@@ -169,13 +169,6 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     // recording / integrations → close Settings
     onSettingsSectionChange(null);
   };
-  // Download view replaces the Recording-tab content in place; the
-  // tab strip then shows `← Download` instead of `Recording`. Lifted
-  // from RightPanel so the strip can render the back-chip without a
-  // ref-chain. Resets on every meeting switch, a stale "Download"
-  // chip would lie about the new meeting's state.
-  const [downloadOpen, setDownloadOpen] = React.useState(false);
-  React.useEffect(() => { setDownloadOpen(false); }, [meetingId]);
   // Reset the playhead on every meeting switch. RightPanel (and its
   // <audio>/<video>) stay mounted across switches, so a stale
   // `currentTime` from the previous session used to carry over, seek
@@ -645,8 +638,6 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               onTimeUpdate={setCurrentTime}
               currentTimeSec={currentTime}
               onSeek={onSeek}
-              downloadOpen={downloadOpen}
-              onDownloadChange={setDownloadOpen}
               t={t}
             />
           </div>
