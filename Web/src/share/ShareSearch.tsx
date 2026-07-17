@@ -16,13 +16,12 @@ export function ShareSearch({
 }) {
   const [open, setOpen] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const wrapRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  // Esc clears and collapses; a stray click outside collapses only if empty, so
-  // an active search isn't lost by clicking the page.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && open) { onQuery(""); setOpen(false); }
@@ -33,8 +32,26 @@ export function ShareSearch({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onQuery]);
 
+  // Click anywhere else — collapse and clear.
+  //
+  // `onBlur` on the input isn't enough: clicking a transcript turn (to seek)
+  // doesn't take focus, so the field just sat there open. Collapsing also
+  // CLEARS, because a collapsed circle next to still-highlighted text is a
+  // state nobody can explain.
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) {
+        onQuery("");
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open, onQuery]);
+
   return (
-    <div className={"sp-search" + (open ? " is-open" : "")}>
+    <div className={"sp-search" + (open ? " is-open" : "")} ref={wrapRef}>
       <button
         type="button"
         className="sp-corner-btn sp-search-btn"
@@ -51,7 +68,6 @@ export function ShareSearch({
         placeholder="Search the transcript"
         value={query}
         onChange={(e) => onQuery(e.target.value)}
-        onBlur={() => { if (!query) setOpen(false); }}
         tabIndex={open ? 0 : -1}
         aria-hidden={!open}
       />

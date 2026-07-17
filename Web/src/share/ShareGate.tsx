@@ -15,7 +15,7 @@ import React from "react";
 /// Dismissed by the button, Esc, or the backdrop, and it never blocks twice:
 /// the choice is remembered per browser, so a second link doesn't re-pitch
 /// someone who already said "maybe later".
-const SEEN_KEY = "corder.share.gateSeen";
+const SEEN_KEY = "corder.share.gateSeen.v2";
 
 export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null; downloadUrl: string }) {
   const [open, setOpen] = React.useState(() => {
