@@ -1,17 +1,16 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   share.getcorder.com — the page AROUND the window.
+   share.getcorder.com
 
-   The window itself is `hero-window.css`, vendored from the landing verbatim;
-   this file must not restate anything it already defines. What lives here:
-     · the page (dot-grid, blobs, nav pill, serif heading) — the landing's
-       hero, rebuilt from its globals.css / tokens.css values;
-     · the entry gate;
-     · the few deltas where the hero window is a MOCK and we have live data
-       (its scrub fill is a CSS keyframe; ours is driven by <audio>).
+   A document on a canvas. The page is the landing's atmosphere (dot-grid +
+   blobs); on it sits ONE sheet carrying the transcript, the way a Google Doc
+   sits on its own backdrop. Nothing else touches the reading column — the
+   brand mark, the audio and the download orb are pinned to corners.
 
-   Every value here is the landing's. Nothing invented: the brand has shipped
-   these for months, and an earlier cut of this page that guessed its own
-   numbers looked exactly like a guess.
+   Every value here comes from the landing's code, not from taste: tokens.css
+   for colour and type, Hero for the buttons, the CorderPresence orb (state B
+   of its morph) for the bottom-right, the cookie circle for the bottom-left
+   geometry. Earlier cuts of this page invented their own numbers and looked
+   exactly like that.
 
    The app's styles.css is NOT imported: it dresses a 3-column Mac window in
    5800 lines and styles bare elements (`button { border-radius: 999px }`),
@@ -25,6 +24,7 @@
   --color-accent-deep: #0e3d28;
   --color-bg: #ffffff;
   --color-surface: #f7f7f6;
+  --color-surface-2: #fafaf8;
   --color-border: #ececea;
   --color-border-strong: #d8d8d4;
   --color-text: #0e0e0d;
@@ -34,10 +34,20 @@
   --font-serif: "IBM Plex Serif", Georgia, serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --radius-pill: 999px;
-  --lh-display: 1.05;
+  --radius-window: 12px;
   --lh-body: 1.6;
   --ls-display: -0.018em;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Speaker palette: the app's (styles.css :root), which the landing's demo
+     uses too. The purple is NOT a second brand colour — it only ever appears
+     as a speaker. */
+  --sp-speaker-1: #5a3aa6;
+  --sp-speaker-2: #1f7a4f;
+  --sp-speaker-3: #b03a3a;
+  --sp-speaker-4: #1a4f8a;
+  /* The corner inset the landing pins its cookie circle and orb to. */
+  --sp-inset: 32px;
+  --sp-orb: 56px;
 }
 ::selection { background: rgba(33, 122, 80, 0.22); color: inherit; }
 
@@ -46,92 +56,256 @@ body { margin: 0; }
 .sp-spin { animation: sp-spin 0.9s linear infinite; }
 @keyframes sp-spin { to { transform: rotate(360deg); } }
 
-/* One screen, strictly. The page itself NEVER scrolls on a desktop: nav and
-   heading take what they need, the window takes the rest of the viewport, and
-   the only scrollers are the columns inside it. That's why the window can't
-   keep the landing's fixed 1180:720 here — the ratio is right for a hero that
-   the page scrolls past, wrong for a page that must fit. Width still caps at
-   1180 and the inside keeps its natural 14px scale; only the height flexes. */
 .sp-page {
   position: relative;
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: clip;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
 }
-.sp-nav-wrap { flex-shrink: 0; }
 .sp-page--center { display: flex; align-items: center; justify-content: center; padding: 24px; }
 
 /* ── Atmosphere: the landing's hero, exactly ──
-   The blobs carry NO blur. They were blurred + animated until 2026-05-22, when
-   six animated blurred fills held Speed Index at 12.9s; they're shape-morphed
-   ovals now, filled rgba(33,122,80,0.06). */
-.sp-atmos { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: clip; }
+   The blobs carry NO blur: blur + animation were dropped there on 2026-05-22,
+   when six animated blurred fills held Speed Index at 12.9s. */
+.sp-atmos { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: clip; }
 .sp-blob {
   position: absolute;
   border-radius: 58% 42% 55% 45% / 55% 50% 50% 45%;
   background: rgba(33, 122, 80, 0.06);
 }
-.sp-blob--tr { top: 60px; right: -140px; width: 620px; height: 540px; }
+.sp-blob--tr { top: -60px; right: -140px; width: 620px; height: 540px; }
 .sp-blob--bl {
-  top: 120px; left: -160px; width: 560px; height: 500px;
+  bottom: -80px; left: -160px; width: 560px; height: 500px;
   border-radius: 52% 48% 48% 52% / 48% 56% 44% 52%;
 }
 .sp-dots {
-  position: absolute;
-  inset: 128px 0 0 0;
+  position: absolute; inset: 0;
   background-image: radial-gradient(circle, var(--color-border) 1px, transparent 1px);
   background-size: 24px 24px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.6) 18%, rgba(0,0,0,0.6) 82%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.6) 18%, rgba(0,0,0,0.6) 82%, transparent 100%);
-}
-@media (max-width: 768px) {
-  .sp-blob--tr { top: 48px; right: -100px; width: 420px; height: 360px; }
-  .sp-blob--bl { top: 100px; left: -120px; width: 380px; height: 340px; }
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.55) 14%, rgba(0,0,0,0.55) 86%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.55) 14%, rgba(0,0,0,0.55) 86%, transparent 100%);
 }
 
-/* ── Nav pill: corder-landing/src/components/sections/Nav.tsx ── */
-.sp-nav-wrap {
-  position: relative; z-index: 3;
-  display: flex; justify-content: center;
-  padding: 12px 16px 0;
+/* ── Brand mark: the only chrome ── */
+.sp-brand {
+  position: fixed;
+  top: var(--sp-inset); left: var(--sp-inset);
+  z-index: 20;
+  display: inline-flex;
+  text-decoration: none;
+  transition: transform 150ms var(--ease-out);
 }
-.sp-nav {
-  display: flex; align-items: center; gap: 8px;
-  height: 56px; max-width: 100%;
-  padding-left: 16px; padding-right: 8px;
+.sp-brand img { display: block; }
+.sp-brand:hover { transform: scale(1.06); }
+.sp-brand:active { transform: scale(0.96); }
+
+/* ── The sheet ──
+   816px is A4 at 96dpi (794) rounded to the grid: the width a document is
+   supposed to be, and close to the 65-80 characters a line should hold. The
+   bottom padding clears the docked audio. */
+.sp-sheet-wrap {
+  position: relative; z-index: 1;
+  padding: 96px 24px 140px;
+}
+.sp-sheet {
+  max-width: 816px;
+  margin: 0 auto;
+  padding: 64px 72px 72px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-window);
+  /* The landing's window shadow, two layers. */
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05), 0 18px 40px rgba(0, 0, 0, 0.07);
+  animation: sp-sheet-in 700ms var(--ease-out) both;
+}
+@keyframes sp-sheet-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.995); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.sp-doc-head {
+  padding-bottom: 28px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--color-border);
+}
+.sp-doc-title {
+  margin: 0;
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 34px; line-height: 1.15; letter-spacing: var(--ls-display);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.sp-doc-meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 12px 0 0;
+  font-size: 14px; color: var(--color-text-muted);
+}
+.sp-doc-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--color-border-strong); }
+.sp-doc-by { color: var(--color-accent); font-weight: 500; }
+
+/* ── Turns ── */
+.sp-turns { display: flex; flex-direction: column; }
+.sp-turn {
+  display: flex; gap: 14px;
+  padding: 10px 12px; margin: 0 -12px;
+  border-radius: 8px;
+  transition: background-color 220ms var(--ease-out);
+  animation: sp-turn-in 460ms var(--ease-out) both;
+}
+@keyframes sp-turn-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sp-turn.is-active { background: rgba(33, 122, 80, 0.07); }
+.sp-avatar {
+  flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; color: #fff;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+.sp-turn-body { min-width: 0; flex: 1; }
+.sp-turn-head { display: flex; align-items: baseline; gap: 8px; }
+.sp-turn-name { font-size: 13.5px; font-weight: 600; }
+.sp-turn-time {
+  padding: 0; border: none; background: none;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.sp-turn:hover .sp-turn-time, .sp-turn.is-active .sp-turn-time { opacity: 1; }
+.sp-turn-time:hover { color: var(--color-accent); }
+.sp-turn-text {
+  margin: 3px 0 0;
+  font-size: 16px; line-height: 1.65;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* ── Docked audio ──
+   Fixed bottom-left, running to the orb. The inset mirrors the landing's
+   cookie circle, so the two corners read as one row. */
+.sp-dock {
+  position: fixed;
+  z-index: 25;
+  left: var(--sp-inset);
+  bottom: max(var(--sp-inset), calc(env(safe-area-inset-bottom, 0px) + 28px));
+  right: calc(var(--sp-inset) + var(--sp-orb) + 16px);
+  height: var(--sp-orb);
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 20px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
-  background-color: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(0, 0, 0, 0.07);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.08);
+  animation: sp-dock-in 620ms var(--ease-out) 240ms both;
 }
-.sp-nav-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
-.sp-nav-brand img { display: block; }
-.sp-nav-word {
-  font-family: var(--font-serif);
-  font-size: 18px; font-weight: 500; letter-spacing: -0.01em;
-  color: var(--color-text);
+@keyframes sp-dock-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.sp-nav-sep { width: 1px; height: 20px; margin: 0 8px; background: rgba(0, 0, 0, 0.1); flex-shrink: 0; }
-.sp-nav-links { display: flex; align-items: center; gap: 4px; }
-.sp-nav-link {
-  padding: 8px 12px;
-  font-size: 15px; font-weight: 500;
+.sp-dock-play {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: var(--color-accent); color: #fff;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+.sp-dock-play svg { width: 13px; height: 13px; }
+.sp-dock-play:hover { background: var(--color-accent-hover); transform: scale(1.06); }
+.sp-dock-play:active { transform: scale(0.96); }
+.sp-dock-time {
+  flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 11.5px;
   color: var(--color-text-muted);
-  text-decoration: none;
-  transition: color 150ms var(--ease-out);
+  font-variant-numeric: tabular-nums;
 }
-.sp-nav-link:hover { color: var(--color-text); }
+.sp-dock-time--end { color: var(--color-text-subtle); }
 
-/* ── CTAs: the landing's .cta-pill / .nav-cta ── */
+/* ONE track. Every turn drawn at its real position in its speaker's colour, so
+   the conversation is a single object: who held the floor, where it went back
+   and forth, where the silences are. The two-lane version was honest but busy;
+   this says the same thing in one line. */
+.sp-dock-track {
+  position: relative; flex: 1; min-width: 0;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  overflow: hidden;
+  cursor: pointer;
+}
+.sp-dock-mark {
+  position: absolute; top: 5px; bottom: 5px;
+  border-radius: 2px;
+  opacity: 0.85;
+  transform-origin: left center;
+  animation: sp-mark-in 420ms var(--ease-out) both;
+}
+@keyframes sp-mark-in {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 0.85; }
+}
+/* Played region is a wash OVER the marks, not a fill that hides them. */
+.sp-dock-played {
+  position: absolute; inset: 0 auto 0 0;
+  background: rgba(14, 14, 13, 0.07);
+  pointer-events: none;
+  transition: width 120ms linear;
+}
+.sp-dock-head {
+  position: absolute; top: -2px; bottom: -2px;
+  width: 2px; margin-left: -1px;
+  background: var(--color-text);
+  border-radius: 1px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  /* Eases between timeupdate ticks (~4/s) instead of stepping. */
+  transition: left 120ms linear;
+}
+.sp-dock-tip {
+  position: absolute; bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 9px;
+  background: var(--color-text); color: #fff;
+  border-radius: 6px;
+  font-family: var(--font-mono); font-size: 11px;
+  white-space: nowrap; pointer-events: none;
+}
+.sp-dock-tip b { font-family: var(--font-sans); font-weight: 500; }
+
+/* ── Download orb: the landing's CorderPresence orb (state B), value-for-value ── */
+.sp-orb {
+  position: fixed;
+  z-index: 25;
+  right: var(--sp-inset);
+  bottom: max(var(--sp-inset), calc(env(safe-area-inset-bottom, 0px) + 28px));
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+  animation: sp-dock-in 620ms var(--ease-out) 320ms both;
+}
+.sp-orb:hover { background: var(--color-accent-hover); transform: scale(1.06); }
+.sp-orb:active { transform: scale(0.96); }
+.sp-orb:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+/* ── Buttons: the landing's .cta-pill ── */
 .sp-cta {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: var(--radius-pill);
@@ -144,7 +318,7 @@ body { margin: 0; }
     transform 150ms var(--ease-out);
 }
 .sp-cta:active { transform: scale(0.98); }
-/* .cta-pill--primary at the hero's geometry: 56px tall, 17px/500, min 260px. */
+/* .cta-pill--primary at the hero's geometry: 56px tall, 17px/500. */
 .sp-cta--primary {
   height: 56px; padding: 0 36px; min-width: 260px;
   font-size: 17px;
@@ -157,6 +331,9 @@ body { margin: 0; }
   border-color: var(--color-accent-hover);
   transform: translateY(-1px);
 }
+/* .cta-pill--ghost. The fill is OPAQUE white, not transparent — the landing's
+   own comment explains why: the blobs pass under it and their edge shows
+   through a transparent pill. This page has the same blobs. */
 .sp-cta--ghost {
   height: 56px; padding: 0 36px; min-width: 220px;
   font-size: 17px;
@@ -164,361 +341,9 @@ body { margin: 0; }
   border: 1px solid var(--color-border);
   color: var(--color-text);
 }
-.sp-cta--ghost:hover {
-  border-color: var(--color-text);
-  background-color: var(--color-surface);
-}
+.sp-cta--ghost:hover { border-color: var(--color-text); background-color: var(--color-surface); }
 
-/* Nav CTA with the landing's scroll-state (.nav-cta--scroll-state): a hairline
-   ghost at the top of the page, accent fill once scrolled past 8px. */
-.sp-nav-cta {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 40px; padding: 0 20px 0 14px; margin-left: 8px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border-strong);
-  background-color: transparent;
-  color: var(--color-text);
-  font-size: 15px; font-weight: 500;
-  text-decoration: none; white-space: nowrap;
-  transition:
-    background-color 150ms var(--ease-out),
-    border-color 150ms var(--ease-out),
-    color 150ms var(--ease-out),
-    transform 150ms var(--ease-out);
-}
-.sp-nav-cta:hover { background-color: rgba(0, 0, 0, 0.04); border-color: var(--color-text); }
-.sp-nav-cta:active { transform: scale(0.98); }
-[data-scrolled="true"] .sp-nav-cta {
-  background-color: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-bg);
-}
-[data-scrolled="true"] .sp-nav-cta:hover {
-  background-color: var(--color-accent-deep);
-  border-color: var(--color-accent-deep);
-}
-/* Inside the window's header strip: the app's scale, not the page's. */
-.sp-cta--nav {
-  height: 32px; padding: 0 14px 0 11px;
-  font-size: 13px;
-  background-color: var(--hl-accent);
-  border: 1px solid var(--hl-accent);
-  color: #fff;
-}
-.sp-cta--nav:hover { background-color: var(--hl-accent-pressed); border-color: var(--hl-accent-pressed); }
-
-/* ── Container + heading ──
-   .page-container is 1260 = the 1180 window + 2×40 padding, so the heading
-   lines up with the window's edges exactly as the landing's sections do. */
-.sp-container {
-  position: relative; z-index: 1;
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column;
-  width: 100%; max-width: 1260px;
-  margin-inline: auto;
-  padding: 14px 16px 16px;
-}
-@media (min-width: 768px)  { .sp-container { padding-inline: 32px; } }
-@media (min-width: 1024px) { .sp-container { padding-inline: 40px; } }
-
-.sp-head { flex-shrink: 0; text-align: center; margin-bottom: 12px; }
-.sp-shared-by {
-  margin: 0;
-  font-size: 15px; color: var(--color-text-muted);
-}
-.sp-shared-by span { color: var(--color-accent); font-weight: 500; }
-.sp-title {
-  margin: 0;
-  font-family: var(--font-serif); font-weight: 500;
-  /* The hero's h1 is clamp(36px, 5.2vw, 72px) for three words. A meeting title
-     is longer, so it sits one step down the same scale. */
-  font-size: clamp(24px, 2.6vw, 38px);
-  line-height: var(--lh-display);
-  letter-spacing: var(--ls-display);
-  color: var(--color-text);
-  text-wrap: balance;
-  overflow-wrap: anywhere;
-}
-.sp-sub {
-  margin: 12px auto 0; max-width: 640px;
-  font-size: 18px; line-height: var(--lh-body);
-  color: var(--color-text-muted);
-}
-.sp-hint {
-  flex-shrink: 0;
-  margin: 10px 0 0;
-  font-size: 14px; line-height: 1.45;
-  color: var(--color-text-subtle); text-align: center;
-}
-
-/* ── The window ──
-   The vendored hero-window.css still supplies the shell (border, radius, the
-   two-layer shadow, the app's 14px scale and its speaker palette). Everything
-   below is this page's own composition, because a shared meeting isn't the
-   app's three-column library: it's one recording.
-
-   Layout, top to bottom: title, the player, then transcript + summary side by
-   side. No tabs — the transcript is what Granola never shows on the web, the
-   summary is what Loom buries a tab deep; showing both at once is the whole
-   argument for this page. */
-.sp-demo {
-  flex: 1; min-height: 0;
-  aspect-ratio: auto !important;
-  height: auto;
-  display: flex; flex-direction: column;
-  /* The landing reveals its window on scroll with this exact move. */
-  animation: sp-window-in 900ms var(--ease-out) both;
-}
-@keyframes sp-window-in {
-  from { opacity: 0; transform: perspective(1600px) rotateX(9deg) translateY(24px) scale(0.985); }
-  to   { opacity: 1; transform: perspective(1600px) rotateX(0) translateY(0) scale(1); }
-}
-
-.sp-win-head {
-  flex-shrink: 0;
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
-  padding: 20px 24px 16px;
-}
-.sp-win-titles { min-width: 0; }
-.sp-win-title {
-  margin: 0;
-  font-family: var(--font-serif); font-weight: 500;
-  font-size: 24px; line-height: 1.2; letter-spacing: -0.012em;
-  color: var(--hl-fg);
-  overflow-wrap: anywhere;
-}
-.sp-win-meta {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  margin: 6px 0 0;
-  font-size: 13px; color: var(--hl-fg-muted);
-}
-.sp-win-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--hl-border-strong); }
-.sp-win-by {
-  flex-shrink: 0; margin: 0;
-  font-size: 13px; color: var(--hl-fg-muted); white-space: nowrap;
-}
-.sp-win-by span { color: var(--hl-accent); font-weight: 600; }
-
-/* ── Player: the conversation IS the scrubber ── */
-.sp-player {
-  flex-shrink: 0;
-  display: flex; align-items: center; gap: 16px;
-  padding: 4px 24px 18px;
-}
-.sp-play {
-  flex-shrink: 0;
-  width: 44px; height: 44px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%;
-  background: var(--hl-accent); color: #fff;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 16px -6px rgba(33, 122, 80, 0.5);
-  transition:
-    background-color 150ms var(--ease-out),
-    transform 150ms var(--ease-out),
-    box-shadow 150ms var(--ease-out);
-}
-.sp-play svg { width: 15px; height: 15px; }
-.sp-play:hover { background: var(--hl-accent-pressed); transform: scale(1.06); box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 10px 22px -8px rgba(33,122,80,0.6); }
-.sp-play:active { transform: scale(0.96); }
-.sp-play:disabled { opacity: 0.4; pointer-events: none; }
-
-.sp-lanes-wrap { flex: 1; min-width: 0; }
-.sp-lanes { position: relative; display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
-.sp-lane { display: flex; align-items: center; gap: 10px; }
-.sp-lane-badge {
-  flex-shrink: 0;
-  width: 22px; height: 22px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9.5px; font-weight: 600; color: #fff;
-  letter-spacing: 0.02em;
-}
-.sp-lane-track {
-  position: relative; flex: 1; min-width: 0;
-  height: 22px;
-  border-radius: 5px;
-  background: var(--hl-bg-elev);
-  overflow: hidden;
-}
-.sp-lane-seg {
-  position: absolute; top: 0; bottom: 0;
-  border-radius: 2px;
-  opacity: 0.9;
-  /* Turns grow out of the lane on load, left to right, so the map draws itself
-     rather than appearing. */
-  transform-origin: left center;
-  animation: sp-seg-in 520ms var(--ease-out) both;
-}
-@keyframes sp-seg-in {
-  from { transform: scaleX(0); opacity: 0; }
-  to   { transform: scaleX(1); opacity: 0.9; }
-}
-.sp-lane:nth-child(1) .sp-lane-seg { animation-delay: 260ms; }
-.sp-lane:nth-child(2) .sp-lane-seg { animation-delay: 340ms; }
-.sp-lane:nth-child(3) .sp-lane-seg { animation-delay: 420ms; }
-.sp-lane:nth-child(4) .sp-lane-seg { animation-delay: 500ms; }
-.sp-lane-share {
-  flex-shrink: 0; width: 30px;
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--hl-fg-muted); text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-/* Playhead spans every lane: one instant across the whole conversation. */
-.sp-playhead {
-  position: absolute; top: -2px; bottom: -2px;
-  width: 2px; margin-left: -1px;
-  background: var(--hl-fg);
-  border-radius: 1px;
-  box-shadow: 0 0 0 2px var(--hl-bg);
-  pointer-events: none;
-  /* Follows the audio smoothly instead of stepping with timeupdate (~4/s). */
-  transition: left 120ms linear;
-  z-index: 2;
-}
-.sp-hover-line {
-  position: absolute; top: -2px; bottom: -2px;
-  width: 1px; margin-left: -0.5px;
-  background: var(--hl-border-strong);
-  pointer-events: none;
-  z-index: 1;
-}
-.sp-times {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-top: 7px;
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--hl-fg-dim);
-  font-variant-numeric: tabular-nums;
-}
-.sp-times-hover { color: var(--hl-fg); }
-
-/* ── Columns ── */
-.sp-cols {
-  flex: 1; min-height: 0;
-  display: grid; grid-template-columns: minmax(0, 1fr) 340px;
-  border-top: 1px solid var(--hl-border);
-}
-.sp-cols--solo { grid-template-columns: minmax(0, 1fr); }
-/* min-height: 0 is load-bearing: a grid item defaults to min-height: auto and
-   refuses to shrink below its content, so the transcript grew to its full
-   3752px and pushed out of the window instead of scrolling inside it. */
-.sp-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.sp-col--rail { background: var(--hl-bg-elev); border-left: 1px solid var(--hl-border); }
-.sp-col-head {
-  flex-shrink: 0;
-  padding: 16px 20px 8px;
-  font-size: 11px; font-weight: 600;
-  letter-spacing: 0.07em; text-transform: uppercase;
-  color: var(--hl-fg-dim);
-}
-
-/* ── Transcript ── */
-.sp-search {
-  flex-shrink: 0;
-  position: relative;
-  margin: 14px 20px 4px;
-}
-.sp-search svg {
-  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  width: 14px; height: 14px; color: var(--hl-fg-dim); pointer-events: none;
-}
-.sp-search input {
-  width: 100%; height: 34px;
-  padding: 0 12px 0 34px;
-  border: 1px solid transparent; border-radius: 999px;
-  background: var(--hl-bg-elev);
-  color: var(--hl-fg);
-  font: inherit; font-size: 13px;
-  outline: none;
-  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out);
-}
-.sp-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
-.sp-search input:focus { background: var(--hl-bg); border-color: var(--hl-border-strong); }
-.sp-search input::placeholder { color: var(--hl-fg-dim); }
-
-.sp-transcript {
-  flex: 1; min-height: 0; overflow-y: auto;
-  padding: 10px 20px 20px;
-  scroll-behavior: smooth;
-  overscroll-behavior: contain;
-}
-.sp-transcript::-webkit-scrollbar { width: 10px; }
-.sp-transcript::-webkit-scrollbar-thumb {
-  background: var(--hl-border-strong); border: 3px solid var(--hl-bg); border-radius: 999px;
-}
-
-/* One turn = avatar + name + what was said, tight. The vendored demo separates
-   speakers by 24px, which reads right for its three mock turns and rhythmless
-   across a real 24-turn transcript. */
-.sp-turn {
-  display: flex; gap: 10px;
-  padding: 7px 8px; margin: 0 -8px;
-  border-radius: 7px;
-  transition: background-color 200ms var(--ease-out);
-  animation: sp-turn-in 420ms var(--ease-out) both;
-}
-@keyframes sp-turn-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.sp-turn + .sp-turn { margin-top: 2px; }
-.sp-turn:hover { background: var(--hl-bg-hover); }
-.sp-turn.is-active { background: color-mix(in srgb, var(--hl-accent) 9%, transparent); }
-.sp-avatar {
-  flex-shrink: 0;
-  width: 24px; height: 24px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 600; color: #fff;
-  /* Aligns with the first line of the paragraph, not its box. */
-  margin-top: 1px;
-}
-.sp-turn-body { min-width: 0; flex: 1; }
-.sp-turn-head { display: flex; align-items: baseline; gap: 8px; }
-.sp-turn-name { font-size: 12.5px; font-weight: 600; color: var(--hl-fg); }
-.sp-turn-time {
-  padding: 0; border: none; background: none;
-  font-family: var(--font-mono); font-size: 10.5px;
-  color: var(--hl-fg-dim);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 150ms var(--ease-out), color 150ms var(--ease-out);
-}
-.sp-turn:hover .sp-turn-time, .sp-turn.is-active .sp-turn-time { opacity: 1; }
-.sp-turn-time:hover { color: var(--hl-accent); }
-.sp-turn-text {
-  margin: 1px 0 0;
-  font-size: 14.5px; line-height: 1.6;
-  color: var(--hl-fg);
-  overflow-wrap: anywhere;
-}
-.sp-mark { background: rgba(255, 214, 0, 0.4); color: inherit; border-radius: 3px; }
-.sp-empty-line { padding: 24px 0; font-size: 13px; color: var(--hl-fg-muted); text-align: center; }
-
-/* ── Summary rail ── */
-.sp-summary-body {
-  flex: 1; min-height: 0; overflow-y: auto;
-  padding: 4px 20px 20px;
-  font-size: 13.5px; line-height: 1.65; color: var(--hl-fg-muted);
-  overscroll-behavior: contain;
-}
-.sp-summary-body::-webkit-scrollbar { width: 10px; }
-.sp-summary-body::-webkit-scrollbar-thumb {
-  background: var(--hl-border-strong); border: 3px solid var(--hl-bg-elev); border-radius: 999px;
-}
-.sp-summary-body > :first-child { margin-top: 0; }
-.sp-summary-body .md-h3 {
-  margin: 18px 0 6px;
-  font-family: var(--font-serif); font-size: 14.5px; font-weight: 500; line-height: 1.35;
-  color: var(--hl-fg);
-}
-.sp-summary-body .md-p { margin: 0 0 10px; }
-.sp-summary-body .md-ul { margin: 0 0 10px; padding-left: 16px; }
-.sp-summary-body .md-ul-nested { margin: 5px 0 0; }
-.sp-summary-body .md-li { margin-bottom: 5px; }
-.sp-summary-body strong { color: var(--hl-fg); font-weight: 600; }
-
-/* ── Entry gate ── */
-/* Geometry + motion are the app's `.update-overlay` / `.update-card`: the
-   perspective lives on the overlay, the tracked rotation on the card. */
+/* ── Modals: the app's .update-card family (entry gate + download) ── */
 .sp-gate {
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
@@ -549,19 +374,15 @@ body { margin: 0; }
   transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
   transform-origin: center 70%;
   /* NO transition on the tracked transform: it would lag and stutter behind a
-     moving target, restarting on every mousemove. Smoothness comes from the
-     rAF-batched JS; a transition is added ONLY on cursor-leave. */
+     moving target. Smoothness comes from the rAF-batched JS; a transition is
+     added only on cursor-leave, via tilt-snap-back. */
   animation: sp-card-in 420ms var(--ease-out);
-  /* Pin the card to its own GPU layer, or the text re-rasterises every frame
-     of the tilt and shimmers (worse on macOS 26 WebKit). */
   will-change: transform;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 .sp-gate-card.tilt-snap-back { transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .sp-gate-card.is-leaving { animation: sp-card-out 200ms var(--ease-out) forwards; }
-/* Sheen sits ABOVE the content (z-index 2) so it actually lights the CTA;
-   alpha stays low enough that white-on-green still reads. */
 .sp-gate-sheen {
   pointer-events: none;
   position: absolute; inset: 0; z-index: 2;
@@ -612,66 +433,27 @@ body { margin: 0; }
 .sp-notice-title { margin: 0; font-family: var(--font-serif); font-weight: 500; font-size: 30px; line-height: 1.15; }
 .sp-notice-body { margin: 12px 0 28px; font-size: 16px; line-height: var(--lh-body); color: var(--color-text-muted); }
 
-/* ── Narrow ──
-   The landing simply hides its demo window under 640px and keeps hero text.
-   We can't: the window IS the content. So it gives up its aspect-ratio, the
-   rail drops away, and the page scrolls like a document. */
-@media (max-width: 1023px) {
-  /* The window is built to a fixed 1180:720 with `height: 100%` inside it and
-     `overflow: hidden` on the body — a self-contained box that never grows.
-     Narrow, that has to invert: the box grows with the transcript and the PAGE
-     scrolls, so every height/overflow lock in the chain has to come off, not
-     just the aspect-ratio. */
-  .sp-demo { aspect-ratio: auto; height: auto; }
-  .sp-demo .hl-app { height: auto; }
-  .sp-demo .hl-detail-tabs,
-  .sp-demo .hl-detail-body { grid-template-columns: minmax(0, 1fr); }
-  .sp-demo .hl-detail-body { overflow: visible; }
-  .sp-demo .hl-detail-tabs .hl-detail-tab-col:last-child,
-  .sp-demo .hl-right-panel { display: none; }
-  .sp-demo .hl-transcript-wrap { overflow: visible; }
-  .sp-transcript { overflow-y: visible !important; margin-bottom: 0; padding-bottom: 20px; }
-  .sp-summary-body { overflow-y: visible; }
-}
-/* ── Undoing the mock's mobile behaviour ──
-   The vendored file is a DEMO, and narrow it does demo things that are fatal
-   for real data:
-     .hl-transcript { max-height: 220px; overflow: hidden }
-     .hl-transcript > .hl-segment-group:nth-of-type(n+3) { display: none }
-   i.e. it caps the pane and HIDES every turn past the second ("the idea lands
-   in two turns"). On a real shared meeting that silently truncates the
-   transcript to two lines. Same story with `min-height: 460px` and the 12px
-   font-size it drops to. Overridden here rather than edited there, so the file
-   stays a straight re-copy. */
-@media (max-width: 879px) {
-  .sp-demo { min-height: 0; font-size: 14px; }
-  .sp-transcript { max-height: none !important; overflow-y: visible !important; }
-  .sp-transcript > .hl-segment-group:nth-of-type(n + 3) { display: flex !important; }
-}
-
-/* The vendored file hides the window entirely under 640px:
-     .hero-library-demo { display: none !important }
-   On the landing that's right — the window is decoration there, and the hero
-   works as text alone. Here the window IS the content, so the rule has to be
-   overridden rather than the file edited (it stays re-copyable). */
-@media (max-width: 640px) {
-  .sp-page .hero-library-demo.sp-demo { display: block !important; }
-}
-
+/* ── Narrow ── */
 @media (max-width: 767px) {
-  .sp-nav-note, .sp-nav-sep { display: none; }
-  .sp-nav { gap: 8px; padding-left: 12px; }
-  .sp-nav-cta { margin-left: 0; }
-  .sp-container { padding-top: 28px; }
-  .sp-head { margin-bottom: 24px; }
-  .sp-sub { font-size: 16px; }
-  .sp-demo .hl-main-header .sp-cta--nav { display: none; }
+  :root { --sp-inset: 16px; --sp-orb: 48px; }
+  .sp-brand { top: 16px; left: 16px; }
+  .sp-brand img { width: 34px; height: 34px; }
+  .sp-sheet-wrap { padding: 72px 12px 120px; }
+  .sp-sheet { padding: 32px 24px 40px; border-radius: 10px; }
+  .sp-doc-title { font-size: 25px; }
+  .sp-doc-meta { font-size: 13px; }
+  .sp-turn { gap: 10px; padding: 8px; margin: 0 -8px; }
+  .sp-turn-text { font-size: 15.5px; }
+  /* The dock keeps the play button and the track; the end clock is the first
+     thing to go when there's no room. */
+  .sp-dock { gap: 10px; padding: 0 12px; }
+  .sp-dock-time--end { display: none; }
+  .sp-cta--primary, .sp-cta--ghost { min-width: 0; width: 100%; padding: 0 24px; }
   .sp-gate-card { padding: 32px 24px 20px; }
   .sp-gate-title { font-size: 22px; }
-  .sp-cta--primary { min-width: 0; width: 100%; padding: 0 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sp-gate, .sp-gate-card { animation: none; }
-  .sp-transcript { scroll-behavior: auto; }
+  .sp-sheet, .sp-turn, .sp-dock, .sp-orb, .sp-dock-mark, .sp-gate, .sp-gate-card { animation: none; }
+  .sp-dock-head, .sp-dock-played { transition: none; }
 }

@@ -2,18 +2,19 @@ import React from "react";
 import type { MeetingDetail } from "../api";
 import { displaySpeakerName } from "../format";
 
-/// The player, and the whole point of the window.
+/// The audio, pinned to the bottom-left and running the width of the page.
 ///
-/// Granola's public page has no audio and no transcript at all; Loom's has a
-/// video and a plain timestamped list. Neither shows what a Corder recording
-/// actually knows: WHO spoke WHEN. So the scrubber here isn't a line — it's the
-/// conversation itself, one lane per speaker, and every lane is seekable. That
-/// is the one thing on this page neither of them can copy.
+/// Fixed, not part of the sheet: the point is to play any moment of the meeting
+/// while reading any part of it. It mirrors the landing's bottom-left cookie
+/// circle in position and padding (left 32, bottom 32), and stops short of the
+/// download orb, which owns the bottom-right.
 ///
-/// An earlier attempt drew these lanes 4px tall inside the existing scrub bar
-/// and it read as static: 60+ short turns became noise. The fix wasn't to drop
-/// them, it was to make them the primary object — at 22px a lane reads as a
-/// map of the conversation.
+/// ONE track, not one lane per speaker. The two-lane version was honest but
+/// busy — two rows of blocks reading as stripes. Here every turn is drawn on a
+/// single line in its speaker's colour, so the shape of the conversation is one
+/// object: who held the floor, when it went back and forth, where the silences
+/// are. Corder is the only one of these products that can draw that at all;
+/// Loom shows a plain scrub bar and Granola has no audio on the web.
 export function SharePlayer({
   audioRef, audioUrl, durationMs, currentTimeSec, onTimeUpdate, onSeek, detail,
 }: {
@@ -27,7 +28,7 @@ export function SharePlayer({
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState(durationMs / 1000);
-  const [hover, setHover] = React.useState<{ pct: number; time: number } | null>(null);
+  const [hover, setHover] = React.useState<{ pct: number; time: number; who: string | null } | null>(null);
 
   const togglePlay = () => {
     const a = audioRef.current;
@@ -40,45 +41,51 @@ export function SharePlayer({
     }
   };
 
-  const ratioFrom = (e: React.MouseEvent<HTMLElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  };
+  const speakerById = React.useMemo(() => {
+    const palette = ["var(--sp-speaker-1)", "var(--sp-speaker-2)", "var(--sp-speaker-3)", "var(--sp-speaker-4)"];
+    const m = new Map<string, { name: string; color: string }>();
+    detail.speakers.forEach((s, i) =>
+      m.set(s.id, { name: displaySpeakerName(s.custom_name, s.label, null), color: palette[i % palette.length] }));
+    return m;
+  }, [detail.speakers]);
+
+  // Every turn on one line, positioned by time, coloured by speaker.
+  const marks = React.useMemo(() => {
+    const totalMs = (duration || 1) * 1000;
+    return detail.segments.map((s) => ({
+      id: s.id,
+      left: (s.start_ms / totalMs) * 100,
+      // A 300ms "yeah" is sub-pixel at this scale; floor it so short turns stay
+      // visible instead of dropping out of the picture.
+      width: Math.max(0.25, ((s.end_ms - s.start_ms) / totalMs) * 100),
+      color: speakerById.get(s.speaker_id)?.color,
+    }));
+  }, [detail.segments, duration, speakerById]);
 
   const pct = duration > 0 ? Math.min(100, Math.max(0, (currentTimeSec / duration) * 100)) : 0;
 
-  const lanes = React.useMemo(() => {
-    const totalMs = (duration || 1) * 1000;
-    // The hero window's speaker palette, in its order.
-    const palette = ["var(--hl-speaker-purple)", "var(--hl-accent)", "var(--hl-speaker-self)", "var(--hl-avatar-admin)"];
-    return detail.speakers.map((sp, i) => {
-      const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
-      const spokenMs = segs.reduce((acc, s) => acc + (s.end_ms - s.start_ms), 0);
-      const name = displaySpeakerName(sp.custom_name, sp.label, null);
-      return {
-        id: sp.id,
-        name,
-        initials: initialsOf(name),
-        color: palette[i % palette.length],
-        share: Math.round((spokenMs / totalMs) * 100),
-        segs: segs.map((s) => ({
-          left: (s.start_ms / totalMs) * 100,
-          // A 300ms "yeah" is a hairline at this scale; floor it so short turns
-          // stay visible instead of vanishing into the lane.
-          width: Math.max(0.35, ((s.end_ms - s.start_ms) / totalMs) * 100),
-        })),
-      };
+  const readHover = (e: React.MouseEvent<HTMLElement>) => {
+    if (!duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const r = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const ms = r * duration * 1000;
+    const seg = detail.segments.find((s) => s.start_ms <= ms && s.end_ms >= ms);
+    setHover({
+      pct: r * 100,
+      time: r * duration,
+      who: seg ? speakerById.get(seg.speaker_id)?.name ?? null : null,
     });
-  }, [detail.speakers, detail.segments, duration]);
+  };
+
+  if (!audioUrl) return null;
 
   return (
-    <div className="sp-player">
+    <div className="sp-dock">
       <button
         type="button"
-        className="sp-play"
+        className="sp-dock-play"
         onClick={togglePlay}
         aria-label={playing ? "Pause" : "Play"}
-        disabled={!audioUrl}
       >
         {playing ? (
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
@@ -92,65 +99,59 @@ export function SharePlayer({
         )}
       </button>
 
-      <div className="sp-lanes-wrap">
-        <div
-          className="sp-lanes"
-          onClick={(e) => { if (duration) onSeek(ratioFrom(e) * duration); }}
-          onMouseMove={(e) => { if (duration) { const r = ratioFrom(e); setHover({ pct: r * 100, time: r * duration }); } }}
-          onMouseLeave={() => setHover(null)}
-        >
-          {lanes.map((l) => (
-            <div className="sp-lane" key={l.id}>
-              <span className="sp-lane-badge" style={{ background: l.color }}>{l.initials}</span>
-              <div className="sp-lane-track">
-                {l.segs.map((s, i) => (
-                  <span
-                    key={i}
-                    className="sp-lane-seg"
-                    style={{ left: `${s.left}%`, width: `${s.width}%`, background: l.color }}
-                  />
-                ))}
-              </div>
-              <span className="sp-lane-share">{l.share}%</span>
-            </div>
-          ))}
+      <span className="sp-dock-time">{fmt(currentTimeSec)}</span>
 
-          <span className="sp-playhead" style={{ left: `${pct}%` }} aria-hidden />
-          {hover && <span className="sp-hover-line" style={{ left: `${hover.pct}%` }} aria-hidden />}
-        </div>
-
-        <div className="sp-times">
-          <span>{fmt(currentTimeSec)}</span>
-          {hover && <span className="sp-times-hover">{fmt(hover.time)}</span>}
-          <span>{fmt(duration)}</span>
-        </div>
+      <div
+        className="sp-dock-track"
+        onClick={(e) => {
+          if (!duration) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          onSeek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+        }}
+        onMouseMove={readHover}
+        onMouseLeave={() => setHover(null)}
+      >
+        {marks.map((m, i) => (
+          <span
+            key={m.id}
+            className="sp-dock-mark"
+            style={{
+              left: `${m.left}%`,
+              width: `${m.width}%`,
+              background: m.color,
+              // Turns draw in left to right as the page settles.
+              animationDelay: `${420 + Math.min(i, 40) * 12}ms`,
+            }}
+          />
+        ))}
+        <span className="sp-dock-played" style={{ width: `${pct}%` }} aria-hidden />
+        <span className="sp-dock-head" style={{ left: `${pct}%` }} aria-hidden />
+        {hover && (
+          <span className="sp-dock-tip" style={{ left: `${hover.pct}%` }}>
+            {hover.who && <b>{hover.who}</b>}
+            {fmt(hover.time)}
+          </span>
+        )}
       </div>
 
-      {!!audioUrl && (
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          preload="auto"
-          style={{ display: "none" }}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={() => setPlaying(false)}
-          onLoadedMetadata={(e) => {
-            const d = (e.target as HTMLAudioElement).duration;
-            if (isFinite(d) && d > 0) setDuration(d);
-          }}
-          onTimeUpdate={(e) => onTimeUpdate((e.target as HTMLAudioElement).currentTime)}
-        />
-      )}
+      <span className="sp-dock-time sp-dock-time--end">{fmt(duration)}</span>
+
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        preload="auto"
+        style={{ display: "none" }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+        onLoadedMetadata={(e) => {
+          const d = (e.target as HTMLAudioElement).duration;
+          if (isFinite(d) && d > 0) setDuration(d);
+        }}
+        onTimeUpdate={(e) => onTimeUpdate((e.target as HTMLAudioElement).currentTime)}
+      />
     </div>
   );
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function fmt(sec: number): string {

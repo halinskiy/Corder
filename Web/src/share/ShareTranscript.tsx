@@ -1,18 +1,17 @@
 import React from "react";
-import { Search } from "lucide-react";
 import type { MeetingDetail } from "../api";
 import { displaySpeakerName } from "../format";
 
-/// The transcript column.
+/// The transcript, as the body of the document.
 ///
 /// One turn is one block: avatar, name, timestamp, and what was said, tight
 /// together. The vendored hero markup groups a speaker's lines into a paragraph
-/// under a head and separates speakers by 24px — right for its three mock
-/// turns, rhythmless across a real 24-turn transcript, where the name ended up
-/// further from its own words than from the next speaker's.
+/// under a shared head and separates speakers by 24px — right for its three
+/// mock turns, rhythmless across a real 24-turn transcript, where a name ended
+/// up further from its own words than from the next speaker's.
 ///
-/// Timestamps only appear on hover (and on the line playing now), so they're
-/// there when you want to jump and invisible when you're reading.
+/// Timestamps show on hover and on the line playing now: there when you want to
+/// jump, invisible while you read.
 export function ShareTranscript({
   detail, currentTimeSec, onSeek,
 }: {
@@ -20,25 +19,17 @@ export function ShareTranscript({
   currentTimeSec: number;
   onSeek: (sec: number) => void;
 }) {
-  const [query, setQuery] = React.useState("");
-  const scrollRef = React.useRef<HTMLDivElement>(null);
   const activeRef = React.useRef<HTMLDivElement>(null);
 
   const speakerById = React.useMemo(() => {
     const m = new Map<string, { name: string; initials: string; color: string }>();
-    const palette = ["var(--hl-speaker-purple)", "var(--hl-accent)", "var(--hl-speaker-self)", "var(--hl-avatar-admin)"];
+    const palette = ["var(--sp-speaker-1)", "var(--sp-speaker-2)", "var(--sp-speaker-3)", "var(--sp-speaker-4)"];
     detail.speakers.forEach((s, i) => {
       const name = displaySpeakerName(s.custom_name, s.label, null);
       m.set(s.id, { name, initials: initialsOf(name), color: palette[i % palette.length] });
     });
     return m;
   }, [detail.speakers]);
-
-  const q = query.trim().toLowerCase();
-  const shown = React.useMemo(
-    () => (q ? detail.segments.filter((s) => s.text.toLowerCase().includes(q)) : detail.segments),
-    [detail.segments, q],
-  );
 
   // Segments are sorted by start_ms (shareApi sorts defensively), so the line
   // playing now is the last one that started before "now".
@@ -51,66 +42,51 @@ export function ShareTranscript({
     return found;
   }, [detail.segments, currentTimeSec]);
 
-  // Follow the audio inside this scroller only — scrollIntoView on the element
-  // would drag the window, and the page must not move.
+  // Keep the playing line in view. The scroller is the PAGE now (the sheet is a
+  // document), so this scrolls the window — and stops short of the bottom,
+  // where the docked audio covers ~110px.
   React.useEffect(() => {
-    const el = activeRef.current, box = scrollRef.current;
-    if (!el || !box || q) return;
-    const top = el.offsetTop - box.offsetTop;
-    if (top < box.scrollTop || top > box.scrollTop + box.clientHeight - 60) {
-      box.scrollTo({ top: top - box.clientHeight / 2.5, behavior: "smooth" });
+    const el = activeRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < 80 || r.bottom > window.innerHeight - 110) {
+      window.scrollTo({ top: window.scrollY + r.top - window.innerHeight / 3, behavior: "smooth" });
     }
-  }, [activeId, q]);
+  }, [activeId]);
 
   return (
-    <>
-      <div className="sp-search">
-        <Search aria-hidden />
-        <input
-          type="search"
-          placeholder="Search the transcript"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-
-      <div className="sp-transcript" ref={scrollRef}>
-        {shown.length === 0 ? (
-          <div className="sp-empty-line">Nothing matches “{query}”.</div>
-        ) : (
-          shown.map((s, i) => {
-            const sp = speakerById.get(s.speaker_id);
-            const isActive = s.id === activeId;
-            return (
-              <div
-                key={s.id}
-                ref={isActive ? activeRef : undefined}
-                className={"sp-turn" + (isActive ? " is-active" : "")}
-                // Turns stagger in on load, then rest. Capped at 12 so a long
-                // transcript doesn't animate for two seconds.
-                style={{ animationDelay: `${Math.min(i, 12) * 45}ms` }}
-              >
-                <span className="sp-avatar" style={{ background: sp?.color }}>{sp?.initials}</span>
-                <div className="sp-turn-body">
-                  <div className="sp-turn-head">
-                    <span className="sp-turn-name" style={{ color: sp?.color }}>{sp?.name}</span>
-                    <button
-                      type="button"
-                      className="sp-turn-time"
-                      onClick={() => onSeek(s.start_ms / 1000)}
-                      title="Jump to this moment"
-                    >
-                      {stamp(s.start_ms)}
-                    </button>
-                  </div>
-                  <p className="sp-turn-text">{highlight(s.text, q)}</p>
-                </div>
+    <div className="sp-turns">
+      {detail.segments.map((s, i) => {
+        const sp = speakerById.get(s.speaker_id);
+        const isActive = s.id === activeId;
+        return (
+          <div
+            key={s.id}
+            ref={isActive ? activeRef : undefined}
+            className={"sp-turn" + (isActive ? " is-active" : "")}
+            // Turns stagger in as the sheet settles, then rest. Capped at 12 so
+            // a long transcript doesn't animate for two seconds.
+            style={{ animationDelay: `${140 + Math.min(i, 12) * 45}ms` }}
+          >
+            <span className="sp-avatar" style={{ background: sp?.color }}>{sp?.initials}</span>
+            <div className="sp-turn-body">
+              <div className="sp-turn-head">
+                <span className="sp-turn-name" style={{ color: sp?.color }}>{sp?.name}</span>
+                <button
+                  type="button"
+                  className="sp-turn-time"
+                  onClick={() => onSeek(s.start_ms / 1000)}
+                  title="Jump to this moment"
+                >
+                  {stamp(s.start_ms)}
+                </button>
               </div>
-            );
-          })
-        )}
-      </div>
-    </>
+              <p className="sp-turn-text">{s.text}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -126,18 +102,4 @@ function stamp(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function highlight(text: string, q: string): React.ReactNode {
-  if (!q) return text;
-  const out: React.ReactNode[] = [];
-  const lower = text.toLowerCase();
-  let from = 0;
-  for (let at = lower.indexOf(q, from); at !== -1; at = lower.indexOf(q, from)) {
-    if (at > from) out.push(text.slice(from, at));
-    out.push(<mark className="sp-mark" key={at}>{text.slice(at, at + q.length)}</mark>);
-    from = at + q.length;
-  }
-  out.push(text.slice(from));
-  return out;
 }

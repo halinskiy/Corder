@@ -1,56 +1,35 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import { ShareTranscript } from "./ShareTranscript";
-import { ShareSummary } from "./ShareSummary";
 import { SharePlayer } from "./SharePlayer";
 import { ShareGate } from "./ShareGate";
+import { ShareDownload } from "./ShareDownload";
 import { formatDuration } from "../format";
 import { fetchShare, tokenFromLocation, ShareGone, type Share } from "./shareApi";
 
 const DOWNLOAD_URL = "https://getcorder.com";
 
-/// The landing's nav.links, verbatim (corder-landing/content/copy.json).
-const NAV_LINKS = [
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
-];
-
-/// The landing's AppleIcon, verbatim — same path, same 0.5px optical nudge
-/// (the leaf makes the glyph read top-heavy next to text).
-function AppleGlyph({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24" fill="currentColor"
-      aria-hidden role="img" style={{ transform: "translateY(0.5px)" }}
-    >
-      <path d="M17.05 20.28c-.98.95-2.05.88-3.08.41-1.09-.47-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.41C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-    </svg>
-  );
-}
-
 /// The public share page.
 ///
-/// It IS the landing's hero window with real data in it. `hero-window.css` is
-/// vendored from corder-landing verbatim and this markup uses its `.hl-*`
-/// classes, so the geometry, type scale, buttons and colours are the ones the
-/// brand already ships — not numbers invented here. Around the window: the
-/// landing's dot-grid, its blobs, its nav pill, its serif display heading.
+/// A document, not an app window. The page is a canvas — the landing's dot-grid
+/// and blobs — and on it sits a single sheet carrying the transcript, the way a
+/// Google Doc sits on its own backdrop. Everything else is pinned to a corner
+/// and never touches the reading column:
 ///
-/// Two earlier shapes were wrong and are worth not repeating: the app's own
-/// layout (transcript tracked the window width — ~150 characters a line at
-/// 2560), and a plain 720px column (readable, but nothing of Corder in it).
+///   top-left      the brand mark. There is no nav bar: on a page whose whole
+///                 job is to be read, a marketing strip competes with the text.
+///   bottom-left   the audio, fixed, so any moment of the meeting is playable
+///                 while reading any part of it.
+///   bottom-right  the download orb — the landing's own CorderPresence orb
+///                 (state B of its morph): same 56px, same accent, same icon,
+///                 same hover. Its mirror on the landing is the cookie circle,
+///                 which is why the audio takes that side.
 ///
-/// The sidebar of the hero window is dropped: it lists YOUR meetings, and a
-/// visitor has none. The window keeps the transcript column + the recording
-/// rail, which is what a shared meeting actually is.
+/// Earlier cuts built this as an app window with tabs and rails, and it kept
+/// fighting itself. A shared meeting is a document, and a document wants a page.
 export function SharePage() {
   const [share, setShare] = React.useState<Share | null>(null);
   const [state, setState] = React.useState<"loading" | "ready" | "gone" | "error">("loading");
-  // Nav.tsx flips this at scrollY > 8 and the CTA fills with accent. The page
-  // does scroll (hero + a 720px window), so the state is real here, not faked.
-  const [scrolled, setScrolled] = React.useState(false);
   const [currentTimeSec, setCurrentTimeSec] = React.useState(0);
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
@@ -62,13 +41,6 @@ export function SharePage() {
       .then((s) => { if (alive) { setShare(s); setState("ready"); } })
       .catch((e) => { if (alive) setState(e instanceof ShareGone ? "gone" : "error"); });
     return () => { alive = false; };
-  }, []);
-
-  React.useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const seek = (sec: number) => {
@@ -99,113 +71,73 @@ export function SharePage() {
               ? "Shared links last 30 days. Ask whoever sent it for a fresh one."
               : "The link could not be loaded. Try again in a moment."}
           </p>
-          <a className="sp-cta sp-cta--primary" href={DOWNLOAD_URL}>
-            <AppleGlyph size={24} />
-            Download for Mac
-          </a>
+          <a className="sp-cta sp-cta--primary" href={DOWNLOAD_URL}>Get Corder</a>
         </div>
       </div>
     );
   }
 
   const { detail, ownerName, audioUrl } = share;
-  const hasSummary = !!(detail.summary && detail.summary.trim());
   const started = new Date(detail.started_at);
 
   return (
     <div className="sp-page">
       <Atmosphere />
-
-      {/* Granola's move: the first thing a visitor meets is the pitch, not the
-          transcript. They dismiss it and read. This is the highest-intent
-          moment on the page — someone just received a Corder link from a
-          person they know. */}
       <ShareGate ownerName={ownerName} downloadUrl={DOWNLOAD_URL} />
 
-      {/* The landing's Nav, copied. Not "inspired by": the same brand mark with
-          NO wordmark beside it (the landing shows the word only on mobile), the
-          same four links, the same hairline separator, and the same CTA with
-          its scroll-state — transparent hairline at the top of the page,
-          accent fill past 8px. Links point at the landing's anchors, since
-          this page has no sections of its own. */}
-      <header className="sp-nav-wrap" data-scrolled={scrolled ? "true" : "false"}>
-        <div className="sp-nav">
-          <a className="sp-nav-brand" href={DOWNLOAD_URL} aria-label="Corder, home">
-            <img src="/brand-mark-128.png" width={32} height={32} alt="" aria-hidden />
-          </a>
-          <span className="sp-nav-sep" aria-hidden />
-          <nav className="sp-nav-links">
-            {NAV_LINKS.map((l) => (
-              <a key={l.href} className="sp-nav-link" href={DOWNLOAD_URL + "/" + l.href}>{l.label}</a>
-            ))}
-          </nav>
-          <a className="sp-nav-cta" href={DOWNLOAD_URL}>
-            <AppleGlyph size={20} />
-            Download
-          </a>
-        </div>
-      </header>
+      <a className="sp-brand" href={DOWNLOAD_URL} aria-label="Corder">
+        <img src="/brand-mark-128.png" width={40} height={40} alt="" />
+      </a>
 
-      <main className="sp-container">
-        {/* Everything lives in the window now: the title too, per the same
-            logic that removed the duplicate — one title, one place. */}
-        <div className="hero-library-demo sp-demo">
-          <header className="sp-win-head">
-            <div className="sp-win-titles">
-              <h1 className="sp-win-title">{detail.title || "Untitled meeting"}</h1>
-              <p className="sp-win-meta">
-                {started.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-                <i aria-hidden />
-                {formatDuration(detail.duration_ms ?? 0)}
-                {detail.speakers.length > 0 && (
-                  <>
-                    <i aria-hidden />
-                    {detail.speakers.length} {detail.speakers.length === 1 ? "speaker" : "speakers"}
-                  </>
-                )}
-              </p>
-            </div>
-            {ownerName && (
-              <p className="sp-win-by"><span>{ownerName}</span> shared this</p>
-            )}
+      <main className="sp-sheet-wrap">
+        <article className="sp-sheet">
+          <header className="sp-doc-head">
+            <h1 className="sp-doc-title">{detail.title || "Untitled meeting"}</h1>
+            <p className="sp-doc-meta">
+              {started.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+              <i aria-hidden />
+              {formatDuration(detail.duration_ms ?? 0)}
+              {detail.speakers.length > 0 && (
+                <>
+                  <i aria-hidden />
+                  {detail.speakers.length} {detail.speakers.length === 1 ? "speaker" : "speakers"}
+                </>
+              )}
+              {ownerName && (
+                <>
+                  <i aria-hidden />
+                  <span className="sp-doc-by">shared by {ownerName}</span>
+                </>
+              )}
+            </p>
           </header>
 
-          <SharePlayer
-            audioRef={audioRef}
-            audioUrl={audioUrl}
-            durationMs={detail.duration_ms ?? 0}
-            currentTimeSec={currentTimeSec}
-            onTimeUpdate={setCurrentTimeSec}
-            onSeek={seek}
+          <ShareTranscript
             detail={detail}
+            currentTimeSec={currentTimeSec}
+            onSeek={seek}
           />
-
-          {/* Both at once, no tabs: the transcript is what Granola won't show
-              and the summary is what Loom buries a tab deep. */}
-          <div className={"sp-cols" + (hasSummary ? "" : " sp-cols--solo")}>
-            <section className="sp-col">
-              <ShareTranscript
-                detail={detail}
-                currentTimeSec={currentTimeSec}
-                onSeek={seek}
-              />
-            </section>
-            {hasSummary && (
-              <aside className="sp-col sp-col--rail">
-                <div className="sp-col-head">Summary</div>
-                <ShareSummary markdown={detail.summary!} />
-              </aside>
-            )}
-          </div>
-        </div>
+        </article>
       </main>
+
+      <SharePlayer
+        audioRef={audioRef}
+        audioUrl={audioUrl}
+        durationMs={detail.duration_ms ?? 0}
+        currentTimeSec={currentTimeSec}
+        onTimeUpdate={setCurrentTimeSec}
+        onSeek={seek}
+        detail={detail}
+      />
+
+      <ShareDownload downloadUrl={DOWNLOAD_URL} ownerName={ownerName} />
     </div>
   );
 }
 
-/// The landing's hero atmosphere: two un-blurred blobs (they were blurred +
-/// animated until 2026-05-22, when six animated blurred fills pinned Speed
-/// Index at 12.9s) under a masked dot-grid.
+/// The landing's hero atmosphere: two un-blurred blobs (blur + animation were
+/// dropped there in May, when six animated blurred fills pinned Speed Index at
+/// 12.9s) under a masked dot-grid.
 function Atmosphere() {
   return (
     <div className="sp-atmos" aria-hidden>
