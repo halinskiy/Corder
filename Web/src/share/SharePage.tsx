@@ -150,7 +150,6 @@ export function SharePage() {
           {ownerName && (
             <p className="sp-shared-by"><span>{ownerName}</span> shared this recording with you</p>
           )}
-          <h1 className="sp-title">{detail.title || "Untitled meeting"}</h1>
         </div>
 
         {/* The hero window itself. `.hero-library-demo` brings the whole thing:
