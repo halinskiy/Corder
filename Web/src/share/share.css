@@ -251,60 +251,270 @@ body { margin: 0; }
   color: var(--color-text-subtle); text-align: center;
 }
 
-/* ── Window deltas ──
-   The hero window is a MOCK; below are the only places live data needs it to
-   move. Everything else comes from hero-window.css untouched. */
+/* ── The window ──
+   The vendored hero-window.css still supplies the shell (border, radius, the
+   two-layer shadow, the app's 14px scale and its speaker palette). Everything
+   below is this page's own composition, because a shared meeting isn't the
+   app's three-column library: it's one recording.
 
-/* No sidebar: it lists YOUR meetings, and a visitor has none. */
-.sp-app { grid-template-columns: 1fr; }
-/* The window fills whatever the viewport has left, instead of imposing its own
-   height on the page. */
+   Layout, top to bottom: title, the player, then transcript + summary side by
+   side. No tabs — the transcript is what Granola never shows on the web, the
+   summary is what Loom buries a tab deep; showing both at once is the whole
+   argument for this page. */
 .sp-demo {
   flex: 1; min-height: 0;
   aspect-ratio: auto !important;
   height: auto;
+  display: flex; flex-direction: column;
+  /* The landing reveals its window on scroll with this exact move. */
+  animation: sp-window-in 900ms var(--ease-out) both;
 }
-.sp-demo .hl-app { height: 100%; min-height: 0; }
-/* `.hl-main` is a grid child in the hero; here it's the only column. */
-.sp-demo .hl-main { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-/* The titlebar floats over the content and the sidebar normally pads it; with
-   no sidebar the header strip has to clear it itself. */
-.sp-demo .hl-main-header { padding-top: 32px; min-height: 78px; }
+@keyframes sp-window-in {
+  from { opacity: 0; transform: perspective(1600px) rotateX(9deg) translateY(24px) scale(0.985); }
+  to   { opacity: 1; transform: perspective(1600px) rotateX(0) translateY(0) scale(1); }
+}
 
-/* The mock's scrub fill runs a 18%→86% keyframe; ours is the audio's position,
-   so the animation must not fight the inline width. */
-.sp-scrub { cursor: pointer; }
-.sp-scrub-fill { animation: none !important; transition: width 120ms linear; }
-.sp-cursor { animation: none !important; }
+.sp-win-head {
+  flex-shrink: 0;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding: 20px 24px 16px;
+}
+.sp-win-titles { min-width: 0; }
+.sp-win-title {
+  margin: 0;
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 24px; line-height: 1.2; letter-spacing: -0.012em;
+  color: var(--hl-fg);
+  overflow-wrap: anywhere;
+}
+.sp-win-meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 6px 0 0;
+  font-size: 13px; color: var(--hl-fg-muted);
+}
+.sp-win-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--hl-border-strong); }
+.sp-win-by {
+  flex-shrink: 0; margin: 0;
+  font-size: 13px; color: var(--hl-fg-muted); white-space: nowrap;
+}
+.sp-win-by span { color: var(--hl-accent); font-weight: 600; }
 
-/* The mock shows a fixed slice and never scrolls; a real transcript does. */
-.sp-transcript { overflow-y: auto !important; scroll-behavior: smooth; }
+/* ── Player: the conversation IS the scrubber ── */
+.sp-player {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 16px;
+  padding: 4px 24px 18px;
+}
+.sp-play {
+  flex-shrink: 0;
+  width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: var(--hl-accent); color: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 16px -6px rgba(33, 122, 80, 0.5);
+  transition:
+    background-color 150ms var(--ease-out),
+    transform 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+.sp-play svg { width: 15px; height: 15px; }
+.sp-play:hover { background: var(--hl-accent-pressed); transform: scale(1.06); box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 10px 22px -8px rgba(33,122,80,0.6); }
+.sp-play:active { transform: scale(0.96); }
+.sp-play:disabled { opacity: 0.4; pointer-events: none; }
+
+.sp-lanes-wrap { flex: 1; min-width: 0; }
+.sp-lanes { position: relative; display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
+.sp-lane { display: flex; align-items: center; gap: 10px; }
+.sp-lane-badge {
+  flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 600; color: #fff;
+  letter-spacing: 0.02em;
+}
+.sp-lane-track {
+  position: relative; flex: 1; min-width: 0;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--hl-bg-elev);
+  overflow: hidden;
+}
+.sp-lane-seg {
+  position: absolute; top: 0; bottom: 0;
+  border-radius: 2px;
+  opacity: 0.9;
+  /* Turns grow out of the lane on load, left to right, so the map draws itself
+     rather than appearing. */
+  transform-origin: left center;
+  animation: sp-seg-in 520ms var(--ease-out) both;
+}
+@keyframes sp-seg-in {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 0.9; }
+}
+.sp-lane:nth-child(1) .sp-lane-seg { animation-delay: 260ms; }
+.sp-lane:nth-child(2) .sp-lane-seg { animation-delay: 340ms; }
+.sp-lane:nth-child(3) .sp-lane-seg { animation-delay: 420ms; }
+.sp-lane:nth-child(4) .sp-lane-seg { animation-delay: 500ms; }
+.sp-lane-share {
+  flex-shrink: 0; width: 30px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--hl-fg-muted); text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Playhead spans every lane: one instant across the whole conversation. */
+.sp-playhead {
+  position: absolute; top: -2px; bottom: -2px;
+  width: 2px; margin-left: -1px;
+  background: var(--hl-fg);
+  border-radius: 1px;
+  box-shadow: 0 0 0 2px var(--hl-bg);
+  pointer-events: none;
+  /* Follows the audio smoothly instead of stepping with timeupdate (~4/s). */
+  transition: left 120ms linear;
+  z-index: 2;
+}
+.sp-hover-line {
+  position: absolute; top: -2px; bottom: -2px;
+  width: 1px; margin-left: -0.5px;
+  background: var(--hl-border-strong);
+  pointer-events: none;
+  z-index: 1;
+}
+.sp-times {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 7px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--hl-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.sp-times-hover { color: var(--hl-fg); }
+
+/* ── Columns ── */
+.sp-cols {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+  border-top: 1px solid var(--hl-border);
+}
+.sp-cols--solo { grid-template-columns: minmax(0, 1fr); }
+/* min-height: 0 is load-bearing: a grid item defaults to min-height: auto and
+   refuses to shrink below its content, so the transcript grew to its full
+   3752px and pushed out of the window instead of scrolling inside it. */
+.sp-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.sp-col--rail { background: var(--hl-bg-elev); border-left: 1px solid var(--hl-border); }
+.sp-col-head {
+  flex-shrink: 0;
+  padding: 16px 20px 8px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--hl-fg-dim);
+}
+
+/* ── Transcript ── */
+.sp-search {
+  flex-shrink: 0;
+  position: relative;
+  margin: 14px 20px 4px;
+}
+.sp-search svg {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; color: var(--hl-fg-dim); pointer-events: none;
+}
+.sp-search input {
+  width: 100%; height: 34px;
+  padding: 0 12px 0 34px;
+  border: 1px solid transparent; border-radius: 999px;
+  background: var(--hl-bg-elev);
+  color: var(--hl-fg);
+  font: inherit; font-size: 13px;
+  outline: none;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out);
+}
+.sp-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.sp-search input:focus { background: var(--hl-bg); border-color: var(--hl-border-strong); }
+.sp-search input::placeholder { color: var(--hl-fg-dim); }
+
+.sp-transcript {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 10px 20px 20px;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
 .sp-transcript::-webkit-scrollbar { width: 10px; }
 .sp-transcript::-webkit-scrollbar-thumb {
   background: var(--hl-border-strong); border: 3px solid var(--hl-bg); border-radius: 999px;
 }
-/* Lines seek the audio here, so they must read as clickable. */
-.sp-transcript .hl-segment-line { cursor: pointer; }
-.sp-empty-line { padding: 24px 0; font-size: 14px; color: var(--hl-fg-muted); }
-.sp-mark { background: rgba(255, 214, 0, 0.4); color: inherit; border-radius: 3px; }
 
-/* Summary rides in the transcript column, at the window's scale. */
+/* One turn = avatar + name + what was said, tight. The vendored demo separates
+   speakers by 24px, which reads right for its three mock turns and rhythmless
+   across a real 24-turn transcript. */
+.sp-turn {
+  display: flex; gap: 10px;
+  padding: 7px 8px; margin: 0 -8px;
+  border-radius: 7px;
+  transition: background-color 200ms var(--ease-out);
+  animation: sp-turn-in 420ms var(--ease-out) both;
+}
+@keyframes sp-turn-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sp-turn + .sp-turn { margin-top: 2px; }
+.sp-turn:hover { background: var(--hl-bg-hover); }
+.sp-turn.is-active { background: color-mix(in srgb, var(--hl-accent) 9%, transparent); }
+.sp-avatar {
+  flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; color: #fff;
+  /* Aligns with the first line of the paragraph, not its box. */
+  margin-top: 1px;
+}
+.sp-turn-body { min-width: 0; flex: 1; }
+.sp-turn-head { display: flex; align-items: baseline; gap: 8px; }
+.sp-turn-name { font-size: 12.5px; font-weight: 600; color: var(--hl-fg); }
+.sp-turn-time {
+  padding: 0; border: none; background: none;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--hl-fg-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.sp-turn:hover .sp-turn-time, .sp-turn.is-active .sp-turn-time { opacity: 1; }
+.sp-turn-time:hover { color: var(--hl-accent); }
+.sp-turn-text {
+  margin: 1px 0 0;
+  font-size: 14.5px; line-height: 1.6;
+  color: var(--hl-fg);
+  overflow-wrap: anywhere;
+}
+.sp-mark { background: rgba(255, 214, 0, 0.4); color: inherit; border-radius: 3px; }
+.sp-empty-line { padding: 24px 0; font-size: 13px; color: var(--hl-fg-muted); text-align: center; }
+
+/* ── Summary rail ── */
 .sp-summary-body {
   flex: 1; min-height: 0; overflow-y: auto;
-  padding: 8px 20px 16px;
-  font-size: 15px; line-height: 1.7; color: var(--hl-fg);
+  padding: 4px 20px 20px;
+  font-size: 13.5px; line-height: 1.65; color: var(--hl-fg-muted);
+  overscroll-behavior: contain;
+}
+.sp-summary-body::-webkit-scrollbar { width: 10px; }
+.sp-summary-body::-webkit-scrollbar-thumb {
+  background: var(--hl-border-strong); border: 3px solid var(--hl-bg-elev); border-radius: 999px;
 }
 .sp-summary-body > :first-child { margin-top: 0; }
 .sp-summary-body .md-h3 {
-  margin: 20px 0 8px;
-  font-size: 15px; font-weight: 600; line-height: 1.4;
+  margin: 18px 0 6px;
+  font-family: var(--font-serif); font-size: 14.5px; font-weight: 500; line-height: 1.35;
   color: var(--hl-fg);
 }
-.sp-summary-body .md-p { margin: 0 0 12px; }
-.sp-summary-body .md-ul { margin: 0 0 12px; padding-left: 18px; }
-.sp-summary-body .md-ul-nested { margin: 6px 0 0; }
-.sp-summary-body .md-li { margin-bottom: 6px; }
-.sp-summary-body strong { font-weight: 600; }
+.sp-summary-body .md-p { margin: 0 0 10px; }
+.sp-summary-body .md-ul { margin: 0 0 10px; padding-left: 16px; }
+.sp-summary-body .md-ul-nested { margin: 5px 0 0; }
+.sp-summary-body .md-li { margin-bottom: 5px; }
+.sp-summary-body strong { color: var(--hl-fg); font-weight: 600; }
 
 /* ── Entry gate ── */
 /* Geometry + motion are the app's `.update-overlay` / `.update-card`: the

@@ -4,6 +4,7 @@ import { ShareTranscript } from "./ShareTranscript";
 import { ShareSummary } from "./ShareSummary";
 import { SharePlayer } from "./SharePlayer";
 import { ShareGate } from "./ShareGate";
+import { formatDuration } from "../format";
 import { fetchShare, tokenFromLocation, ShareGone, type Share } from "./shareApi";
 
 const DOWNLOAD_URL = "https://getcorder.com";
@@ -47,7 +48,6 @@ function AppleGlyph({ size = 20 }: { size?: number }) {
 export function SharePage() {
   const [share, setShare] = React.useState<Share | null>(null);
   const [state, setState] = React.useState<"loading" | "ready" | "gone" | "error">("loading");
-  const [tab, setTab] = React.useState<"transcript" | "summary">("transcript");
   // Nav.tsx flips this at scrollY > 8 and the CTA fills with accent. The page
   // does scroll (hero + a 720px window), so the state is real here, not faked.
   const [scrolled, setScrolled] = React.useState(false);
@@ -110,6 +110,7 @@ export function SharePage() {
 
   const { detail, ownerName, audioUrl } = share;
   const hasSummary = !!(detail.summary && detail.summary.trim());
+  const started = new Date(detail.started_at);
 
   return (
     <div className="sp-page">
@@ -146,73 +147,57 @@ export function SharePage() {
       </header>
 
       <main className="sp-container">
-        <div className="sp-head">
-          {ownerName && (
-            <p className="sp-shared-by"><span>{ownerName}</span> shared this recording with you</p>
-          )}
-        </div>
-
-        {/* The hero window itself. `.hero-library-demo` brings the whole thing:
-            1180px, 12px radius, the two-layer shadow, the app type scale. */}
+        {/* Everything lives in the window now: the title too, per the same
+            logic that removed the duplicate — one title, one place. */}
         <div className="hero-library-demo sp-demo">
-          <div className="hl-app sp-app">
-            <div className="hl-main">
-              <div className="hl-detail-tabs sp-tabs-row">
-                <div className="hl-detail-tab-col">
-                  <button
-                    type="button"
-                    className={"hl-tab" + (tab === "transcript" ? " active" : "")}
-                    onClick={() => setTab("transcript")}
-                  >
-                    Transcript
-                  </button>
-                  {hasSummary && (
-                    <button
-                      type="button"
-                      className={"hl-tab" + (tab === "summary" ? " active" : "")}
-                      onClick={() => setTab("summary")}
-                    >
-                      Summary
-                    </button>
-                  )}
-                </div>
-                <div className="hl-detail-tab-col">
-                  <span className="hl-tab active">Recording</span>
-                </div>
-              </div>
-
-              <div className="hl-detail-body sp-body">
-                {tab === "transcript" ? (
-                  <ShareTranscript
-                    detail={detail}
-                    currentTimeSec={currentTimeSec}
-                    onSeek={seek}
-                  />
-                ) : (
-                  <div className="hl-transcript-wrap">
-                    <ShareSummary markdown={detail.summary!} />
-                  </div>
+          <header className="sp-win-head">
+            <div className="sp-win-titles">
+              <h1 className="sp-win-title">{detail.title || "Untitled meeting"}</h1>
+              <p className="sp-win-meta">
+                {started.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                <i aria-hidden />
+                {formatDuration(detail.duration_ms ?? 0)}
+                {detail.speakers.length > 0 && (
+                  <>
+                    <i aria-hidden />
+                    {detail.speakers.length} {detail.speakers.length === 1 ? "speaker" : "speakers"}
+                  </>
                 )}
-
-                <div className="hl-right-panel">
-                  <SharePlayer
-                    audioRef={audioRef}
-                    audioUrl={audioUrl}
-                    durationMs={detail.duration_ms ?? 0}
-                    currentTimeSec={currentTimeSec}
-                    onTimeUpdate={setCurrentTimeSec}
-                    onSeek={seek}
-                    detail={detail}
-                  />
-                </div>
-              </div>
+              </p>
             </div>
+            {ownerName && (
+              <p className="sp-win-by"><span>{ownerName}</span> shared this</p>
+            )}
+          </header>
+
+          <SharePlayer
+            audioRef={audioRef}
+            audioUrl={audioUrl}
+            durationMs={detail.duration_ms ?? 0}
+            currentTimeSec={currentTimeSec}
+            onTimeUpdate={setCurrentTimeSec}
+            onSeek={seek}
+            detail={detail}
+          />
+
+          {/* Both at once, no tabs: the transcript is what Granola won't show
+              and the summary is what Loom buries a tab deep. */}
+          <div className={"sp-cols" + (hasSummary ? "" : " sp-cols--solo")}>
+            <section className="sp-col">
+              <ShareTranscript
+                detail={detail}
+                currentTimeSec={currentTimeSec}
+                onSeek={seek}
+              />
+            </section>
+            {hasSummary && (
+              <aside className="sp-col sp-col--rail">
+                <div className="sp-col-head">Summary</div>
+                <ShareSummary markdown={detail.summary!} />
+              </aside>
+            )}
           </div>
         </div>
-
-        <p className="sp-hint">
-          Recorded with Corder.
-        </p>
       </main>
     </div>
   );

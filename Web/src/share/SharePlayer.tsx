@@ -2,13 +2,18 @@ import React from "react";
 import type { MeetingDetail } from "../api";
 import { displaySpeakerName } from "../format";
 
-/// Player + speaker timeline inside the hero window's right rail.
+/// The player, and the whole point of the window.
 ///
-/// Classes are the landing's (`.hl-audio-*`, `.hl-timeline-*`), so the 36px
-/// accent play button, the 6px scrub track, the 22px speaker bars and the
-/// tabular-nums clock are the shipped ones. The landing's copy of this is a
-/// mock — a CSS keyframe animates the fill from 18% to 86%. Here the same
-/// markup is driven by a real <audio>, which is the master clock.
+/// Granola's public page has no audio and no transcript at all; Loom's has a
+/// video and a plain timestamped list. Neither shows what a Corder recording
+/// actually knows: WHO spoke WHEN. So the scrubber here isn't a line — it's the
+/// conversation itself, one lane per speaker, and every lane is seekable. That
+/// is the one thing on this page neither of them can copy.
+///
+/// An earlier attempt drew these lanes 4px tall inside the existing scrub bar
+/// and it read as static: 60+ short turns became noise. The fix wasn't to drop
+/// them, it was to make them the primary object — at 22px a lane reads as a
+/// map of the conversation.
 export function SharePlayer({
   audioRef, audioUrl, durationMs, currentTimeSec, onTimeUpdate, onSeek, detail,
 }: {
@@ -22,6 +27,7 @@ export function SharePlayer({
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState(durationMs / 1000);
+  const [hover, setHover] = React.useState<{ pct: number; time: number } | null>(null);
 
   const togglePlay = () => {
     const a = audioRef.current;
@@ -34,93 +40,91 @@ export function SharePlayer({
     }
   };
 
+  const ratioFrom = (e: React.MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  };
+
   const pct = duration > 0 ? Math.min(100, Math.max(0, (currentTimeSec / duration) * 100)) : 0;
 
-  // Per-speaker bars, same shape as the hero's timeline: absolute segments
-  // positioned by time, plus a playhead. Real segment data, not a mock.
-  const rows = React.useMemo(() => {
+  const lanes = React.useMemo(() => {
     const totalMs = (duration || 1) * 1000;
+    // The hero window's speaker palette, in its order.
     const palette = ["var(--hl-speaker-purple)", "var(--hl-accent)", "var(--hl-speaker-self)", "var(--hl-avatar-admin)"];
     return detail.speakers.map((sp, i) => {
       const segs = detail.segments.filter((s) => s.speaker_id === sp.id);
       const spokenMs = segs.reduce((acc, s) => acc + (s.end_ms - s.start_ms), 0);
+      const name = displaySpeakerName(sp.custom_name, sp.label, null);
       return {
         id: sp.id,
-        name: displaySpeakerName(sp.custom_name, sp.label, null),
+        name,
+        initials: initialsOf(name),
         color: palette[i % palette.length],
         share: Math.round((spokenMs / totalMs) * 100),
-        spoken: fmt(spokenMs / 1000),
         segs: segs.map((s) => ({
           left: (s.start_ms / totalMs) * 100,
-          width: Math.max(0.5, ((s.end_ms - s.start_ms) / totalMs) * 100),
+          // A 300ms "yeah" is a hairline at this scale; floor it so short turns
+          // stay visible instead of vanishing into the lane.
+          width: Math.max(0.35, ((s.end_ms - s.start_ms) / totalMs) * 100),
         })),
       };
     });
   }, [detail.speakers, detail.segments, duration]);
 
   return (
-    <>
-      {!!audioUrl && (
-        <div className="hl-audio-controls">
-          <button
-            type="button"
-            className="hl-audio-btn-primary"
-            onClick={togglePlay}
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? (
-              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-                <rect x="4" y="2.5" width="3" height="11" rx="0.6" />
-                <rect x="9" y="2.5" width="3" height="11" rx="0.6" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-                <path d="M4 2.5v11c0 .6.7 1 1.2.6l8.4-5.5a.7.7 0 0 0 0-1.2L5.2 1.9C4.7 1.5 4 1.9 4 2.5z" />
-              </svg>
-            )}
-          </button>
+    <div className="sp-player">
+      <button
+        type="button"
+        className="sp-play"
+        onClick={togglePlay}
+        aria-label={playing ? "Pause" : "Play"}
+        disabled={!audioUrl}
+      >
+        {playing ? (
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+            <rect x="4" y="2.5" width="3" height="11" rx="0.6" />
+            <rect x="9" y="2.5" width="3" height="11" rx="0.6" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+            <path d="M4 2.5v11c0 .6.7 1 1.2.6l8.4-5.5a.7.7 0 0 0 0-1.2L5.2 1.9C4.7 1.5 4 1.9 4 2.5z" />
+          </svg>
+        )}
+      </button>
 
-          <span className="hl-audio-time">{fmt(currentTimeSec)} / {fmt(duration)}</span>
-
-          <div
-            className="hl-audio-scrub sp-scrub"
-            onClick={(e) => {
-              if (!duration) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const r = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-              onSeek(r * duration);
-            }}
-          >
-            <span className="hl-audio-scrub-fill sp-scrub-fill" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-      )}
-
-      {rows.length > 0 && (
-        <div className="hl-timeline-card">
-          <div className="hl-timeline-section-label">Timeline</div>
-          <div className="hl-tl-bars">
-            {rows.map((r) => (
-              <div className="hl-tl-row" key={r.id}>
-                <div className="hl-tl-row-head">
-                  <span className="hl-tl-name">{r.name}</span>
-                  <span className="hl-tl-stats">{r.share}% · {r.spoken}</span>
-                </div>
-                <div className="hl-tl-bar">
-                  {r.segs.map((s, i) => (
-                    <span
-                      key={i}
-                      className="hl-tl-bar-seg"
-                      style={{ left: `${s.left}%`, width: `${s.width}%`, background: r.color }}
-                    />
-                  ))}
-                  <span className="hl-tl-bar-cursor sp-cursor" style={{ left: `${pct}%` }} />
-                </div>
+      <div className="sp-lanes-wrap">
+        <div
+          className="sp-lanes"
+          onClick={(e) => { if (duration) onSeek(ratioFrom(e) * duration); }}
+          onMouseMove={(e) => { if (duration) { const r = ratioFrom(e); setHover({ pct: r * 100, time: r * duration }); } }}
+          onMouseLeave={() => setHover(null)}
+        >
+          {lanes.map((l) => (
+            <div className="sp-lane" key={l.id}>
+              <span className="sp-lane-badge" style={{ background: l.color }}>{l.initials}</span>
+              <div className="sp-lane-track">
+                {l.segs.map((s, i) => (
+                  <span
+                    key={i}
+                    className="sp-lane-seg"
+                    style={{ left: `${s.left}%`, width: `${s.width}%`, background: l.color }}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+              <span className="sp-lane-share">{l.share}%</span>
+            </div>
+          ))}
+
+          <span className="sp-playhead" style={{ left: `${pct}%` }} aria-hidden />
+          {hover && <span className="sp-hover-line" style={{ left: `${hover.pct}%` }} aria-hidden />}
         </div>
-      )}
+
+        <div className="sp-times">
+          <span>{fmt(currentTimeSec)}</span>
+          {hover && <span className="sp-times-hover">{fmt(hover.time)}</span>}
+          <span>{fmt(duration)}</span>
+        </div>
+      </div>
 
       {!!audioUrl && (
         <audio
@@ -138,8 +142,15 @@ export function SharePlayer({
           onTimeUpdate={(e) => onTimeUpdate((e.target as HTMLAudioElement).currentTime)}
         />
       )}
-    </>
+    </div>
   );
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function fmt(sec: number): string {
