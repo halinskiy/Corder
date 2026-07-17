@@ -46,17 +46,26 @@ body { margin: 0; }
 .sp-spin { animation: sp-spin 0.9s linear infinite; }
 @keyframes sp-spin { to { transform: rotate(360deg); } }
 
+/* One screen, strictly. The page itself NEVER scrolls on a desktop: nav and
+   heading take what they need, the window takes the rest of the viewport, and
+   the only scrollers are the columns inside it. That's why the window can't
+   keep the landing's fixed 1180:720 here — the ratio is right for a hero that
+   the page scrolls past, wrong for a page that must fit. Width still caps at
+   1180 and the inside keeps its natural 14px scale; only the height flexes. */
 .sp-page {
   position: relative;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overflow-x: clip;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
 }
+.sp-nav-wrap { flex-shrink: 0; }
 .sp-page--center { display: flex; align-items: center; justify-content: center; padding: 24px; }
 
 /* ── Atmosphere: the landing's hero, exactly ──
@@ -112,8 +121,15 @@ body { margin: 0; }
   color: var(--color-text);
 }
 .sp-nav-sep { width: 1px; height: 20px; margin: 0 8px; background: rgba(0, 0, 0, 0.1); flex-shrink: 0; }
-.sp-nav-note { font-size: 15px; color: var(--color-text-muted); white-space: nowrap; }
-.sp-nav-note b { color: var(--color-text); font-weight: 500; }
+.sp-nav-links { display: flex; align-items: center; gap: 4px; }
+.sp-nav-link {
+  padding: 8px 12px;
+  font-size: 15px; font-weight: 500;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: color 150ms var(--ease-out);
+}
+.sp-nav-link:hover { color: var(--color-text); }
 
 /* ── CTAs: the landing's .cta-pill / .nav-cta ── */
 .sp-cta {
@@ -153,21 +169,34 @@ body { margin: 0; }
   background-color: var(--color-surface);
 }
 
-/* Nav CTA, shipped in its scrolled state (this page's window doesn't scroll,
-   so the landing's transparent-at-top state would never resolve). */
+/* Nav CTA with the landing's scroll-state (.nav-cta--scroll-state): a hairline
+   ghost at the top of the page, accent fill once scrolled past 8px. */
 .sp-nav-cta {
   display: inline-flex; align-items: center; gap: 6px;
   height: 40px; padding: 0 20px 0 14px; margin-left: 8px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--color-accent);
-  background-color: var(--color-accent);
-  color: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  background-color: transparent;
+  color: var(--color-text);
   font-size: 15px; font-weight: 500;
   text-decoration: none; white-space: nowrap;
-  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+  transition:
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
 }
-.sp-nav-cta:hover { background-color: var(--color-accent-deep); border-color: var(--color-accent-deep); }
+.sp-nav-cta:hover { background-color: rgba(0, 0, 0, 0.04); border-color: var(--color-text); }
 .sp-nav-cta:active { transform: scale(0.98); }
+[data-scrolled="true"] .sp-nav-cta {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+[data-scrolled="true"] .sp-nav-cta:hover {
+  background-color: var(--color-accent-deep);
+  border-color: var(--color-accent-deep);
+}
 /* Inside the window's header strip: the app's scale, not the page's. */
 .sp-cta--nav {
   height: 32px; padding: 0 14px 0 11px;
@@ -183,20 +212,27 @@ body { margin: 0; }
    lines up with the window's edges exactly as the landing's sections do. */
 .sp-container {
   position: relative; z-index: 1;
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
   width: 100%; max-width: 1260px;
   margin-inline: auto;
-  padding: 40px 16px 56px;
+  padding: 28px 16px 28px;
 }
 @media (min-width: 768px)  { .sp-container { padding-inline: 32px; } }
 @media (min-width: 1024px) { .sp-container { padding-inline: 40px; } }
 
-.sp-head { text-align: center; margin-bottom: 36px; }
+.sp-head { flex-shrink: 0; text-align: center; margin-bottom: 20px; }
+.sp-shared-by {
+  margin: 0 0 8px;
+  font-size: 15px; color: var(--color-text-muted);
+}
+.sp-shared-by span { color: var(--color-accent); font-weight: 500; }
 .sp-title {
   margin: 0;
   font-family: var(--font-serif); font-weight: 500;
   /* The hero's h1 is clamp(36px, 5.2vw, 72px) for three words. A meeting title
      is longer, so it sits one step down the same scale. */
-  font-size: clamp(30px, 3.6vw, 52px);
+  font-size: clamp(24px, 2.6vw, 38px);
   line-height: var(--lh-display);
   letter-spacing: var(--ls-display);
   color: var(--color-text);
@@ -209,7 +245,8 @@ body { margin: 0; }
   color: var(--color-text-muted);
 }
 .sp-hint {
-  margin: 24px 0 0;
+  flex-shrink: 0;
+  margin: 14px 0 0;
   font-size: 14px; line-height: 1.45;
   color: var(--color-text-subtle); text-align: center;
 }
@@ -220,6 +257,14 @@ body { margin: 0; }
 
 /* No sidebar: it lists YOUR meetings, and a visitor has none. */
 .sp-app { grid-template-columns: 1fr; }
+/* The window fills whatever the viewport has left, instead of imposing its own
+   height on the page. */
+.sp-demo {
+  flex: 1; min-height: 0;
+  aspect-ratio: auto !important;
+  height: auto;
+}
+.sp-demo .hl-app { height: 100%; min-height: 0; }
 /* `.hl-main` is a grid child in the hero; here it's the only column. */
 .sp-demo .hl-main { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 /* The titlebar floats over the content and the sidebar normally pads it; with

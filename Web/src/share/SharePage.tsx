@@ -4,10 +4,17 @@ import { ShareTranscript } from "./ShareTranscript";
 import { ShareSummary } from "./ShareSummary";
 import { SharePlayer } from "./SharePlayer";
 import { ShareGate } from "./ShareGate";
-import { formatDuration } from "../format";
 import { fetchShare, tokenFromLocation, ShareGone, type Share } from "./shareApi";
 
 const DOWNLOAD_URL = "https://getcorder.com";
+
+/// The landing's nav.links, verbatim (corder-landing/content/copy.json).
+const NAV_LINKS = [
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Features", href: "#features" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
+];
 
 /// The landing's AppleIcon, verbatim — same path, same 0.5px optical nudge
 /// (the leaf makes the glyph read top-heavy next to text).
@@ -41,6 +48,9 @@ export function SharePage() {
   const [share, setShare] = React.useState<Share | null>(null);
   const [state, setState] = React.useState<"loading" | "ready" | "gone" | "error">("loading");
   const [tab, setTab] = React.useState<"transcript" | "summary">("transcript");
+  // Nav.tsx flips this at scrollY > 8 and the CTA fills with accent. The page
+  // does scroll (hero + a 720px window), so the state is real here, not faked.
+  const [scrolled, setScrolled] = React.useState(false);
   const [currentTimeSec, setCurrentTimeSec] = React.useState(0);
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
@@ -52,6 +62,13 @@ export function SharePage() {
       .then((s) => { if (alive) { setShare(s); setState("ready"); } })
       .catch((e) => { if (alive) setState(e instanceof ShareGone ? "gone" : "error"); });
     return () => { alive = false; };
+  }, []);
+
+  React.useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const seek = (sec: number) => {
@@ -93,7 +110,6 @@ export function SharePage() {
 
   const { detail, ownerName, audioUrl } = share;
   const hasSummary = !!(detail.summary && detail.summary.trim());
-  const started = new Date(detail.started_at);
 
   return (
     <div className="sp-page">
@@ -105,21 +121,25 @@ export function SharePage() {
           person they know. */}
       <ShareGate ownerName={ownerName} downloadUrl={DOWNLOAD_URL} />
 
-      {/* The landing's nav pill, value-for-value (Nav.tsx). Its CTA is
-          transparent until scrollY > 8; this page's window doesn't scroll, so
-          it ships in the scrolled (filled) state. */}
-      <header className="sp-nav-wrap">
+      {/* The landing's Nav, copied. Not "inspired by": the same brand mark with
+          NO wordmark beside it (the landing shows the word only on mobile), the
+          same four links, the same hairline separator, and the same CTA with
+          its scroll-state — transparent hairline at the top of the page,
+          accent fill past 8px. Links point at the landing's anchors, since
+          this page has no sections of its own. */}
+      <header className="sp-nav-wrap" data-scrolled={scrolled ? "true" : "false"}>
         <div className="sp-nav">
           <a className="sp-nav-brand" href={DOWNLOAD_URL} aria-label="Corder, home">
             <img src="/brand-mark-128.png" width={32} height={32} alt="" aria-hidden />
-            <span className="sp-nav-word">Corder</span>
           </a>
           <span className="sp-nav-sep" aria-hidden />
-          <span className="sp-nav-note">
-            {ownerName ? <><b>{ownerName}</b> shared this recording</> : "Shared with you"}
-          </span>
+          <nav className="sp-nav-links">
+            {NAV_LINKS.map((l) => (
+              <a key={l.href} className="sp-nav-link" href={DOWNLOAD_URL + "/" + l.href}>{l.label}</a>
+            ))}
+          </nav>
           <a className="sp-nav-cta" href={DOWNLOAD_URL}>
-            <AppleGlyph size={18} />
+            <AppleGlyph size={20} />
             Download
           </a>
         </div>
@@ -127,50 +147,17 @@ export function SharePage() {
 
       <main className="sp-container">
         <div className="sp-head">
+          {ownerName && (
+            <p className="sp-shared-by"><span>{ownerName}</span> shared this recording with you</p>
+          )}
           <h1 className="sp-title">{detail.title || "Untitled meeting"}</h1>
-          <p className="sp-sub">
-            {started.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-            {" · "}{formatDuration(detail.duration_ms ?? 0)}
-            {detail.speakers.length > 0 && <>{" · "}{detail.speakers.length} {detail.speakers.length === 1 ? "speaker" : "speakers"}</>}
-          </p>
         </div>
 
         {/* The hero window itself. `.hero-library-demo` brings the whole thing:
             1180px, 12px radius, the two-layer shadow, the app type scale. */}
         <div className="hero-library-demo sp-demo">
-          <div className="hl-titlebar" aria-hidden="true">
-            <span className="hl-traffic close">
-              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
-                <path d="M3.7 3.7 8.3 8.3M8.3 3.7 3.7 8.3" />
-              </svg>
-            </span>
-            <span className="hl-traffic minimize">
-              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
-                <path d="M3.2 6h5.6" />
-              </svg>
-            </span>
-            <span className="hl-traffic maximize">
-              <svg viewBox="0 0 12 12" fill="currentColor">
-                <path d="M3 3 3 6.4 6.4 3Z" /><path d="M9 9 9 5.6 5.6 9Z" />
-              </svg>
-            </span>
-          </div>
-
           <div className="hl-app sp-app">
             <div className="hl-main">
-              <div className="hl-main-header">
-                <div className="hl-breadcrumb">
-                  <span className="hl-breadcrumb-current">{detail.title || "Untitled meeting"}</span>
-                </div>
-                <div className="hl-spacer" />
-                <div className="hl-header-actions">
-                  <a className="sp-cta sp-cta--nav" href={DOWNLOAD_URL}>
-                    <AppleGlyph size={16} />
-                    Download Corder
-                  </a>
-                </div>
-              </div>
-
               <div className="hl-detail-tabs sp-tabs-row">
                 <div className="hl-detail-tab-col">
                   <button
@@ -225,7 +212,7 @@ export function SharePage() {
         </div>
 
         <p className="sp-hint">
-          Recorded with Corder. Nothing joined the call.
+          Recorded with Corder.
         </p>
       </main>
     </div>
