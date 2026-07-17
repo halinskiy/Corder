@@ -486,7 +486,10 @@ body { margin: 0; }
 }
 .sp-gate-title span { color: var(--color-accent); }
 .sp-gate-body {
-  margin: 12px 0 26px;
+  /* 6px under the title, exactly as the app's modals set it
+     (.update-status { margin: 6px 0 0 }). It was 12 here, which read as a gap
+     between two thoughts rather than a title and its own subtitle. */
+  margin: 6px 0 24px;
   font-size: 16px; line-height: var(--lh-body);
   color: var(--color-text-muted);
 }
@@ -508,8 +511,8 @@ body { margin: 0; }
 .sp-pick-card { max-width: 420px; padding: 36px 28px 24px; }
 .sp-picks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
 .sp-pick {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 16px;
+  display: flex; align-items: center;
+  padding: 14px 18px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-window);
   background: var(--color-bg);
@@ -523,14 +526,6 @@ body { margin: 0; }
 .sp-pick:hover:not(:disabled) { border-color: var(--color-text); background: var(--color-surface); transform: translateY(-1px); }
 .sp-pick:active:not(:disabled) { transform: scale(0.99); }
 .sp-pick:disabled { opacity: 0.45; cursor: default; }
-.sp-pick-icon {
-  flex-shrink: 0;
-  width: 36px; height: 36px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: var(--color-surface);
-  color: var(--color-accent);
-}
 .sp-pick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sp-pick-text b { font-size: 15px; font-weight: 500; color: var(--color-text); }
 .sp-pick-text i { font-style: normal; font-size: 13px; color: var(--color-text-muted); }

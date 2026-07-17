@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, FileText, AudioLines, Package } from "lucide-react";
+import { Download } from "lucide-react";
 import type { MeetingDetail } from "../api";
 import { displaySpeakerName } from "../format";
 
@@ -130,7 +130,6 @@ export function ShareExport({ detail, audioUrl }: { detail: MeetingDetail; audio
 
             <div className="sp-picks">
               <button type="button" className="sp-pick" onClick={downloadTranscript}>
-                <span className="sp-pick-icon"><FileText size={18} strokeWidth={1.8} /></span>
                 <span className="sp-pick-text">
                   <b>Transcript</b>
                   <i>Plain text, with speakers and timestamps</i>
@@ -138,7 +137,6 @@ export function ShareExport({ detail, audioUrl }: { detail: MeetingDetail; audio
               </button>
 
               <button type="button" className="sp-pick" onClick={downloadAudio} disabled={!audioUrl}>
-                <span className="sp-pick-icon"><AudioLines size={18} strokeWidth={1.8} /></span>
                 <span className="sp-pick-text">
                   <b>Audio</b>
                   <i>{audioUrl ? "The recording, as m4a" : "Not shared with this link"}</i>
@@ -146,7 +144,6 @@ export function ShareExport({ detail, audioUrl }: { detail: MeetingDetail; audio
               </button>
 
               <button type="button" className="sp-pick" onClick={downloadBoth} disabled={!audioUrl}>
-                <span className="sp-pick-icon"><Package size={18} strokeWidth={1.8} /></span>
                 <span className="sp-pick-text">
                   <b>Both</b>
                   <i>Transcript and audio</i>
