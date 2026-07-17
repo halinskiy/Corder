@@ -92,7 +92,7 @@ export function SharePage() {
       <ShareGate ownerName={ownerName} downloadUrl={DOWNLOAD_URL} />
 
       <a className="sp-brand" href={DOWNLOAD_URL} aria-label="Corder">
-        <img src="/brand-mark-128.png" width={56} height={56} alt="" />
+        <img src="/brand-mark-256.png" width={56} height={56} alt="" />
       </a>
 
       <div className="sp-tools">

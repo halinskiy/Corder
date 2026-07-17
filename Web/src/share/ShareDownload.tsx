@@ -107,7 +107,7 @@ export function ShareDownload({ downloadUrl, ownerName }: { downloadUrl: string;
         >
           <div className={"sp-gate-card" + (leaving ? " is-leaving" : "")} ref={cardRef}>
             <div className="sp-gate-sheen" aria-hidden />
-            <img className="sp-gate-mark" src="/brand-mark-128.png" width={64} height={64} alt="" aria-hidden />
+            <img className="sp-gate-mark" src="/brand-mark-256.png" width={64} height={64} alt="" aria-hidden />
             <h2 className="sp-gate-title">Get Corder</h2>
             <p className="sp-gate-body">
               {ownerName

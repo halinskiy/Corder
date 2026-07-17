@@ -111,7 +111,7 @@ export function ShareGate({ ownerName, downloadUrl }: { ownerName: string | null
     >
       <div className={"sp-gate-card" + (leaving ? " is-leaving" : "")} ref={cardRef}>
         <div className="sp-gate-sheen" aria-hidden />
-        <img className="sp-gate-mark" src="/brand-mark-128.png" width={64} height={64} alt="" aria-hidden />
+        <img className="sp-gate-mark" src="/brand-mark-256.png" width={64} height={64} alt="" aria-hidden />
         <h2 className="sp-gate-title">
           {ownerName ? <><span>{ownerName}</span> shared a recording with you.</> : "A recording was shared with you."}
         </h2>
