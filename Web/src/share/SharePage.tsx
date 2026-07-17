@@ -4,6 +4,8 @@ import { ShareTranscript } from "./ShareTranscript";
 import { SharePlayer } from "./SharePlayer";
 import { ShareGate } from "./ShareGate";
 import { ShareDownload } from "./ShareDownload";
+import { ShareExport } from "./ShareExport";
+import { ShareSearch } from "./ShareSearch";
 import { formatDuration } from "../format";
 import { fetchShare, tokenFromLocation, ShareGone, type Share } from "./shareApi";
 
@@ -31,6 +33,7 @@ export function SharePage() {
   const [share, setShare] = React.useState<Share | null>(null);
   const [state, setState] = React.useState<"loading" | "ready" | "gone" | "error">("loading");
   const [currentTimeSec, setCurrentTimeSec] = React.useState(0);
+  const [query, setQuery] = React.useState("");
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
   React.useEffect(() => {
@@ -79,6 +82,8 @@ export function SharePage() {
 
   const { detail, ownerName, audioUrl } = share;
   const started = new Date(detail.started_at);
+  const q = query.trim().toLowerCase();
+  const matchCount = q ? detail.segments.filter((s) => s.text.toLowerCase().includes(q)).length : null;
 
   return (
     <div className="sp-page">
@@ -86,8 +91,13 @@ export function SharePage() {
       <ShareGate ownerName={ownerName} downloadUrl={DOWNLOAD_URL} />
 
       <a className="sp-brand" href={DOWNLOAD_URL} aria-label="Corder">
-        <img src="/brand-mark-128.png" width={40} height={40} alt="" />
+        <img src="/brand-mark-128.png" width={56} height={56} alt="" />
       </a>
+
+      <div className="sp-tools">
+        <ShareSearch query={query} onQuery={setQuery} count={matchCount} />
+        <ShareExport detail={detail} audioUrl={audioUrl} />
+      </div>
 
       <main className="sp-sheet-wrap">
         <article className="sp-sheet">
@@ -116,6 +126,7 @@ export function SharePage() {
             detail={detail}
             currentTimeSec={currentTimeSec}
             onSeek={seek}
+            query={query}
           />
         </article>
       </main>

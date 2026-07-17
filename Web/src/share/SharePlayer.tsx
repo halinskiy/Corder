@@ -2,19 +2,31 @@ import React from "react";
 import type { MeetingDetail } from "../api";
 import { displaySpeakerName } from "../format";
 
-/// The audio, pinned to the bottom-left and running the width of the page.
+/// The audio, pinned along the bottom of the page.
+///
+/// Three separate bodies, not one bar: a play circle in the bottom-left corner
+/// (the landing's cookie-circle slot), the track spanning the middle, and the
+/// download orb in the bottom-right. Play and download are the same 56px
+/// circle, so the row reads as a pair of controls with the conversation
+/// stretched between them — rather than a play button crammed inside a pill,
+/// where its left inset could never match its top and bottom.
 ///
 /// Fixed, not part of the sheet: the point is to play any moment of the meeting
-/// while reading any part of it. It mirrors the landing's bottom-left cookie
-/// circle in position and padding (left 32, bottom 32), and stops short of the
-/// download orb, which owns the bottom-right.
+/// while reading any part of it.
 ///
-/// ONE track, not one lane per speaker. The two-lane version was honest but
-/// busy — two rows of blocks reading as stripes. Here every turn is drawn on a
-/// single line in its speaker's colour, so the shape of the conversation is one
-/// object: who held the floor, when it went back and forth, where the silences
-/// are. Corder is the only one of these products that can draw that at all;
-/// Loom shows a plain scrub bar and Granola has no audio on the web.
+/// ONE track, sampled into ticks. Two earlier versions failed here: a lane per
+/// speaker read as two rows of stripes, and one line of per-turn blocks read as
+/// dirt — rounded rectangles at 60 different widths colliding into shapes that
+/// were never in the data. A uniform tick grid fixes both: the rhythm comes
+/// from the conversation, the geometry stays still.
+///
+/// Corder is the only one of these products that can draw this at all: Loom
+/// ships a plain scrub bar, Granola has no audio on the web.
+/// Tick count. 240 across a track that's ~1000px wide lands each tick at ~3px
+/// plus a 1px gap — dense enough to read as texture, coarse enough that a
+/// 4-minute meeting doesn't turn into noise.
+const TICKS = 240;
+
 export function SharePlayer({
   audioRef, audioUrl, durationMs, currentTimeSec, onTimeUpdate, onSeek, detail,
 }: {
@@ -49,17 +61,25 @@ export function SharePlayer({
     return m;
   }, [detail.speakers]);
 
-  // Every turn on one line, positioned by time, coloured by speaker.
-  const marks = React.useMemo(() => {
+  // The track is sampled, not drawn from the segments directly.
+  //
+  // Drawing one rounded block per turn is what made this dirty: 60+ turns at
+  // wildly different widths, each with its own radius, overlapping into shapes
+  // that aren't in the data. Instead the timeline is a fixed grid of ticks —
+  // each tick asks "who was speaking at this instant?" and takes that colour.
+  // Uniform width, uniform gap, no radius fighting a neighbour: the texture
+  // comes from the conversation, not from the rendering.
+  const ticks = React.useMemo(() => {
     const totalMs = (duration || 1) * 1000;
-    return detail.segments.map((s) => ({
-      id: s.id,
-      left: (s.start_ms / totalMs) * 100,
-      // A 300ms "yeah" is sub-pixel at this scale; floor it so short turns stay
-      // visible instead of dropping out of the picture.
-      width: Math.max(0.25, ((s.end_ms - s.start_ms) / totalMs) * 100),
-      color: speakerById.get(s.speaker_id)?.color,
-    }));
+    const out: (string | null)[] = [];
+    for (let i = 0; i < TICKS; i++) {
+      // Sample mid-tick, so a tick represents its own slice rather than its
+      // left edge.
+      const ms = ((i + 0.5) / TICKS) * totalMs;
+      const seg = detail.segments.find((x) => x.start_ms <= ms && x.end_ms >= ms);
+      out.push(seg ? speakerById.get(seg.speaker_id)?.color ?? null : null);
+    }
+    return out;
   }, [detail.segments, duration, speakerById]);
 
   const pct = duration > 0 ? Math.min(100, Math.max(0, (currentTimeSec / duration) * 100)) : 0;
@@ -80,10 +100,10 @@ export function SharePlayer({
   if (!audioUrl) return null;
 
   return (
-    <div className="sp-dock">
+    <>
       <button
         type="button"
-        className="sp-dock-play"
+        className="sp-play-orb"
         onClick={togglePlay}
         aria-label={playing ? "Pause" : "Play"}
       >
@@ -99,42 +119,43 @@ export function SharePlayer({
         )}
       </button>
 
-      <span className="sp-dock-time">{fmt(currentTimeSec)}</span>
+      <div className="sp-dock">
+        <span className="sp-dock-time">{fmt(currentTimeSec)}</span>
 
-      <div
-        className="sp-dock-track"
-        onClick={(e) => {
-          if (!duration) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          onSeek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
-        }}
-        onMouseMove={readHover}
-        onMouseLeave={() => setHover(null)}
-      >
-        {marks.map((m, i) => (
-          <span
-            key={m.id}
-            className="sp-dock-mark"
-            style={{
-              left: `${m.left}%`,
-              width: `${m.width}%`,
-              background: m.color,
-              // Turns draw in left to right as the page settles.
-              animationDelay: `${420 + Math.min(i, 40) * 12}ms`,
-            }}
-          />
-        ))}
-        <span className="sp-dock-played" style={{ width: `${pct}%` }} aria-hidden />
-        <span className="sp-dock-head" style={{ left: `${pct}%` }} aria-hidden />
-        {hover && (
-          <span className="sp-dock-tip" style={{ left: `${hover.pct}%` }}>
-            {hover.who && <b>{hover.who}</b>}
-            {fmt(hover.time)}
-          </span>
-        )}
+        <div
+          className="sp-dock-track"
+          onClick={(e) => {
+            if (!duration) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            onSeek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+          }}
+          onMouseMove={readHover}
+          onMouseLeave={() => setHover(null)}
+        >
+          {ticks.map((color, i) => (
+            <span
+              key={i}
+              className={"sp-tick" + (color ? "" : " is-quiet")}
+              style={{
+                background: color ?? undefined,
+                // Ticks rise left to right as the dock settles, so the shape of
+                // the conversation draws itself.
+                animationDelay: `${380 + i * 3}ms`,
+              }}
+            />
+          ))}
+          <span className="sp-dock-played" style={{ width: `${pct}%` }} aria-hidden />
+          <span className="sp-dock-head" style={{ left: `${pct}%` }} aria-hidden />
+          {hover && (
+            <span className="sp-dock-tip" style={{ left: `${hover.pct}%` }}>
+              {hover.who && <b>{hover.who}</b>}
+              {fmt(hover.time)}
+            </span>
+          )}
+        </div>
+
+        <span className="sp-dock-time sp-dock-time--end">{fmt(duration)}</span>
       </div>
-
-      <span className="sp-dock-time sp-dock-time--end">{fmt(duration)}</span>
 
       <audio
         ref={audioRef}
@@ -150,7 +171,7 @@ export function SharePlayer({
         }}
         onTimeUpdate={(e) => onTimeUpdate((e.target as HTMLAudioElement).currentTime)}
       />
-    </div>
+    </>
   );
 }
 

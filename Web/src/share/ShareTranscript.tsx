@@ -11,15 +11,23 @@ import { displaySpeakerName } from "../format";
 /// up further from its own words than from the next speaker's.
 ///
 /// Timestamps show on hover and on the line playing now: there when you want to
-/// jump, invisible while you read.
+/// jump, invisible while you read. The whole turn is the jump target, not just
+/// the timestamp — same as clicking a line in the app.
+///
+/// Search doesn't filter. Filtering a conversation to matching lines destroys
+/// the thing you're reading; matches are highlighted in place and the first one
+/// is scrolled to instead.
 export function ShareTranscript({
-  detail, currentTimeSec, onSeek,
+  detail, currentTimeSec, onSeek, query,
 }: {
   detail: MeetingDetail;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
+  query: string;
 }) {
   const activeRef = React.useRef<HTMLDivElement>(null);
+  const firstHitRef = React.useRef<HTMLDivElement>(null);
+  const q = query.trim().toLowerCase();
 
   const speakerById = React.useMemo(() => {
     const m = new Map<string, { name: string; initials: string; color: string }>();
@@ -46,6 +54,15 @@ export function ShareTranscript({
   // document), so this scrolls the window — and stops short of the bottom,
   // where the docked audio covers ~110px.
   React.useEffect(() => {
+    const el = firstHitRef.current;
+    if (!q || !el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < 80 || r.bottom > window.innerHeight - 110) {
+      window.scrollTo({ top: window.scrollY + r.top - window.innerHeight / 3, behavior: "smooth" });
+    }
+  }, [q]);
+
+  React.useEffect(() => {
     const el = activeRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -54,16 +71,27 @@ export function ShareTranscript({
     }
   }, [activeId]);
 
+  const firstHitIndex = React.useMemo(
+    () => (q ? detail.segments.findIndex((s) => s.text.toLowerCase().includes(q)) : -1),
+    [detail.segments, q],
+  );
+
   return (
     <div className="sp-turns">
       {detail.segments.map((s, i) => {
         const sp = speakerById.get(s.speaker_id);
         const isActive = s.id === activeId;
+        const isFirstHit = !!q && i === firstHitIndex;
         return (
           <div
             key={s.id}
-            ref={isActive ? activeRef : undefined}
-            className={"sp-turn" + (isActive ? " is-active" : "")}
+            ref={isActive ? activeRef : (isFirstHit ? firstHitRef : undefined)}
+            className={"sp-turn" + (isActive ? " is-active" : "") + (hit(s.text, q) ? " is-hit" : "")}
+            onClick={() => onSeek(s.start_ms / 1000)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSeek(s.start_ms / 1000); } }}
+            title="Jump to this moment"
             // Turns stagger in as the sheet settles, then rest. Capped at 12 so
             // a long transcript doesn't animate for two seconds.
             style={{ animationDelay: `${140 + Math.min(i, 12) * 45}ms` }}
@@ -72,16 +100,9 @@ export function ShareTranscript({
             <div className="sp-turn-body">
               <div className="sp-turn-head">
                 <span className="sp-turn-name" style={{ color: sp?.color }}>{sp?.name}</span>
-                <button
-                  type="button"
-                  className="sp-turn-time"
-                  onClick={() => onSeek(s.start_ms / 1000)}
-                  title="Jump to this moment"
-                >
-                  {stamp(s.start_ms)}
-                </button>
+                <span className="sp-turn-time">{stamp(s.start_ms)}</span>
               </div>
-              <p className="sp-turn-text">{s.text}</p>
+              <p className="sp-turn-text">{highlight(s.text, q)}</p>
             </div>
           </div>
         );
@@ -102,4 +123,22 @@ function stamp(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function hit(text: string, q: string): boolean {
+  return !!q && text.toLowerCase().includes(q);
+}
+
+function highlight(text: string, q: string): React.ReactNode {
+  if (!q) return text;
+  const out: React.ReactNode[] = [];
+  const lower = text.toLowerCase();
+  let from = 0;
+  for (let at = lower.indexOf(q, from); at !== -1; at = lower.indexOf(q, from)) {
+    if (at > from) out.push(text.slice(from, at));
+    out.push(<mark className="sp-mark" key={at}>{text.slice(at, at + q.length)}</mark>);
+    from = at + q.length;
+  }
+  out.push(text.slice(from));
+  return out;
 }

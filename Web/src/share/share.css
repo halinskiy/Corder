@@ -104,6 +104,77 @@ body { margin: 0; }
 .sp-brand:hover { transform: scale(1.06); }
 .sp-brand:active { transform: scale(0.96); }
 
+/* ── Corner controls ──
+   The mark, search, export and the two bottom circles are ONE body at four
+   corners: same 56px, same inset, same hover. That's why the mark is 56 too —
+   at 40 it read as a stray graphic rather than a member of the set. */
+.sp-tools {
+  position: fixed;
+  top: var(--sp-inset); right: var(--sp-inset);
+  z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+}
+.sp-corner-btn {
+  width: var(--sp-orb); height: var(--sp-orb);
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  /* Opaque, like the landing's ghost CTA: the blobs pass under these and their
+     edge shows through anything translucent. */
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
+.sp-corner-btn:hover { border-color: var(--color-text); background: var(--color-surface); transform: scale(1.06); }
+.sp-corner-btn:active { transform: scale(0.96); }
+.sp-corner-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+/* Search: the circle IS the field. Collapsed it's a corner button; open, the
+   same body stretches and the input fades up inside it. Nothing appears from
+   nowhere — the button becomes the field. */
+.sp-search {
+  position: relative;
+  display: flex; align-items: center;
+  height: var(--sp-orb);
+  width: var(--sp-orb);
+  transition: width 320ms var(--ease-out);
+}
+.sp-search.is-open { width: 320px; }
+.sp-search-btn { position: relative; z-index: 2; }
+.sp-search.is-open .sp-search-btn {
+  border-color: transparent;
+  background: transparent;
+}
+.sp-search.is-open .sp-search-btn:hover { background: transparent; transform: none; color: var(--color-accent); }
+.sp-search-input {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  padding: 0 52px 0 var(--sp-orb);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  font-family: var(--font-sans); font-size: 15px;
+  color: var(--color-text);
+  outline: none;
+  opacity: 0; pointer-events: none;
+  transition: opacity 200ms var(--ease-out);
+}
+.sp-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.sp-search.is-open .sp-search-input { opacity: 1; pointer-events: auto; }
+.sp-search-input:focus { border-color: var(--color-text); }
+.sp-search-count {
+  position: absolute; right: 18px; z-index: 2;
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--color-text-subtle);
+  pointer-events: none;
+}
+
 /* ── The sheet ──
    816px is A4 at 96dpi (794) rounded to the grid: the width a document is
    supposed to be, and close to the 65-80 characters a line should hold. The
@@ -161,7 +232,12 @@ body { margin: 0; }
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+.sp-turn { cursor: pointer; }
+.sp-turn:hover { background: var(--color-surface); }
 .sp-turn.is-active { background: rgba(33, 122, 80, 0.07); }
+.sp-turn.is-hit { background: rgba(255, 214, 0, 0.1); }
+.sp-turn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.sp-mark { background: rgba(255, 214, 0, 0.45); color: inherit; border-radius: 3px; padding: 0 1px; }
 .sp-avatar {
   flex-shrink: 0;
   width: 26px; height: 26px; border-radius: 50%;
@@ -174,15 +250,12 @@ body { margin: 0; }
 .sp-turn-head { display: flex; align-items: baseline; gap: 8px; }
 .sp-turn-name { font-size: 13.5px; font-weight: 600; }
 .sp-turn-time {
-  padding: 0; border: none; background: none;
   font-family: var(--font-mono); font-size: 11px;
   color: var(--color-text-subtle);
-  cursor: pointer;
   opacity: 0;
-  transition: opacity 150ms var(--ease-out), color 150ms var(--ease-out);
+  transition: opacity 150ms var(--ease-out);
 }
 .sp-turn:hover .sp-turn-time, .sp-turn.is-active .sp-turn-time { opacity: 1; }
-.sp-turn-time:hover { color: var(--color-accent); }
 .sp-turn-text {
   margin: 3px 0 0;
   font-size: 16px; line-height: 1.65;
@@ -190,17 +263,37 @@ body { margin: 0; }
   overflow-wrap: anywhere;
 }
 
-/* ── Docked audio ──
-   Fixed bottom-left, running to the orb. The inset mirrors the landing's
-   cookie circle, so the two corners read as one row. */
-.sp-dock {
+/* ── Bottom row: play · track · download ──
+   Three bodies, not one bar. Play and download are the same circle as the top
+   corners; the track spans between them. */
+.sp-play-orb {
   position: fixed;
   z-index: 25;
   left: var(--sp-inset);
   bottom: max(var(--sp-inset), calc(env(safe-area-inset-bottom, 0px) + 28px));
-  right: calc(var(--sp-inset) + var(--sp-orb) + 16px);
+  width: var(--sp-orb); height: var(--sp-orb);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--color-accent); color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 22px -8px rgba(33, 122, 80, 0.55);
+  transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+  animation: sp-dock-in 620ms var(--ease-out) 200ms both;
+}
+.sp-play-orb svg { width: 17px; height: 17px; }
+.sp-play-orb:hover { background: var(--color-accent-hover); transform: scale(1.06); }
+.sp-play-orb:active { transform: scale(0.96); }
+.sp-play-orb:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+.sp-dock {
+  position: fixed;
+  z-index: 25;
+  left: calc(var(--sp-inset) + var(--sp-orb) + 12px);
+  right: calc(var(--sp-inset) + var(--sp-orb) + 12px);
+  bottom: max(var(--sp-inset), calc(env(safe-area-inset-bottom, 0px) + 28px));
   height: var(--sp-orb);
-  display: flex; align-items: center; gap: 14px;
+  display: flex; align-items: center; gap: 16px;
   padding: 0 20px;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid var(--color-border-strong);
@@ -214,18 +307,6 @@ body { margin: 0; }
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.sp-dock-play {
-  flex-shrink: 0;
-  width: 34px; height: 34px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%;
-  background: var(--color-accent); color: #fff;
-  cursor: pointer;
-  transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
-}
-.sp-dock-play svg { width: 13px; height: 13px; }
-.sp-dock-play:hover { background: var(--color-accent-hover); transform: scale(1.06); }
-.sp-dock-play:active { transform: scale(0.96); }
 .sp-dock-time {
   flex-shrink: 0;
   font-family: var(--font-mono); font-size: 11.5px;
@@ -234,38 +315,41 @@ body { margin: 0; }
 }
 .sp-dock-time--end { color: var(--color-text-subtle); }
 
-/* ONE track. Every turn drawn at its real position in its speaker's colour, so
-   the conversation is a single object: who held the floor, where it went back
-   and forth, where the silences are. The two-lane version was honest but busy;
-   this says the same thing in one line. */
+/* The track is a tick grid, not one block per turn.
+   Per-turn blocks were the dirt: 60+ rounded rectangles at wildly different
+   widths, colliding into shapes that were never in the data. Ticks are uniform
+   — same width, same gap, same radius — so the texture is the conversation and
+   nothing else. */
 .sp-dock-track {
   position: relative; flex: 1; min-width: 0;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--color-surface);
-  overflow: hidden;
+  height: 26px;
+  display: flex; align-items: center; gap: 1px;
   cursor: pointer;
 }
-.sp-dock-mark {
-  position: absolute; top: 5px; bottom: 5px;
-  border-radius: 2px;
-  opacity: 0.85;
-  transform-origin: left center;
-  animation: sp-mark-in 420ms var(--ease-out) both;
+.sp-tick {
+  flex: 1;
+  height: 16px;
+  min-width: 0;
+  border-radius: 1px;
+  opacity: 0.9;
+  transform-origin: center;
+  animation: sp-tick-in 340ms var(--ease-out) both;
 }
-@keyframes sp-mark-in {
-  from { transform: scaleX(0); opacity: 0; }
-  to   { transform: scaleX(1); opacity: 0.85; }
+/* Silence is a hairline, not a gap: the track stays one continuous object. */
+.sp-tick.is-quiet { height: 3px; background: var(--color-border); opacity: 1; }
+@keyframes sp-tick-in {
+  from { transform: scaleY(0.2); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 0.9; }
 }
-/* Played region is a wash OVER the marks, not a fill that hides them. */
 .sp-dock-played {
   position: absolute; inset: 0 auto 0 0;
-  background: rgba(14, 14, 13, 0.07);
+  background: rgba(14, 14, 13, 0.06);
+  border-radius: 3px;
   pointer-events: none;
   transition: width 120ms linear;
 }
 .sp-dock-head {
-  position: absolute; top: -2px; bottom: -2px;
+  position: absolute; top: 2px; bottom: 2px;
   width: 2px; margin-left: -1px;
   background: var(--color-text);
   border-radius: 1px;
@@ -275,7 +359,7 @@ body { margin: 0; }
   transition: left 120ms linear;
 }
 .sp-dock-tip {
-  position: absolute; bottom: calc(100% + 10px);
+  position: absolute; bottom: calc(100% + 14px);
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 6px;
   padding: 5px 9px;
@@ -420,6 +504,37 @@ body { margin: 0; }
   to   { opacity: 0; transform: perspective(900px) rotateX(6deg) scale(0.96); }
 }
 
+/* ── Export picker ── */
+.sp-pick-card { max-width: 420px; padding: 36px 28px 24px; }
+.sp-picks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.sp-pick {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-window);
+  background: var(--color-bg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
+.sp-pick:hover:not(:disabled) { border-color: var(--color-text); background: var(--color-surface); transform: translateY(-1px); }
+.sp-pick:active:not(:disabled) { transform: scale(0.99); }
+.sp-pick:disabled { opacity: 0.45; cursor: default; }
+.sp-pick-icon {
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-accent);
+}
+.sp-pick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-pick-text b { font-size: 15px; font-weight: 500; color: var(--color-text); }
+.sp-pick-text i { font-style: normal; font-size: 13px; color: var(--color-text-muted); }
+
 /* ── Expired / error ── */
 .sp-notice {
   position: relative; z-index: 1;
@@ -437,7 +552,9 @@ body { margin: 0; }
 @media (max-width: 767px) {
   :root { --sp-inset: 16px; --sp-orb: 48px; }
   .sp-brand { top: 16px; left: 16px; }
-  .sp-brand img { width: 34px; height: 34px; }
+  .sp-brand img { width: 48px; height: 48px; }
+  .sp-tools { top: 16px; right: 16px; gap: 8px; }
+  .sp-search.is-open { width: calc(100vw - 32px - 48px - 8px); }
   .sp-sheet-wrap { padding: 72px 12px 120px; }
   .sp-sheet { padding: 32px 24px 40px; border-radius: 10px; }
   .sp-doc-title { font-size: 25px; }
@@ -446,7 +563,11 @@ body { margin: 0; }
   .sp-turn-text { font-size: 15.5px; }
   /* The dock keeps the play button and the track; the end clock is the first
      thing to go when there's no room. */
-  .sp-dock { gap: 10px; padding: 0 12px; }
+  .sp-dock {
+    left: calc(var(--sp-inset) + var(--sp-orb) + 8px);
+    right: calc(var(--sp-inset) + var(--sp-orb) + 8px);
+    gap: 10px; padding: 0 12px;
+  }
   .sp-dock-time--end { display: none; }
   .sp-cta--primary, .sp-cta--ghost { min-width: 0; width: 100%; padding: 0 24px; }
   .sp-gate-card { padding: 32px 24px 20px; }
@@ -454,6 +575,7 @@ body { margin: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sp-sheet, .sp-turn, .sp-dock, .sp-orb, .sp-dock-mark, .sp-gate, .sp-gate-card { animation: none; }
+  .sp-sheet, .sp-turn, .sp-dock, .sp-orb, .sp-play-orb, .sp-tick, .sp-gate, .sp-gate-card { animation: none; }
+  .sp-search { transition: none; }
   .sp-dock-head, .sp-dock-played { transition: none; }
 }
