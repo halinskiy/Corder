@@ -34,6 +34,7 @@ export function SharePage() {
   const [state, setState] = React.useState<"loading" | "ready" | "gone" | "error">("loading");
   const [currentTimeSec, setCurrentTimeSec] = React.useState(0);
   const [query, setQuery] = React.useState("");
+  const [readingMs, setReadingMs] = React.useState(0);
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
   React.useEffect(() => {
@@ -127,6 +128,7 @@ export function SharePage() {
             currentTimeSec={currentTimeSec}
             onSeek={seek}
             query={query}
+            onReading={setReadingMs}
           />
         </article>
       </main>
@@ -139,6 +141,7 @@ export function SharePage() {
         onTimeUpdate={setCurrentTimeSec}
         onSeek={seek}
         detail={detail}
+        readingMs={readingMs}
       />
 
       <ShareDownload downloadUrl={DOWNLOAD_URL} ownerName={ownerName} />

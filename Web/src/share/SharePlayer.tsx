@@ -28,7 +28,7 @@ import { displaySpeakerName } from "../format";
 const TICKS = 240;
 
 export function SharePlayer({
-  audioRef, audioUrl, durationMs, currentTimeSec, onTimeUpdate, onSeek, detail,
+  audioRef, audioUrl, durationMs, currentTimeSec, onTimeUpdate, onSeek, detail, readingMs,
 }: {
   audioRef: React.RefObject<HTMLAudioElement>;
   audioUrl: string | null;
@@ -37,6 +37,8 @@ export function SharePlayer({
   onTimeUpdate: (sec: number) => void;
   onSeek: (sec: number) => void;
   detail: MeetingDetail;
+  /// Where the reader is, in meeting time. Drives the track while paused.
+  readingMs: number;
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState(durationMs / 1000);
@@ -83,6 +85,13 @@ export function SharePlayer({
   }, [detail.segments, duration, speakerById]);
 
   const pct = duration > 0 ? Math.min(100, Math.max(0, (currentTimeSec / duration) * 100)) : 0;
+
+  // While nothing is playing the track follows the READER instead: scroll the
+  // transcript and the marker walks the meeting with you, so the dock doubles
+  // as a minimap. The moment audio starts, the audio wins — one marker, and it
+  // always shows the thing that's actually moving.
+  const readPct = duration > 0 ? Math.min(100, Math.max(0, (readingMs / 1000 / duration) * 100)) : 0;
+  const headPct = playing ? pct : readPct;
 
   const readHover = (e: React.MouseEvent<HTMLElement>) => {
     if (!duration) return;
@@ -145,7 +154,11 @@ export function SharePlayer({
             />
           ))}
           <span className="sp-dock-played" style={{ width: `${pct}%` }} aria-hidden />
-          <span className="sp-dock-head" style={{ left: `${pct}%` }} aria-hidden />
+          <span
+            className={"sp-dock-head" + (playing ? "" : " is-reading")}
+            style={{ left: `${headPct}%` }}
+            aria-hidden
+          />
           {hover && (
             <span className="sp-dock-tip" style={{ left: `${hover.pct}%` }}>
               {hover.who && <b>{hover.who}</b>}

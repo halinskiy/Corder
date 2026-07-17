@@ -17,13 +17,20 @@ import { displaySpeakerName } from "../format";
 /// Search doesn't filter. Filtering a conversation to matching lines destroys
 /// the thing you're reading; matches are highlighted in place and the first one
 /// is scrolled to instead.
+///
+/// Scrolling reports the turn nearest the middle of the viewport, which lets
+/// the docked track double as a minimap: read anywhere and the track shows
+/// where you are in the meeting.
 export function ShareTranscript({
-  detail, currentTimeSec, onSeek, query,
+  detail, currentTimeSec, onSeek, query, onReading,
 }: {
   detail: MeetingDetail;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
   query: string;
+  /// Where the reader is, in meeting time. Reported on scroll so the track can
+  /// act as a minimap while nothing is playing.
+  onReading: (ms: number) => void;
 }) {
   const activeRef = React.useRef<HTMLDivElement>(null);
   const firstHitRef = React.useRef<HTMLDivElement>(null);
@@ -76,8 +83,38 @@ export function ShareTranscript({
     [detail.segments, q],
   );
 
+  // Report the reading position: the turn closest to the middle of the screen.
+  // Reads are batched into one rAF, so a fast scroll doesn't measure the DOM on
+  // every event.
+  const listRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const nodes = listRef.current?.querySelectorAll<HTMLElement>("[data-ms]");
+      if (!nodes?.length) return;
+      const middle = window.innerHeight / 2;
+      let bestMs = 0, bestDist = Infinity;
+      nodes.forEach((n) => {
+        const r = n.getBoundingClientRect();
+        const d = Math.abs(r.top + r.height / 2 - middle);
+        if (d < bestDist) { bestDist = d; bestMs = Number(n.dataset.ms); }
+      });
+      onReading(bestMs);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(measure); };
+    measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [onReading, detail.segments]);
+
   return (
-    <div className="sp-turns">
+    <div className="sp-turns" ref={listRef}>
       {detail.segments.map((s, i) => {
         const sp = speakerById.get(s.speaker_id);
         const isActive = s.id === activeId;
@@ -86,6 +123,7 @@ export function ShareTranscript({
           <div
             key={s.id}
             ref={isActive ? activeRef : (isFirstHit ? firstHitRef : undefined)}
+            data-ms={s.start_ms}
             className={"sp-turn" + (isActive ? " is-active" : "") + (hit(s.text, q) ? " is-hit" : "")}
             onClick={() => onSeek(s.start_ms / 1000)}
             role="button"

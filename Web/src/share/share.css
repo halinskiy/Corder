@@ -356,7 +356,14 @@ body { margin: 0; }
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
   pointer-events: none;
   /* Eases between timeupdate ticks (~4/s) instead of stepping. */
-  transition: left 120ms linear;
+  transition: left 120ms linear, background-color 200ms var(--ease-out), opacity 200ms var(--ease-out);
+}
+/* Following the reader, not the audio: same marker, quieter, and it glides
+   rather than ticks — it's a hint about where you are, not a playhead. */
+.sp-dock-head.is-reading {
+  background: var(--color-text-subtle);
+  opacity: 0.8;
+  transition: left 260ms var(--ease-out), background-color 200ms var(--ease-out), opacity 200ms var(--ease-out);
 }
 .sp-dock-tip {
   position: absolute; bottom: calc(100% + 14px);
@@ -374,6 +381,7 @@ body { margin: 0; }
 .sp-orb {
   position: fixed;
   z-index: 25;
+  width: var(--sp-orb); height: var(--sp-orb);
   right: var(--sp-inset);
   bottom: max(var(--sp-inset), calc(env(safe-area-inset-bottom, 0px) + 28px));
   display: inline-flex; align-items: center; justify-content: center;

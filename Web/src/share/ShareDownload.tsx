@@ -11,7 +11,10 @@ import React from "react";
 /// Clicking opens the same card as the entry gate — Corder's modals are one
 /// family (update, sign-in, gate), so this one gets the same shell, the same
 /// cursor-tilt and the same buttons.
-const ORB_SIZE_DESKTOP = 56;
+///
+/// The size lives in CSS (--sp-orb), never inline: an inline width beat the
+/// mobile media query, so the orb stayed 56 while play shrank to 48 and the
+/// gap to the track collapsed to zero.
 
 export function ShareDownload({ downloadUrl, ownerName }: { downloadUrl: string; ownerName: string | null }) {
   const [open, setOpen] = React.useState(false);
@@ -90,7 +93,6 @@ export function ShareDownload({ downloadUrl, ownerName }: { downloadUrl: string;
         className="sp-orb"
         onClick={() => setOpen(true)}
         aria-label="Download Corder"
-        style={{ width: ORB_SIZE_DESKTOP, height: ORB_SIZE_DESKTOP }}
       >
         <CloudDownloadIcon />
       </button>
