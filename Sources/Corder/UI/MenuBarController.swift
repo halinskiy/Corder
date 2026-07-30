@@ -136,12 +136,22 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
                 // sees on a normal launch. UI is idempotent; nothing
                 // breaks if it was already correct.
                 switch state {
-                case .recording, .stopping, .idle, .preroll:
+                case .recording, .stopping, .idle:
                     if let menuHost = self.menuHost,
                        self.popover.contentViewController !== menuHost {
                         self.popover.contentViewController = menuHost
                     }
                     self.popover.behavior = .transient
+                case .preroll:
+                    // The "Record this call?" invite (InviteOfferView) is shown
+                    // DURING preroll on the auto-detect flow. Restoring menuHost
+                    // here (as the other states do) clobbers the invite with the
+                    // normal menu the instant it appears — the "offer shows the
+                    // old popover, no Not now button" bug. Preroll always resolves
+                    // to .recording (accept) or .idle (dismiss/timeout), and both
+                    // of those restore the menu, so leaving the popover untouched
+                    // here is safe. Don't fold .preroll back into the case above.
+                    break
                 }
             }
         updateIcon(for: AppContext.shared.recordingState)
