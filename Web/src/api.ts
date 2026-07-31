@@ -280,11 +280,32 @@ export async function retranscribe(id: string): Promise<void> {
 /// transcript is in the cloud, uploads the compact audio, and records the
 /// share via the Worker; returns the public URL. Throws with a user-facing
 /// message on any failure (surfaced in the Share modal).
-export async function shareMeeting(id: string): Promise<string> {
-  const r = await fetch(`/api/meetings/${id}/share`, { method: "POST" });
-  const j = (await r.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
-  if (!r.ok || !j.ok || !j.url) throw new Error(j.error || `HTTP ${r.status}`);
-  return j.url;
+///
+/// `clip` shares only a time range (ms from the meeting start): the audio is
+/// cut to it and the transcript trimmed, so the recipient gets exactly that
+/// slice. Omit it to share the whole meeting.
+export async function shareMeeting(
+  id: string,
+  clip?: { startMs: number; endMs: number },
+): Promise<string> {
+  // The backend does a verified push + audio upload + Worker call and blocks up
+  // to 60s. Give the fetch its own ceiling so a wedged connection surfaces as a
+  // retryable error instead of an endless "Creating link…" spinner.
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 65000);
+  try {
+    const r = await fetch(`/api/meetings/${id}/share`, {
+      method: "POST",
+      headers: clip ? { "Content-Type": "application/json" } : undefined,
+      body: clip ? JSON.stringify({ clip_start_ms: clip.startMs, clip_end_ms: clip.endMs }) : undefined,
+      signal: ctrl.signal,
+    });
+    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || `HTTP ${r.status}`);
+    return j.url;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 /// Returns the cached summary or generates one on the spot (the

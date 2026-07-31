@@ -73,6 +73,34 @@ enum MediaExporter {
         return runExport(session) ? out : nil
     }
 
+    /// `audio.wav` → AAC `.m4a` clipped to `[startMs, endMs)`. Same encode as
+    /// `audioM4A`, plus an export `timeRange` so the file physically contains
+    /// ONLY the shared range: a share clip must never ship the rest of the
+    /// meeting's audio. The cache name carries the range so distinct clips of
+    /// one meeting don't overwrite each other's export.
+    static func audioClipM4A(meetingId id: String, startMs: Int, endMs: Int) -> URL? {
+        let dir = AppPaths.recordingDir(for: id)
+        let src = dir.appendingPathComponent("audio.wav")
+        guard FileManager.default.fileExists(atPath: src.path) else { return nil }
+        guard endMs - startMs >= 1000 else { return nil }
+        let out = exportsDir(for: id).appendingPathComponent("corder-\(id)-\(startMs)-\(endMs).m4a")
+        if isFresh(out, newerThan: [src]) { return out }
+        try? FileManager.default.removeItem(at: out)
+        let asset = AVURLAsset(url: src, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else { return nil }
+        session.outputURL = out
+        session.outputFileType = .m4a
+        // Clamp to the asset so a range past the end just yields a shorter clip
+        // instead of failing the export.
+        let ms = 1000
+        let start = CMTime(value: CMTimeValue(startMs), timescale: CMTimeScale(ms))
+        let end = CMTime(value: CMTimeValue(endMs), timescale: CMTimeScale(ms))
+        let full = CMTimeRange(start: .zero, duration: asset.duration)
+        let want = CMTimeRange(start: start, end: end)
+        session.timeRange = full.intersection(want)
+        return runExport(session) ? out : nil
+    }
+
     /// `video.mov` (silent) + `audio.wav` → one `.mp4` with an AAC audio
     /// track. Video passthrough, audio re-encoded (via the cached m4a).
     /// `videoPath` is the meeting's stored video location (the canonical

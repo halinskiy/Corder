@@ -13,13 +13,19 @@ import type { T } from "../i18n";
 /// share page, which hides the Share + clip actions — a viewer cannot re-share
 /// or clip someone else's meeting).
 export function AudioCard({
-  detail, audioRef, onTimeUpdate, onShare, audioUrl, t,
+  detail, audioRef, onTimeUpdate, onShare, onClip, clipActive = false, audioUrl, t,
 }: {
   detail: MeetingDetail;
   audioRef: React.RefObject<HTMLAudioElement>;
   onTimeUpdate: (sec: number) => void;
   /// Omit to hide the Share + clip buttons entirely (read-only viewer).
   onShare?: () => void;
+  /// Toggles clip-select mode (pick a range in the transcript). Omit to hide
+  /// the Scissors button (read-only viewer).
+  onClip?: () => void;
+  /// Reflects whether clip mode is currently on, so the Scissors button lights
+  /// up active the same way the transcript toolbar buttons do.
+  clipActive?: boolean;
   /// Defaults to the app's local `/api/meetings/:id/audio` route.
   audioUrl?: string;
   t: T;
@@ -111,29 +117,29 @@ export function AudioCard({
             </div>
           )}
         </div>
-        {/* Share replaces the old per-file download chooser: one link that
-            carries the whole meeting (transcript + audio + summary). The
-            Scissors button to its right is a placeholder for the upcoming
-            "share a clip" feature (select a segment); it does nothing yet. */}
+        {/* Share = one link carrying the whole meeting (transcript + audio +
+            summary). Scissors turns on clip mode: you then pick the range by
+            clicking lines in the transcript. Both hidden on the read-only
+            share page (a viewer can't re-share or clip someone else's call). */}
         {onShare && (
-          <>
-            <button
-              className="toolbar-icon-btn audio-share-btn"
-              onClick={onShare}
-              title={t.share_btn_title ?? "Share a link"}
-              aria-label={t.share_btn_title ?? "Share a link"}
-            >
-              <Share2 size={16} strokeWidth={2} />
-            </button>
-            <button
-              className="toolbar-icon-btn audio-clip-btn"
-              title={t.share_clip_title ?? "Share a clip (coming soon)"}
-              aria-label={t.share_clip_title ?? "Share a clip (coming soon)"}
-              disabled
-            >
-              <Scissors size={16} strokeWidth={2} />
-            </button>
-          </>
+          <button
+            className="toolbar-icon-btn audio-share-btn"
+            onClick={onShare}
+            title={t.share_btn_title ?? "Share a link"}
+            aria-label={t.share_btn_title ?? "Share a link"}
+          >
+            <Share2 size={16} strokeWidth={2} />
+          </button>
+        )}
+        {onClip && (
+          <button
+            className={"toolbar-icon-btn audio-clip-btn" + (clipActive ? " active" : "")}
+            onClick={onClip}
+            title={clipActive ? (t.clip_exit ?? "Cancel clip") : (t.clip_enter ?? "Share a clip")}
+            aria-label={clipActive ? (t.clip_exit ?? "Cancel clip") : (t.clip_enter ?? "Share a clip")}
+          >
+            <Scissors size={16} strokeWidth={2} />
+          </button>
         )}
       </div>
       <audio

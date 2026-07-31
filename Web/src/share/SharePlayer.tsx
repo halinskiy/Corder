@@ -43,10 +43,12 @@ export function SharePlayer({
   const [playing, setPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState(durationMs / 1000);
   const [hover, setHover] = React.useState<{ pct: number; time: number; who: string | null } | null>(null);
+  const trackRef = React.useRef<HTMLDivElement>(null);
+  const magRaf = React.useRef<number | null>(null);
 
   const togglePlay = () => {
     const a = audioRef.current;
-    if (!a) return;
+    if (!a || !audioUrl) return;
     if (a.paused) {
       if (a.error || a.readyState === 0) { try { a.load(); } catch { /* ignore */ } }
       a.play().catch(() => {});
@@ -93,10 +95,11 @@ export function SharePlayer({
   const readPct = duration > 0 ? Math.min(100, Math.max(0, (readingMs / 1000 / duration) * 100)) : 0;
   const headPct = playing ? pct : readPct;
 
-  const readHover = (e: React.MouseEvent<HTMLElement>) => {
-    if (!duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const r = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const readHover = (clientX: number) => {
+    const track = trackRef.current;
+    if (!duration || !track) return;
+    const rect = track.getBoundingClientRect();
+    const r = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const ms = r * duration * 1000;
     const seg = detail.segments.find((s) => s.start_ms <= ms && s.end_ms >= ms);
     setHover({
@@ -106,8 +109,60 @@ export function SharePlayer({
     });
   };
 
-  if (!audioUrl) return null;
+  // Dock-style magnify: ticks near the cursor rise like macOS dock icons, with
+  // a cosine falloff over MAG_RADIUS ticks so the lens has soft shoulders. We
+  // write the transform straight to each tick node (240 of them, once per
+  // animation frame) rather than through React state, so a hover never
+  // triggers a re-render; the CSS `transition: transform` on .sp-tick eases
+  // each step, which is what makes the lens glide instead of snap. Off under
+  // reduced-motion.
+  const MAG_RADIUS = 10;
+  const MAG_PEAK = 2.1;
+  const applyMagnify = (clientX: number) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const els = track.getElementsByClassName("sp-tick");
+    const n = els.length;
+    if (!n || rect.width === 0) return;
+    const cursor = ((clientX - rect.left) / rect.width) * n;
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(i + 0.5 - cursor);
+      let s = 1;
+      if (d < MAG_RADIUS) {
+        const f = 0.5 * (1 + Math.cos((d / MAG_RADIUS) * Math.PI));
+        s = 1 + (MAG_PEAK - 1) * f;
+      }
+      (els[i] as HTMLElement).style.transform = s > 1 ? `scaleY(${s.toFixed(3)})` : "";
+    }
+  };
+  const resetMagnify = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const els = track.getElementsByClassName("sp-tick");
+    for (let i = 0; i < els.length; i++) (els[i] as HTMLElement).style.transform = "";
+  };
+  const prefersReduced =
+    typeof window !== "undefined" &&
+    !!window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const scheduleMagnify = (clientX: number) => {
+    if (prefersReduced) return;
+    if (magRaf.current != null) cancelAnimationFrame(magRaf.current);
+    magRaf.current = requestAnimationFrame(() => applyMagnify(clientX));
+  };
+  React.useEffect(
+    () => () => {
+      if (magRaf.current != null) cancelAnimationFrame(magRaf.current);
+    },
+    []
+  );
 
+  // Render the dock even without audio: the timeline is drawn from the
+  // transcript (segments + the duration prop), so it still works as a reading
+  // minimap and a shareable visual. The play orb stays visible but is a no-op
+  // when there is nothing to play (see togglePlay). A share WITH audio behaves
+  // exactly as before.
   return (
     <>
       <button
@@ -128,19 +183,31 @@ export function SharePlayer({
         )}
       </button>
 
-      <div className="sp-dock">
+      <div
+        className="sp-dock"
+        // Hover + seek span the WHOLE pill, not just the thin tick strip, so
+        // the magnify lens triggers anywhere over the dock (the earlier target
+        // was only the 26px track band in the middle). Coordinates are still
+        // mapped through the inner track's rect (trackRef), so a cursor over
+        // the time labels clamps to the nearest end.
+        onClick={(e) => {
+          const track = trackRef.current;
+          if (!duration || !track) return;
+          const rect = track.getBoundingClientRect();
+          onSeek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+        }}
+        onMouseMove={(e) => {
+          readHover(e.clientX);
+          scheduleMagnify(e.clientX);
+        }}
+        onMouseLeave={() => {
+          setHover(null);
+          resetMagnify();
+        }}
+      >
         <span className="sp-dock-time">{fmt(currentTimeSec)}</span>
 
-        <div
-          className="sp-dock-track"
-          onClick={(e) => {
-            if (!duration) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            onSeek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
-          }}
-          onMouseMove={readHover}
-          onMouseLeave={() => setHover(null)}
-        >
+        <div className="sp-dock-track" ref={trackRef}>
           {ticks.map((color, i) => (
             <span
               key={i}
@@ -172,7 +239,7 @@ export function SharePlayer({
 
       <audio
         ref={audioRef}
-        src={audioUrl}
+        src={audioUrl ?? undefined}
         preload="auto"
         style={{ display: "none" }}
         onPlay={() => setPlaying(true)}

@@ -123,7 +123,12 @@ final class TranscriptionPipeline {
     private var taskGen: [String: Int] = [:]
 
     @discardableResult
-    func enqueue(meetingId: String) -> Task<Void, Never> {
+    /// `forceFresh` bypasses the raw-turns cache so the run re-fetches ASR and
+    /// re-runs the LLM polish from scratch — used by the MANUAL Re-transcribe so
+    /// pipeline/prompt improvements actually reach an existing recording (a plain
+    /// cache-hit re-transcribe only re-derives timing off the cached, already-
+    /// polished text). Launch recovery / network retry keep the cache (default).
+    func enqueue(meetingId: String, forceFresh: Bool = false) -> Task<Void, Never> {
         // Double-clicking Re-transcribe used to spawn a SECOND task while
         // the first was still unwinding its cancellation. Both ran
         // `transcribe()` concurrently and raced on the meeting row, the
@@ -144,7 +149,7 @@ final class TranscriptionPipeline {
                 FileLogger.log("enqueue: superseded before start for \(meetingId)")
                 return
             }
-            await self.transcribe(meetingId: meetingId)
+            await self.transcribe(meetingId: meetingId, forceFresh: forceFresh)
             if self.taskGen[meetingId] == gen { self.activeTasks[meetingId] = nil }
         }
         activeTasks[meetingId] = task
@@ -171,8 +176,8 @@ final class TranscriptionPipeline {
         }
     }
 
-    func transcribe(meetingId: String) async {
-        FileLogger.log("transcribe(): START for \(meetingId)")
+    func transcribe(meetingId: String, forceFresh: Bool = false) async {
+        FileLogger.log("transcribe(): START for \(meetingId)\(forceFresh ? " (forceFresh: re-fetch ASR + re-polish)" : "")")
         // Reset the runtime provider override no matter how this
         // returns, exception, cancel, or normal completion, so a
         // following transcribe() always begins by re-evaluating the
@@ -556,7 +561,7 @@ final class TranscriptionPipeline {
             var haveRaw = false                 // raw cached → no Gemini
             var usingDualTrack = canDualTrack
 
-            if cacheUsable,
+            if cacheUsable, !forceFresh,
                let cachedJSON = meeting.geminiRawTurns,
                let storedHash = meeting.audioHash,
                !storedHash.isEmpty,
@@ -679,8 +684,11 @@ final class TranscriptionPipeline {
                         // the drift we just fixed at the ASR layer. Pinned
                         // setting still wins if the user set one.
                         let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? meetingLang ?? AppLanguage.current
-                        rawUserTurns = await WhisperCleanup.polish(rawUserTurns, language: lang)
-                        rawOtherTurns = await WhisperCleanup.polish(rawOtherTurns, language: lang)
+                        // High-quality (gpt-4o) polish only on a MANUAL
+                        // Re-transcribe (forceFresh); the first/auto pass uses
+                        // the cheap model to keep the default path near-free.
+                        rawUserTurns = await WhisperCleanup.polish(rawUserTurns, language: lang, highQuality: forceFresh)
+                        rawOtherTurns = await WhisperCleanup.polish(rawOtherTurns, language: lang, highQuality: forceFresh)
                     }
                     usingDualTrack = true
                 } else {
@@ -695,7 +703,7 @@ final class TranscriptionPipeline {
                     if currentProvider != .gemini {
                         let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? AppLanguage.current
                         rawOtherTurns = await WhisperCleanup.polish(
-                            rawOtherTurns, language: lang)
+                            rawOtherTurns, language: lang, highQuality: forceFresh)
                     }
                 }
             } else {
@@ -2114,6 +2122,28 @@ final class TranscriptionPipeline {
             }
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), no on-device diarization, offline re-derive → caller keeps cached finals")
             return []
+        }
+
+        // SINGLE-speaker track under a WHISPER provider (Groq / local / whisper-1):
+        // keep the raw ASR turns with their own timing, exactly like the mic
+        // `numSpeakers == 1` shortcut above. When FluidAudio finds only one
+        // speaker on this track there is nothing to SPLIT, so the re-lay below
+        // buys no WHO and only risks WHEN: on a degraded far-end (a Bluetooth
+        // call, measured) the diarizer under-covers the speech, the proportional
+        // / token re-lay squeezes real turns onto the covered spans, and turns
+        // that land on a now-silent stretch are deleted by the downstream
+        // dominance gate. A whole side of a call went missing this way (15 loud,
+        // real far-end turns dropped, verified their system-track RMS was 0.05
+        // to 0.13 the entire time). Whisper's per-segment timestamps are
+        // reliable (the code already trusts them for the mic track), so keeping
+        // them here is strictly safer than re-laying. Gemini is EXCLUDED: its
+        // per-chunk timestamps are the unreliable thing diarize-first exists to
+        // fix, so a single-speaker Gemini track still re-lays. Multi-speaker
+        // tracks always re-lay (that is the only way to split WHO).
+        let diarSpeakers = Set(diarSegs.map(\.speakerId)).count
+        if diarSpeakers <= 1, currentProvider != .gemini {
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single diarized speaker + Whisper-reliable timing, keeping \(rawTurns.count) raw ASR turns (no re-lay)")
+            return rawTurns
         }
 
         // Forced-alignment when on-device ASR is available; fall back to

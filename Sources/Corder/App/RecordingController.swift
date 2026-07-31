@@ -143,8 +143,16 @@ final class RecordingController {
         // routes through `startRecording`, which surfaces the sign-in prompt.
         if Self.guestAtSessionCap() { return nil }
         // Silent → require permissions ALREADY granted (we can't prompt
-        // without UI). Screen Recording for SCStream; mic must not be denied.
-        guard case .granted = await PermissionsChecker.checkScreenRecording() else { return nil }
+        // without UI). Screen Recording is needed ONLY when we'll record VIDEO
+        // (SCStream); an audio-only pre-roll (the default) captures the far end
+        // via the Core Audio process tap and the mic via AVAudioEngine, neither
+        // of which needs a screen grant. Crucially we must NOT go through
+        // `checkScreenRecording()` here: it calls `SCShareableContent`, which
+        // POPS the macOS "Screen & System Audio Recording" prompt whenever the
+        // grant is missing — firing on every call-app detection even with video
+        // off (the spurious prompt). Use the NON-prompting preflight, and only
+        // when video is actually on.
+        if AppSettings.captureVideo, !CGPreflightScreenCaptureAccess() { return nil }
         if PermissionsChecker.checkMicrophone() == .denied { return nil }
         if let free = Self.freeDiskBytes(), free < 500 * 1024 * 1024 { return nil }
 
@@ -431,7 +439,7 @@ final class RecordingController {
     /// Start offers sign-in instead of recording. Signed-in users are
     /// unlimited. Shared with the `/api/account/usage` route + the header
     /// "N left" counter.
-    static let guestSessionLimit = 5
+    static let guestSessionLimit = 2
 
     /// Sessions the guest currently holds (library + archive, minus pre-roll).
     /// 0 for signed-in users (the cap doesn't apply, so we don't query).

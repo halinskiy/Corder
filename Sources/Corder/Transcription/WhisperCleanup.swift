@@ -27,14 +27,23 @@ enum WhisperCleanup {
 
     // MARK: - Tunables
 
-    /// Endpoint + model. gpt-4o-mini is the right cost/quality knob
-    /// for a "make the text presentable" pass: $0.15 / $0.60 per 1M
-    /// tokens, fast, native multilingual. We post chat-completions
+    /// Endpoint + model. gpt-4o (was gpt-4o-mini): the mini couldn't
+    /// reconstruct heavily mis-heard speech (a garbled stretch stayed
+    /// garbled even with an aggressive prompt); gpt-4o does. Pricier per
+    /// token but the polish text is tiny, so a meeting is still cents.
+    /// The Worker PINS this model server-side anyway (abuse guard), so this
+    /// constant just keeps the client honest. We post chat-completions
     /// rather than the responses API so the surface matches every
     /// other Corder OpenAI call and we can stream later if needed.
     private static let directEndpoint = "https://api.openai.com/v1/chat/completions"
     private static let proxyEndpoint = "https://corder-api.empqwork.workers.dev/transcribe/whisper-cleanup"
-    private static let model = "gpt-4o-mini"
+    /// Two-tier polish to keep the default path nearly free while still
+    /// offering top reconstruction on demand. First/auto transcription uses
+    /// the cheap model (~$0.004/meeting); a MANUAL Re-transcribe (`highQuality`)
+    /// escalates to gpt-4o (~$0.06/meeting) for the garbled cases the mini can't
+    /// reconstruct. The Worker allow-lists exactly these two models.
+    private static let modelDefault = "gpt-4o-mini"
+    private static let modelHighQuality = "gpt-4o"
 
     /// Per-call turn budget. 50 short turns ≈ 3-5 k tokens of input,
     /// well under the 16 k context window and small enough that one
@@ -53,7 +62,8 @@ enum WhisperCleanup {
     /// the same timestamps and speaker labels; only `text` is replaced.
     /// On any failure returns the input unchanged.
     static func polish(_ turns: [GeminiTranscriber.Turn],
-                       language: String?) async -> [GeminiTranscriber.Turn] {
+                       language: String?,
+                       highQuality: Bool = false) async -> [GeminiTranscriber.Turn] {
         // Setting gate first, a Whisper user who flipped cleanup off
         // shouldn't pay an HTTP round-trip just to be told no.
         guard AppSettings.transcriptCleanup else {
@@ -91,7 +101,8 @@ enum WhisperCleanup {
             let batch = Array(turns[idx..<end])
             batchNo += 1
             let polished = await polishBatch(batch, language: language,
-                                             apiKey: key, jwt: jwt, batchNo: batchNo)
+                                             apiKey: key, jwt: jwt, batchNo: batchNo,
+                                             highQuality: highQuality)
             out.append(contentsOf: polished)
             idx = end
         }
@@ -113,15 +124,29 @@ enum WhisperCleanup {
                                     language: String?,
                                     apiKey: String,
                                     jwt: String,
-                                    batchNo: Int) async -> [GeminiTranscriber.Turn] {
+                                    batchNo: Int,
+                                    highQuality: Bool) async -> [GeminiTranscriber.Turn] {
         guard !batch.isEmpty else { return batch }
+        let model = highQuality ? modelHighQuality : modelDefault
 
         let systemPrompt: String = {
             var s = """
-            You are a professional transcript editor. Fix punctuation, capitalisation, \
-            and obvious typos in the spoken text below. Preserve the original meaning, \
-            speaker order, and wording. Do not paraphrase, summarise, translate, or add \
-            content. Return ONLY the edited text in the same line structure as the input: \
+            You are an expert transcript editor cleaning up speech-to-text output that \
+            contains recognition errors. The text below has mis-heard words and garbled \
+            stretches where the recogniser guessed wrong. Rewrite each line into what the \
+            speaker most likely actually said: confidently fix mis-heard words AND whole \
+            garbled phrases using the surrounding context and common sense, so the result \
+            reads as clean, natural speech (e.g. "один бак всего и тушите, кинал" → the \
+            plausible words that fit; "кинал" → "кидал"). Also fix punctuation and \
+            capitalisation. \
+            HARD LIMITS — this must stay the SAME utterance, only heard correctly: keep \
+            the speaker's own words, phrasing, tone, filler and profanity; do NOT \
+            paraphrase into your own style, summarise, translate, add or remove content, \
+            and keep each line about the same length as its input. If a token is clearly \
+            a person's name, username, or a product / game name, prefer keeping a sensible \
+            phonetic version over swapping in an unrelated common word. If a stretch is too \
+            garbled to reconstruct with any confidence, leave it as is rather than \
+            inventing. Return ONLY the edited text in the same line structure as the input: \
             one line per input line, no numbering, no prefixes.
             """
             if let lang = language?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -192,6 +217,13 @@ enum WhisperCleanup {
               let content = message["content"] as? String else {
             FileLogger.log("WhisperCleanup: batch \(batchNo) parse error, returning unchanged")
             return batch
+        }
+
+        // Real token usage for cost accounting (input/output priced differently).
+        if let usage = json["usage"] as? [String: Any] {
+            let pin = usage["prompt_tokens"] as? Int ?? 0
+            let pout = usage["completion_tokens"] as? Int ?? 0
+            FileLogger.log("WhisperCleanup: batch \(batchNo) usage model=\(model) prompt=\(pin) completion=\(pout)")
         }
 
         let edited = parseNumberedLines(content, expected: batch.count)

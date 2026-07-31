@@ -109,6 +109,13 @@ interface Props {
   onClarifyDismiss: () => void;
   onClarifyChosen: () => void;
   onToast: (msg: string, kind?: "success" | "error") => void;
+  /// Clip-share mode (owned by MeetingView). While on, a click SELECTS a line
+  /// for the clip instead of seeking, and lines inside the selected range get
+  /// the `clip-picked` class. Two-click range: `aId` is the start, `bId` the
+  /// end (null while waiting for the second click).
+  clipMode?: boolean;
+  clipSel?: { aId: number; bId: number | null } | null;
+  onClipPick?: (segId: number) => void;
   /// Public share page: someone else's meeting, viewed in a browser with no
   /// local Corder behind it. Kills every write path (segment editing, speaker
   /// rename), the rating prompt (a stranger must not be asked to rate an app
@@ -118,7 +125,7 @@ interface Props {
   t: T;
 }
 
-export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, activeMatchId, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, readOnly = false, t }: Props) {
+export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdated, query, activeMatchId, boostOn, recordingState, onRecordingStopped, onDeleted, clarifyOpen, onClarifyDismiss, onClarifyChosen, onToast, clipMode = false, clipSel = null, onClipPick, readOnly = false, t }: Props) {
   const speakerById = React.useMemo(() => {
     const map = new Map<string, SpeakerDTO>();
     detail.speakers.forEach((s) => map.set(s.id, s));
@@ -229,6 +236,34 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
     }
     return out;
   }, [detail.segments]);
+
+  // While the START is placed but the END isn't, the hovered line previews
+  // where the range would land, so selecting a section reads like dragging in a
+  // calendar. Cleared whenever clip mode turns off.
+  const [clipHoverId, setClipHoverId] = React.useState<number | null>(null);
+  React.useEffect(() => { if (!clipMode) setClipHoverId(null); }, [clipMode]);
+
+  // Segment id → its index in DOCUMENT order.
+  const segIndex = React.useMemo(() => {
+    const m = new Map<number, number>();
+    detail.segments.forEach((s, i) => { if (s.id != null) m.set(s.id, i); });
+    return m;
+  }, [detail.segments]);
+
+  // Clip selection is by DOCUMENT ORDER, not by time. Two speakers' turns
+  // overlap in ms (the far end talks over your pause), so a time-window tint
+  // bled onto the neighbouring line above — unpredictable and not what the
+  // cursor hovers. Selecting the lines BETWEEN the two clicks (inclusive)
+  // highlights exactly what you point at. The end is the second click if made,
+  // else the hovered line (live preview), else just the start line.
+  const clipIdxRange = React.useMemo(() => {
+    if (!clipMode || !clipSel) return null;
+    const ai = segIndex.get(clipSel.aId);
+    if (ai == null) return null;
+    const endId = clipSel.bId ?? clipHoverId ?? clipSel.aId;
+    const bi = segIndex.get(endId) ?? ai;
+    return { lo: Math.min(ai, bi), hi: Math.max(ai, bi) };
+  }, [clipMode, clipSel, clipHoverId, segIndex]);
 
   // Search no longer FILTERS the transcript, it highlights matches in
   // place (cmd+F style). The toolbar drives which match is current via
@@ -364,7 +399,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
   // its max-height in and out.
 
   return (
-    <div className="transcript ovsb-scroll" ref={containerRef}>
+    <div className={"transcript ovsb-scroll" + (clipMode ? " clip-mode" : "")} ref={containerRef}>
       {clarifyOpen && (
         // Mounted/unmounted directly. We tried wrapping it in a max-height
         // collapsible and a grid-rows collapsible, both leaked the banner's
@@ -397,6 +432,7 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
                 speaker={sp}
                 display={name === "you" ? t.speaker_self : name}
                 onUpdated={onSpeakersUpdated}
+                onToast={onToast}
                 readOnly={readOnly}
                 t={t}
               />
@@ -423,14 +459,23 @@ export function TranscriptPane({ detail, currentTimeSec, onSeek, onSpeakersUpdat
                     </React.Fragment>
                   );
                 }
+                const si = s.id != null ? segIndex.get(s.id) : undefined;
+                const picked = clipIdxRange != null && si != null && si >= clipIdxRange.lo && si <= clipIdxRange.hi;
                 return (
                   <React.Fragment key={s.id}>
                     <span
                       data-segid={s.id}
                       className={"segment-line"
                         + (s.id === activeSegmentId ? " active" : "")
-                        + (q && s.id === activeMatchId ? " search-hit" : "")}
-                      onClick={() => onSeek(s.start_ms / 1000)}
+                        + (q && s.id === activeMatchId ? " search-hit" : "")
+                        + (picked ? " clip-picked" : "")}
+                      onClick={() => {
+                        if (clipMode) { if (s.id != null) onClipPick?.(s.id); }
+                        else onSeek(s.start_ms / 1000);
+                      }}
+                      onMouseEnter={() => {
+                        if (clipMode && clipSel && clipSel.bId == null && s.id != null) setClipHoverId(s.id);
+                      }}
                       onContextMenu={(e) => s.id != null && startEdit(e, s.id, display)}
                     >
                       {highlight(display, q)}
@@ -536,13 +581,14 @@ interface SpeakerNameProps {
   speaker: SpeakerDTO | undefined;
   display: string;
   onUpdated: () => void;
+  onToast: (msg: string, kind?: "success" | "error") => void;
   /// Share page: render as plain text, renaming would POST to a server that
   /// isn't there and it isn't the viewer's meeting to rename anyway.
   readOnly?: boolean;
   t: T;
 }
 
-function SpeakerName({ meetingId, speaker, display, onUpdated, readOnly = false, t }: SpeakerNameProps) {
+function SpeakerName({ meetingId, speaker, display, onUpdated, onToast, readOnly = false, t }: SpeakerNameProps) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(speaker?.custom_name || "");
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -564,7 +610,16 @@ function SpeakerName({ meetingId, speaker, display, onUpdated, readOnly = false,
           const trimmed = draft.trim();
           const next = trimmed.length === 0 ? null : trimmed;
           if (next !== (speaker.custom_name || null)) {
-            try { await renameSpeaker(meetingId, speaker.id, next); onUpdated(); } catch {}
+            // Surface a failure instead of swallowing it: the local server can
+            // wedge (a slow Share on the same keep-alive connection blocks the
+            // next request), and a silent catch just reverted the name with no
+            // hint that nothing saved.
+            try {
+              await renameSpeaker(meetingId, speaker.id, next);
+              onUpdated();
+            } catch {
+              onToast(t.toast_settings_failed ?? "Couldn't save. Try again.", "error");
+            }
           }
         }}
         onKeyDown={(e) => {

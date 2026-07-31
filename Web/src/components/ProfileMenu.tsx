@@ -462,6 +462,25 @@ export function ProfileMenu({
           {userEmail && (
             <>
               <div className="profile-pop-sep" />
+              {tier !== "max" && (
+                // Upgrade entry point: the in-app link to the plans, sitting
+                // above Sign out, same full-width shape but green (the
+                // `.profile-pop-signin` accent, not the red signout variant).
+                // Hidden for Max users, they have nothing to upgrade to.
+                <button
+                  className="profile-pop-signin profile-pop-upgrade"
+                  onClick={() => {
+                    setOpen(false);
+                    const w = window as Window & { corderOpenExternal?: (u: string) => void };
+                    w.corderOpenExternal?.("https://getcorder.com/#pricing");
+                  }}
+                  role="menuitem"
+                >
+                  {tier === "pro"
+                    ? t.profile_upgrade_max ?? "Upgrade to Max"
+                    : t.profile_upgrade ?? "Upgrade to Pro"}
+                </button>
+              )}
               <button
                 className="profile-pop-signin profile-pop-signout"
                 onClick={async () => {

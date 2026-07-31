@@ -596,7 +596,7 @@ summary,
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 12px;
+  padding: 12px 12px;
   margin: 2px 0;
   border: 1px solid var(--accent);
   /* Squarer than the nav items: a small 5px radius reads as "barely
@@ -606,7 +606,9 @@ summary,
   background: var(--accent);
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  /* 500 to match the design-system `.clarify-btn` weight (Settings "Open"
+     etc.) rather than the heavier 600 the popover CTAs used to carry. */
+  font-weight: 500;
   cursor: pointer;
   transition: background 80ms ease, border-color 80ms ease;
 }
@@ -623,6 +625,21 @@ summary,
 .profile-pop-signout:hover {
   background: color-mix(in srgb, var(--danger) 88%, #000);
   border-color: color-mix(in srgb, var(--danger) 88%, #000);
+}
+/* Upgrade sits directly above Sign out; a touch of breathing room so the
+   two stacked full-width buttons don't read as one block. It's a SECONDARY
+   control (white with a hairline border, dark label), same geometry as the
+   green Sign-in / red Sign-out but the design-system `.clarify-btn` look, so
+   it doesn't compete with them for attention. */
+.profile-pop-upgrade {
+  margin-bottom: 6px;
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.profile-pop-upgrade:hover {
+  background: var(--bg-hover);
+  border-color: var(--fg-muted);
 }
 /* Support group (Get help / Check for updates / admin). +4px above it so
    it doesn't crowd the green Sign-in CTA, and matching air below so the
@@ -2147,6 +2164,9 @@ body.resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Anchor for the floating clip-share bar (`.clip-bar`), which docks to the
+     bottom of this column while clip mode is on. */
+  position: relative;
   /* Pin to the LEFT grid cell of `.detail-body`, Transcript and
      Summary share this column (each is its own `.transcript-wrap`
      sibling with `display: none/flex` driven by `leftTab`). Without
@@ -2975,6 +2995,59 @@ body.resizing { cursor: col-resize; user-select: none; }
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* Clip-share mode: lines inside the selected range get a solid accent band
+   (stronger than `.active`'s scrub tint, so the selection reads as a
+   deliberate block). While the mode is on, `.active`/hover tints are muted so
+   they don't fight the selection colour. */
+.segment-line.clip-picked {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.transcript.clip-mode .segment-line:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.transcript.clip-mode .segment-line.clip-picked:hover {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* Floating clip action bar: docks to the bottom-centre of the transcript
+   column while clip mode is on, above the scrollable list. */
+.clip-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  display: flex;
+  justify-content: center;
+  padding: 0 20px;
+  /* The bar itself is a passthrough; only its children take pointer events so
+     the transcript stays clickable around them. */
+  pointer-events: none;
+  z-index: 4;
+}
+.clip-bar > * { pointer-events: auto; }
+/* Share pill = the canonical green CTA (`.clarify-btn.accent`), but floating:
+   auto width instead of the row-filling `flex: 1`, and a lift shadow so it
+   reads above the transcript. */
+.clip-share-btn.clarify-btn {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 12px 20px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+/* Instruction chip shown before a range is picked: a quiet outlined pill in
+   the same shape as the share button. */
+.clip-hint {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
 /* Inline transcript edit (right-click → Edit text). Sized to flow with
    the paragraph; widens with content via the field's own min-width. */
 .segment-edit-input {
@@ -3441,16 +3514,21 @@ body.resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
   margin-top: 14px;
 }
-.share-link-input {
+/* Shape/fill/border come from the base `input[type="text"]` pill, same as the
+   sidebar + transcript search fields, so this reads as the app's one input.
+   The `type="text"` on the element is REQUIRED: the base rule is an attribute
+   selector, and an <input> with no type attribute does not match it (that's
+   why this row used to carry its own 10px-radius box). Only the mono URL face,
+   the ellipsis, and the 38px height (to line up with the two round actions
+   beside it) are share-specific. */
+/* Selector carries the tag + parent ON PURPOSE. The base rule above is
+   `input[type="text"]` (element + attribute), which outweighs a bare class,
+   and its `font: inherit` would otherwise stomp the mono URL face back to the
+   UI font. Don't simplify this to `.share-link-input`. */
+.share-link-row input.share-link-input {
   flex: 1;
   min-width: 0;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--bg-input);
-  color: var(--fg);
-  font-size: 13px;
+  height: 38px;
   font-family: var(--font-mono, ui-monospace, monospace);
   text-overflow: ellipsis;
 }

@@ -90,7 +90,11 @@ export function SpeakersClarifyBanner({ meetingId, pickedOthers, onChanged, onTo
             <button
               key={opt.othersValue}
               className={"clarify-btn" + (isActive ? " active" : "")}
-              onClick={() => { if (!isActive) select(opt.othersValue); }}
+              // Re-fire even when this pill is already active: a cancelled or
+              // failed run leaves the count set, and a "no-op if active" guard
+              // made the pill un-clickable ("выбрал 2, отменил, снова 2 нажать
+              // не могу"). Re-selecting just re-runs with the same count.
+              onClick={() => select(opt.othersValue)}
               disabled={busy}
             >
               {opt.label === "just_me" ? t.clarify_just_me : opt.label}

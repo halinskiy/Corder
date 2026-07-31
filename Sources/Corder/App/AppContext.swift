@@ -715,7 +715,7 @@ extension UserTier {
     /// ~$0.08/meeting-hour: comfortably profitable at every cap.
     var advancedMonthlyLimitSeconds: Int? {
         switch self {
-        case .free: return 60 * 60        // 1 hour / month (free is local-only anyway)
+        case .free: return 2 * 3600       // 2 hours / month — cloud safety net when the on-device model can't run; matches the Worker's CLOUD_CAP_SECONDS.free
         case .pro:  return 25 * 3600      // 25 hours / month
         case .max:  return 250 * 3600     // 250 hours / month (fair-use; marketed "unlimited")
         }

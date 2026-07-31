@@ -36,8 +36,15 @@ enum ShareService {
     private static let uploadURLEndpoint =
         URL(string: "https://corder-api.empqwork.workers.dev/share/upload-url")!
 
+    /// A shared time range, in milliseconds from the meeting start. `nil` shares
+    /// the whole meeting.
+    struct Clip: Equatable { let startMs: Int; let endMs: Int }
+
     /// Create (or refresh) a share for `meetingId` and return the public URL.
-    static func createShare(meetingId: String, repo: MeetingRepository) async throws -> URL {
+    /// When `clip` is set, only that range is shared: the audio is cut to it and
+    /// the Worker trims + re-bases the transcript, so the recipient gets exactly
+    /// the shared slice and nothing else.
+    static func createShare(meetingId: String, repo: MeetingRepository, clip: Clip? = nil) async throws -> URL {
         // 1. Live Supabase session (NOT the AppSettings.isSignedIn UserDefaults
         //    mirror, which can diverge from the real session).
         guard let session = SupabaseClientHolder.shared.auth.currentSession else {
@@ -73,10 +80,12 @@ enum ShareService {
         //    row-level security policy"). The Worker also DERIVES the object key
         //    from the JWT, so the client never names its own path.
         var hasAudio = false
-        if let m4aURL = MediaExporter.audioM4A(meetingId: meetingId) {
+        let m4aURL = clip.map { MediaExporter.audioClipM4A(meetingId: meetingId, startMs: $0.startMs, endMs: $0.endMs) }
+            ?? MediaExporter.audioM4A(meetingId: meetingId)
+        if let m4aURL {
             do {
                 let data = try Data(contentsOf: m4aURL)
-                try await uploadAudio(data: data, meetingId: meetingId, jwt: jwt)
+                try await uploadAudio(data: data, meetingId: meetingId, jwt: jwt, clip: clip)
                 hasAudio = true
             } catch {
                 FileLogger.log("ShareService: audio upload failed for \(meetingId), sharing text-only: \(error)")
@@ -91,11 +100,15 @@ enum ShareService {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 30
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "meeting_id": meetingId,
             "has_audio": hasAudio,
             "owner_name": AppSettings.userName ?? AppSettings.userEmail ?? "",
         ]
+        if let clip {
+            payload["clip_start_ms"] = clip.startMs
+            payload["clip_end_ms"] = clip.endMs
+        }
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         let (respData, resp) = try await URLSession.shared.data(for: req)
@@ -114,13 +127,20 @@ enum ShareService {
 
     /// Ask the Worker for a one-shot signed upload URL and PUT the audio to it.
     /// Throws on any failure; the caller treats audio as best-effort.
-    private static func uploadAudio(data: Data, meetingId: String, jwt: String) async throws {
+    private static func uploadAudio(data: Data, meetingId: String, jwt: String, clip: Clip?) async throws {
         var req = URLRequest(url: uploadURLEndpoint)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 30
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["meeting_id": meetingId])
+        // The clip range must match what /share/create records, or the signed
+        // upload key and the row's key diverge and the page can't find the audio.
+        var uploadBody: [String: Any] = ["meeting_id": meetingId]
+        if let clip {
+            uploadBody["clip_start_ms"] = clip.startMs
+            uploadBody["clip_end_ms"] = clip.endMs
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: uploadBody)
 
         let (signData, signResp) = try await URLSession.shared.data(for: req)
         guard let signHTTP = signResp as? HTTPURLResponse,

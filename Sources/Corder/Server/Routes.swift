@@ -96,13 +96,13 @@ enum Routes {
             renameMeeting(req: req, repo: repo)
         }
         server.post["/api/meetings/:id/share"] = { req in
-            shareMeeting(id: req.params[":id"] ?? "", repo: repo)
+            shareMeeting(id: req.params[":id"] ?? "", body: Data(req.body), repo: repo)
         }
         server.post["/api/meetings/:id/retranscribe"] = { req in
             retranscribe(id: req.params[":id"] ?? "", repo: repo)
         }
         server.post["/api/meetings/:id/cancel-transcription"] = { req in
-            cancelTranscription(id: req.params[":id"] ?? "")
+            cancelTranscription(id: req.params[":id"] ?? "", repo: repo)
         }
         server.post["/api/meetings/:id/expected-speakers"] = { req in
             setExpectedSpeakers(id: req.params[":id"] ?? "", req: req, repo: repo)
@@ -1146,14 +1146,21 @@ enum Routes {
     /// the compact .m4a, and records the share via the Worker) to Swifter's
     /// blocking handler via a semaphore. Returns `{ok:true,url}` or, on any
     /// failure, `{ok:false,error}` with a user-facing message for the toast.
-    private static func shareMeeting(id: String, repo: MeetingRepository) -> HttpResponse {
+    private static func shareMeeting(id: String, body: Data, repo: MeetingRepository) -> HttpResponse {
+        // Optional clip range: when present, only that slice of the meeting is
+        // shared (audio cut + transcript trimmed). Absent → whole meeting.
+        var clip: ShareService.Clip?
+        if let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+           let s = obj["clip_start_ms"] as? Int, let e = obj["clip_end_ms"] as? Int {
+            clip = ShareService.Clip(startMs: s, endMs: e)
+        }
         let sem = DispatchSemaphore(value: 0)
         var url: String?
         var errorMsg: String?
         Task { @MainActor in
             defer { sem.signal() }
             do {
-                url = try await ShareService.createShare(meetingId: id, repo: repo).absoluteString
+                url = try await ShareService.createShare(meetingId: id, repo: repo, clip: clip).absoluteString
             } catch {
                 errorMsg = (error as? ShareService.ShareError)?.errorDescription
                     ?? error.localizedDescription
@@ -1561,7 +1568,11 @@ enum Routes {
         }
         TranscriptionErrors.clear(meetingId: id)
         Task { @MainActor in
-            TranscriptionPipeline.shared.enqueue(meetingId: id)
+            // Manual Re-transcribe = a full fresh redo (re-fetch ASR + re-run
+            // the LLM polish), so pipeline/prompt improvements actually reach an
+            // existing recording. A plain cache-hit would only re-derive timing
+            // off the already-polished cached text and change nothing.
+            TranscriptionPipeline.shared.enqueue(meetingId: id, forceFresh: true)
         }
         return .ok(.text("queued"))
     }
@@ -1677,12 +1688,17 @@ enum Routes {
         return false
     }
 
-    private static func cancelTranscription(id: String) -> HttpResponse {
+    private static func cancelTranscription(id: String, repo: MeetingRepository) -> HttpResponse {
         guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
         FileLogger.log("cancelTranscription: \(id)")
         Task { @MainActor in
             TranscriptionPipeline.shared.cancel(meetingId: id)
         }
+        // Clear the clarify-banner speaker count so the user can pick the same
+        // number again after cancelling: a cancelled run left the pill active,
+        // and re-selecting the active pill was a no-op (dead button). Cancelling
+        // means "start over", so the choice resets to neutral.
+        try? repo.setExpectedOtherSpeakers(meetingId: id, count: nil)
         return .ok(.text("cancelled"))
     }
 

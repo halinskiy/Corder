@@ -218,6 +218,12 @@ interface Strings {
   share_open?: string;
   share_btn_title?: string;
   share_clip_title?: string;
+  share_clip_note?: string;
+  clip_enter?: string;
+  clip_exit?: string;
+  clip_hint?: string;
+  clip_hint_pick_end?: string;
+  clip_share_btn?: string;
   ghost_video_title?: string;
   ghost_video_sub?: string;
   ghost_video_cta?: string;
@@ -365,6 +371,7 @@ interface Strings {
   profile_tier_pro?: string;
   profile_tier_max?: string;
   profile_upgrade?: string;
+  profile_upgrade_max?: string;
   upgrade_card_title?: string;
   upgrade_card_body?: string;
   upgrade_card_cta?: string;
@@ -619,7 +626,13 @@ const en: Strings = {
   share_close: "Close",
   share_open: "Open link",
   share_btn_title: "Share a link",
-  share_clip_title: "Share a clip (coming soon)",
+  share_clip_title: "Share this clip",
+  share_clip_note: "Only the selected part is shared. Expires in 30 days.",
+  clip_enter: "Share a clip",
+  clip_exit: "Cancel clip",
+  clip_hint: "Click a line to start the clip.",
+  clip_hint_pick_end: "Now click the line where the clip ends.",
+  clip_share_btn: "Share clip",
   profile_title: "Profile",
   profile_name: "Kostiantyn Halynskyi",
   profile_sub: "id #012103",
@@ -737,6 +750,7 @@ const en: Strings = {
   profile_tier_pro: "Pro",
   profile_tier_max: "Max",
   profile_upgrade: "Upgrade to Pro",
+  profile_upgrade_max: "Upgrade to Max",
   upgrade_card_title: "Get Max",
   upgrade_card_body: "Unlimited recordings, all ASR providers, priority support",
   upgrade_card_cta: "Upgrade",

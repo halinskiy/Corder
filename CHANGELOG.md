@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.45] - 2026-07-31
+
+### Added
+- An Upgrade shortcut in the profile menu, opening the plans.
+
+### Changed
+- Signed-out guests keep two recordings before signing in.
+
 ## [0.15.44] - 2026-07-14
 
 ### Removed

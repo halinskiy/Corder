@@ -32,8 +32,8 @@ export function ShareTranscript({
   /// act as a minimap while nothing is playing.
   onReading: (ms: number) => void;
 }) {
-  const activeRef = React.useRef<HTMLDivElement>(null);
-  const firstHitRef = React.useRef<HTMLDivElement>(null);
+  const activeRef = React.useRef<HTMLElement>(null);
+  const firstHitRef = React.useRef<HTMLElement>(null);
   const q = query.trim().toLowerCase();
 
   const speakerById = React.useMemo(() => {
@@ -78,10 +78,25 @@ export function ShareTranscript({
     }
   }, [activeId]);
 
-  const firstHitIndex = React.useMemo(
-    () => (q ? detail.segments.findIndex((s) => s.text.toLowerCase().includes(q)) : -1),
+  const firstHitId = React.useMemo(
+    () => (q ? (detail.segments.find((s) => s.text.toLowerCase().includes(q))?.id ?? null) : null),
     [detail.segments, q],
   );
+
+  // Group consecutive same-speaker segments into ONE block, exactly like the
+  // app's transcript. Each segment's text then flows as a run inside one
+  // paragraph (separated by a space) instead of sitting on its own line — a
+  // wall of one-phrase-per-line was unreadable. Every run stays its own inline
+  // span, so per-phrase seek / active-highlight / minimap position are intact.
+  const groups = React.useMemo(() => {
+    const out: { speakerId: string; segs: typeof detail.segments }[] = [];
+    for (const s of detail.segments) {
+      const last = out[out.length - 1];
+      if (last && last.speakerId === s.speaker_id) last.segs.push(s);
+      else out.push({ speakerId: s.speaker_id, segs: [s] });
+    }
+    return out;
+  }, [detail.segments]);
 
   // Report the reading position: the turn closest to the middle of the screen.
   // Reads are batched into one rAF, so a fast scroll doesn't measure the DOM on
@@ -115,32 +130,45 @@ export function ShareTranscript({
 
   return (
     <div className="sp-turns" ref={listRef}>
-      {detail.segments.map((s, i) => {
-        const sp = speakerById.get(s.speaker_id);
-        const isActive = s.id === activeId;
-        const isFirstHit = !!q && i === firstHitIndex;
+      {groups.map((g, gi) => {
+        const sp = speakerById.get(g.speakerId);
         return (
           <div
-            key={s.id}
-            ref={isActive ? activeRef : (isFirstHit ? firstHitRef : undefined)}
-            data-ms={s.start_ms}
-            className={"sp-turn" + (isActive ? " is-active" : "") + (hit(s.text, q) ? " is-hit" : "")}
-            onClick={() => onSeek(s.start_ms / 1000)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSeek(s.start_ms / 1000); } }}
-            title="Jump to this moment"
-            // Turns stagger in as the sheet settles, then rest. Capped at 12 so
+            key={g.segs[0].id}
+            className="sp-turn"
+            // Blocks stagger in as the sheet settles, then rest. Capped at 12 so
             // a long transcript doesn't animate for two seconds.
-            style={{ animationDelay: `${140 + Math.min(i, 12) * 45}ms` }}
+            style={{ animationDelay: `${140 + Math.min(gi, 12) * 45}ms` }}
           >
             <span className="sp-avatar" style={{ background: sp?.color }}>{sp?.initials}</span>
             <div className="sp-turn-body">
               <div className="sp-turn-head">
                 <span className="sp-turn-name" style={{ color: sp?.color }}>{sp?.name}</span>
-                <span className="sp-turn-time">{stamp(s.start_ms)}</span>
+                <span className="sp-turn-time">{stamp(g.segs[0].start_ms)}</span>
               </div>
-              <p className="sp-turn-text">{highlight(s.text, q)}</p>
+              <p className="sp-turn-text">
+                {g.segs.map((s, i) => {
+                  const isActive = s.id === activeId;
+                  const isFirstHit = s.id === firstHitId;
+                  return (
+                    <React.Fragment key={s.id}>
+                      <span
+                        ref={isActive ? activeRef : (isFirstHit ? firstHitRef : undefined)}
+                        data-ms={s.start_ms}
+                        className={"sp-line" + (isActive ? " is-active" : "") + (hit(s.text, q) ? " is-hit" : "")}
+                        onClick={() => onSeek(s.start_ms / 1000)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSeek(s.start_ms / 1000); } }}
+                        title="Jump to this moment"
+                      >
+                        {highlight(s.text, q)}
+                      </span>
+                      {i < g.segs.length - 1 ? " " : ""}
+                    </React.Fragment>
+                  );
+                })}
+              </p>
             </div>
           </div>
         );

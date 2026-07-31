@@ -32,6 +32,9 @@ declare global {
 interface Props {
   meetingId: string;
   onClose: () => void;
+  /// When set, only this time range (ms from the meeting start) is shared: the
+  /// audio is cut to it and the transcript trimmed. Absent → whole meeting.
+  clip?: { startMs: number; endMs: number };
   t: T;
 }
 
@@ -43,7 +46,7 @@ interface Props {
 /// parallax + sheen and the enter/exit animations, so it reads as the same
 /// family of surfaces. Dismissed by the corner X, clicking outside, Esc, or
 /// the Done button — all of which play the exit animation first.
-export function ShareModal({ meetingId, onClose, t }: Props) {
+export function ShareModal({ meetingId, onClose, clip, t }: Props) {
   const [state, setState] = React.useState<"loading" | "ready" | "error">("loading");
   const [url, setUrl] = React.useState("");
   const [error, setError] = React.useState("");
@@ -68,13 +71,13 @@ export function ShareModal({ meetingId, onClose, t }: Props) {
 
   const create = React.useCallback(() => {
     setState("loading");
-    shareMeeting(meetingId)
+    shareMeeting(meetingId, clip)
       .then((u) => { setUrl(u); setState("ready"); })
       .catch((e) => {
         setError((e && (e as Error).message) || "Could not create the link.");
         setState("error");
       });
-  }, [meetingId]);
+  }, [meetingId, clip]);
 
   React.useEffect(() => { create(); }, [create]);
 
@@ -177,7 +180,9 @@ export function ShareModal({ meetingId, onClose, t }: Props) {
         </button>
 
         <div className="update-head">
-          <div className="update-title">{t.share_title ?? "Share this meeting"}</div>
+          <div className="update-title">
+            {clip ? (t.share_clip_title ?? "Share this clip") : (t.share_title ?? "Share this meeting")}
+          </div>
           {state === "loading" && (
             <div className="update-status share-status-loading">
               <Loader2 size={15} strokeWidth={2.5} className="summary-spin" aria-hidden />
@@ -186,7 +191,9 @@ export function ShareModal({ meetingId, onClose, t }: Props) {
           )}
           {state === "ready" && (
             <div className="update-status">
-              {t.share_note ?? "Anyone with the link can view. Expires in 30 days."}
+              {clip
+                ? (t.share_clip_note ?? "Only the selected part is shared. Expires in 30 days.")
+                : (t.share_note ?? "Anyone with the link can view. Expires in 30 days.")}
             </div>
           )}
           {state === "error" && (
@@ -197,6 +204,7 @@ export function ShareModal({ meetingId, onClose, t }: Props) {
         {state === "ready" && (
           <div className="share-link-row">
             <input
+              type="text"
               className="share-link-input"
               readOnly
               value={url}

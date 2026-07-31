@@ -4,7 +4,6 @@ import { Maximize2, X, Play } from "lucide-react";
 import {
   MeetingDetail, videoSrc,
 } from "../api";
-import { ShareModal } from "./ShareModal";
 import { AudioCard } from "./AudioCard";
 import { formatDuration } from "../format";
 import type { Lang, T } from "../i18n";
@@ -18,14 +17,18 @@ interface Props {
   onTimeUpdate: (sec: number) => void;
   currentTimeSec: number;
   onSeek: (sec: number) => void;
+  /// Opens the (lifted) share modal for the WHOLE meeting.
+  onShare: () => void;
+  /// Toggles clip-select mode; `clipActive` reflects whether it's on. The
+  /// Scissors button lives in the audio card (next to Share); the range is
+  /// then picked in the transcript.
+  onClip: () => void;
+  clipActive: boolean;
   t: T;
   lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, t, lang = "en" }: Props) {
-  // Share opens a modal (create link + copy), replacing the old inline
-  // download chooser.
-  const [shareOpen, setShareOpen] = React.useState(false);
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, onShare, onClip, clipActive, t, lang = "en" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   // Whether macOS Screen Recording is granted. When it isn't, video capture is
@@ -91,13 +94,12 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
         detail={detail}
         audioRef={audioRef}
         onTimeUpdate={onTimeUpdate}
-        onShare={() => setShareOpen(true)}
+        onShare={onShare}
+        onClip={onClip}
+        clipActive={clipActive}
         t={t}
       />
       <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
-      {shareOpen && (
-        <ShareModal meetingId={detail.id} onClose={() => setShareOpen(false)} t={t} />
-      )}
     </div>
   );
 }

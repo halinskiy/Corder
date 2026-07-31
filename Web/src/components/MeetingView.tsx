@@ -1,6 +1,7 @@
 import React from "react";
-import { Copy, Users, Search, X } from "lucide-react";
+import { Copy, Users, Search, X, Scissors } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
+import { ShareModal } from "./ShareModal";
 import { Tooltip } from "./Tooltip";
 import { MainHeader } from "./MainHeader";
 import type { Lang, T } from "../i18n";
@@ -56,7 +57,7 @@ async function copyText(text: string): Promise<void> {
   document.body.removeChild(ta);
   if (!ok) throw new Error("clipboard unavailable");
 }
-import { formatDate } from "../format";
+import { formatDate, formatClock } from "../format";
 import { TranscriptPane } from "./TranscriptPane";
 import { SummaryPane } from "./SummaryPane";
 import { ChaptersPane } from "./ChaptersPane";
@@ -193,6 +194,21 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // icon button can toggle it. Auto-opens once per meeting if the diarizer
   // looks over-segmented and the user hasn't already dismissed for this id.
   const [clarifyOpen, setClarifyOpen] = React.useState(false);
+  // Clip-share mode. The scissors toolbar button turns it on; while on, a
+  // click in the transcript SELECTS a line instead of seeking (seek is the
+  // default action, so selection needs its own mode to coexist). `clipSel`
+  // holds the anchor + head segment ids; the shared range is derived from
+  // their millisecond bounds.
+  const [clipMode, setClipMode] = React.useState(false);
+  // Two-click range, calendar-style: `aId` is the first click (start), `bId`
+  // the second (end). `bId === null` means the start is placed and we're
+  // waiting for the end click. A third click starts a fresh range.
+  const [clipSel, setClipSel] = React.useState<{ aId: number; bId: number | null } | null>(null);
+  // One lifted share modal for BOTH the full-meeting share (from the audio
+  // card) and a clip share (from the scissors flow), so there's a single
+  // modal instance and one dismissal path. null = closed; `{}` = whole
+  // meeting; `{ clip }` = a range.
+  const [share, setShare] = React.useState<{ clip?: { startMs: number; endMs: number } } | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
   // Report play/pause of this meeting's media (videoRef is the master
@@ -254,6 +270,8 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     setSearch("");
     setClarifyOpen(false);
     setTitleEdit(null);
+    setClipMode(false);
+    setClipSel(null);
     load();
   }, [load]);
   // Hide the skeleton as soon as the first detail arrives. After
@@ -354,6 +372,47 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     return () => { cancelled = true; };
   }, [detail?.id, detail?.status, onToast, t]);
 
+  // Clip hooks live ABOVE the early returns below: a hook after a conditional
+  // return changes the hook count between the skeleton render (detail null) and
+  // the real render, which white-screens the whole app.
+  //
+  // The selected clip range in ms. Only READY once both clicks have landed
+  // (bId set); a lone start doesn't produce a shareable range, so the Share
+  // pill stays hidden until the user clicks the end line.
+  //
+  // The range spans every line BETWEEN the two clicks in DOCUMENT order, then
+  // takes min-start / max-end of that slice. Deriving from just the two clicked
+  // lines was wrong: two speakers' turns overlap in ms, so the audio window
+  // could reach past what was actually selected. Document-order matches the
+  // highlight the user sees.
+  const clipRange = React.useMemo(() => {
+    if (!clipSel || clipSel.bId == null || !detail) return null;
+    const segs = detail.segments;
+    const ai = segs.findIndex((s) => s.id === clipSel.aId);
+    const bi = segs.findIndex((s) => s.id === clipSel.bId);
+    if (ai < 0 || bi < 0) return null;
+    const slice = segs.slice(Math.min(ai, bi), Math.max(ai, bi) + 1);
+    const startMs = Math.min(...slice.map((s) => s.start_ms));
+    const endMs = Math.max(...slice.map((s) => s.end_ms));
+    return endMs - startMs >= 1000 ? { startMs, endMs } : null;
+  }, [clipSel, detail]);
+
+  // A click on a transcript line while in clip mode. First click (or a click
+  // after a completed range) places the START; the next click places the END.
+  const onClipPick = React.useCallback((segId: number) => {
+    setClipSel((prev) => (prev && prev.bId == null ? { aId: prev.aId, bId: segId } : { aId: segId, bId: null }));
+  }, []);
+
+  // Esc leaves clip mode without sharing (mirrors the modal's own Esc).
+  React.useEffect(() => {
+    if (!clipMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setClipMode(false); setClipSel(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clipMode]);
+
   if (error) return <div className="empty"><div className="empty-title">{t.error_label}</div><div>{error}</div></div>;
   if (!detail) {
     // Skeleton during the first detail fetch, keeps the layout stable
@@ -396,6 +455,13 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
       await copyText(text);
       onToast(t.toast_copied, "success");
     } catch { onToast(t.toast_copy_failed, "error"); }
+  };
+
+  const toggleClip = () => {
+    setClipMode((on) => {
+      if (on) setClipSel(null);   // leaving the mode clears any selection
+      return !on;
+    });
   };
 
   // Toolbar's Archive button opens the archive panel (the bin itself).
@@ -605,9 +671,32 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               clarifyOpen={clarifyOpen}
               onClarifyDismiss={onClarifyDismiss}
               onClarifyChosen={onClarifyChosen}
+              clipMode={clipMode}
+              clipSel={clipSel}
+              onClipPick={onClipPick}
               onToast={onToast}
               t={t}
             />
+            {clipMode && (
+              <div className="clip-bar">
+                {clipRange ? (
+                  <button
+                    type="button"
+                    className="clarify-btn accent clip-share-btn"
+                    onClick={() => { setShare({ clip: clipRange }); setClipMode(false); setClipSel(null); }}
+                  >
+                    <Scissors size={15} strokeWidth={2} />
+                    <span>{(t.clip_share_btn ?? "Share clip")} · {formatClock(clipRange.startMs)}–{formatClock(clipRange.endMs)}</span>
+                  </button>
+                ) : (
+                  <div className="clip-hint">
+                    {clipSel
+                      ? (t.clip_hint_pick_end ?? "Shift-click another line to set the end.")
+                      : (t.clip_hint ?? "Click a line to start the clip.")}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {/* Summary occupies the SAME grid cell as `.transcript-wrap`
               above, they're siblings inside `.detail-body` but only
@@ -638,6 +727,9 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               onTimeUpdate={setCurrentTime}
               currentTimeSec={currentTime}
               onSeek={onSeek}
+              onShare={() => setShare({})}
+              onClip={toggleClip}
+              clipActive={clipMode}
               t={t}
             />
           </div>
@@ -651,6 +743,14 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               hidden (see the comment in the tab strip above). */}
         </div>
       </div>
+      {share && (
+        <ShareModal
+          meetingId={detail.id}
+          clip={share.clip}
+          onClose={() => setShare(null)}
+          t={t}
+        />
+      )}
     </>
   );
 }

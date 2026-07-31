@@ -77,6 +77,9 @@ body { margin: 0; }
   position: absolute;
   border-radius: 58% 42% 55% 45% / 55% 50% 50% 45%;
   background: rgba(33, 122, 80, 0.06);
+  /* TEMP 2026-07-18: blobs hidden to preview the page without them. Delete this
+     one line to bring them back. Dot-grid stays. */
+  display: none;
 }
 .sp-blob--tr { top: -60px; right: -140px; width: 620px; height: 540px; }
 .sp-blob--bl {
@@ -232,12 +235,22 @@ body { margin: 0; }
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.sp-turn { cursor: pointer; }
-.sp-turn:hover { background: var(--color-surface); }
-.sp-turn.is-active { background: rgba(33, 122, 80, 0.07); }
-.sp-turn.is-hit { background: rgba(255, 214, 0, 0.1); }
-.sp-turn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .sp-mark { background: rgba(255, 214, 0, 0.45); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* Each phrase is an inline run inside the speaker's paragraph: the text flows
+   as one block (readable), but every phrase is still its own clickable seek
+   target with its own active / search highlight. */
+.sp-line {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0 2px; margin: 0 -2px;
+  transition: background-color 120ms var(--ease-out);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.sp-line:hover { background: var(--color-surface); }
+.sp-line.is-active { background: rgba(33, 122, 80, 0.12); }
+.sp-line.is-hit { background: rgba(255, 214, 0, 0.16); }
+.sp-line:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .sp-avatar {
   flex-shrink: 0;
   width: 26px; height: 26px; border-radius: 50%;
@@ -255,7 +268,7 @@ body { margin: 0; }
   opacity: 0;
   transition: opacity 150ms var(--ease-out);
 }
-.sp-turn:hover .sp-turn-time, .sp-turn.is-active .sp-turn-time { opacity: 1; }
+.sp-turn:hover .sp-turn-time { opacity: 1; }
 .sp-turn-text {
   margin: 3px 0 0;
   font-size: 16px; line-height: 1.65;
@@ -277,7 +290,6 @@ body { margin: 0; }
   border: 0; border-radius: var(--radius-pill);
   background: var(--color-accent); color: #fff;
   cursor: pointer;
-  box-shadow: 0 6px 22px -8px rgba(33, 122, 80, 0.55);
   transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
   animation: sp-dock-in 620ms var(--ease-out) 200ms both;
 }
@@ -295,6 +307,7 @@ body { margin: 0; }
   height: var(--sp-orb);
   display: flex; align-items: center; gap: 16px;
   padding: 0 20px;
+  cursor: pointer;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
@@ -333,7 +346,13 @@ body { margin: 0; }
   border-radius: 1px;
   opacity: 0.9;
   transform-origin: center;
-  animation: sp-tick-in 340ms var(--ease-out) both;
+  animation: sp-tick-in 340ms var(--ease-out) backwards;
+  /* Dock-style magnify (driven by SharePlayer): JS writes a per-tick scaleY
+     on hover; this transition eases each tick toward its target so the lens
+     glides like the macOS dock instead of snapping. Fill is `backwards`, not
+     `both`, so the intro holds its start state during the stagger delay yet
+     releases the end state afterwards, letting the inline transform win. */
+  transition: transform 150ms var(--ease-out);
 }
 /* Silence is a hairline, not a gap: the track stays one continuous object. */
 .sp-tick.is-quiet { height: 3px; background: var(--color-border); opacity: 1; }
