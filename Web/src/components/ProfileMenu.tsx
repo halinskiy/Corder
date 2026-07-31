@@ -1,5 +1,5 @@
 import React from "react";
-import { LifeBuoy, RefreshCw, Shield, Shuffle } from "lucide-react";
+import { CreditCard, LifeBuoy, RefreshCw, Shield, Shuffle } from "lucide-react";
 import type { T } from "../i18n";
 import { getSettings, signOut, triggerUpdateCheck, openWelcome } from "../api";
 
@@ -422,6 +422,21 @@ export function ProfileMenu({
             <button className="profile-pop-item" onClick={checkUpdates} role="menuitem">
               <RefreshCw size={15} strokeWidth={2} /> {t.profile_check_updates ?? "Check for updates"}
             </button>
+            {userEmail && (
+              // Opens the account page on getcorder.com (billing, usage,
+              // cancel, delete) in the default browser.
+              <button
+                className="profile-pop-item"
+                onClick={() => {
+                  setOpen(false);
+                  const w = window as Window & { corderOpenExternal?: (u: string) => void };
+                  w.corderOpenExternal?.("https://getcorder.com/account/");
+                }}
+                role="menuitem"
+              >
+                <CreditCard size={15} strokeWidth={2} /> {t.profile_manage_sub ?? "Manage subscription"}
+              </button>
+            )}
             {isAdmin && (
               // Operator-only shortcut. Doesn't ship admin UI inside the
               // app, just opens getcorder.com/admin in the default

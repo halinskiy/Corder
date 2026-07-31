@@ -244,6 +244,7 @@ interface Strings {
   profile_language?: string;
   profile_help?: string;
   profile_check_updates?: string;
+  profile_manage_sub?: string;
   profile_admin?: string;
   profile_delete?: string;
   profile_delete_confirm?: string;
@@ -641,6 +642,7 @@ const en: Strings = {
   profile_language: "Language",
   profile_help: "Get help",
   profile_check_updates: "Check for updates",
+  profile_manage_sub: "Manage subscription",
   profile_admin: "Open admin panel",
   profile_delete: "Delete account",
   profile_delete_confirm: "Delete your account and all recordings? This cannot be undone.",
