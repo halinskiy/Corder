@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.46] - 2026-07-31
+
+### Added
+- A Manage subscription shortcut in the profile menu, opening your account on getcorder.com to manage billing, usage, and cancellation.
+
 ## [0.15.45] - 2026-07-31
 
 ### Added
