@@ -125,10 +125,9 @@ export function SettingsPane({
       onScroll={(e) => { settingsScrollCache[section] = (e.currentTarget as HTMLDivElement).scrollTop; }}
     >
       <div style={{ display: section === "general" ? "contents" : "none" }}>
-        {/* Recording equalizer (the floating HUD pill), default ON. Same
-            SoloCard + Toggle shell as Screen video recording, sits directly
-            above it. Off suppresses the floating pill for the whole session
-            (recording still starts/stops from the popover + in-app button). */}
+        {/* Recording equalizer (the floating HUD pill), default ON. Off
+            suppresses the floating pill for the whole session (recording
+            still starts/stops from the popover + in-app button). */}
         <SoloCard>
           <Toggle
             label={t.settings_hud_title ?? "Recording equalizer"}
@@ -136,6 +135,111 @@ export function SettingsPane({
             checked={on("hud_enabled")}
             disabled={!loaded}
             onChange={(v) => patch({ hud_enabled: v })}
+          />
+        </SoloCard>
+
+        <SoloCard>
+          <ThemeToggleRow t={t} />
+        </SoloCard>
+
+        <SoloCard>
+          <Toggle
+            label={t.settings_notifications}
+            desc={t.settings_notifications_desc}
+            checked={on("notifications")}
+            disabled={!loaded}
+            onChange={(v) => patch({ notifications: v })}
+          />
+        </SoloCard>
+
+        {/* Auto-transcribe: works for guests too (on-device local
+            transcription), so no sign-in guard. */}
+        <SoloCard>
+          <Toggle
+            label={t.settings_autotranscribe}
+            desc={t.settings_autotranscribe_desc}
+            checked={on("auto_transcribe")}
+            disabled={!loaded}
+            onChange={(v) => patch({ auto_transcribe: v })}
+          />
+        </SoloCard>
+
+        {/* Auto-summary / Auto-chapters are cloud notes flows: free for every
+            tier, but the Worker still needs a signed-in JWT, so gate the rows
+            on sign-in (a guest would otherwise see a toggle that can't run).
+            They used to live in Advanced, which was guest-hidden; now that the
+            Advanced tab is visible to guests these carry their own guard. */}
+        {!!s?.user_email && (
+          <>
+            <SoloCard>
+              <Toggle
+                label={t.settings_autosummary}
+                desc={t.settings_autosummary_desc}
+                checked={on("auto_summary")}
+                disabled={!loaded}
+                onChange={(v) => patch({ auto_summary: v })}
+              />
+            </SoloCard>
+
+            <SoloCard>
+              <Toggle
+                label={t.settings_auto_chapters_title ?? "Auto-chapters"}
+                desc={t.settings_auto_chapters_desc ?? "Split a finished transcript."}
+                checked={on("auto_chapters")}
+                disabled={!loaded}
+                onChange={(v) => patch({ auto_chapters: v })}
+              />
+            </SoloCard>
+          </>
+        )}
+
+        {/* Subscription flip is an admin/QA-only lever, regular users
+            must not be able to change their own tier from Settings. */}
+        {s?.is_admin === true && (
+          <>
+            <div className="settings-divider" />
+            <SoloCard>
+              <TierTestRow t={t} s={s} patch={patch} />
+            </SoloCard>
+          </>
+        )}
+      </div>
+
+      <div style={{ display: section === "advanced" ? "contents" : "none" }}>
+        {/* Transcription model picker, ADMIN-ONLY. Normal users have no
+            model choice (the hard provider lock pins them to Groq cloud +
+            on-device), so the whole block is hidden for non-admins; only
+            admins (who can benchmark cloud models) see and use it. */}
+        {s?.is_admin === true && (
+          <SoloCard>
+            <div className="hk-block mic-block">
+              <div className="settings-row-label">{t.settings_model_label ?? "Transcription model"}</div>
+              <div className="settings-row-desc">{t.settings_model_desc ?? "Which model the next recording is transcribed with."}</div>
+              <WhisperPrefetchPill t={t} />
+            </div>
+          </SoloCard>
+        )}
+
+        {/* Offline safety-net model, PAID-ONLY (Pro / Max). Free users already
+            run on-device by default, so the concept doesn't apply to them.
+            Opt-in download of the on-device model so a mid-call connection drop
+            still finishes the transcript. */}
+        {(s?.tier === "pro" || s?.tier === "max") && (
+          <SoloCard>
+            <OfflineModelRow t={t} />
+          </SoloCard>
+        )}
+
+        {/* Microphone picker. "System default" stays the first option (the
+            value when mic_device_uid is empty); the choice applies to the NEXT
+            recording (no live AVAudioEngine hot-swap). */}
+        <SoloCard>
+          <MicDevicePicker
+            devices={s?.audio_input_devices ?? []}
+            value={s?.mic_device_uid ?? ""}
+            disabled={!loaded}
+            onChange={(uid) => patch({ mic_device_uid: uid })}
+            t={t}
           />
         </SoloCard>
 
@@ -186,18 +290,23 @@ export function SettingsPane({
           </SoloCard>
         )}
 
+        {/* Recordings folder, same vertical `.hk-block` shell as the
+            Microphone block (label + desc + full-width control), only the
+            control is an "Open" button instead of a dropdown. */}
         <SoloCard>
-          <ThemeToggleRow t={t} />
-        </SoloCard>
-
-        <SoloCard>
-          <Toggle
-            label={t.settings_notifications}
-            desc={t.settings_notifications_desc}
-            checked={on("notifications")}
-            disabled={!loaded}
-            onChange={(v) => patch({ notifications: v })}
-          />
+          <div className="hk-block">
+            <div className="settings-row-label">{t.settings_recordings_folder_title ?? "Recordings folder"}</div>
+            <div className="settings-row-desc recordings-folder-desc">
+              {t.settings_recordings_folder_desc ?? "Open the folder with all your recordings in Finder."}
+            </div>
+            <button
+              type="button"
+              className="clarify-btn settings-open-btn"
+              onClick={() => { openRecordingsFolder().catch(() => {}); }}
+            >
+              {t.settings_recordings_folder_open ?? "Open"}
+            </button>
+          </div>
         </SoloCard>
 
         <SoloCard>
@@ -219,117 +328,6 @@ export function SettingsPane({
             onChange={(v) => patch({ telemetry: v })}
           />
         </SoloCard>
-
-        {/* Microphone picker, moved here (was at the top of General) so it
-            sits directly above the Recordings folder block. "System default"
-            stays the first option (the value when mic_device_uid is empty);
-            the choice applies to the NEXT recording (no live AVAudioEngine
-            hot-swap). */}
-        <SoloCard>
-          <MicDevicePicker
-            devices={s?.audio_input_devices ?? []}
-            value={s?.mic_device_uid ?? ""}
-            disabled={!loaded}
-            onChange={(uid) => patch({ mic_device_uid: uid })}
-            t={t}
-          />
-        </SoloCard>
-
-        {/* Recordings folder, same vertical `.hk-block` shell as the
-            Microphone block (label + desc + full-width control), only the
-            control is an "Open" button instead of a dropdown, sized identically
-            (full-width, backgroundless, matches the dropdown surface). Strict
-            component reuse: same shell + the shared `.clarify-btn`. */}
-        <SoloCard>
-          <div className="hk-block">
-            <div className="settings-row-label">{t.settings_recordings_folder_title ?? "Recordings folder"}</div>
-            <div className="settings-row-desc recordings-folder-desc">
-              {t.settings_recordings_folder_desc ?? "Open the folder with all your recordings in Finder."}
-            </div>
-            <button
-              type="button"
-              className="clarify-btn settings-open-btn"
-              onClick={() => { openRecordingsFolder().catch(() => {}); }}
-            >
-              {t.settings_recordings_folder_open ?? "Open"}
-            </button>
-          </div>
-        </SoloCard>
-
-        {/* Subscription flip is an admin/QA-only lever, regular users
-            must not be able to change their own tier from Settings. */}
-        {s?.is_admin === true && (
-          <>
-            <div className="settings-divider" />
-            <SoloCard>
-              <TierTestRow t={t} s={s} patch={patch} />
-            </SoloCard>
-          </>
-        )}
-      </div>
-
-      <div style={{ display: section === "advanced" ? "contents" : "none" }}>
-        {/* Transcription model picker, ADMIN-ONLY. Normal users have no
-            model choice (the hard provider lock pins them to Groq cloud +
-            on-device), so the whole block is hidden for non-admins; only
-            admins (who can benchmark cloud models) see and use it. */}
-        {s?.is_admin === true && (
-          <SoloCard>
-            <div className="hk-block mic-block">
-              <div className="settings-row-label">{t.settings_model_label ?? "Transcription model"}</div>
-              <div className="settings-row-desc">{t.settings_model_desc ?? "Which model the next recording is transcribed with."}</div>
-              <WhisperPrefetchPill t={t} />
-            </div>
-          </SoloCard>
-        )}
-
-        {/* Offline safety-net model, PAID-ONLY (Pro / Max). Free users already
-            run on-device by default, so the concept doesn't apply to them;
-            guests never see the Advanced tab. Opt-in download of the on-device
-            model so a mid-call connection drop still finishes the transcript. */}
-        {(s?.tier === "pro" || s?.tier === "max") && (
-          <SoloCard>
-            <OfflineModelRow t={t} />
-          </SoloCard>
-        )}
-
-        <SoloCard>
-          <Toggle
-            label={t.settings_autotranscribe}
-            desc={t.settings_autotranscribe_desc}
-            checked={on("auto_transcribe")}
-            disabled={!loaded}
-            onChange={(v) => patch({ auto_transcribe: v })}
-          />
-        </SoloCard>
-
-        {/* Auto-summary / Auto-chapters are cloud features (need sign-in). They
-            live in the Advanced tab, which is hidden wholesale for guests (see
-            MeetingView/Dashboard), so no per-row guard needed here. Auto-title is
-            NOT user-toggleable anymore, it's always on (recording folder names
-            depend on it), so it has no Settings row. */}
-        <SoloCard>
-          <Toggle
-            label={t.settings_autosummary}
-            desc={t.settings_autosummary_desc}
-            checked={on("auto_summary")}
-            disabled={!loaded}
-            onChange={(v) => patch({ auto_summary: v })}
-          />
-        </SoloCard>
-
-        <SoloCard>
-          <Toggle
-            label={t.settings_auto_chapters_title ?? "Auto-chapters"}
-            desc={t.settings_auto_chapters_desc ?? "Split a finished transcript."}
-            checked={on("auto_chapters")}
-            disabled={!loaded}
-            onChange={(v) => patch({ auto_chapters: v })}
-          />
-        </SoloCard>
-
-        {/* Transcription-language picker removed, transcription is always
-            Auto-detect for everyone, so there's nothing to choose. */}
 
         <div className="settings-divider" />
         {/* "Always offer to record" (whitelist) block removed per request, only the "Never offer to record" (blacklist) list remains. The

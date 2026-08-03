@@ -82,7 +82,7 @@ interface Props {
 /// and `.detail-body` (grid 1fr | --right-w). Same `ResizeHandle` for
 /// the split, so dragging the divider here resizes the right pane the
 /// same way it does in a meeting (and vice-versa, they share `--right-w`).
-export function Dashboard({ onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange, signedIn = true }: Props) {
+export function Dashboard({ onStart, isRecording, onStop, t, lang, onResizeSplit, onResetSplit, openSettingsNonce, settingsSection, onSettingsSectionChange }: Props) {
   /// `busy` covers the gap between the user clicking Start/Stop and
   /// the backend `RecordingState.active` flipping in the next poll.
   /// Without this, the button looked frozen, the click landed, the
@@ -188,15 +188,16 @@ export function Dashboard({ onStart, isRecording, onStop, t, lang, onResizeSplit
               >
                 {t.tab_general_settings ?? "General"}
               </span>
-              {/* Advanced hidden for guests (cloud-only auto-* settings). */}
-              {signedIn && (
-                <span
-                  className={"tab" + (rightSection === "settings-advanced" ? " active" : "")}
-                  onClick={() => setRightSection("settings-advanced")}
-                >
-                  {t.tab_advanced_settings ?? "Advanced"}
-                </span>
-              )}
+              {/* Advanced is visible to everyone now: it holds capture / device
+                  settings (mic, recordings folder, screen video, launch,
+                  telemetry) that guests need too. The few sign-in / paid / admin
+                  rows inside carry their own guards. */}
+              <span
+                className={"tab" + (rightSection === "settings-advanced" ? " active" : "")}
+                onClick={() => setRightSection("settings-advanced")}
+              >
+                {t.tab_advanced_settings ?? "Advanced"}
+              </span>
             </>
           )}
         </div>

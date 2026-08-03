@@ -133,7 +133,7 @@ interface Props {
   t: T;
 }
 
-export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onResizeSplit, onResetSplit, onPlayingChange, onSettingsOpenChange, signedIn = true, t }: Props) {
+export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDeleted, onOpenArchive, archiveOpen, archiveEmpty, onOpenSettings, onOpenDashboard, onToast, recordingState, onRecordingStopped, reloadSignal, openSettingsNonce, settingsSection, onSettingsSectionChange, lang, onResizeSplit, onResetSplit, onPlayingChange, onSettingsOpenChange, t }: Props) {
   const [detail, setDetail] = React.useState<MeetingDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
@@ -567,16 +567,16 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                 >
                   {t.tab_general_settings ?? "General"}
                 </span>
-                {/* Advanced is cloud-heavy (auto-title/summary/chapters), hidden
-                    for guests, who only get the local General toggles. */}
-                {signedIn && (
-                  <span
-                    className={"tab" + (rightTab === "settings-advanced" ? " active" : "")}
-                    onClick={() => setRightTab("settings-advanced")}
-                  >
-                    {t.tab_advanced_settings ?? "Advanced"}
-                  </span>
-                )}
+                {/* Advanced is visible to everyone now: it holds capture / device
+                    settings (mic, recordings folder, screen video, launch,
+                    telemetry) that guests need too. The few sign-in / paid /
+                    admin rows inside carry their own guards. */}
+                <span
+                  className={"tab" + (rightTab === "settings-advanced" ? " active" : "")}
+                  onClick={() => setRightTab("settings-advanced")}
+                >
+                  {t.tab_advanced_settings ?? "Advanced"}
+                </span>
               </>
             ) : (
               <span
