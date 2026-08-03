@@ -105,7 +105,16 @@ export function OfflineModelRow({ t }: { t: T }) {
           disabled={!loaded || !model}
           onClick={() => { void onDownload(); }}
         >
-          {t.settings_offline_model_download ?? "Download model"}
+          {/* Single wrapper span so the label + size are ONE flex child (the
+              button's `gap: 8px` would otherwise double the middot spacing).
+              Size is muted with the picker's own `settings-select-trigger-meta`
+              (var(--fg-muted), weight 400), matching "Groq Whisper · cloud". */}
+          <span>
+            {t.settings_offline_model_download ?? "Download model"}
+            {model?.size_label && (
+              <span className="settings-select-trigger-meta"> · {model.size_label}</span>
+            )}
+          </span>
         </button>
       )}
     </div>

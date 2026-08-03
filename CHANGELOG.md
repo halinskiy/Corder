@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.49] - 2026-08-03
+
+### Added
+- Pro and Max can download the on-device model in Settings, Advanced as an offline backup, so a transcript still finishes if your connection drops mid-call.
+
+### Changed
+- Paid plans no longer pre-download the on-device model in the background after you upgrade. It is opt-in now, from the new Offline transcription setting.
+
+### Fixed
+- A finished cloud transcript no longer shows a stray "Preparing model" while a background model download runs.
+- Dropped a "DimaTorzok" subtitle credit that could surface in a transcript over a silent stretch.
+
 ## [0.15.48] - 2026-08-03
 
 ### Added
