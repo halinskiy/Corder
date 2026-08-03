@@ -4078,6 +4078,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* `bigbtn-full` already pins it to 100 % width; this just kisses it
    away from the picked-app list above. */
 .applist-addbtn { margin-top: 4px; }
+/* When the list is EMPTY the Add button sits directly under the title and
+   read as cramped (4px). Match the text-to-button gap of the Recordings
+   folder block (its desc has `margin-bottom: 10px` before the Open button).
+   Only the empty case: with rows present the `.applist` sits between and the
+   4px list-to-button gap above still applies. */
+.applist-block .settings-row-label + .applist-addbtn { margin-top: 10px; }
 .applist-ico {
   width: 18px;
   height: 18px;

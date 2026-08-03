@@ -143,6 +143,10 @@ enum DTO {
         /// accepting the offer keeps audio/video from the start. Opt-in,
         /// default OFF (records before consent, then discards on decline).
         let preroll: Bool?
+        /// Automatic updates (opt-in, default OFF). When on, Sparkle silently
+        /// downloads a found update and installs it on the next quit, no pill,
+        /// no modal. Critical updates auto-install regardless of this flag.
+        let auto_update: Bool?
         /// User-managed bundle ids: always offer to record for these /
         /// never offer for these. Consumed by `MeetingDetector`.
         let meeting_whitelist: [String]?

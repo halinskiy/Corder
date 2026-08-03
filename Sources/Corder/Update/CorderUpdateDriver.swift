@@ -17,6 +17,15 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     /// the headline the user already saw.
     private var lastVersion: String = ""
     private var lastReleaseNotes: String? = nil
+    /// True while the CURRENT update flow should proceed SILENTLY in the
+    /// background and install on the next quit (no modal, no mid-session
+    /// relaunch): a non-user-initiated check when "Automatic updates" is on OR
+    /// the update is CRITICAL (which forces it even with the toggle off). Set
+    /// in `showUpdateFound` (the one entry point that carries the state + item)
+    /// and read by the download / extract / ready callbacks, which don't get
+    /// the state. A user-INITIATED check never sets this, the modal shows so
+    /// the click has visible feedback.
+    private var flowSilent = false
 
     // MARK: - Permission request
 
@@ -51,6 +60,21 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         lastVersion = appcastItem.displayVersionString
         lastReleaseNotes = htmlToPlain(appcastItem.itemDescription ?? "")
         FileLogger.log("UpdateDriver: showUpdateFound stage=\(updateState.stage.rawValue) version=\(appcastItem.displayVersionString)")
+
+        // SILENT background flow: a non-user-initiated check when Automatic
+        // updates is on, OR a CRITICAL update (forced even with the toggle
+        // off). Download silently and install on the NEXT quit (see showReady),
+        // never showing the modal. A user-initiated check ALWAYS shows the
+        // modal below so the click has visible feedback. No recording guard is
+        // needed here: the install is deferred to quit, so nothing relaunches
+        // mid-session; only a background download runs now, which is harmless.
+        flowSilent = !updateState.userInitiated
+            && (AppSettings.autoUpdate || appcastItem.isCriticalUpdate)
+        if flowSilent {
+            FileLogger.log("UpdateDriver: SILENT flow (auto=\(AppSettings.autoUpdate) critical=\(appcastItem.isCriticalUpdate)) → background download + install on quit, no modal")
+            reply(.install)
+            return
+        }
 
         // The button label is ALWAYS "Install" through the whole flow
         // never a frozen "Installing…" verb. Progress is shown inside
@@ -120,6 +144,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {
         let text = String(data: downloadData.data, encoding: .utf8) ?? ""
         lastReleaseNotes = htmlToPlain(text)
+        if flowSilent { return }
         // Re-push so React picks up the freshly-loaded notes.
         push(visible: true, phase: "available",
              primaryLabel: "Update", primaryEnabled: true,
@@ -184,6 +209,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Download
 
     func showDownloadInitiated(cancellation: @escaping () -> Void) {
+        if flowSilent { return }
         bridge.onDismiss = { cancellation() }
         pushPhase("downloading", primaryLabel: "Downloading…", primaryEnabled: false,
                   statusLine: "Downloading the update", showsProgress: true, progress: 0)
@@ -199,6 +225,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
 
     func showDownloadDidReceiveData(ofLength length: UInt64) {
         receivedBytes += length
+        if flowSilent { return }
         let p = expectedBytes > 0 ? min(1.0, Double(receivedBytes) / Double(expectedBytes)) : 0
         let mb = expectedBytes > 0 ? Double(expectedBytes) / 1_048_576.0 : 0
         let line = expectedBytes > 0 ? String(format: "Downloading %.1f MB", mb) : "Downloading the update"
@@ -209,11 +236,13 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Extraction
 
     func showDownloadDidStartExtractingUpdate() {
+        if flowSilent { return }
         pushPhase("extracting", primaryLabel: "Preparing…", primaryEnabled: false,
                   statusLine: "Unpacking the update", showsProgress: true, progress: 0)
     }
 
     func showExtractionReceivedProgress(_ progress: Double) {
+        if flowSilent { return }
         pushPhase("extracting", primaryLabel: "Preparing…", primaryEnabled: false,
                   statusLine: "Unpacking the update", showsProgress: true, progress: progress)
     }
@@ -221,6 +250,15 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Ready to install
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        // SILENT flow: defer the install to the next quit instead of relaunching
+        // now. Per Sparkle, a `.dismiss` here keeps the downloaded update and
+        // installs it automatically after the app terminates, so the user gets
+        // the new version next time they quit, with no modal and no interruption.
+        if flowSilent {
+            FileLogger.log("UpdateDriver: showReady SILENT → dismiss (install on next quit, no relaunch)")
+            reply(.dismiss)
+            return
+        }
         FileLogger.log("UpdateDriver: showReady(toInstallAndRelaunch) → auto-install (single-click flow)")
         // Don't make the user press Install a SECOND time after the download.
         // They already committed by pressing Install once; once the bytes are

@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.51] - 2026-08-03
+
+### Added
+- Automatic updates: turn it on in Settings, General and new versions install themselves the next time you quit Corder, with no pop-up to click.
+- Rate Corder straight from the profile menu.
+
+### Changed
+- Settings tidy-up: tighter spacing and no divider lines.
+- Important updates now install automatically.
+
+### Removed
+- The standalone bug-report button. Diagnostic logs still ship from the error prompts and the once-a-day anonymous diagnostics.
+
 ## [0.15.50] - 2026-08-03
 
 ### Added

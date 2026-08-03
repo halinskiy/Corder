@@ -937,6 +937,7 @@ enum Routes {
             launch_at_login: AppSettings.launchAtLogin,
             telemetry: AppSettings.telemetryEnabled,
             preroll: AppSettings.prerollEnabled,
+            auto_update: AppSettings.autoUpdate,
             meeting_whitelist: AppSettings.meetingWhitelist,
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
@@ -1430,6 +1431,12 @@ enum Routes {
             if let v = parsed.launch_at_login  { AppSettings.setLaunchAtLogin(v) }
             if let v = parsed.telemetry        { AppSettings.setTelemetryEnabled(v) }
             if let v = parsed.preroll          { AppSettings.setPrerollEnabled(v) }
+            if let v = parsed.auto_update {
+                AppSettings.setAutoUpdate(v)
+                // Re-apply to the live Sparkle updater immediately so the next
+                // background check honours the new preference.
+                Task { @MainActor in UpdateController.shared.syncAutoUpdatePreference() }
+            }
             if let v = parsed.meeting_whitelist { AppSettings.setMeetingWhitelist(v) }
             if let v = parsed.meeting_blacklist { AppSettings.setMeetingBlacklist(v) }
             // Mic device picker. Empty string = "system default", which

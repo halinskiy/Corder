@@ -474,6 +474,8 @@ export interface Settings {
   /** forced transcription language (ISO-639-1, e.g. "ru"); "" = auto. */
   transcription_language?: string;
   telemetry?: boolean;
+  /** automatic updates: silent background download + install on next quit. */
+  auto_update?: boolean;
   /** user-managed bundle ids for the call auto-detector. */
   meeting_whitelist?: string[];
   meeting_blacklist?: string[];

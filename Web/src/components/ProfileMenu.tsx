@@ -1,5 +1,5 @@
 import React from "react";
-import { CreditCard, LifeBuoy, RefreshCw, Shield, Shuffle } from "lucide-react";
+import { CreditCard, LifeBuoy, RefreshCw, Shield, Shuffle, Star } from "lucide-react";
 import type { T } from "../i18n";
 import { getSettings, signOut, triggerUpdateCheck, openWelcome } from "../api";
 
@@ -421,6 +421,20 @@ export function ProfileMenu({
             </button>
             <button className="profile-pop-item" onClick={checkUpdates} role="menuitem">
               <RefreshCw size={15} strokeWidth={2} /> {t.profile_check_updates ?? "Check for updates"}
+            </button>
+            {/* Rate Corder, opens the Product Hunt page in the browser for now
+                (that's where the reviews live). A proper in-app rating modal
+                comes later; this is the interim path to collect ratings. */}
+            <button
+              className="profile-pop-item"
+              onClick={() => {
+                setOpen(false);
+                const w = window as Window & { corderOpenExternal?: (u: string) => void };
+                w.corderOpenExternal?.("https://www.producthunt.com/products/corder");
+              }}
+              role="menuitem"
+            >
+              <Star size={15} strokeWidth={2} /> {t.profile_rate ?? "Rate Corder"}
             </button>
             {userEmail && (
               // Opens the account page on getcorder.com (billing, usage,

@@ -44,6 +44,10 @@ final class UpdateController: NSObject {
         } catch {
             FileLogger.log("UpdateController: SPUUpdater.start failed: \(error.localizedDescription)")
         }
+        // Honour the user's "Automatic updates" preference (opt-in, default
+        // off). When on, Sparkle silently downloads a found update and the
+        // driver defers the install to the next quit (see CorderUpdateDriver).
+        updater.automaticallyDownloadsUpdates = AppSettings.autoUpdate
         // Sparkle's scheduled check fires only after the configured
         // interval (24h) has elapsed since the last successful check
         // which means a freshly installed copy doesn't hit the appcast
@@ -64,6 +68,17 @@ final class UpdateController: NSObject {
     /// by the React UI before deciding whether to render the pill.
     func checkInBackground() {
         updater.checkForUpdatesInBackground()
+    }
+
+    /// Re-apply the "Automatic updates" preference after the user flips the
+    /// Settings toggle (POST /api/settings calls this). Also nudges a
+    /// background check so a just-enabled auto-update can pick up a pending
+    /// update without waiting for the next scheduled cycle.
+    func syncAutoUpdatePreference() {
+        updater.automaticallyDownloadsUpdates = AppSettings.autoUpdate
+        if AppSettings.autoUpdate {
+            updater.checkForUpdatesInBackground()
+        }
     }
 }
 

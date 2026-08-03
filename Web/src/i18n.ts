@@ -59,6 +59,8 @@ interface Strings {
   settings_notifications_desc: string;
   settings_launch_at_login_title?: string;
   settings_launch_at_login_desc?: string;
+  settings_auto_update_title?: string;
+  settings_auto_update_desc?: string;
   settings_transcription_language_title?: string;
   settings_transcription_language_desc?: string;
   settings_transcription_language_auto?: string;
@@ -250,6 +252,7 @@ interface Strings {
   profile_language?: string;
   profile_help?: string;
   profile_check_updates?: string;
+  profile_rate?: string;
   profile_manage_sub?: string;
   profile_admin?: string;
   profile_delete?: string;
@@ -475,6 +478,8 @@ const en: Strings = {
   settings_notifications_desc: "Notify on recording start, transcript ready, and network loss.",
   settings_launch_at_login_title: "Launch at login",
   settings_launch_at_login_desc: "Open Corder automatically when your Mac starts.",
+  settings_auto_update_title: "Automatic updates",
+  settings_auto_update_desc: "Install updates automatically. No pop-up, the new version applies next time you quit Corder.",
   settings_transcription_language_title: "Transcription language",
   settings_transcription_language_desc: "Auto-detect works for most calls.",
   settings_transcription_language_auto: "Auto-detect",
@@ -654,6 +659,7 @@ const en: Strings = {
   profile_language: "Language",
   profile_help: "Get help",
   profile_check_updates: "Check for updates",
+  profile_rate: "Rate Corder",
   profile_manage_sub: "Manage subscription",
   profile_admin: "Open admin panel",
   profile_delete: "Delete account",

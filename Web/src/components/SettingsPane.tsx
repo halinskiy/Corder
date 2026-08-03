@@ -152,6 +152,19 @@ export function SettingsPane({
           />
         </SoloCard>
 
+        {/* Automatic updates (opt-in, default OFF). On = Sparkle silently
+            downloads a found update and installs it on the next quit, no pill
+            click, no modal. Critical updates auto-install regardless. */}
+        <SoloCard>
+          <Toggle
+            label={t.settings_auto_update_title ?? "Automatic updates"}
+            desc={t.settings_auto_update_desc ?? "Install updates automatically. No pop-up, the new version applies next time you quit Corder."}
+            checked={(s?.auto_update as boolean | undefined) ?? false}
+            disabled={!loaded}
+            onChange={(v) => patch({ auto_update: v })}
+          />
+        </SoloCard>
+
         {/* Auto-transcribe: works for guests too (on-device local
             transcription), so no sign-in guard. */}
         <SoloCard>
@@ -196,12 +209,9 @@ export function SettingsPane({
         {/* Subscription flip is an admin/QA-only lever, regular users
             must not be able to change their own tier from Settings. */}
         {s?.is_admin === true && (
-          <>
-            <div className="settings-divider" />
-            <SoloCard>
-              <TierTestRow t={t} s={s} patch={patch} />
-            </SoloCard>
-          </>
+          <SoloCard>
+            <TierTestRow t={t} s={s} patch={patch} />
+          </SoloCard>
         )}
       </div>
 
@@ -329,9 +339,8 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        <div className="settings-divider" />
-        {/* "Always offer to record" (whitelist) block removed per request, only the "Never offer to record" (blacklist) list remains. The
-            meeting_whitelist field stays in the backend, just not editable. */}
+        {/* "Never offer to record" (blacklist) list. The meeting_whitelist
+            field stays in the backend, just not editable. */}
         <SoloCard>
           <AppListEditor
             title={t.settings_blacklist}

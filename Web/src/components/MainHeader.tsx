@@ -1,5 +1,5 @@
 import React from "react";
-import { Archive as ArchiveIcon, Settings as SettingsIcon, Bug, Plus, Square } from "lucide-react";
+import { Archive as ArchiveIcon, Settings as SettingsIcon, Plus, Square } from "lucide-react";
 
 /// Filled (solid) twins of the Lucide outline icons used in the
 /// toolbar's active state. Lucide ships only outlines; layering a
@@ -40,7 +40,7 @@ function ArchiveFilled({ size = 16 }: { size?: number }) {
 import { UpdatePill } from "./UpdatePill";
 import { ProfileMenu } from "./ProfileMenu";
 import { Tooltip } from "./Tooltip";
-import { submitLogs, hasBugEvents, getAccountUsage, openWelcome, startRecordingNow, stopRecordingNow, getRecordingState } from "../api";
+import { getAccountUsage, openWelcome, startRecordingNow, stopRecordingNow, getRecordingState } from "../api";
 import type { T } from "../i18n";
 
 /// Single source of truth for the main pane's top strip, breadcrumb
@@ -104,7 +104,9 @@ export function MainHeader({
       <div className="toolbar">
         <UpdatePill t={t} onToast={onToast} />
         <GuestSessionCounter />
-        <SubmitLogsButton t={t} onToast={onToast} />
+        {/* The dedicated "Send a bug report" bug icon was removed: logs now
+            ship from the failure toasts (the "Send a report" action) and the
+            once-a-day anonymous telemetry, no standalone header button. */}
         {/* ThemeSwitch moved into Settings → General as a real toggle
             row; the toolbar slot was visual noise next to controls the
             user touches once a year. */}
@@ -253,105 +255,3 @@ function GuestSessionCounter() {
   );
 }
 
-/// Sends the tail of `/tmp/corder.log` to the maintainer via the
-/// Cloudflare Worker (→ Resend email). Replaces "ask the user to run
-/// a curl in the terminal", which nobody actually does. Disabled
-/// while a previous submit is in flight so a double-click doesn't
-/// fire two emails.
-function SubmitLogsButton({
-  t,
-  onToast,
-}: {
-  t: T;
-  onToast: (
-    msg: string,
-    kind?: "success" | "error",
-    opts?: { action?: { label: string; onClick: () => void }; durationMs?: number; countdown?: boolean }
-  ) => void;
-}) {
-  // Rate-limit to 1 report per hour. A user mashing the Bug icon
-  // used to fill the maintainer's inbox in seconds; the localStorage
-  // timestamp is enforced here client-side. A second guard lives on
-  // the Worker (TODO) so this can't be bypassed by a fresh install.
-  const SUBMIT_COOLDOWN_MS = 60 * 60 * 1000;
-  const LAST_SUBMIT_KEY = "corder.lastSubmitLogsAt";
-  const readCooldownEnd = (): number => {
-    try {
-      const lastAt = parseInt(localStorage.getItem(LAST_SUBMIT_KEY) ?? "0", 10) || 0;
-      return lastAt + SUBMIT_COOLDOWN_MS;
-    } catch { return 0; }
-  };
-  // 10-second send-with-undo, same UX as the archive flow. The
-  // actual `submitLogs()` POST fires when the countdown elapses,
-  // not when the button is clicked, so an accidental click never
-  // ships the log. Undo cancels the timer and nothing leaves the Mac.
-  const pendingRef = React.useRef<number | null>(null);
-  // `now` is the only state driving visibility, bumped every 30 s and
-  // on every send/undo. The button stays unmounted whenever
-  //   `now < cooldownEnd` (post-send rate-limit) OR a send is in flight
-  //   (`pendingRef !== null`).
-  const [now, setNow] = React.useState(() => Date.now());
-  const [pending, setPending] = React.useState(false);
-  // Whether the current log has any bug-flagged event lines. We poll
-  // the backend so the button only appears when there's actually
-  // something worth shipping, fewer noise emails for the maintainer.
-  const [hasEvents, setHasEvents] = React.useState(false);
-  React.useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
-  React.useEffect(() => {
-    let alive = true;
-    const tick = () => {
-      hasBugEvents().then((v) => { if (alive) setHasEvents(v); }).catch(() => {});
-    };
-    tick();
-    const id = window.setInterval(tick, 60_000);
-    return () => { alive = false; window.clearInterval(id); };
-  }, []);
-
-  const cooldownEnd = readCooldownEnd();
-  const inCooldown = now < cooldownEnd;
-  // The button DISAPPEARS the instant the user clicks it: while the
-  // 10-s undo window is open, while the POST is in flight, and for the
-  // full 60-min cooldown after a successful send. `hasEvents` is now
-  // true whenever there's ANY log to send (the backend stopped gating
-  // on error lines), a transcription-QUALITY bug throws no error, so
-  // gating here hid the report button exactly when we needed it.
-  if (pending || inCooldown || !hasEvents) return null;
-
-  const onClick = async () => {
-    // Send immediately, no 10s countdown / Undo window. The button unmounts
-    // while `pending` (see the gate above) and pendingRef guards a double-fire.
-    if (pendingRef.current !== null) return;
-    pendingRef.current = 1;
-    setPending(true);
-    try {
-      await submitLogs();
-      try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
-      onToast(t.submit_logs_success ?? "Logs sent. Thanks!", "success");
-    } catch {
-      // Failed send still costs a cooldown so a flapping endpoint can't be
-      // hammered. Clearing the localStorage entry lets the user retry sooner.
-      try { localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now())); } catch {}
-      onToast(t.submit_logs_failed ?? "Couldn't send the log. Try again.", "error");
-    } finally {
-      // Re-render to flip from `pending` to `inCooldown` (button stays hidden
-      // only the gating reason changes).
-      pendingRef.current = null;
-      setPending(false);
-      setNow(Date.now());
-    }
-  };
-  return (
-    <Tooltip label={t.submit_logs_title ?? "Send a bug report"}>
-      <button
-        className="toolbar-icon-btn"
-        onClick={onClick}
-        aria-label={t.submit_logs_title ?? "Send a bug report"}
-      >
-        <Bug size={16} strokeWidth={2} />
-      </button>
-    </Tooltip>
-  );
-}

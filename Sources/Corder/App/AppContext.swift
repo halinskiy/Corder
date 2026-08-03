@@ -112,6 +112,7 @@ enum AppSettings {
     private static let kAutoChapters   = "Corder.set.autoChapters"
     private static let kTelemetry      = "Corder.set.telemetry"
     private static let kPrerollEnabled = "Corder.set.prerollEnabled"
+    private static let kAutoUpdate     = "Corder.set.autoUpdate"
     private static let kWhitelist      = "Corder.set.meetingWhitelist"
     private static let kBlacklist      = "Corder.set.meetingBlacklist"
     private static let kTranscriptionProvider = "Corder.set.transcriptionProvider"
@@ -206,6 +207,13 @@ enum AppSettings {
     /// beginning. A user can still turn it off in Settings.
     static var prerollEnabled: Bool {
         UserDefaults.standard.object(forKey: kPrerollEnabled) as? Bool ?? true
+    }
+    /// Automatic updates (opt-in, default OFF). When ON, Sparkle silently
+    /// downloads a found update in the background and installs it on the NEXT
+    /// quit (no pill click, no modal, no mid-session relaunch). Independent of
+    /// the CRITICAL-update force, which auto-installs regardless of this flag.
+    static var autoUpdate: Bool {
+        UserDefaults.standard.object(forKey: kAutoUpdate) as? Bool ?? false
     }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
@@ -308,6 +316,9 @@ enum AppSettings {
     }
     static func setPrerollEnabled(_ v: Bool) {
         UserDefaults.standard.set(v, forKey: kPrerollEnabled)
+    }
+    static func setAutoUpdate(_ v: Bool) {
+        UserDefaults.standard.set(v, forKey: kAutoUpdate)
     }
     static func setMeetingWhitelist(_ v: [String]) { setList(kWhitelist, v) }
     static func setMeetingBlacklist(_ v: [String]) { setList(kBlacklist, v) }
