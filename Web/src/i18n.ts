@@ -479,7 +479,7 @@ const en: Strings = {
   settings_launch_at_login_title: "Launch at login",
   settings_launch_at_login_desc: "Open Corder automatically when your Mac starts.",
   settings_auto_update_title: "Automatic updates",
-  settings_auto_update_desc: "Install updates automatically. No pop-up, the new version applies next time you quit Corder.",
+  settings_auto_update_desc: "Install updates automatically.",
   settings_transcription_language_title: "Transcription language",
   settings_transcription_language_desc: "Auto-detect works for most calls.",
   settings_transcription_language_auto: "Auto-detect",

@@ -158,7 +158,7 @@ export function SettingsPane({
         <SoloCard>
           <Toggle
             label={t.settings_auto_update_title ?? "Automatic updates"}
-            desc={t.settings_auto_update_desc ?? "Install updates automatically. No pop-up, the new version applies next time you quit Corder."}
+            desc={t.settings_auto_update_desc ?? "Install updates automatically."}
             checked={(s?.auto_update as boolean | undefined) ?? false}
             disabled={!loaded}
             onChange={(v) => patch({ auto_update: v })}
