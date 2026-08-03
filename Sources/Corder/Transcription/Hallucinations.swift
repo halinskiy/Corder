@@ -88,6 +88,15 @@ enum Hallucinations {
     static let alwaysDropFragments: [String] = [
         "amaraorg",
         "castingwords",
+        // "Субтитры сделал DimaTorzok" — a Russian YouTube subtitle-author
+        // credit Whisper hallucinates over silence, often clipped to the bare
+        // handle "DimaTorzok" (which the 60%-domination `patterns` rule then
+        // misses because it's short relative to the phrase, and the clip has no
+        // "субтитры" left to match). No real meeting says it, so drop on any
+        // containment. Normalises to "dimatorzok" (lowercased, punctuation
+        // stripped). Reported by Kostya, twice, attributed to HIM on the mic
+        // track.
+        "dimatorzok",
     ]
 
     /// Bare caption words Whisper emits over silence: "자막" (Korean for

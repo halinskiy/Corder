@@ -183,6 +183,12 @@ interface Strings {
   settings_theme_enable_dark_desc?: string;
   settings_model_label?: string;
   settings_model_desc?: string;
+  settings_offline_model_label?: string;
+  settings_offline_model_desc?: string;
+  settings_offline_model_download?: string;
+  settings_offline_model_downloading?: string;
+  settings_offline_model_preparing?: string;
+  settings_offline_model_ready?: string;
   btn_dismiss?: string;
   btn_collapse?: string;
   news_eyebrow?: string;
@@ -582,6 +588,12 @@ const en: Strings = {
   settings_theme_enable_dark_desc: "Dark interface.",
   settings_model_label: "Transcription model",
   settings_model_desc: "Which model the next recording is transcribed with.",
+  settings_offline_model_label: "Offline transcription",
+  settings_offline_model_desc: "Download the on-device model so Corder can finish a transcript even if your internet drops mid-call. About 1.5 GB, downloaded once.",
+  settings_offline_model_download: "Download model",
+  settings_offline_model_downloading: "Downloading model",
+  settings_offline_model_preparing: "Preparing model",
+  settings_offline_model_ready: "Ready for offline use",
   btn_dismiss: "Dismiss",
   news_eyebrow: "New",
   settings_tier_upgrade_label: "Upgrade",

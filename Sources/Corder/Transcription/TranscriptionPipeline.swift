@@ -69,33 +69,23 @@ final class TranscriptionPipeline {
             return
         }
 
-        // Cloud-provider users (Pro/Max) don't transcribe locally, but we
-        // still keep a SMALL on-device model on disk as the offline
-        // safety net: if the connection drops mid-transcribe, the
-        // per-chunk fallback finishes the meeting locally instead of
-        // failing it (see WhisperTranscriber.localChunkFallback). Only
-        // fetch it when NOTHING is on disk yet, if the user already has
-        // any local model (they picked local before), that one is the net.
+        // Cloud-provider users (Pro/Max) transcribe in the cloud and DON'T
+        // pre-stage an on-device model. We used to background-download the
+        // ~1.5 GB offline-fallback net here so a mid-call connection drop
+        // could finish locally, but on a slow Mac that fetch + the one-time
+        // ANE compile ran hot for up to 25 min right after a user upgraded,
+        // and (because the compile lights the global "preparing" flag) it
+        // surfaced on the paid user's finished cloud transcript as a bogus
+        // "Preparing model…" banner. A paid user should just see their cloud
+        // result. So: no eager staging for cloud users (product decision,
+        // 2026-08-03). The connection-drop safety net still works IF a model
+        // is already on disk (a user who was Free before, or picked local):
+        // `WhisperTranscriber.localChunkFallback` gates on `isModelDownloaded`
+        // and simply skips the offline rescue when nothing is staged (the
+        // meeting fails on the network error and retries in the cloud), it
+        // never triggers a surprise mid-transcribe download.
         guard AppSettings.transcriptionProvider == .whisperLocal else {
-            if LocalWhisperTranscriber.firstDownloadedVariant() != nil {
-                FileLogger.log("TranscriptionPipeline.prewarm: cloud user already has a local model on disk, skip")
-                return
-            }
-            let net = LocalWhisperTranscriber.offlineFallbackVariant
-            FileLogger.log("TranscriptionPipeline.prewarm: cloud user, staging offline fallback \(net.rawValue) in background")
-            Task { @MainActor in
-                do {
-                    // Full ensureModelReady (not downloadOnly): it ALSO
-                    // fetches + caches the tokenizer sidecar, which the
-                    // offline fallback needs, once the network is down we
-                    // can't fetch it. Small (the offline fallback now that
-                    // base/tiny were dropped) is light, so warming it is cheap.
-                    try await LocalWhisperTranscriber.ensureModelReady(net)
-                    FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) ready (model + tokenizer cached)")
-                } catch {
-                    FileLogger.log("TranscriptionPipeline.prewarm: offline fallback \(net.rawValue) staging failed, \(error)")
-                }
-            }
+            FileLogger.log("TranscriptionPipeline.prewarm: cloud user, no on-device pre-stage")
             return
         }
 

@@ -9,6 +9,7 @@ import {
 import { type T } from "../i18n";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
+import { OfflineModelRow } from "./OfflineModelRow";
 import { useTheme } from "../theme";
 
 /// Settings page (right column, next to "Recording"). Toggles are
@@ -279,6 +280,16 @@ export function SettingsPane({
               <div className="settings-row-desc">{t.settings_model_desc ?? "Which model the next recording is transcribed with."}</div>
               <WhisperPrefetchPill t={t} />
             </div>
+          </SoloCard>
+        )}
+
+        {/* Offline safety-net model, PAID-ONLY (Pro / Max). Free users already
+            run on-device by default, so the concept doesn't apply to them;
+            guests never see the Advanced tab. Opt-in download of the on-device
+            model so a mid-call connection drop still finishes the transcript. */}
+        {(s?.tier === "pro" || s?.tier === "max") && (
+          <SoloCard>
+            <OfflineModelRow t={t} />
           </SoloCard>
         )}
 
