@@ -61,7 +61,7 @@ export function OfflineModelRow({ t }: { t: T }) {
       </div>
       <div className="settings-row-desc">
         {t.settings_offline_model_desc ??
-          "Download the on-device model so Corder can finish a transcript even if your internet drops mid-call. About 1.5 GB, downloaded once."}
+          "Corder can finish a transcript even if your internet drops."}
       </div>
 
       {ready ? (
