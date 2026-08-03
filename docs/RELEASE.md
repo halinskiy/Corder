@@ -158,6 +158,23 @@ Optional: open a GitHub Release with the same notes.
 </rss>
 ```
 
+## Automatic + critical updates (0.15.51+)
+
+Two mechanisms let an update install without the user clicking the pill:
+
+- **Automatic updates** — the user opts in via Settings → General
+  ("Automatic updates", default OFF). The app then downloads a found update
+  silently and installs it on the NEXT quit (no modal). See the update-driver
+  gotcha in `AGENTS.md`.
+- **Critical update** — add `<sparkle:criticalUpdate></sparkle:criticalUpdate>`
+  inside the release's `<item>` in `appcast.xml` (after `generate_appcast`,
+  before pushing to `gh-pages`; `generate_appcast` preserves it on re-runs).
+  A build **≥ 0.15.51** treats a non-user-initiated critical update as a
+  silent install-on-quit even with the Automatic-updates toggle OFF. This is
+  CLIENT-side: it forces 0.15.51+ users, it can NOT retroactively force older
+  builds (they lack the logic — for them a critical flag only reinforces the
+  every-launch update prompt).
+
 ## Hotfixes
 
 If you ship a release that bricks installs, push a `MAJOR.MINOR.PATCH+1`
