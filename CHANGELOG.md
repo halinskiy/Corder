@@ -16,6 +16,21 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.53] - 2026-08-04
+
+### Fixed
+- Auto-summary and auto-chapters now appear on their own once a recording finishes. They are generated a moment after the transcript is ready, and the tabs no longer stay on the empty state until you reopen the meeting.
+
+### Added
+- Automatic updates: turn it on in Settings, General and new versions install themselves the next time you quit Corder, with no pop-up to click.
+- Rate Corder straight from the profile menu.
+
+### Changed
+- Settings tidy-up: tighter spacing and no divider lines.
+
+### Removed
+- The standalone bug-report button. Diagnostic logs still ship from the error prompts and the once-a-day anonymous diagnostics.
+
 ## [0.15.52] - 2026-08-04
 
 ### Added

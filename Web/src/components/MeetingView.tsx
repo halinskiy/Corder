@@ -177,7 +177,17 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // showed 6:24 (past the end). The AudioCard resets its own element +
   // local time on `detail.id`; this resets the lifted clock the
   // timeline/chapters read from.
-  React.useEffect(() => { setCurrentTime(0); }, [meetingId]);
+  // Auto-summary / auto-chapters are generated server-side a few seconds
+  // AFTER the row flips to `ready` (pipeline steps 3b/3c), so the poll below
+  // keeps re-fetching briefly once a transcription we watched finishes. Both
+  // refs reset per meeting so opening an OLD meeting doesn't trigger it.
+  const justTranscribedRef = React.useRef(false);
+  const postGenDeadlineRef = React.useRef(0);
+  React.useEffect(() => {
+    setCurrentTime(0);
+    justTranscribedRef.current = false;
+    postGenDeadlineRef.current = 0;
+  }, [meetingId]);
   // Tell the parent (main.tsx → MainHeader) when the right tab
   // is Settings so the Settings toolbar button can light up
   // active. Same pattern the Archive button uses.
@@ -344,7 +354,32 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     if (!detail) return;
     // Re-poll while a transcription or recording is in flight.
     if (detail.status === "transcribing" || detail.status === "recording") {
+      justTranscribedRef.current = true;
+      postGenDeadlineRef.current = 0;   // re-armed once we hit `ready`
       const t = setInterval(load, 2000);
+      return () => clearInterval(t);
+    }
+    // The row flips to `ready` a few seconds BEFORE the server finishes
+    // auto-summary / auto-chapters (pipeline 3b/3c). Without a re-fetch the
+    // Summary/Chapters tabs render their empty state even though the DB now
+    // has them. So keep polling briefly after `ready` while either is still
+    // missing. Gated on `justTranscribedRef` (only for a transcription we
+    // just watched, never an OLD ready meeting) and capped by a deadline so
+    // an auto-gen-OFF finish stops after ~40s instead of polling forever.
+    if (detail.status === "ready" && justTranscribedRef.current) {
+      const missing =
+        (detail.summary ?? "").trim() === "" || (detail.chapters ?? "").trim() === "";
+      if (!missing) {
+        justTranscribedRef.current = false;
+        postGenDeadlineRef.current = 0;
+        return;
+      }
+      if (postGenDeadlineRef.current === 0) postGenDeadlineRef.current = Date.now() + 40000;
+      if (Date.now() >= postGenDeadlineRef.current) {
+        justTranscribedRef.current = false;
+        return;
+      }
+      const t = setInterval(load, 2500);
       return () => clearInterval(t);
     }
   }, [detail, load]);
