@@ -16,6 +16,11 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.54] - 2026-08-04
+
+### Fixed
+- Transcription is more resilient under load: if the cloud service is briefly rate-limited, Corder now finishes the chunk through a backup path instead of failing the whole recording.
+
 ## [0.15.53] - 2026-08-04
 
 ### Fixed

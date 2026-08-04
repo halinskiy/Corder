@@ -648,6 +648,23 @@ enum WhisperTranscriber {
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             let bodyText = String(data: data, encoding: .utf8) ?? ""
+            // GROQ RATE-LIMIT → OpenAI whisper-1 FALLBACK. Our Groq key is on
+            // the shared free tier, which caps audio-seconds-per-hour; a busy
+            // hour 429s (rate-limit, NOT billing/insufficient_quota) and used to
+            // just fail the meeting after the retries above. Retry THIS chunk
+            // once via OpenAI whisper-1 so the transcript still completes. Only
+            // groq→openai (openai never re-falls, no loop). The Worker allows
+            // /transcribe/whisper for paid tiers (metered under the same cloud
+            // cap); a Free user's fallback 403s and drops through to the local /
+            // upsell handling below, so cost stays bounded. whisper-1 is an OLDER
+            // model that hallucinates more (see Hallucinations.swift, tuned for
+            // its silence artefacts), acceptable as a rare overflow backstop.
+            if backend == .groq, status == 429, !bodyText.contains("insufficient_quota") {
+                FileLogger.log("WhisperTranscriber: Groq 429 rate-limit exhausted → OpenAI whisper-1 fallback for this chunk")
+                return try await transcribeSingleUnguarded(audioURL: audioURL, apiKey: apiKey,
+                                                           offsetMs: offsetMs, mode: mode,
+                                                           initialPrompt: initialPrompt, backend: .openai)
+            }
             FileLogger.log("WhisperTranscriber: HTTP \(status), \(bodyText.prefix(300))")
             // Worker's tier-gate (403 + "tier required") is a known
             // expected condition for free-tier users who somehow ended
