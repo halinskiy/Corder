@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.55] - 2026-08-05
+
+### Fixed
+
+- Transcript chronology on quiet microphone tracks. When your mic mostly
+  listened, some of your phrases could land at the wrong point of the
+  timeline and interleave incorrectly with the other speaker. Your turns
+  are now anchored to the moments your mic actually picked up speech, so
+  the merged transcript follows the real order of the conversation.
+  Re-transcribe an affected recording to apply.
+
 ## [0.15.54] - 2026-08-04
 
 ### Fixed

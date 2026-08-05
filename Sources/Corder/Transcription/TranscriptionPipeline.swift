@@ -2055,6 +2055,76 @@ final class TranscriptionPipeline {
     /// offline), the caller then keeps the last-derived cached finals
     /// so timing never regresses. On a true miss (`allowGeminiFallback`)
     /// it falls back to a Gemini `.diarize` pass exactly like before.
+
+    /// Snap raw ASR turns whose Whisper timestamps landed in SILENCE onto
+    /// the track's REAL voiced spans (VAD over the full, uncompressed wav).
+    ///
+    /// Why: the keep-raw branches below trust Whisper's own timestamps, but
+    /// on a sparse track (a mic that mostly listened) the cloud ASR ran over
+    /// a VAD-COMPRESSED file, and its per-segment stamps drift across the
+    /// concatenation joints; the piecewise projection then lands a phrase in
+    /// a silent stretch of the original timeline. Measured on a real call:
+    /// 28 of 64 "you" turns sat where the mic was silent, so the merged
+    /// transcript interleaved them wrongly with the (correctly timed) far
+    /// end. This pass moves ONLY turns that overlap no voiced span (with
+    /// tolerance), placing each onto the nearest span while preserving turn
+    /// ORDER (monotonic cursor); confirmed turns are never touched, so the
+    /// healthy case is a no-op. Text is never altered.
+    private static func snapTurnsToVoicedSpans(_ turns: [GeminiTranscriber.Turn],
+                                               wavURL: URL,
+                                               label: String) -> [GeminiTranscriber.Turn] {
+        guard turns.count > 1,
+              let spans = VoiceActivityDetector.detect(audioURL: wavURL),
+              !spans.isEmpty else { return turns }
+        let tol: Int64 = 400
+        func isConfirmed(_ t: GeminiTranscriber.Turn) -> Bool {
+            spans.contains { $0.startMs - tol < t.endMs && t.startMs < $0.endMs + tol }
+        }
+        let confirmed = turns.map(isConfirmed)
+        var out = turns
+        var moved = 0
+        var cursor: Int64 = 0
+        for i in out.indices {
+            let t = out[i]
+            if confirmed[i] {
+                cursor = max(cursor, t.endMs)
+                continue
+            }
+            // Monotonic window: never before the previous turn's end, never
+            // past the next CONFIRMED turn's start (order must survive).
+            var windowEnd = Int64.max
+            for j in (i + 1)..<out.count where confirmed[j] {
+                windowEnd = out[j].startMs + tol
+                break
+            }
+            let dur = max(900, t.endMs - t.startMs)
+            let cands = spans.filter { $0.endMs > cursor && $0.startMs < windowEnd }
+            guard !cands.isEmpty else {
+                cursor = max(cursor, t.endMs)
+                continue // no room in the window: leave as-is (no worse)
+            }
+            let best = cands.min {
+                abs(max($0.startMs, cursor) - t.startMs) < abs(max($1.startMs, cursor) - t.startMs)
+            }!
+            let ns = max(best.startMs, cursor)
+            guard ns < windowEnd else {
+                cursor = max(cursor, t.endMs)
+                continue
+            }
+            let ne = min(max(best.endMs, ns + 900), ns + dur)
+            out[i] = GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                            startMs: ns,
+                                            endMs: max(ne, ns + 900),
+                                            text: t.text)
+            moved += 1
+            cursor = out[i].endMs
+        }
+        if moved > 0 {
+            FileLogger.log("applyTiming: \(label), snapped \(moved)/\(turns.count) silent-timed turns onto voiced spans")
+        }
+        return out
+    }
+
     private func applyTiming(rawTurns: [GeminiTranscriber.Turn],
                              wavURL: URL,
                              numSpeakers: Int?,
@@ -2077,7 +2147,8 @@ final class TranscriptionPipeline {
         // hallucinations (which keep their own silent timestamp and get gated).
         if numSpeakers == 1 {
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single speaker, keeping \(rawTurns.count) raw ASR turns with Whisper's own timing (no re-derivation)")
-            return rawTurns
+            return Self.snapTurnsToVoicedSpans(rawTurns, wavURL: wavURL,
+                                               label: "\(wavURL.lastPathComponent) single-speaker")
         }
 
         var diarSegs: [DiarizedSegment] = []
@@ -2133,7 +2204,8 @@ final class TranscriptionPipeline {
         let diarSpeakers = Set(diarSegs.map(\.speakerId)).count
         if diarSpeakers <= 1, currentProvider != .gemini {
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single diarized speaker + Whisper-reliable timing, keeping \(rawTurns.count) raw ASR turns (no re-lay)")
-            return rawTurns
+            return Self.snapTurnsToVoicedSpans(rawTurns, wavURL: wavURL,
+                                               label: "\(wavURL.lastPathComponent) single-diar")
         }
 
         // Forced-alignment when on-device ASR is available; fall back to
