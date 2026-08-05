@@ -16,6 +16,19 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.57] - 2026-08-05
+
+### Fixed
+
+- Missing stretches of real speech in transcripts. The speech model
+  occasionally skips a passage mid-recording (10+ seconds of audible
+  talk coming back empty, more likely on fast or mumbled speech).
+  Corder now detects stretches where your voice is clearly present but
+  no text came back, and re-transcribes just those spots with a
+  focused second pass. On the reported recording this restored 3
+  skipped passages, about 23 seconds of speech. Re-transcribe an
+  affected recording to apply.
+
 ## [0.15.56] - 2026-08-05
 
 ### Changed
