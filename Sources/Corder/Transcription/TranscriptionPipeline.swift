@@ -2056,32 +2056,74 @@ final class TranscriptionPipeline {
     /// so timing never regresses. On a true miss (`allowGeminiFallback`)
     /// it falls back to a Gemini `.diarize` pass exactly like before.
 
-    /// Snap raw ASR turns whose Whisper timestamps landed in SILENCE onto
-    /// the track's REAL voiced spans (VAD over the full, uncompressed wav).
+    /// Correct raw ASR turns whose Whisper timestamps landed where this
+    /// track is NOT the one speaking, using cross-track energy dominance.
     ///
     /// Why: the keep-raw branches below trust Whisper's own timestamps, but
     /// on a sparse track (a mic that mostly listened) the cloud ASR ran over
     /// a VAD-COMPRESSED file, and its per-segment stamps drift across the
     /// concatenation joints; the piecewise projection then lands a phrase in
-    /// a silent stretch of the original timeline. Measured on a real call:
-    /// 28 of 64 "you" turns sat where the mic was silent, so the merged
-    /// transcript interleaved them wrongly with the (correctly timed) far
-    /// end. This pass moves ONLY turns that overlap no voiced span (with
-    /// tolerance), placing each onto the nearest span while preserving turn
-    /// ORDER (monotonic cursor); confirmed turns are never touched, so the
-    /// healthy case is a no-op. Text is never altered.
-    private static func snapTurnsToVoicedSpans(_ turns: [GeminiTranscriber.Turn],
-                                               wavURL: URL,
-                                               label: String) -> [GeminiTranscriber.Turn] {
-        guard turns.count > 1,
-              let spans = VoiceActivityDetector.detect(audioURL: wavURL),
-              !spans.isEmpty else { return turns }
-        let tol: Int64 = 400
-        func isConfirmed(_ t: GeminiTranscriber.Turn) -> Bool {
-            spans.contains { $0.startMs - tol < t.endMs && t.startMs < $0.endMs + tol }
+    /// a stretch where only the OTHER side spoke, so the merged transcript
+    /// interleaves the two sides wrongly (measured: 28 of 64 "you" turns).
+    /// Plain VAD spans cannot verify placement — speaker bleed + the mic's
+    /// own noise floor make ~43% of the timeline "voiced" (tried in 0.15.55,
+    /// moved 0 turns); the discriminative signal is cross-track DOMINANCE
+    /// (see `VoiceActivityDetector.dominanceMap`), the same test the
+    /// diagnosis used. Three conservative, order-preserving passes, tuned
+    /// on the real recording (bad placements 28 -> ~1):
+    ///   1. CONFIRM: a turn >= 35% covered by dominant steps stays.
+    ///   2. TRIM: a confirmed turn whose leading/trailing edge overhangs
+    ///      the dominant region by > 600 ms is clipped to it — Whisper
+    ///      routinely stretched a turn's start over the OTHER side's
+    ///      preceding phrase, which flipped the merge order at
+    ///      conversation starts.
+    ///   3. RELOCATE: an unconfirmed turn moves to the nearest dominant
+    ///      span inside its monotonic window (never before the previous
+    ///      placed turn, never past the next confirmed turn's start).
+    /// Text is never altered, order is never changed. Single-file
+    /// recordings are left alone — no sibling to test dominance against.
+    private static func snapTurnsToDominantSpans(_ turns: [GeminiTranscriber.Turn],
+                                                 wavURL: URL,
+                                                 label: String) -> [GeminiTranscriber.Turn] {
+        let counterpartName: String
+        switch wavURL.lastPathComponent {
+        case "mic.wav": counterpartName = "system.wav"
+        case "system.wav": counterpartName = "mic.wav"
+        default: return turns
         }
-        let confirmed = turns.map(isConfirmed)
+        let counterpartURL = wavURL.deletingLastPathComponent()
+            .appendingPathComponent(counterpartName)
+        guard turns.count > 1,
+              FileManager.default.fileExists(atPath: counterpartURL.path),
+              let map = VoiceActivityDetector.dominanceMap(primaryURL: wavURL,
+                                                           referenceURL: counterpartURL),
+              !map.spans.isEmpty else { return turns }
+
+        let winMs = VoiceActivityDetector.dominanceWindowMs
         var out = turns
+        var confirmed = [Bool](repeating: false, count: out.count)
+        var trimmedCount = 0
+
+        // Pass 1+2: confirm by dominant coverage, then clip long silent
+        // overhangs off a confirmed turn's edges.
+        for i in out.indices {
+            let t = out[i]
+            guard map.fraction(startMs: t.startMs, endMs: t.endMs) >= 0.35 else { continue }
+            confirmed[i] = true
+            guard let edges = map.dominantEdges(startMs: t.startMs, endMs: t.endMs,
+                                                windowMs: winMs) else { continue }
+            var ns = t.startMs
+            var ne = t.endMs
+            if edges.first - t.startMs > 600 { ns = edges.first }
+            if t.endMs - edges.last > 600 { ne = edges.last }
+            if (ns != t.startMs || ne != t.endMs), ne - ns >= 500 {
+                out[i] = GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                                startMs: ns, endMs: ne, text: t.text)
+                trimmedCount += 1
+            }
+        }
+
+        // Pass 3: relocate unconfirmed turns, monotonic.
         var moved = 0
         var cursor: Int64 = 0
         for i in out.indices {
@@ -2090,15 +2132,13 @@ final class TranscriptionPipeline {
                 cursor = max(cursor, t.endMs)
                 continue
             }
-            // Monotonic window: never before the previous turn's end, never
-            // past the next CONFIRMED turn's start (order must survive).
             var windowEnd = Int64.max
             for j in (i + 1)..<out.count where confirmed[j] {
-                windowEnd = out[j].startMs + tol
+                windowEnd = out[j].startMs + 400
                 break
             }
             let dur = max(900, t.endMs - t.startMs)
-            let cands = spans.filter { $0.endMs > cursor && $0.startMs < windowEnd }
+            let cands = map.spans.filter { $0.endMs > cursor && $0.startMs < windowEnd }
             guard !cands.isEmpty else {
                 cursor = max(cursor, t.endMs)
                 continue // no room in the window: leave as-is (no worse)
@@ -2119,9 +2159,7 @@ final class TranscriptionPipeline {
             moved += 1
             cursor = out[i].endMs
         }
-        if moved > 0 {
-            FileLogger.log("applyTiming: \(label), snapped \(moved)/\(turns.count) silent-timed turns onto voiced spans")
-        }
+        FileLogger.log("applyTiming: \(label), dominance snap: \(moved) relocated + \(trimmedCount) trimmed of \(turns.count) turns (\(map.spans.count) spans)")
         return out
     }
 
@@ -2147,7 +2185,7 @@ final class TranscriptionPipeline {
         // hallucinations (which keep their own silent timestamp and get gated).
         if numSpeakers == 1 {
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single speaker, keeping \(rawTurns.count) raw ASR turns with Whisper's own timing (no re-derivation)")
-            return Self.snapTurnsToVoicedSpans(rawTurns, wavURL: wavURL,
+            return Self.snapTurnsToDominantSpans(rawTurns, wavURL: wavURL,
                                                label: "\(wavURL.lastPathComponent) single-speaker")
         }
 
@@ -2204,7 +2242,7 @@ final class TranscriptionPipeline {
         let diarSpeakers = Set(diarSegs.map(\.speakerId)).count
         if diarSpeakers <= 1, currentProvider != .gemini {
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single diarized speaker + Whisper-reliable timing, keeping \(rawTurns.count) raw ASR turns (no re-lay)")
-            return Self.snapTurnsToVoicedSpans(rawTurns, wavURL: wavURL,
+            return Self.snapTurnsToDominantSpans(rawTurns, wavURL: wavURL,
                                                label: "\(wavURL.lastPathComponent) single-diar")
         }
 

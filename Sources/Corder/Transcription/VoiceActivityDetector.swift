@@ -165,6 +165,127 @@ enum VoiceActivityDetector {
         return (voicedMs, mean)
     }
 
+    /// Per-window RMS series for a whole file (same windowing as
+    /// `detect`). Used to compare two tracks instant-by-instant.
+    private static func windowRMS(audioURL: URL,
+                                  config: Config) -> (values: [Float], totalDurationMs: Int64)? {
+        guard let file = try? AVAudioFile(forReading: audioURL) else { return nil }
+        let format = file.processingFormat
+        let sampleRate = format.sampleRate
+        guard sampleRate > 0, file.length > 0 else { return ([], 0) }
+        let totalFrames = AVAudioFrameCount(file.length)
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: totalFrames) else { return nil }
+        do { try file.read(into: buf, frameCount: totalFrames) } catch { return nil }
+        guard let channels = buf.floatChannelData else { return nil }
+        let frames = Int(buf.frameLength)
+        let channelCount = Int(format.channelCount)
+        let windowFrames = max(1, Int(Double(config.windowMs) * sampleRate / 1000.0))
+        let hopFrames = max(1, Int(Double(config.hopMs) * sampleRate / 1000.0))
+        var out: [Float] = []
+        out.reserveCapacity(frames / hopFrames + 1)
+        var pos = 0
+        while pos + windowFrames <= frames {
+            var sumSq: Float = 0
+            for ch in 0..<channelCount {
+                let data = channels[ch]
+                for i in 0..<windowFrames {
+                    let s = data[pos + i]
+                    sumSq += s * s
+                }
+            }
+            out.append(sqrtf(sumSq / Float(windowFrames * channelCount)))
+            pos += hopFrames
+        }
+        return (out, Int64(Double(frames) / sampleRate * 1000.0))
+    }
+
+    /// Where `primary` carries speech AND is the DOMINANT track: its
+    /// windowed RMS clears an ADAPTIVE voice floor and exceeds 1.2x the
+    /// sibling track's RMS over the same instant.
+    ///
+    /// Plain `detect()` marks any audible window as speech — on a mic
+    /// track that includes the far end's speaker bleed AND the mic's own
+    /// noise floor (measured ~-44 dBFS on a real recording, just above
+    /// the fixed 0.005 gate), so ~43% of the timeline read as "voiced"
+    /// while the user spoke for ~23%. Two changes make the signal
+    /// discriminative: (1) the floor adapts to the recording — 0.4x the
+    /// 90th-percentile window RMS, never below 0.005 — which sits above
+    /// the noise floor but below quiet speech; (2) a window counts only
+    /// when primary RMS > 1.2x the sibling's, the same cross-track test
+    /// the mis-placement diagnosis used. 300 ms windows at 100 ms steps
+    /// integrate over word-level burstiness. Both files are left-padded
+    /// to a shared capture clock at write time, so equal indices are the
+    /// same instant. `nil` when either file can't be read.
+    struct DominanceMap {
+        let stepMs: Int64
+        /// Per-step "primary is speaking here" flags, step k covers
+        /// [k*stepMs, k*stepMs + windowMs).
+        let dominant: [Bool]
+        /// Collapsed spans: gaps <= 300 ms bridged, runs < 500 ms dropped.
+        let spans: [SpeechSegment]
+
+        /// Fraction of the interval's steps that are primary-dominant.
+        func fraction(startMs: Int64, endMs: Int64) -> Double {
+            let lo = max(0, Int(startMs / stepMs))
+            let hi = min(dominant.count, max(lo + 1, Int(endMs / stepMs)))
+            guard hi > lo else { return 0 }
+            var n = 0
+            for k in lo..<hi where dominant[k] { n += 1 }
+            return Double(n) / Double(hi - lo)
+        }
+
+        /// First/last dominant instant inside the interval, nil when none.
+        func dominantEdges(startMs: Int64, endMs: Int64, windowMs: Int64) -> (first: Int64, last: Int64)? {
+            let lo = max(0, Int(startMs / stepMs))
+            let hi = min(dominant.count, max(lo + 1, Int(endMs / stepMs)))
+            guard hi > lo else { return nil }
+            var first: Int? = nil
+            var last: Int? = nil
+            for k in lo..<hi where dominant[k] {
+                if first == nil { first = k }
+                last = k
+            }
+            guard let f = first, let l = last else { return nil }
+            return (Int64(f) * stepMs, Int64(l) * stepMs + windowMs)
+        }
+    }
+
+    static let dominanceWindowMs: Int64 = 300
+
+    static func dominanceMap(primaryURL: URL,
+                             referenceURL: URL) -> DominanceMap? {
+        var cfg = Config()
+        cfg.windowMs = Int(dominanceWindowMs)
+        cfg.hopMs = 100
+        guard let prim = windowRMS(audioURL: primaryURL, config: cfg),
+              let ref = windowRMS(audioURL: referenceURL, config: cfg) else { return nil }
+        guard !prim.values.isEmpty else {
+            return DominanceMap(stepMs: 100, dominant: [], spans: [])
+        }
+        let sortedVals = prim.values.sorted()
+        let p90 = sortedVals[min(sortedVals.count - 1, Int(Double(sortedVals.count) * 0.90))]
+        let floor = max(0.005, 0.4 * p90)
+        var dom: [Bool] = []
+        dom.reserveCapacity(prim.values.count)
+        for (i, p) in prim.values.enumerated() {
+            let r = i < ref.values.count ? ref.values[i] : 0
+            dom.append(p >= floor && p > 1.2 * r)
+        }
+        let spans = collapse(voiced: dom,
+                             hopMs: 100,
+                             minSpeechMs: 500,
+                             maxGapMs: 300,
+                             paddingMs: 0,
+                             totalDurationMs: prim.totalDurationMs)
+        // collapse() sizes runs by hop count; widen each run's end by the
+        // window tail so a span covers the full audible stretch.
+        let widened = spans.map {
+            SpeechSegment(startMs: $0.startMs,
+                          endMs: min(prim.totalDurationMs, $0.endMs + dominanceWindowMs - 100))
+        }
+        return DominanceMap(stepMs: 100, dominant: dom, spans: widened)
+    }
+
     /// Take the voiced/silent bitmap and produce final [SpeechSegment].
     ///
     /// 1. Run-length encode into raw speech runs.

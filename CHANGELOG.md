@@ -16,6 +16,25 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.56] - 2026-08-05
+
+### Changed
+
+- The player scrubber is now draggable: press and hold anywhere on the
+  bar and slide to the exact moment, including all the way to 0:00.
+  On hover the bar grows properly and shows a position knob, so
+  grabbing it no longer takes pixel-level aim.
+
+### Fixed
+
+- Transcript chronology on quiet microphone tracks, properly this time.
+  Your phrases are now verified against which channel actually carries
+  the voice at that moment (your mic vs the other side), so a phrase
+  can no longer appear before a question it answers or in the middle of
+  the other person's monologue. On the reported recording this
+  corrected 38 of 72 placements, including the very first exchange.
+  Re-transcribe an affected recording to apply.
+
 ## [0.15.55] - 2026-08-05
 
 ### Fixed

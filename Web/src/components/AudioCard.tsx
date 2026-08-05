@@ -63,22 +63,53 @@ export function AudioCard({
       a.pause();
     }
   };
-  const onScrubClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const a = audioRef.current; if (!a || !duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    a.currentTime = Math.max(0, Math.min(1, ratio)) * duration;
-  };
-
+  // Press-and-drag scrubbing with pointer capture: once the button is
+  // down, the position follows the pointer even OUTSIDE the track, so
+  // dragging past the left edge lands exactly on 0:00 instead of
+  // pixel-hunting the first millimetre. A plain click still seeks (the
+  // down event itself seeks). While dragging, the fill follows the
+  // pointer ratio, not the audio clock — a seek on a long file can lag
+  // a frame and the bar must never rubber-band under the cursor.
+  const [drag, setDrag] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<{ pct: number; time: number } | null>(null);
-  const onScrubMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!duration) return;
+
+  const scrubRatio = (e: React.PointerEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    setHover({ pct: ratio * 100, time: ratio * duration });
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  };
+  const seekTo = (ratio: number) => {
+    const a = audioRef.current; if (!a) return;
+    try { a.currentTime = ratio * duration; } catch { /* not seekable yet */ }
+  };
+  const onScrubDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const r = scrubRatio(e);
+    setDrag(r);
+    seekTo(r);
+    setHover({ pct: r * 100, time: r * duration });
+  };
+  const onScrubMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    const r = scrubRatio(e);
+    if (drag !== null) {
+      setDrag(r);
+      seekTo(r);
+    }
+    setHover({ pct: r * 100, time: r * duration });
+  };
+  const onScrubUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (drag !== null) {
+      seekTo(scrubRatio(e));
+      setDrag(null);
+    }
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* never captured */ }
   };
 
-  const cursorPct = duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;
+  const cursorPct =
+    drag !== null
+      ? drag * 100
+      : duration > 0 ? Math.min(100, Math.max(0, (time / duration) * 100)) : 0;
 
   // Playable = a finished recording that has audio ON DISK. We gate on
   // `has_audio` (server checks the mix / mic / archived file exists), NOT on
@@ -105,12 +136,14 @@ export function AudioCard({
           {fmtTime(time)} / {fmtTime(duration)}
         </div>
         <div
-          className="audio-scrub"
-          onClick={onScrubClick}
-          onMouseMove={onScrubMove}
-          onMouseLeave={() => setHover(null)}
+          className={"audio-scrub" + (drag !== null ? " dragging" : "")}
+          onPointerDown={onScrubDown}
+          onPointerMove={onScrubMove}
+          onPointerUp={onScrubUp}
+          onPointerLeave={() => { if (drag === null) setHover(null); }}
         >
           <div className="audio-scrub-fill" style={{ width: `${cursorPct}%` }} />
+          <div className="audio-scrub-thumb" style={{ left: `${cursorPct}%` }} />
           {hover && (
             <div className="audio-scrub-tooltip" style={{ left: `${hover.pct}%` }}>
               {fmtTime(hover.time)}

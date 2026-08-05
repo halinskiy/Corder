@@ -3601,17 +3601,24 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 /* Scrub bar lives in a fixed-height row so growing the inner track on
    hover doesn't shove neighbouring controls. The track is centred
-   vertically inside the row. Default = thick (8px); hover bumps to 10px.
+   vertically inside the row. Default = 8px; hover/drag grows to 14px
+   and reveals a thumb, so the interactive state is unmistakable (the
+   old 10px bump read as "nothing happened"). The row itself is the hit
+   area — taller than the track so grabbing it needs no precision. The
+   `.dragging` class mirrors the pointer-capture drag: the pointer may
+   legitimately be OUTSIDE the element mid-drag, where :hover is false.
    Border-radius is half the height so the pill stays fully rounded
    regardless of the size jump. */
 .audio-scrub {
   flex: 1;
-  height: 18px;
+  height: 28px;
   display: flex;
   align-items: center;
   cursor: pointer;
   position: relative;
+  touch-action: none;
 }
+.audio-scrub.dragging { cursor: grabbing; }
 .audio-scrub::before {
   content: "";
   display: block;
@@ -3619,9 +3626,10 @@ body.resizing { cursor: col-resize; user-select: none; }
   height: 8px;
   background: #ececea;
   border-radius: 999px;
-  transition: height 100ms ease;
+  transition: height 120ms ease;
 }
-.audio-scrub:hover::before { height: 10px; }
+.audio-scrub:hover::before,
+.audio-scrub.dragging::before { height: 14px; }
 .audio-scrub-fill {
   position: absolute;
   left: 0;
@@ -3630,13 +3638,39 @@ body.resizing { cursor: col-resize; user-select: none; }
   height: 8px;
   background: #1E7A50;
   border-radius: 999px;
-  transition: height 100ms ease;
+  transition: height 120ms ease;
   pointer-events: none;
 }
-.audio-scrub:hover .audio-scrub-fill { height: 10px; }
+.audio-scrub:hover .audio-scrub-fill,
+.audio-scrub.dragging .audio-scrub-fill { height: 14px; }
+/* Position knob: hidden at rest, pops on hover, rides the fill edge.
+   White ring separates it from the fill on both themes. */
+.audio-scrub-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1E7A50;
+  border: 2px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+.audio-scrub:hover .audio-scrub-thumb,
+.audio-scrub.dragging .audio-scrub-thumb {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
 .audio-scrub-tooltip {
   position: absolute;
-  bottom: calc(100% + 6px);
+  /* Anchored to the ROW's top edge, which is ~7px above the visible
+     track (the row is the padded hit area). A positive gap on top of
+     that clipped the tooltip against the panel edge once the row grew
+     to 28px, so tuck it back down toward the track. */
+  bottom: calc(100% - 4px);
   transform: translateX(-50%);
   background: var(--fg);
   color: var(--bg);
