@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.58] - 2026-08-11
+
+### Fixed
+
+- Meeting titles drifting into English. A Russian call could come back
+  titled "Interface issues and game setup" while every other recording
+  was named in its own language. Titles are now generated in the
+  language the recording was actually spoken in, and a title that comes
+  back in the wrong writing system is regenerated before it is saved.
+  Rename a recording by hand, or clear its name to have a new one
+  generated.
+
 ## [0.15.57] - 2026-08-05
 
 ### Fixed

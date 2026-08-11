@@ -550,6 +550,11 @@ final class TranscriptionPipeline {
             var cachedUserLabel: String? = nil
             var haveRaw = false                 // raw cached → no Gemini
             var usingDualTrack = canDualTrack
+            // Language the ASR itself reported for this meeting (majority
+            // of per-chunk detections). Lifted to function scope so the
+            // title / summary steps below can NAME it to the model instead
+            // of hoping it infers the language from the text.
+            var detectedMeetingLang: String? = nil
 
             if cacheUsable, !forceFresh,
                let cachedJSON = meeting.geminiRawTurns,
@@ -658,6 +663,7 @@ final class TranscriptionPipeline {
                         let meetingName = WhisperTranscriber.LanguageTally
                             .combinedDominantName(micTally, sysTally)
                         meetingLang = meetingName.flatMap(WhisperTranscriber.iso639)
+                        detectedMeetingLang = meetingLang
                         FileLogger.log("transcribe(): meeting language '\(meetingName ?? "?")' → iso '\(meetingLang ?? "?")', mic \(micTally.snapshot().counts), sys \(sysTally.snapshot().counts)")
                         if let name = meetingName, let iso = meetingLang {
                             rawUserTurns = await rescueDriftedTrack(
@@ -1008,7 +1014,9 @@ final class TranscriptionPipeline {
                 let spks = (try? repo.speakers(forMeeting: meetingId)) ?? []
                 if !segs.isEmpty {
                     let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
-                    if let title = await GeminiTitler.generate(transcript: text) {
+                    if let title = await GeminiTitler.generate(
+                        transcript: text,
+                        languageISO: AppSettings.transcriptionLanguage.nilIfEmpty ?? detectedMeetingLang) {
                         try? repo.setTitle(meetingId: meetingId, title: title)
                         RecordingDirNaming.renameToTitled(repo: repo, meetingId: meetingId)
                         FileLogger.log("transcribe(): titled \(meetingId) → \"\(title)\"")
@@ -2711,7 +2719,9 @@ final class TranscriptionPipeline {
                 guard !segs.isEmpty else { continue }
                 let spks = (try? repo.speakers(forMeeting: id)) ?? []
                 let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
-                if let title = await GeminiTitler.generate(transcript: text) {
+                if let title = await GeminiTitler.generate(
+                    transcript: text,
+                    languageISO: AppSettings.transcriptionLanguage.nilIfEmpty) {
                     try? repo.setTitle(meetingId: id, title: title)
                     RecordingDirNaming.renameToTitled(repo: repo, meetingId: id)
                     FileLogger.log("startup: titled \(id) → \"\(title)\"")

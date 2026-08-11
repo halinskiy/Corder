@@ -11,7 +11,37 @@ enum GeminiTitler {
     // ~3–5× cheaper on text with no meaningful quality loss here.
     private static let model = "gemini-2.5-flash-lite"
 
-    static func generate(transcript: String) async -> String? {
+    /// Writing system of a piece of text, by majority of its letters.
+    /// Used as a deterministic language check on the model's answer: a
+    /// Cyrillic transcript must not come back with a Latin title.
+    /// Script (not language) is the right granularity here — it is
+    /// unambiguous to compute, and it catches the failure users actually
+    /// see ("Interface issues and game setup" over a Russian call)
+    /// without pretending to identify Kazakh vs Russian (a distinction
+    /// NLLanguageRecognizer gets wrong on Cyrillic anyway).
+    enum Script: Equatable {
+        case cyrillic, latin, cjk, other
+    }
+
+    static func dominantScript(_ text: String) -> Script {
+        var cyr = 0, lat = 0, cjk = 0
+        for s in text.unicodeScalars {
+            switch s.value {
+            case 0x0400...0x04FF, 0x0500...0x052F: cyr += 1
+            case 0x0041...0x005A, 0x0061...0x007A, 0x00C0...0x024F: lat += 1
+            case 0x4E00...0x9FFF, 0x3400...0x4DBF, 0x3040...0x30FF, 0xAC00...0xD7AF: cjk += 1
+            default: break
+            }
+        }
+        let total = cyr + lat + cjk
+        guard total >= 8 else { return .other }
+        if cjk * 2 > total { return .cjk }
+        if cyr > lat { return .cyrillic }
+        if lat > cyr { return .latin }
+        return .other
+    }
+
+    static func generate(transcript: String, languageISO: String? = nil) async -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         // Match GeminiTranscriber's routing: a signed-in user goes
@@ -27,62 +57,113 @@ enum GeminiTitler {
         // minutes carry the topic. Keeps the call fast and cheap.
         let snippet = String(trimmed.prefix(6000))
 
+        // The language rule is stated FIRST and by NAME whenever the
+        // pipeline knows it (from the ASR's own per-chunk language
+        // tally, the only reliable signal we have). Buried at the end of
+        // a rule list as a generic "same language as the transcript" it
+        // was routinely ignored: flash-lite with thinking disabled and a
+        // 40-token budget defaults to English, so a Russian call came
+        // back titled "Interface issues and game setup". A named target
+        // language is followed far more reliably than an inferred one.
+        let languageLine: String
+        if let iso = languageISO?.nilIfEmpty,
+           let name = Locale(identifier: "en_US").localizedString(forLanguageCode: iso) {
+            languageLine = "- WRITE THE TITLE IN \(name.uppercased()). This is mandatory, the transcript is in \(name)."
+        } else {
+            languageLine = "- WRITE THE TITLE IN THE TRANSCRIPT'S OWN LANGUAGE (Russian transcript → Russian title, English → English). Never translate to English."
+        }
         let system = """
         You write a short, descriptive title for a meeting transcript.
         Output ONLY the title, nothing else.
 
         Rules:
+        \(languageLine)
         - Say WHAT the conversation is about (the concrete topic/subject),
           or WHO it is with if that's the point. Infer the subject from
           what is actually discussed.
         - ALWAYS produce a real title whenever there is any discernible
           topic, even from a short or rough transcript. Be decisive.
-        - 3 to 7 words. Same language as the transcript (Russian → Russian,
-          English → English). No surrounding quotes, no trailing
-          punctuation, no "Meeting"/"Conversation"/"Discussion" filler,
-          no single bare word copied verbatim from the transcript.
+        - 3 to 7 words. No surrounding quotes, no trailing punctuation,
+          no "Meeting"/"Conversation"/"Discussion" filler, no single bare
+          word copied verbatim from the transcript.
         - Output exactly NONE only when the transcript has no speech or
           no content at all to title (pure noise / empty).
         """
-        let body: [String: Any] = [
-            "systemInstruction": ["parts": [["text": system]]],
-            "contents": [[
-                "role": "user",
-                "parts": [["text": "Transcript:\n\n\(snippet)"]]
-            ]],
-            "generationConfig": [
-                "temperature": 0.3,
-                // gemini-2.5-flash is a *thinking* model: with a tiny
-                // maxOutputTokens the reasoning pass eats the entire
-                // budget and the response comes back with NO text part
-                // (finishReason MAX_TOKENS), which is why every title
-                // was silently dropped. Disable thinking for this
-                // trivial task and leave generous room for the title.
-                "thinkingConfig": ["thinkingBudget": 0],
-                "maxOutputTokens": 40
+        func ask(_ systemPrompt: String) async -> String? {
+            let body: [String: Any] = [
+                "systemInstruction": ["parts": [["text": systemPrompt]]],
+                "contents": [[
+                    "role": "user",
+                    "parts": [["text": "Transcript:\n\n\(snippet)"]]
+                ]],
+                "generationConfig": [
+                    "temperature": 0.3,
+                    // gemini-2.5-flash is a *thinking* model: with a tiny
+                    // maxOutputTokens the reasoning pass eats the entire
+                    // budget and the response comes back with NO text part
+                    // (finishReason MAX_TOKENS), which is why every title
+                    // was silently dropped. Disable thinking for this
+                    // trivial task and leave generous room for the title.
+                    "thinkingConfig": ["thinkingBudget": 0],
+                    "maxOutputTokens": 40
+                ]
             ]
-        ]
 
-        guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
-              let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !jwt.isEmpty {
-            req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+            guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
+                  let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if !jwt.isEmpty {
+                req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+            }
+            req.timeoutInterval = 30
+            req.httpBody = payload
+
+            guard let (data, resp) = try? await URLSession.shared.data(for: req),
+                  let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let candidates = json["candidates"] as? [[String: Any]],
+                  let content = candidates.first?["content"] as? [String: Any],
+                  let parts = content["parts"] as? [[String: Any]] else { return nil }
+            return parts.compactMap { $0["text"] as? String }.joined()
         }
-        req.timeoutInterval = 30
-        req.httpBody = payload
 
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let content = candidates.first?["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]] else { return nil }
+        guard var raw = await ask(system)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
 
-        let raw = parts.compactMap { $0["text"] as? String }.joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Deterministic language check. The prompt alone is not enough:
+        // the model still drifts to English on a Cyrillic transcript. If
+        // the answer's writing system differs from the transcript's, ask
+        // once more with the failure named. Script (not language) keeps
+        // this honest — it cannot misfire on a Russian/Ukrainian mix the
+        // way language identification would.
+        let wantScript = Self.dominantScript(snippet)
+        if wantScript != .other, Self.dominantScript(raw) != wantScript {
+            let scriptName: String
+            switch wantScript {
+            case .cyrillic: scriptName = "Cyrillic"
+            case .cjk: scriptName = "the transcript's East Asian script"
+            case .latin: scriptName = "Latin"
+            case .other: scriptName = "the transcript's script"
+            }
+            let stricter = system + """
+
+
+            IMPORTANT: an earlier attempt answered in the WRONG LANGUAGE
+            ("\(raw.prefix(60))"). The transcript is written in \(scriptName).
+            Write the title in the transcript's own language, using the same
+            script. Do NOT translate it into English.
+            """
+            if let second = await ask(stricter)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               Self.dominantScript(second) == wantScript {
+                FileLogger.log("GeminiTitler: wrong-language title \"\(raw)\" replaced with \"\(second)\"")
+                raw = second
+            } else {
+                FileLogger.log("GeminiTitler: title \"\(raw)\" is off-script and the retry did not fix it, keeping it")
+            }
+        }
         // Strip stray wrapping quotes / trailing period the model
         // sometimes adds despite the instruction.
         let cleaned = raw
