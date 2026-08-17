@@ -95,6 +95,9 @@ enum Routes {
         server.post["/api/meetings/:id/rename"] = { req in
             renameMeeting(req: req, repo: repo)
         }
+        server.post["/api/meetings/:id/retitle"] = { req in
+            retitleMeeting(id: req.params[":id"] ?? "", repo: repo)
+        }
         server.post["/api/meetings/:id/share"] = { req in
             shareMeeting(id: req.params[":id"] ?? "", body: Data(req.body), repo: repo)
         }
@@ -1686,13 +1689,28 @@ enum Routes {
     /// True iff the cached summary already uses the new Granola-style
     /// structured Markdown (`### Heading` + `- ` bullets). Pre-Granola
     /// summaries are plain prose, let them re-generate on first open.
+    /// Whether a cached summary is in the CURRENT format. A stale one falls
+    /// through and is regenerated on the next open of the tab, which is how
+    /// each format change has rolled out. Mirrors `pickStructured` in
+    /// `SummaryPane.tsx` — keep the two in step or the pane offers to
+    /// regenerate something the server then serves from cache unchanged.
+    ///
+    /// Current format: dense bullets under every heading. The retired one
+    /// (paragraph per section, bullets only in the closing action items)
+    /// scores 1 section of 4 and is treated as stale.
     private static func isStructuredMarkdown(_ s: String) -> Bool {
-        // Either an `### ` heading anywhere or at least one bullet line
-        // qualifies. We don't require both because a very short meeting
-        // might collapse to a single section.
-        if s.range(of: #"(^|\n)###\s"#, options: .regularExpression) != nil { return true }
-        if s.range(of: #"(^|\n)-\s"#, options: .regularExpression) != nil { return true }
-        return false
+        // Prefix a newline when the text opens on a heading, so the FIRST
+        // section survives the `dropFirst` that discards the pre-heading part.
+        let text = s.hasPrefix("### ") ? "\n" + s : s
+        let sections = text.components(separatedBy: "\n### ").dropFirst()
+        // No headings at all: only a bullet list qualifies.
+        guard !sections.isEmpty else {
+            return s.range(of: #"(^|\n)\s*[-*]\s"#, options: .regularExpression) != nil
+        }
+        let withBullets = sections.filter {
+            $0.range(of: #"\n\s*[-*]\s"#, options: .regularExpression) != nil
+        }.count
+        return withBullets * 2 > sections.count
     }
 
     private static func cancelTranscription(id: String, repo: MeetingRepository) -> HttpResponse {
@@ -1904,6 +1922,45 @@ enum Routes {
         } catch {
             return .badRequest(.text("\(error)"))
         }
+    }
+
+    /// Regenerate the auto-title for a meeting that already has one.
+    ///
+    /// The automatic pass only ever titles an UNTITLED meeting (so a
+    /// re-transcribe can't churn a name the user is used to), which left every
+    /// meeting titled before a titler fix stuck with the old name — including
+    /// the ones that motivated the fix. This is the manual escape hatch behind
+    /// the sidebar's "Regenerate title".
+    private static func retitleMeeting(id: String, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
+        guard (try? repo.meeting(id: id)) != nil else { return .notFound }
+        let segs = (try? repo.segments(forMeeting: id)) ?? []
+        guard !segs.isEmpty else { return jsonResponse(["title": "", "error": "no transcript"]) }
+        // Same gate as Summary: titling runs through the Worker, which
+        // authenticates with the user's Supabase JWT.
+        guard AppSettings.isSignedIn else {
+            return jsonResponse(["title": "", "error": "sign_in_required"])
+        }
+        let spks = (try? repo.speakers(forMeeting: id)) ?? []
+        let text = TranscriptFormatter.clipboardText(segments: segs, speakers: spks)
+
+        let sema = DispatchSemaphore(value: 0)
+        var title: String?
+        Task {
+            title = await GeminiTitler.generate(
+                transcript: text,
+                languageISO: AppSettings.transcriptionLanguage.nilIfEmpty)
+            sema.signal()
+        }
+        sema.wait()
+
+        guard let title, !title.isEmpty else {
+            return jsonResponse(["title": "", "error": "generation failed"])
+        }
+        try? repo.setTitle(meetingId: id, title: title)
+        RecordingDirNaming.renameToTitled(repo: repo, meetingId: id)
+        FileLogger.log("retitle: \(id) → \"\(title)\"")
+        return jsonResponse(["title": title])
     }
 
     private static func search(query: String, repo: MeetingRepository) -> HttpResponse {

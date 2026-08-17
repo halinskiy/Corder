@@ -309,6 +309,7 @@ interface Strings {
   empty_archive_btn: string;
 
   ctx_retranscribe: string;
+  ctx_retitle: string;
   ctx_archive: string;
   ctx_archive_selected: (n: number) => string;
   ctx_pin: string;
@@ -339,6 +340,8 @@ interface Strings {
   toast_copy_failed: string;
   toast_retranscribe_started: string;
   toast_retranscribe_failed: string;
+  toast_retitle_started: string;
+  toast_retitle_failed: string;
   toast_deleted: string;
   toast_archived: string;
   toast_undo: string;
@@ -698,6 +701,7 @@ const en: Strings = {
   empty_archive_btn: "Archive Session",
 
   ctx_retranscribe: "Re-transcribe",
+  ctx_retitle: "Regenerate title",
   ctx_archive: "Archive",
   ctx_archive_selected: (n) => `Archive (${n})`,
   ctx_pin: "Pin",
@@ -728,6 +732,8 @@ const en: Strings = {
   toast_copy_failed: "Could not copy",
   toast_retranscribe_started: "Starting transcription…",
   toast_retranscribe_failed: "Could not start transcription",
+  toast_retitle_started: "Renaming…",
+  toast_retitle_failed: "Could not regenerate the title",
   toast_deleted: "Recording deleted",
   toast_archived: "Archived",
   toast_undo: "Undo",

@@ -277,15 +277,28 @@ function SummaryBanner({
   );
 }
 
-/// Treat pre-Granola plain-prose summaries as "no summary" so the
-/// auto-trigger above re-renders them in the new structured format.
+/// Treat a summary written in a SUPERSEDED format as "no summary", so the
+/// pane offers to regenerate instead of rendering last year's shape. The row
+/// keeps the old text either way — this only decides what is shown.
+///
+/// Two generations have been retired this way: the unstructured plain-prose
+/// recap (no headings, no bullets at all), and the paragraph-per-section one
+/// that followed it, whose only bullets were in the closing "Дальше" list.
+/// That format was measured against Granola's notes on the same call and lost
+/// the specifics — the reference someone cited, the per-item decision, the bug
+/// mentioned once — because prose paraphrases them away. Current format is
+/// dense bullets under every heading.
 export function pickStructured(s: string | null): string | null {
   if (!s) return null;
   const trimmed = s.trim();
   if (!trimmed) return null;
-  const looksStructured =
-    /(^|\n)###\s/.test(trimmed) || /(^|\n)[-*]\s/.test(trimmed);
-  return looksStructured ? trimmed : null;
+  const sections = trimmed.split(/\n(?=###\s)/).filter((x) => /^###\s/.test(x.trim()));
+  // No headings at all: the oldest format. Keep it only if it is a bullet list.
+  if (sections.length === 0) return /(^|\n)\s*[-*]\s/.test(trimmed) ? trimmed : null;
+  // Headings present: the body has to be bullets in most of them. The prose
+  // format scores 1 of 4 (only its action items were a list).
+  const withBullets = sections.filter((x) => /\n\s*[-*]\s/.test(x)).length;
+  return withBullets * 2 > sections.length ? trimmed : null;
 }
 
 // ──────────────────────────────────────────────────────────────

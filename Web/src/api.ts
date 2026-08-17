@@ -276,6 +276,17 @@ export async function retranscribe(id: string): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+/// Re-run the auto-titler on an already-titled meeting. The automatic pass
+/// skips a meeting that has a name, so this is the only way to pick up a
+/// titler improvement on old recordings.
+export async function retitle(id: string): Promise<string> {
+  const r = await fetch(`/api/meetings/${id}/retitle`, { method: "POST" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = (await r.json()) as { title?: string; error?: string };
+  if (d.error || !d.title) throw new Error(d.error || "generation failed");
+  return d.title;
+}
+
 /// Create a public share link for a meeting. The backend verifies the
 /// transcript is in the cloud, uploads the compact audio, and records the
 /// share via the Worker; returns the public URL. Throws with a user-facing

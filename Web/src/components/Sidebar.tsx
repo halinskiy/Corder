@@ -1,6 +1,6 @@
 import React from "react";
 import { Search } from "lucide-react";
-import { MeetingSummary, MeetingStatus, retranscribe, pinMeeting, renameMeeting } from "../api";
+import { MeetingSummary, MeetingStatus, retranscribe, retitle, pinMeeting, renameMeeting } from "../api";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { formatDate, formatDuration, dateBucket } from "../format";
 import type { Lang, T } from "../i18n";
@@ -381,6 +381,16 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
               }
               catch { onToast(t.toast_retranscribe_failed, "error"); }
             }}
+            onRetitle={async () => {
+              const id = menu.meetingId;
+              setMenu(null);
+              onToast(t.toast_retitle_started, "success");
+              try {
+                await retitle(id);
+                onChanged?.();
+              }
+              catch { onToast(t.toast_retitle_failed, "error"); }
+            }}
           />
         )
       )}
@@ -388,10 +398,10 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
   );
 }
 
-function ContextMenu({ x, y, pinned, onRename, onPin, onDelete, onRetranscribe, t }: {
+function ContextMenu({ x, y, pinned, onRename, onPin, onDelete, onRetranscribe, onRetitle, t }: {
   x: number; y: number; pinned: boolean;
   onRename: () => void; onPin: () => void; onDelete: () => void;
-  onRetranscribe: () => void; t: T;
+  onRetranscribe: () => void; onRetitle: () => void; t: T;
 }) {
   return (
     <div
@@ -401,6 +411,7 @@ function ContextMenu({ x, y, pinned, onRename, onPin, onDelete, onRetranscribe, 
       onContextMenu={(e) => e.preventDefault()}
     >
       <button className="ctx-item" onClick={onRename}>{t.ctx_rename}</button>
+      <button className="ctx-item" onClick={onRetitle}>{t.ctx_retitle}</button>
       <button className="ctx-item" onClick={onPin}>
         {pinned ? t.ctx_unpin : t.ctx_pin}
       </button>

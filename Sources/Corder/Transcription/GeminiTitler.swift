@@ -53,9 +53,11 @@ enum GeminiTitler {
         if jwt.isEmpty && key.isEmpty { return nil }
         let base = await GeminiTranscriber.endpointBaseForProxy()
 
-        // Cap the input, a title only needs the gist, and the opening
-        // minutes carry the topic. Keeps the call fast and cheap.
-        let snippet = String(trimmed.prefix(6000))
+        // Whole transcript when it fits, otherwise an even sample of it (see
+        // `TranscriptSampling`, and the cake-title bug it documents). ~24k
+        // characters is ≈8k tokens on flash-lite — well under a tenth of a
+        // cent per title, so there is no reason to read only the opening.
+        let snippet = TranscriptSampling.evenSample(trimmed, budget: 24000)
 
         // The language rule is stated FIRST and by NAME whenever the
         // pipeline knows it (from the ASR's own per-chunk language
@@ -81,8 +83,19 @@ enum GeminiTitler {
         - Say WHAT the conversation is about (the concrete topic/subject),
           or WHO it is with if that's the point. Infer the subject from
           what is actually discussed.
+        - Title the MAIN SUBJECT of the whole meeting — the thing most of
+          the time was spent on, the reason the call happened. Opening
+          small talk (greetings, food, cooking, weather, travel, plans for
+          the evening) and closing pleasantries are NOT the subject even
+          though they come first; ignore them unless the entire call is
+          that. Weigh the middle and the end at least as much as the
+          opening.
+        - The transcript may arrive as an even SAMPLE of the meeting, with
+          `[…]` marking a skipped stretch. Judge the subject from all the
+          windows together, never from the first one alone.
         - ALWAYS produce a real title whenever there is any discernible
           topic, even from a short or rough transcript. Be decisive.
+        - No em dash (—) in the title; use a colon or a comma instead.
         - 3 to 7 words. No surrounding quotes, no trailing punctuation,
           no "Meeting"/"Conversation"/"Discussion" filler, no single bare
           word copied verbatim from the transcript.
@@ -105,7 +118,9 @@ enum GeminiTitler {
                     // was silently dropped. Disable thinking for this
                     // trivial task and leave generous room for the title.
                     "thinkingConfig": ["thinkingBudget": 0],
-                    "maxOutputTokens": 40
+                    // 40 was tight for Cyrillic (a 7-word Russian headline
+                    // tokenises to ~30), which truncated long titles.
+                    "maxOutputTokens": 64
                 ]
             ]
 

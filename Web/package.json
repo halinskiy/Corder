@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/edge": "^1.2.2",
+    "@vercel/og": "^0.6.4",
     "flag-icons": "^7.5.0",
     "lucide-react": "^1.14.0",
     "react": "^18.3.0",

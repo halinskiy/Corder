@@ -16,6 +16,33 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.59] - 2026-08-17
+
+### Added
+
+- "Regenerate title" in a recording's right-click menu. Titles are
+  generated once, when a recording is first transcribed, so older
+  recordings keep whatever name they were given; this re-runs the
+  titler on demand.
+
+### Fixed
+
+- Meeting titles are about the meeting, not its first ten minutes. The
+  titler only ever read the opening of a transcript, so a call that
+  started with small talk got named after the small talk: an hour-long
+  session titled after a cake mentioned in the first minutes. It now
+  reads the whole transcript (sampled evenly across it when very long)
+  and is told to ignore greetings and chit-chat.
+
+### Changed
+
+- Summaries are back to dense bullets under every heading, instead of
+  paragraphs. The prose format paraphrased away exactly what a recap is
+  read for: the reference someone cited, the per-item decision, the bug
+  raised once. Existing summaries in the old format offer to regenerate.
+- A summary of a very long meeting now samples the whole recording rather
+  than stopping partway through it.
+
 ## [0.15.58] - 2026-08-11
 
 ### Fixed

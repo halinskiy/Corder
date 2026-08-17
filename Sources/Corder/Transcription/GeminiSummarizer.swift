@@ -30,16 +30,23 @@ enum GeminiSummarizer {
         let base = await GeminiTranscriber.endpointBaseForProxy()
 
         // Summaries need broad context; cap generously but bound it so a
-        // 3-hour transcript can't blow the request up.
-        let snippet = String(trimmed.prefix(60000))
+        // 3-hour transcript can't blow the request up. Over the cap we SAMPLE
+        // across the whole meeting rather than crop the head — a recap of a
+        // 3-hour call that silently stops at minute 90 is worse than one that
+        // is thin everywhere (see `TranscriptSampling`).
+        let snippet = TranscriptSampling.evenSample(trimmed, budget: 120000, windows: 8)
 
-        // Prose-style recap. Earlier version used heavy nested bullets
-        // ("Speaker 2 said X, Speaker 2 said Y…") which read as a
-        // transcript dump rather than a summary. New format: each
-        // section is a single flowing paragraph that captures the
-        // SUBSTANCE of what was discussed, not a per-speaker log.
-        // Bullets reserved only for the trailing "next steps" section
-        // where they're genuinely useful (one action per line).
+        // Dense nested bullets, one fact per line. History: v1 was a
+        // per-speaker bullet log ("Speaker 2 said X, Speaker 2 said Y…"),
+        // which read as a transcript dump, so v2 swung to flowing prose
+        // paragraphs. Prose turned out to cost DETAIL — measured against
+        // Granola's notes on the same 65-minute call (2026-08-17): they kept
+        // the reference titles, the per-item decisions and the one-line bugs,
+        // ours dissolved them into "стороны пришли к соглашению о
+        // необходимости…". A recap is read for exactly those specifics.
+        // v3 keeps the per-fact bullet SHAPE of v1 but bans the per-speaker
+        // logging that made it a dump: each bullet is a decision, a fact or a
+        // number, never "кто что сказал".
         let system = """
         You write meeting recaps in Markdown. Quality bar: a senior PM
         reading the recap (instead of the call) walks away with what
@@ -53,53 +60,64 @@ enum GeminiSummarizer {
         Output format (STRICT):
         - Markdown only. NO preamble, NO meta ("This meeting was about…"),
           NO closing remarks, NO ```code``` fences.
-        - 3 to 6 sections, each headed by `### Heading`. Heading is a
+        - 4 to 8 sections, each headed by `### Heading`. Heading is a
           concrete topic ("Финансовое положение компании", "Решение
-          по найму", "Позиция по войне"), NOT a generic label.
-        - Body of each section is ONE OR TWO PARAGRAPHS of plain prose.
-          DO NOT use bullet lists inside sections. Each paragraph is a
-          flowing summary of the substance, written in third person
-          past tense ("Обсуждение свелось к тому, что…", "Стороны
-          разошлись в оценке…", "Команда решила…").
+          по найму", "Навигация: шапка сайта"), NOT a generic label.
+        - Body of each section is a BULLET LIST, never prose paragraphs.
+          One fact, decision or number per bullet.
+        - Nest ONE level with exactly two spaces when bullets belong to
+          the line above: options under a decision, per-item detail under
+          a category, consequences under a problem.
+        - Bullets are TELEGRAPHIC. Write the substance, not the fact that
+          it was discussed: "Блок «Popular Visa Services» убрать: дублирует
+          «Our Immigration Services»" ✅, "Обсуждение свелось к
+          необходимости реструктуризации" ❌. Never open a bullet with
+          "Обсуждалось", "Стороны пришли", "Было решено рассмотреть".
+        - Punctuation: use a colon or a comma where you would reach for a
+          dash. Never write an em dash (—) in the output.
         - Bold key numbers, names, decisions, dates, percentages with
           `**…**`.
-        - Order sections by importance: decisions and money first,
-          context and tangents last.
+        - Order sections the way the meeting weighted them: what took the
+          most time and what was decided first, tangents last.
 
         Content rules:
         - Be specific. Numbers, names, dates, deadlines, percentages,
-          counts, keep them inline in the prose, never paraphrase
-          them away ("обсуждали зарплаты" ❌ → "сошлись на зарплате
-          **£35k фикс**" ✅).
-        - Synthesise, do not transcribe. Capture each side's POSITION
-          on a topic in one sentence rather than listing every "Speaker
-          2 сказал…" / "Speaker 1 ответил…". If both sides agree,
-          state the agreement; if they disagreed, state the split in
-          one sentence ("Стороны разошлись в оценке X: один считал
-          A, другой, B").
+          counts, tool and product names, references someone cited, the
+          concrete example given — KEEP them ("обсуждали зарплаты" ❌ →
+          "сошлись на зарплате **£35k фикс**" ✅). These specifics are
+          the whole reason someone reads the recap instead of the call;
+          a bullet that survives without them was not worth writing.
+        - Synthesise, do not transcribe. A bullet states WHAT holds, not
+          who uttered it — no "Speaker 2 сказал…" / "Speaker 1 ответил…"
+          chains. If both sides agreed, state the agreement; if they
+          disagreed, state the split in one bullet ("Разошлись в оценке
+          X: один считал A, другой B").
+        - Cover the WHOLE meeting, not its opening. Every topic that got
+          real time deserves a section, including ones raised near the
+          end. If the transcript arrives as an even sample (`[…]` marks a
+          skipped stretch), weigh all windows equally.
         - Never invent anything not said. If unclear, omit it. Do not
           hedge ("вероятно", "возможно"), either it was said or it
           wasn't.
         - Quotes only when exact wording matters. Russian guillemets
           «…» for Russian.
-        - ONLY EXCEPTION to the no-bullets rule: a closing section
-          `### Дальше` (RU) / `### Next` (EN) listing action items as
-          bullets, one per line, responsible party in **bold** when
-          known. Skip this section entirely if there are no action
-          items.
+        - Close with `### Дальше` (RU) / `### Next` (EN) listing action
+          items, one per bullet, responsible party in **bold** when it is
+          actually known from the transcript. Skip the section entirely
+          if there are no action items; never invent an owner.
 
         Example structure (Russian):
 
         ### Финансовое положение компании
-        Денег осталось на **2 месяца** при текущем burn rate. На прошлой
-        неделе сократили **3 подрядчиков**, параллельно ведут переговоры
-        с инвестором X о **bridge round £200k**, решение по которому
-        ожидается до **15 июня**.
+        - Денег при текущем burn rate осталось на **2 месяца**
+        - Сократили **3 подрядчиков** на прошлой неделе
+        - Переговоры с инвестором X о **bridge round £200k**
+          - Решение ожидается до **15 июня**
+          - Запасной вариант: кредитная линия банка, ставка не обсуждалась
 
         ### Решение по найму
-        Senior backend закрыли на **£70k фикс + 0.5% equity**, выход
-        с **1 июля**. От junior-кандидата отказались из-за слабого
-        алгоритмического собеса.
+        - Senior backend закрыт: **£70k фикс + 0.5% equity**, выход **1 июля**
+        - Junior-кандидату отказали: слабый алгоритмический собес
 
         ### Дальше
         - **Костя**: подготовить cap-table к пятнице
@@ -119,7 +137,11 @@ enum GeminiSummarizer {
                 // generous (was 600) because a real structured recap of a
                 // 30-minute call needs ~1200–2000 tokens.
                 "thinkingConfig": ["thinkingBudget": 0],
-                "maxOutputTokens": 2200
+                // Bullet recaps of a long call run longer than the prose ones
+                // did (Granola's notes on a 65-min call are ~3.5k characters,
+                // ≈1.7k Cyrillic tokens), and a truncated recap loses its tail
+                // sections silently. 2200 was cutting them off.
+                "maxOutputTokens": 4000
             ]
         ]
 
