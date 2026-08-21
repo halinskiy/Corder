@@ -131,7 +131,11 @@ create policy news_items_authenticated_read
 -- 5) Public view used by the worker and (eventually) the admin UI's
 --    "see what's live" preview.
 -- ---------------------------------------------------------------------
-create or replace view public.news_active as
+-- `security_invoker` makes the view run RLS as the CALLER, not as the
+-- view's owner. Without it Postgres defaults to owner rights and the
+-- Supabase advisor flags the view CRITICAL (see the follow-up
+-- migration 20260821_news_active_security_invoker.sql).
+create or replace view public.news_active with (security_invoker = on) as
 select
   id,
   title,
