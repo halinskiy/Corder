@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.60] - 2026-08-21
+
+### Changed
+
+- Backend maintenance only. Tightened the sync database's access rules
+  and query performance behind the scenes. Nothing in the app itself
+  changed in this build.
+
 ## [0.15.59] - 2026-08-17
 
 ### Added
