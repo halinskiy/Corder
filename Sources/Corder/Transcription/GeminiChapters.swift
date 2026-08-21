@@ -65,8 +65,14 @@ enum GeminiChapters {
         Output ONLY a JSON object with a `chapters` array. Each
         chapter has `start_index` (the integer index of the line where
         that chapter begins, copy it exactly from the line prefix)
-        and `title` (3–7 words describing the topic of that segment in
-        the SAME language as the transcript).
+        and `title` (3–7 words describing the topic of that segment).
+
+        Language: every `title` MUST be in the SAME language as the
+        transcript (Russian transcript → Russian titles, English →
+        English, and so on). NEVER translate titles into English when
+        the transcript is in another language — this is the single most
+        common mistake on this task, do not make it. Match the language
+        of the line text, not this instruction.
 
         Rules:
         - 3 to 8 chapters depending on how long / topically varied
