@@ -1,6 +1,8 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import { ShareTranscript } from "./ShareTranscript";
+import { ShareSummary } from "./ShareSummary";
+import { ShareChapters } from "./ShareChapters";
 import { SharePlayer } from "./SharePlayer";
 import { ShareGate } from "./ShareGate";
 import { ShareDownload } from "./ShareDownload";
@@ -8,6 +10,8 @@ import { ShareExport } from "./ShareExport";
 import { ShareSearch } from "./ShareSearch";
 import { formatDuration } from "../format";
 import { fetchShare, tokenFromLocation, ShareGone, type Share } from "./shareApi";
+
+type Tab = "transcript" | "summary" | "chapters";
 
 const DOWNLOAD_URL = "https://getcorder.com";
 
@@ -35,6 +39,7 @@ export function SharePage() {
   const [currentTimeSec, setCurrentTimeSec] = React.useState(0);
   const [query, setQuery] = React.useState("");
   const [readingMs, setReadingMs] = React.useState(0);
+  const [tab, setTab] = React.useState<Tab>("transcript");
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
   React.useEffect(() => {
@@ -81,10 +86,19 @@ export function SharePage() {
     );
   }
 
-  const { detail, ownerName, audioUrl } = share;
+  const { detail, chapters, ownerName, audioUrl } = share;
   const started = new Date(detail.started_at);
   const q = query.trim().toLowerCase();
   const matchCount = q ? detail.segments.filter((s) => s.text.toLowerCase().includes(q)).length : null;
+
+  // Tabs only appear when there's a second surface to switch to. A share with
+  // just a transcript stays the plain document it always was.
+  const hasSummary = !!detail.summary && detail.summary.trim().length > 0;
+  const hasChapters = chapters.length > 0;
+  const showTabs = hasSummary || hasChapters;
+  // Guard against a stale tab if the active surface has no content.
+  const activeTab: Tab =
+    (tab === "summary" && !hasSummary) || (tab === "chapters" && !hasChapters) ? "transcript" : tab;
 
   return (
     <div className="sp-page">
@@ -102,7 +116,7 @@ export function SharePage() {
 
       <main className="sp-sheet-wrap">
         <article className="sp-sheet">
-          <header className="sp-doc-head">
+          <header className={"sp-doc-head" + (showTabs ? " sp-doc-head--tabbed" : "")}>
             <h1 className="sp-doc-title">{detail.title || "Untitled meeting"}</h1>
             <p className="sp-doc-meta">
               {started.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
@@ -123,13 +137,54 @@ export function SharePage() {
             </p>
           </header>
 
-          <ShareTranscript
-            detail={detail}
-            currentTimeSec={currentTimeSec}
-            onSeek={seek}
-            query={query}
-            onReading={setReadingMs}
-          />
+          {showTabs && (
+            <nav className="sp-tabs" aria-label="Sections">
+              <button
+                type="button"
+                className={"sp-tab" + (activeTab === "transcript" ? " is-active" : "")}
+                onClick={() => setTab("transcript")}
+              >
+                Transcript
+              </button>
+              {hasSummary && (
+                <button
+                  type="button"
+                  className={"sp-tab" + (activeTab === "summary" ? " is-active" : "")}
+                  onClick={() => setTab("summary")}
+                >
+                  Summary
+                </button>
+              )}
+              {hasChapters && (
+                <button
+                  type="button"
+                  className={"sp-tab" + (activeTab === "chapters" ? " is-active" : "")}
+                  onClick={() => setTab("chapters")}
+                >
+                  Chapters
+                </button>
+              )}
+            </nav>
+          )}
+
+          {/* Transcript stays mounted (display-toggled) so its scroll position
+              and the reading-minimap survive a tab flip, exactly like the app's
+              left column. Summary / Chapters are cheap, mounted only when live. */}
+          <div style={{ display: activeTab === "transcript" ? "block" : "none" }}>
+            <ShareTranscript
+              detail={detail}
+              currentTimeSec={currentTimeSec}
+              onSeek={seek}
+              query={query}
+              onReading={setReadingMs}
+            />
+          </div>
+          {hasSummary && activeTab === "summary" && (
+            <ShareSummary markdown={detail.summary!} />
+          )}
+          {hasChapters && activeTab === "chapters" && (
+            <ShareChapters chapters={chapters} currentTimeSec={currentTimeSec} onSeek={seek} />
+          )}
         </article>
       </main>
 

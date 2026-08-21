@@ -1,0 +1,11 @@
+-- Add `chapters` to meetings so the public share page can show a Chapters tab.
+--
+-- Stored as JSON-TEXT (a `[{"start_ms":..,"title":..}]` array), mirrored
+-- verbatim from the app's local `meetings.chapters` column by SupabaseSync.
+-- Kept as text (not jsonb) so it round-trips byte-for-byte with the local
+-- store and the app's push path stays a plain string assignment; the Worker's
+-- `/share/<token>` read JSON.parses it into an array for the frontend.
+--
+-- Nullable: a meeting has no chapters until GeminiChapters has run, and older
+-- meetings simply never gain the tab.
+alter table public.meetings add column if not exists chapters text;

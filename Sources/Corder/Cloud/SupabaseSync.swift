@@ -71,6 +71,10 @@ enum SupabaseSync {
         let archived_at: String?
         let viewed_at: String?
         let provider: String?
+        // JSON-text array of {start_ms,title}, mirrored verbatim from the local
+        // `meetings.chapters` column so the public share page can show a
+        // Chapters tab. nil until the meeting has generated chapters.
+        let chapters: String?
     }
 
     struct SpeakerRow: Codable, Sendable {
@@ -134,7 +138,8 @@ enum SupabaseSync {
             pinned: m.pinnedAt != nil,
             archived_at: iso(m.archivedAt),
             viewed_at: iso(m.viewedAt),
-            provider: nil
+            provider: nil,
+            chapters: (m.chapters?.isEmpty == false) ? m.chapters : nil
         )
     }
 

@@ -18,6 +18,10 @@ interface ShareResponse {
     text: string; position: number;
   }>;
   summary: string | null;
+  // Chapters ride the share as a plain array (the Worker reads them off the
+  // meeting row). Older shares / meetings without chapters send null, so the
+  // Chapters tab simply doesn't appear.
+  chapters: Array<{ start_ms: number; title: string }> | null;
   owner_name: string | null;
   expires_at: string;
   audio_url: string | null;
@@ -25,6 +29,7 @@ interface ShareResponse {
 
 export interface Share {
   detail: MeetingDetail;
+  chapters: Array<{ startMs: number; title: string }>;
   ownerName: string | null;
   audioUrl: string | null;
   expiresAt: string;
@@ -80,8 +85,14 @@ export async function fetchShare(token: string): Promise<Share> {
     has_video: false,   // Phase 1 is audio-only
   };
 
+  const chapters = (d.chapters ?? [])
+    .map((c) => ({ startMs: c.start_ms, title: (c.title || "").trim() }))
+    .filter((c) => c.title)
+    .sort((a, b) => a.startMs - b.startMs);
+
   return {
     detail,
+    chapters,
     ownerName: d.owner_name,
     audioUrl: d.audio_url,
     expiresAt: d.expires_at,

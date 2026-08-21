@@ -222,6 +222,78 @@ body { margin: 0; }
 .sp-doc-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--color-border-strong); }
 .sp-doc-by { color: var(--color-accent); font-weight: 500; }
 
+/* ── Section tabs (Transcript · Summary · Chapters) ──
+   The same bar the app carries under the meeting header: 14px labels, the
+   active one in full ink with a 2px underline, sitting ON a hairline divider.
+   When tabs are present they OWN the header divider, so the head drops its own
+   border (a share with only a transcript keeps the plain document divider). */
+.sp-doc-head--tabbed { padding-bottom: 18px; margin-bottom: 0; border-bottom: 0; }
+.sp-tabs {
+  display: flex; align-items: center; gap: 24px;
+  margin: 0 0 28px;
+  border-bottom: 1px solid var(--color-border);
+}
+.sp-tab {
+  appearance: none; background: none; border: 0;
+  font-family: inherit; font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 4px 0 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 120ms var(--ease-out);
+}
+.sp-tab:hover { color: var(--color-text); }
+.sp-tab.is-active { color: var(--color-text); border-bottom-color: var(--color-text); }
+.sp-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 3px; }
+
+/* ── Summary tab ── */
+.sp-summary { animation: sp-turn-in 460ms var(--ease-out) both; }
+.sp-sum-h {
+  margin: 26px 0 10px;
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 20px; line-height: 1.25; letter-spacing: var(--ls-display);
+  color: var(--color-text);
+}
+.sp-sum-h:first-child { margin-top: 2px; }
+.sp-sum-list { margin: 0; padding: 0; list-style: none; }
+.sp-sum-li {
+  position: relative;
+  padding: 4px 0 4px 22px;
+  font-size: 16px; line-height: 1.6; color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.sp-sum-li::before {
+  content: ""; position: absolute; left: 5px; top: 13px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--color-accent);
+}
+.sp-sum-li--sub { padding-left: 44px; }
+.sp-sum-li--sub::before { left: 27px; width: 4px; height: 4px; top: 13.5px; background: var(--color-border-strong); }
+.sp-summary strong { font-weight: 600; }
+
+/* ── Chapters tab ── */
+.sp-chapters { display: flex; flex-direction: column; gap: 2px; animation: sp-turn-in 460ms var(--ease-out) both; }
+.sp-chapter {
+  display: flex; align-items: baseline; gap: 16px;
+  width: 100%; text-align: left;
+  appearance: none; background: none; border: 0;
+  padding: 11px 12px; margin: 0 -12px;
+  border-radius: 8px; cursor: pointer;
+  font-family: inherit;
+  transition: background-color 150ms var(--ease-out);
+}
+.sp-chapter:hover { background: var(--color-surface); }
+.sp-chapter.is-active { background: rgba(33, 122, 80, 0.1); }
+.sp-chapter:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.sp-chapter-time {
+  flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--color-accent);
+  min-width: 46px;
+}
+.sp-chapter-title { font-size: 16px; line-height: 1.5; color: var(--color-text); overflow-wrap: anywhere; }
+
 /* ── Turns ── */
 .sp-turns { display: flex; flex-direction: column; }
 .sp-turn {
@@ -576,6 +648,7 @@ body { margin: 0; }
   .sp-brand { top: 16px; left: 16px; }
   .sp-brand img { width: 48px; height: 48px; }
   .sp-tools { top: 16px; right: 16px; gap: 8px; }
+  .sp-tabs { gap: 20px; }
   .sp-search.is-open { width: calc(100vw - 32px - 48px - 8px); }
   .sp-sheet-wrap { padding: 72px 12px 120px; }
   .sp-sheet { padding: 32px 24px 40px; border-radius: 10px; }
