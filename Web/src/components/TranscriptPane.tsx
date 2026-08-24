@@ -591,9 +591,19 @@ interface SpeakerNameProps {
 function SpeakerName({ meetingId, speaker, display, onUpdated, onToast, readOnly = false, t }: SpeakerNameProps) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(speaker?.custom_name || "");
+  // Optimistic name shown the instant the user commits, so the rename feels
+  // immediate. The real path — POST /rename, then the parent re-fetches the
+  // detail — can take a couple of seconds when a Swifter worker is busy (e.g.
+  // serving audio), and leaving the OLD name on screen the whole time reads as
+  // "nothing happened". We render this override until the fresh `display` from
+  // the server catches up, at which point the effect below clears it.
+  const [pending, setPending] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  // The server round-trip landed and the parent re-rendered with the new name:
+  // drop the optimistic override so there's a single source of truth again.
+  React.useEffect(() => { setPending(null); }, [display]);
 
   if (!speaker || readOnly) return <span className="speaker-name">{display}</span>;
 
@@ -610,6 +620,9 @@ function SpeakerName({ meetingId, speaker, display, onUpdated, onToast, readOnly
           const trimmed = draft.trim();
           const next = trimmed.length === 0 ? null : trimmed;
           if (next !== (speaker.custom_name || null)) {
+            // Show the new name right away (falls back to the label when the
+            // name is cleared), before the network round-trip.
+            setPending(next ?? speaker.label);
             // Surface a failure instead of swallowing it: the local server can
             // wedge (a slow Share on the same keep-alive connection blocks the
             // next request), and a silent catch just reverted the name with no
@@ -618,6 +631,7 @@ function SpeakerName({ meetingId, speaker, display, onUpdated, onToast, readOnly
               await renameSpeaker(meetingId, speaker.id, next);
               onUpdated();
             } catch {
+              setPending(null);
               onToast(t.toast_settings_failed ?? "Couldn't save. Try again.", "error");
             }
           }
@@ -635,7 +649,7 @@ function SpeakerName({ meetingId, speaker, display, onUpdated, onToast, readOnly
       onClick={() => { setDraft(speaker.custom_name || ""); setEditing(true); }}
       title={t.speaker_rename_title}
     >
-      {display}
+      {pending ?? display}
     </span>
   );
 }

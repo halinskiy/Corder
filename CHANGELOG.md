@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.61] - 2026-08-24
+
+### Fixed
+
+- Playback that stayed silent on a recording you watched finish transcribing now works. The player was holding on to an early, empty fetch and never reloaded the finished audio; it now picks up the file the moment it's ready, and a single click on Play starts it.
+- Renaming a speaker is instant. The new name used to sit on the old one for a couple of seconds while it saved, which read as nothing happening; it now updates immediately and saves in the background.
+
 ## [0.15.60] - 2026-08-21
 
 ### Changed

@@ -51,17 +51,22 @@ export function AudioCard({
 
   const togglePlay = () => {
     const a = audioRef.current; if (!a) return;
-    if (a.paused) {
-      // Recover a stuck element: the browser preloads the audio src, and if it
-      // was fetched WHILE the meeting was still recording (the playback mix is
-      // produced only at stop) it 404s and the element sticks in an error state,
-      // so play() stays silent even once the file exists. A fresh load()
-      // re-fetches the now-available audio before playing.
-      if (a.error || a.readyState === 0) { try { a.load(); } catch {} }
-      a.play().catch(() => {});
-    } else {
-      a.pause();
+    if (!a.paused) { a.pause(); return; }
+    // Recover a stuck element: the browser preloads the audio src, and if it
+    // was fetched WHILE the meeting was still recording (the playback mix is
+    // produced only at stop) it 404s and the element sticks in an error state,
+    // so play() stays silent even once the file exists. Reload it, then play
+    // once it can — calling play() SYNCHRONOUSLY right after load() is a no-op
+    // in WKWebView, because load() resets the element to HAVE_NOTHING and the
+    // media isn't fetched yet, so the click did nothing and the user had to
+    // press twice. Deferring play() to `canplay` makes a single click work.
+    if (a.error || a.readyState === 0) {
+      const onReady = () => { a.removeEventListener("canplay", onReady); a.play().catch(() => {}); };
+      a.addEventListener("canplay", onReady);
+      try { a.load(); } catch { /* not ready */ }
+      return;
     }
+    a.play().catch(() => {});
   };
   // Press-and-drag scrubbing with pointer capture: once the button is
   // down, the position follows the pointer even OUTSIDE the track, so
@@ -122,6 +127,17 @@ export function AudioCard({
     detail.status !== "recording" &&
     (detail.has_audio ?? ((detail.duration_ms ?? 0) > 0));
 
+  // Bust a stale early preload. If the meeting was OPEN while it was still
+  // recording / transcribing (the common case — you watch it transcribe), this
+  // <audio> already fetched `/audio` before the playback mix existed (a 404, or
+  // a half-built on-demand mix) and stuck there. Its src is otherwise CONSTANT
+  // across the meeting's whole life (keyed only on the id, which never changes),
+  // so it never re-fetches once the finished file lands and play stays silent.
+  // Tying the src to `has_audio` flips it the instant the mix becomes available,
+  // which reloads the element onto the real, complete file. The share page
+  // passes its own signed `audioUrl` (never mid-processing), so it's untouched.
+  const resolvedSrc = audioUrl ?? (audioSrc(detail.id) + (detail.has_audio ? "?ready=1" : ""));
+
   return (
     <>
       <div className="audio-controls">
@@ -177,7 +193,7 @@ export function AudioCard({
       </div>
       <audio
         ref={audioRef}
-        src={audioUrl ?? audioSrc(detail.id)}
+        src={resolvedSrc}
         preload="auto"
         style={{ display: "none" }}
         onPlay={() => setPlaying(true)}
