@@ -30,6 +30,7 @@ enum TelemetryService {
         case btRecordings      = "Corder.tele.btRecordings"      // output was Bluetooth at start
         case farEndLost        = "Corder.tele.farEndLost"        // system track came out silent
         case btFarEndLost      = "Corder.tele.btFarEndLost"      // silent AND Bluetooth
+        case micLost           = "Corder.tele.micLost"           // mic track came out silent, far end fine
         case tapRebuilds       = "Corder.tele.tapRebuilds"       // watchdog rebuilt the tap
     }
     /// Bump a reliability counter by one. Safe to call from any actor

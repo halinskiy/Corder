@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.62] - 2026-08-25
+
+### Fixed
+
+- Your own voice can no longer be silently dropped from a saved recording. A retained mic track is never overwritten with silence during background compaction, the audio conversion now streams reliably at any length instead of a single giant pass that could come back empty, and if a session's microphone captures nothing while the other side is recorded, you are told right away instead of finding out on playback.
+
 ## [0.15.61] - 2026-08-24
 
 ### Fixed

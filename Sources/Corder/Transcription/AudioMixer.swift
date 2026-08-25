@@ -44,6 +44,12 @@ enum AudioMixer {
             throw AudioMixerError.bothStreamsMissing
         }
 
+        // Diagnostic: record the ENERGY each track carried into the mix. A mic
+        // that reads as silent HERE while the live meter heard the user speaking
+        // is the "my voice is missing from playback" failure — this line pins
+        // down whether the loss is at read time (this stage) if it ever recurs.
+        FileLogger.log("produceWhisperInput: micFrames=\(micBuffer.frameLength) micPeak=\(bufferPeak(micBuffer)) sysFrames=\(systemBuffer.frameLength) sysPeak=\(bufferPeak(systemBuffer))")
+
         // 2. Mix sample-wise into a single buffer the length of whichever
         //    stream is longer.
         let mixed = mix(buffers: [systemBuffer, micBuffer], format: target)
@@ -89,6 +95,17 @@ enum AudioMixer {
         // and same memory profile, as the per-transcription playback mix).
         guard let buf = try? readAndConvert(fileURL: url, targetFormat: target),
               buf.frameLength > 1 else { return false }
+        // SAFETY NET: never overwrite a retained track with silence. If the
+        // conversion came out effectively silent we cannot tell HERE whether the
+        // source was genuinely silent or the convert dropped the audio, so we
+        // refuse the swap and keep the ORIGINAL intact (uncompacted, a little
+        // disk wasted — a fine trade against destroying the recording). This is
+        // the guard for the "my voice wasn't recorded" data loss: a good
+        // 44.1 kHz Float32 mic track must never be replaced by a silent file.
+        if bufferPeak(buf) < 1e-4 {
+            FileLogger.log("AudioMixer: compact SKIPPED for \(url.lastPathComponent) — converted output is silent, keeping original intact")
+            return false
+        }
         let base = url.deletingPathExtension().lastPathComponent
         let tmp = url.deletingLastPathComponent()
             .appendingPathComponent("\(base).compact.\(UInt64(buf.frameLength)).tmp.wav")
@@ -264,37 +281,79 @@ enum AudioMixer {
         let file = try AVAudioFile(forReading: fileURL)
         let sourceFormat = file.processingFormat
 
-        let frameCapacity = AVAudioFrameCount(file.length)
-        guard frameCapacity > 0 else {
+        let total = file.length
+        guard total > 0 else {
             return AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: 1)!
         }
-        let inBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: frameCapacity)!
-        try file.read(into: inBuffer)
 
-        // If already in target format, skip conversion.
+        // If already in target format, read the whole thing straight through.
         if sourceFormat.sampleRate == targetFormat.sampleRate
             && sourceFormat.channelCount == targetFormat.channelCount
             && sourceFormat.commonFormat == targetFormat.commonFormat {
+            let inBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(total))!
+            try file.read(into: inBuffer)
             return inBuffer
         }
 
         guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
+            let inBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(total))!
+            try file.read(into: inBuffer)
             return inBuffer
         }
+
         let ratio = targetFormat.sampleRate / sourceFormat.sampleRate
-        let outCapacity = AVAudioFrameCount(Double(inBuffer.frameLength) * ratio + 1024)
+        let outCapacity = AVAudioFrameCount(Double(total) * ratio) + 4096
         let outBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outCapacity)!
 
-        var error: NSError?
-        var feed = false
-        converter.convert(to: outBuffer, error: &error) { _, status in
-            if feed { status.pointee = .endOfStream; return nil }
-            feed = true
+        // STREAM the source through the converter, letting the converter DRIVE
+        // the reads chunk by chunk. The previous version read the ENTIRE file
+        // into one giant buffer and handed it to the converter in a single pull
+        // — which, on a long 44.1 kHz mono Float32 mic.wav (~28M frames),
+        // returned an ALL-ZERO output. That silent buffer then poisoned BOTH the
+        // playback mix (mic + system → the mix came out as system only, the
+        // user's own voice missing from playback) AND the on-disk compaction
+        // (the retained mic.wav was overwritten with pure silence). The
+        // transcriber decodes mic.wav on its own path, so the transcript still
+        // had the user's turns — only the AUDIO was lost, which is the worst
+        // possible failure for a recorder. Feeding the converter in bounded
+        // chunks (the canonical AVAudioConverter streaming pattern) converts
+        // reliably at any length.
+        let readChunk: AVAudioFrameCount = 1 << 16   // 65536 source frames per read
+        var reachedEOF = false
+        var convError: NSError?
+        _ = converter.convert(to: outBuffer, error: &convError) { _, status in
+            if reachedEOF { status.pointee = .endOfStream; return nil }
+            let inChunk = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: readChunk)!
+            do {
+                try file.read(into: inChunk, frameCount: readChunk)
+            } catch {
+                reachedEOF = true
+                status.pointee = .endOfStream
+                return nil
+            }
+            if inChunk.frameLength == 0 {
+                reachedEOF = true
+                status.pointee = .endOfStream
+                return nil
+            }
             status.pointee = .haveData
-            return inBuffer
+            return inChunk
         }
-        if let e = error { throw e }
+        if let e = convError { throw e }
         return outBuffer
+    }
+
+    /// Absolute peak of a mono/interleaved Float32 buffer's first channel.
+    /// Used as a "did this actually carry audio" probe so a conversion that
+    /// silently produced zeros can never be written over a real recording.
+    private static func bufferPeak(_ buf: AVAudioPCMBuffer) -> Float {
+        guard let ch = buf.floatChannelData?[0] else { return 0 }
+        var peak: Float = 0
+        for i in 0..<Int(buf.frameLength) {
+            let a = ch[i] < 0 ? -ch[i] : ch[i]
+            if a > peak { peak = a }
+        }
+        return peak
     }
 
     // MARK: - sample-wise mix

@@ -242,6 +242,10 @@ final class RecordingController {
             TelemetryService.bump(.farEndLost)
             if btAtStart { TelemetryService.bump(.btFarEndLost) }
         }
+        // Symmetric to farEndLost: the mic came out silent while the far end
+        // WAS recorded — the user's own voice is missing from the recording.
+        let micLost = !capturedSilence && maxMic < 0.004
+        if micLost { TelemetryService.bump(.micLost) }
 
         // Tell the user *now* if nothing was actually captured (mic muted,
         // wrong input, permission silently lost). The silent-recording
@@ -273,6 +277,21 @@ final class RecordingController {
             LibraryWindow.shared.postToast(
                 title: L.notif("notif_bt_title"),
                 body: L.notif("notif_bt_body"),
+                kind: "error")
+        } else if micLost {
+            // The far end WAS recorded but the user's own mic came out silent
+            // (muted, wrong input device, permission lost mid-session). This is
+            // the "my voice isn't in the recording" failure — surface it now so
+            // the user knows immediately, not days later on playback.
+            FileLogger.log("stopRecording: \(id) mic track silent, user's own voice not captured (maxMic=\(maxMic) maxSys=\(maxSys))")
+            if AppSettings.notificationsEnabled {
+                NotificationsService.post(
+                    title: L.notif("notif_mic_title"),
+                    body: L.notif("notif_mic_body"))
+            }
+            LibraryWindow.shared.postToast(
+                title: L.notif("notif_mic_title"),
+                body: L.notif("notif_mic_body"),
                 kind: "error")
         }
 
