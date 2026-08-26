@@ -171,12 +171,24 @@ enum WhisperTranscriber {
     /// PCM in practice, so ~12 minutes / chunk fits comfortably under
     /// the cap with WAV header overhead.
     private static let maxBytesPerChunk: Int64 = 24 * 1024 * 1024
-    private static let maxSecondsPerChunk: Double = 12 * 60
+    /// Groq's cap is NOT the documented 25 MB of upload: a 65 s chunk of
+    /// 48 kHz stereo float WAV (25.2 MB on the wire) passed, while a 720 s
+    /// chunk of 16 kHz mono int16 (23.0 MB) came back 413 "request_too_large".
+    /// So the limit is applied AFTER decoding (~25 MB of 16 kHz float32 =
+    /// ~390 s of audio). 6 minutes keeps a healthy margin; a 413 on any
+    /// chunk still splits it in half and retries (see `transcribeSplittingOn413`).
+    private static let maxSecondsPerChunk: Double = 6 * 60
 
     /// VAD pre-pass thresholds, mirror `GeminiTranscriber`. Talk-heavy
     /// meetings sail through unchanged; idle mic tracks get squeezed.
     private static let vadMinSavings: Double = 0.10
     private static let vadEmptyFloorMs: Int64 = 500
+    /// Silence inserted between concatenated speech islands so Whisper
+    /// still hears sentence boundaries (see `concatenateSpeech(gapMs:)`).
+    private static let vadJoinGapMs: Int64 = 400
+    /// When a chunk boundary must be cut, look back this far for the
+    /// quietest 100 ms window and cut there instead of mid-word.
+    private static let chunkCutSearchSec: Double = 30
 
     private static let endpoint = "https://api.openai.com/v1/audio/transcriptions"
     private static let proxyEndpoint = "https://corder-api.empqwork.workers.dev/transcribe/whisper"
@@ -258,36 +270,45 @@ enum WhisperTranscriber {
         let savingsRatio = durationMs > 0 ? 1.0 - Double(speechMs) / Double(durationMs) : 0.0
         let useVad = (segments != nil) && savingsRatio >= vadMinSavings
 
-        let workURL: URL
-        let projection: VoiceActivityDetector.Projection?
-        let tmpDir: URL?
+        // One scratch dir per call holds the VAD concat (if any) and the
+        // normalised upload file; removed on every exit path.
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corder-whisper-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        var workURL: URL = audioURL
+        var projection: VoiceActivityDetector.Projection? = nil
 
         if useVad, let segs = segments {
-            let dir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("corder-whisper-vad-\(UUID().uuidString)")
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let concat = dir.appendingPathComponent("speech.wav")
+            let concat = tmpDir.appendingPathComponent("speech.wav")
             do {
-                let proj = try VoiceActivityDetector.concatenateSpeech(audioURL: audioURL, segments: segs, outURL: concat)
+                // A short pause between islands keeps Whisper's sentence
+                // boundaries intact (see concatenateSpeech).
+                let proj = try VoiceActivityDetector.concatenateSpeech(
+                    audioURL: audioURL, segments: segs, outURL: concat, gapMs: vadJoinGapMs)
                 workURL = concat
                 projection = proj
-                tmpDir = dir
-                FileLogger.log(String(format: "WhisperTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments)",
-                                      Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count))
+                FileLogger.log(String(format: "WhisperTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments, %dms joins)",
+                                      Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count, Int(vadJoinGapMs)))
             } catch {
-                try? FileManager.default.removeItem(at: dir)
                 FileLogger.log("WhisperTranscriber: VAD concat failed (\(error)), falling back to original")
                 workURL = audioURL
                 projection = nil
-                tmpDir = nil
             }
-        } else {
-            workURL = audioURL
-            projection = nil
-            tmpDir = nil
         }
-        defer {
-            if let dir = tmpDir { try? FileManager.default.removeItem(at: dir) }
+
+        // Ship 16 kHz mono int16, level-normalised. Falls back to the raw
+        // work file if the conversion fails, so a conversion bug can only
+        // ever cost quality, never the transcript.
+        let uploadURL = tmpDir.appendingPathComponent("upload.wav")
+        do {
+            let gainDb = try AudioMixer.prepareASRUpload(sourceURL: workURL, outURL: uploadURL)
+            let mb = Double((try? FileManager.default.attributesOfItem(atPath: uploadURL.path)[.size] as? NSNumber)?.int64Value ?? 0) / (1024 * 1024)
+            FileLogger.log(String(format: "WhisperTranscriber: upload prepared 16k mono int16, %.1f MB, gain %+.1f dB", mb, gainDb))
+            workURL = uploadURL
+        } catch {
+            FileLogger.log("WhisperTranscriber: upload prep failed (\(error)), sending the work file as-is")
         }
 
         let rawTurns: [GeminiTranscriber.Turn]
@@ -306,11 +327,19 @@ enum WhisperTranscriber {
         // Project compressed timestamps back onto the original timeline
         // if VAD chopped silence out. Identical to the Gemini path.
         guard let proj = projection else { return rawTurns }
-        let projected = rawTurns.map {
-            GeminiTranscriber.Turn(speakerLabel: $0.speakerLabel,
-                                   startMs: proj.toOriginal(compressedMs: $0.startMs),
-                                   endMs: proj.toOriginal(compressedMs: $0.endMs),
-                                   text: $0.text)
+        // Words are projected individually: a word never straddles a
+        // concatenation joint, so each lands exactly where it was spoken,
+        // which is what makes them a trustworthy timing source downstream.
+        let projected = rawTurns.map { t -> GeminiTranscriber.Turn in
+            let words = t.words?.map { w -> GeminiTranscriber.Turn.Word in
+                let s = proj.toOriginal(compressedMs: w.startMs)
+                let e = max(s, proj.toOriginal(compressedMs: w.endMs, isEnd: true))
+                return GeminiTranscriber.Turn.Word(text: w.text, startMs: s, endMs: e)
+            }
+            let s = proj.toOriginal(compressedMs: t.startMs)
+            let e = max(s, proj.toOriginal(compressedMs: t.endMs, isEnd: true))
+            return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                          startMs: s, endMs: e, text: t.text, words: words)
         }
         // Same monotonic clamp + reverse pass as Gemini: a turn near the
         // tail can over-shoot the real duration after projection; collapsing
@@ -322,8 +351,9 @@ enum WhisperTranscriber {
         for i in stride(from: out.count - 1, through: 0, by: -1) {
             let s = min(out[i].startMs, bound)
             let e = max(s, min(out[i].endMs, origDurationMs))
-            out[i] = GeminiTranscriber.Turn(speakerLabel: out[i].speakerLabel,
-                                            startMs: s, endMs: e, text: out[i].text)
+            if s != out[i].startMs || e != out[i].endMs {
+                out[i] = out[i].retimed(startMs: s, endMs: e)
+            }
             bound = max(0, s - 1)
         }
         return out
@@ -361,10 +391,10 @@ enum WhisperTranscriber {
             // reads as "moving"), then complete on return.
             onProgress?(0.15)
             do {
-                let single = try await transcribeSingle(audioURL: audioURL, apiKey: apiKey,
-                                                  offsetMs: 0, mode: mode,
-                                                  initialPrompt: initialPrompt,
-                                                  backend: backend)
+                let single = try await transcribeSplittingOn413(audioURL: audioURL, apiKey: apiKey,
+                                                                offsetMs: 0, mode: mode,
+                                                                initialPrompt: initialPrompt,
+                                                                backend: backend, depth: 0)
                 onProgress?(0.99)
                 return single
             } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
@@ -401,7 +431,9 @@ enum WhisperTranscriber {
         // component, forcing a language would hit the stale auto-detected
         // chunks and silently no-op the far-end rescue.
         let langTag = (WhisperTranscriber.languageOverride ?? AppSettings.transcriptionLanguage).nilIfEmpty ?? "auto"
-        let cacheTag = "\(backend):\(mode):\(langTag)"
+        // `w2` = parse revision: cached chunk turns carry the parsed word
+        // pairing, so a parser change must miss the old entries.
+        let cacheTag = "\(backend):\(mode):\(langTag):w5"
         for (i, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
             // Real progress: fraction of chunks finished so far. Reported at
@@ -431,12 +463,12 @@ enum WhisperTranscriber {
             let turns: [GeminiTranscriber.Turn]
             var fromLocalFallback = false
             do {
-                turns = try await transcribeSingle(audioURL: chunk.url,
-                                                   apiKey: apiKey,
-                                                   offsetMs: chunk.offsetMs,
-                                                   mode: mode,
-                                                   initialPrompt: initialPrompt,
-                                                   backend: backend)
+                turns = try await transcribeSplittingOn413(audioURL: chunk.url,
+                                                           apiKey: apiKey,
+                                                           offsetMs: chunk.offsetMs,
+                                                           mode: mode,
+                                                           initialPrompt: initialPrompt,
+                                                           backend: backend, depth: 0)
             } catch let urlErr as URLError where Self.isNetworkError(urlErr) {
                 // Connection dropped on THIS chunk, finish it on-device
                 // and carry on. The next chunk retries the cloud first,
@@ -466,6 +498,45 @@ enum WhisperTranscriber {
         onProgress?(0.99)
         FileLogger.log("WhisperTranscriber: stitched \(all.count) turns from \(chunks.count) chunks")
         return all
+    }
+
+    /// One chunk upload that self-heals a 413 ("request_too_large"): the
+    /// piece is cut in half at the quietest point and both halves are sent,
+    /// recursively up to 3 deep (≥ ~45 s pieces). The provider's real cap
+    /// has already moved once without notice (see `maxSecondsPerChunk`);
+    /// this keeps a meeting from failing outright the next time it does.
+    private static func transcribeSplittingOn413(audioURL: URL,
+                                                 apiKey: String,
+                                                 offsetMs: Int64,
+                                                 mode: WMode,
+                                                 initialPrompt: String?,
+                                                 backend: Backend,
+                                                 depth: Int) async throws -> [GeminiTranscriber.Turn] {
+        do {
+            return try await transcribeSingle(audioURL: audioURL, apiKey: apiKey,
+                                              offsetMs: offsetMs, mode: mode,
+                                              initialPrompt: initialPrompt, backend: backend)
+        } catch WhisperError.apiFailure(let status, _) where status == 413 && depth < 3 {
+            let durationSec = (try? audioDurationSeconds(audioURL: audioURL)) ?? 0
+            guard durationSec >= 20 else { throw WhisperError.apiFailure(status: 413, body: "chunk too short to split") }
+            FileLogger.log(String(format: "WhisperTranscriber: 413 on a %.0fs chunk, splitting in half (depth %d)", durationSec, depth + 1))
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("corder-whisper-split-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            // Budget = half + the silence-search window, so the quietest-cut
+            // search can only shorten the first half and the remainder always
+            // fits in ONE second piece (never a third sliver).
+            let halves = try sliceWav(audioURL: audioURL, into: dir,
+                                      chunkSeconds: durationSec / 2 + chunkCutSearchSec + 1)
+            var out: [GeminiTranscriber.Turn] = []
+            for h in halves {
+                out.append(contentsOf: try await transcribeSplittingOn413(
+                    audioURL: h.url, apiKey: apiKey, offsetMs: offsetMs + h.offsetMs,
+                    mode: mode, initialPrompt: initialPrompt, backend: backend, depth: depth + 1))
+            }
+            return out
+        }
     }
 
     /// On-device recovery for ONE chunk whose cloud call hit a network
@@ -595,8 +666,12 @@ enum WhisperTranscriber {
         appendFormField(name: "model", value: model)
         appendFormField(name: "response_format", value: "verbose_json")
         // verbose_json sometimes omits segment-level breakdowns unless we
-        // explicitly ask for them via timestamp_granularities.
+        // explicitly ask for them via timestamp_granularities. Word-level
+        // timings are requested alongside: they are the acoustic truth the
+        // multi-speaker attribution keys off (each word lands on the
+        // diarizer's span that covers it), replacing the second-ASR re-lay.
         appendFormField(name: "timestamp_granularities[]", value: "segment")
+        appendFormField(name: "timestamp_granularities[]", value: "word")
         if let prompt = initialPrompt, !prompt.isEmpty {
             appendFormField(name: "prompt", value: prompt)
         }
@@ -684,14 +759,10 @@ enum WhisperTranscriber {
         }
 
         let parsed = try parseVerboseJSON(data: data, mode: mode)
-        FileLogger.log("WhisperTranscriber: produced \(parsed.count) turns from \(audioURL.lastPathComponent)")
+        let timedWords = parsed.reduce(0) { $0 + ($1.words?.count ?? 0) }
+        FileLogger.log("WhisperTranscriber: produced \(parsed.count) turns (\(timedWords) timed words) from \(audioURL.lastPathComponent)")
         guard offsetMs != 0 else { return parsed }
-        return parsed.map {
-            GeminiTranscriber.Turn(speakerLabel: $0.speakerLabel,
-                                   startMs: $0.startMs + offsetMs,
-                                   endMs: $0.endMs + offsetMs,
-                                   text: $0.text)
-        }
+        return parsed.map { $0.shifted(by: offsetMs) }
     }
 
     // MARK: - Response parsing
@@ -731,17 +802,91 @@ enum WhisperTranscriber {
             throw WhisperError.parse("response missing segments + text")
         }
 
+        // Top-level `words` (present when timestamp_granularities[] asked
+        // for "word"): {word, start, end} in seconds, in reading order.
+        // Each word is attached to the segment whose span contains its
+        // midpoint; both lists are sorted, so a single forward walk does
+        // it. A word that falls between two segments (float rounding at a
+        // boundary) goes to the next one.
+        let rawWords: [(text: String, startMs: Int64, endMs: Int64)] =
+            ((json["words"] as? [[String: Any]]) ?? []).compactMap { w in
+                guard let text = (w["word"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty,
+                      let st = w["start"] as? Double else { return nil }
+                let en = (w["end"] as? Double) ?? st
+                return (text, Int64(st * 1000), Int64(max(st, en) * 1000))
+            }
+        var wordCursor = 0
+        // Time-anchored pairing (a word belongs to the segment whose span
+        // holds its midpoint) with a TEXT correction at each boundary.
+        // Boundary stamps are loose in both directions: a segment's last
+        // word is often stamped past its end, the next segment's first word
+        // before it. The words are the segment texts' tokens, so a boundary
+        // word is settled by comparing it with this segment's last token
+        // and the next segment's first. Pairing purely by token COUNT was
+        // tried and cascades: Groq's word list and the segment texts
+        // disagree in count now and then (numbers, hyphens, a 3-token
+        // segment carrying 40 words) and once shifted every later segment
+        // held its neighbour's words. Time anchoring cannot drift.
+        func norm(_ s: String) -> String {
+            let lowered = s.lowercased().replacingOccurrences(of: "ё", with: "е")
+            return String(String.UnicodeScalarView(
+                lowered.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))
+        }
+        func tokens(_ i: Int) -> [String] {
+            ((segs[i]["text"] as? String) ?? "")
+                .split(whereSeparator: { $0.isWhitespace })
+                .map { norm(String($0)) }
+        }
+
         var out: [GeminiTranscriber.Turn] = []
         out.reserveCapacity(segs.count)
-        for s in segs {
+        for (idx, s) in segs.enumerated() {
             let text = (s["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let startSec = (s["start"] as? Double) ?? 0
+            let endSec = (s["end"] as? Double) ?? startSec
+            let segStartMs = Int64(startSec * 1000)
+            let segEndMs = Int64(endSec * 1000)
+            // Consume this segment's words regardless of whether the
+            // segment is kept, so a dropped hallucination can't shift the
+            // words of every later segment.
+            let isLast = idx == segs.count - 1
+            var segWords: [GeminiTranscriber.Turn.Word] = []
+            while wordCursor < rawWords.count {
+                let w = rawWords[wordCursor]
+                let mid = (w.startMs + w.endMs) / 2
+                if !isLast, mid > segEndMs { break }
+                segWords.append(.init(text: w.text, startMs: w.startMs, endMs: w.endMs))
+                wordCursor += 1
+            }
+            if !isLast {
+                let mine = tokens(idx)
+                let next = tokens(idx + 1)
+                // Pull in the word stamped just past the end when it IS this
+                // segment's last token (and not the next one's first).
+                if let lastTok = mine.last, wordCursor < rawWords.count, segWords.count < mine.count {
+                    let w = rawWords[wordCursor]
+                    let n = norm(w.text)
+                    if !n.isEmpty, n == lastTok, n != next.first, w.startMs <= segEndMs + 1000 {
+                        segWords.append(.init(text: w.text, startMs: w.startMs, endMs: w.endMs))
+                        wordCursor += 1
+                    }
+                }
+                // Give back a trailing word stamped early that IS the next
+                // segment's first token (and not this one's last).
+                if let firstNext = next.first, let lastW = segWords.last {
+                    let n = norm(lastW.text)
+                    if !n.isEmpty, n == firstNext, n != mine.last, lastW.startMs >= segEndMs - 1000 {
+                        segWords.removeLast()
+                        wordCursor -= 1
+                    }
+                }
+            }
             guard !text.isEmpty else { continue }
             guard !Hallucinations.isHallucination(text) else {
                 FileLogger.log("WhisperTranscriber: dropping hallucination: \(text)")
                 continue
             }
-            let startSec = (s["start"] as? Double) ?? 0
-            let endSec = (s["end"] as? Double) ?? startSec
             let speaker: String
             switch mode {
             case .single:
@@ -751,11 +896,18 @@ enum WhisperTranscriber {
                     .trimmingCharacters(in: .whitespaces).nilIfEmpty
                     ?? "speaker-1"
             }
+            // Keep only words that START plausibly inside the segment (the
+            // boundary slack above is 1 s). Ends are left alone even when
+            // they reach far past the segment: an inflated end is the
+            // pause-absorbing DTW artefact that retimeWordsByEnergy fixes
+            // downstream, and it needs the real span to do so.
+            let fitted = segWords.filter { $0.startMs >= segStartMs - 1000 && $0.startMs <= segEndMs + 1000 }
             out.append(GeminiTranscriber.Turn(
                 speakerLabel: speaker,
-                startMs: Int64(startSec * 1000),
-                endMs: Int64(endSec * 1000),
-                text: text))
+                startMs: segStartMs,
+                endMs: segEndMs,
+                text: text,
+                words: fitted.isEmpty ? nil : fitted))
         }
         // Weight this chunk's detected language by the turns it produced, so
         // a long Russian chunk outvotes a short mis-detected English one.
@@ -784,19 +936,43 @@ enum WhisperTranscriber {
     /// Slices the input WAV into `chunkSeconds`-long pieces; the last
     /// piece may be shorter. Returns absolute file URLs paired with the
     /// time offset (in ms) on the original timeline.
+    /// Boundaries are placed on the QUIETEST 100 ms window within the last
+    /// `chunkCutSearchSec` of each nominal chunk, never blindly at the byte
+    /// budget: a cut through a word loses that word and often the sentence
+    /// around it on BOTH sides (no overlap between chunks). On a
+    /// VAD-concatenated file the inserted joins are exact silence, so the
+    /// cut lands between utterances.
     private static func sliceWav(audioURL: URL, into dir: URL, chunkSeconds: Double) throws -> [(url: URL, offsetMs: Int64)] {
         let inFile = try AVAudioFile(forReading: audioURL)
         let format = inFile.processingFormat
         let totalFrames = inFile.length
         let sampleRate = format.sampleRate
         let chunkFrames = AVAudioFramePosition(sampleRate * chunkSeconds)
+        let rmsHop = max(1, Int(sampleRate * 0.1))
+        let rms = quietnessProfile(file: inFile, hopFrames: rmsHop)
+
+        func cutPoint(nominal: AVAudioFramePosition, from start: AVAudioFramePosition) -> AVAudioFramePosition {
+            guard !rms.isEmpty else { return nominal }
+            let searchFrames = AVAudioFramePosition(sampleRate * chunkCutSearchSec)
+            // Never shrink a chunk below half its budget hunting for silence.
+            let lo = max(start + chunkFrames / 2, nominal - searchFrames)
+            let loIdx = Int(lo) / rmsHop, hiIdx = min(rms.count - 1, Int(nominal) / rmsHop)
+            guard hiIdx > loIdx else { return nominal }
+            var best = hiIdx, bestVal = Float.greatestFiniteMagnitude
+            for k in loIdx...hiIdx where rms[k] < bestVal { bestVal = rms[k]; best = k }
+            return AVAudioFramePosition(best) * AVAudioFramePosition(rmsHop)
+        }
 
         var out: [(url: URL, offsetMs: Int64)] = []
         var pos: AVAudioFramePosition = 0
         var idx = 0
         while pos < totalFrames {
             let remaining = totalFrames - pos
-            let n = AVAudioFrameCount(min(chunkFrames, remaining))
+            var n = AVAudioFrameCount(min(chunkFrames, remaining))
+            if remaining > chunkFrames {
+                let cut = cutPoint(nominal: pos + chunkFrames, from: pos)
+                if cut > pos { n = AVAudioFrameCount(cut - pos) }
+            }
             inFile.framePosition = pos
             guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: n) else { break }
             try inFile.read(into: buf, frameCount: n)
@@ -811,6 +987,40 @@ enum WhisperTranscriber {
             pos += AVAudioFramePosition(n)
             idx += 1
         }
+        return out
+    }
+
+    /// Per-hop RMS over the whole file, streamed in bounded reads (never the
+    /// whole file in memory), all channels averaged. Leaves the file's
+    /// read position at 0. Empty on any read failure, which makes the
+    /// slicer fall back to plain budget cuts.
+    private static func quietnessProfile(file: AVAudioFile, hopFrames: Int) -> [Float] {
+        let format = file.processingFormat
+        let block: AVAudioFrameCount = 1 << 16
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: block) else { return [] }
+        var out: [Float] = []
+        out.reserveCapacity(Int(file.length) / hopFrames + 1)
+        var acc: Float = 0
+        var accN = 0
+        file.framePosition = 0
+        while file.framePosition < file.length {
+            do { try file.read(into: buf, frameCount: block) } catch { break }
+            let n = Int(buf.frameLength)
+            guard n > 0, let chans = buf.floatChannelData else { break }
+            let chCount = Int(format.channelCount)
+            for i in 0..<n {
+                var s: Float = 0
+                for c in 0..<chCount { let v = chans[c][i]; s += v * v }
+                acc += s / Float(chCount)
+                accN += 1
+                if accN == hopFrames {
+                    out.append(sqrtf(acc / Float(accN)))
+                    acc = 0; accN = 0
+                }
+            }
+        }
+        if accN > 0 { out.append(sqrtf(acc / Float(accN))) }
+        file.framePosition = 0
         return out
     }
 

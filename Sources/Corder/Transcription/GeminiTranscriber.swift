@@ -47,12 +47,64 @@ enum GeminiTranscriber {
         let startMs: Int64
         let endMs: Int64
         let text: String
+        /// Per-word acoustic timings straight from the ASR (Whisper
+        /// `verbose_json` `words`), on the SAME timeline as start/end. This
+        /// is what lets a multi-speaker track be attributed by overlap with
+        /// the diarizer's spans instead of re-laying the text through a
+        /// second ASR. nil for providers that don't return them (Gemini,
+        /// on-device WhisperKit) and for turns cached before the field
+        /// existed; every consumer must tolerate nil. Steps that re-time a
+        /// turn (cap / gate / snap) build a fresh Turn and drop the words,
+        /// which is correct: after attribution they carry no further meaning.
+        var words: [Word]? = nil
+
+        struct Word: Codable {
+            let text: String
+            let startMs: Int64
+            let endMs: Int64
+            enum CodingKeys: String, CodingKey {
+                case text = "w"
+                case startMs = "s"
+                case endMs = "e"
+            }
+        }
 
         enum CodingKeys: String, CodingKey {
             case speakerLabel = "speaker"
             case startMs = "start_ms"
             case endMs = "end_ms"
             case text
+            case words
+        }
+
+        /// True when the turn carries usable per-word timing.
+        var hasWordTiming: Bool { !(words ?? []).isEmpty }
+
+        /// Same turn moved by `deltaMs` (words included).
+        func shifted(by deltaMs: Int64) -> Turn {
+            guard deltaMs != 0 else { return self }
+            return Turn(speakerLabel: speakerLabel,
+                        startMs: startMs + deltaMs, endMs: endMs + deltaMs, text: text,
+                        words: words?.map { Word(text: $0.text, startMs: $0.startMs + deltaMs, endMs: $0.endMs + deltaMs) })
+        }
+
+        /// Same turn with a new [start, end]; words are kept only where they
+        /// still fit inside the new span (a re-timed turn must never carry
+        /// words that point outside it).
+        func retimed(startMs s: Int64, endMs e: Int64) -> Turn {
+            let kept = words?.filter { $0.startMs >= s && $0.endMs <= e }
+            return Turn(speakerLabel: speakerLabel, startMs: s, endMs: e, text: text,
+                        words: (kept?.isEmpty ?? true) ? nil : kept)
+        }
+
+        /// Same turn with its span tightened to the first/last word. A
+        /// Whisper segment routinely stretches over the pause before/after
+        /// the speech; the words carry the acoustic truth.
+        func tightenedToWords() -> Turn {
+            guard let w = words, let first = w.first, let last = w.last,
+                  last.endMs > first.startMs else { return self }
+            return Turn(speakerLabel: speakerLabel, startMs: first.startMs, endMs: last.endMs,
+                        text: text, words: w)
         }
     }
 

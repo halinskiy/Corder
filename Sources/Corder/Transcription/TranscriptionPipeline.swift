@@ -455,7 +455,12 @@ final class TranscriptionPipeline {
             let providerTag: String = {
                 switch currentProvider {
                 case .gemini:        return ""
-                case .whisper:       return "whisper:v2:"
+                // v3 / groq v2: raw turns now carry per-word timings and come
+                // from a 16 kHz-mono normalised upload sliced into long
+                // silence-aligned chunks (0.15.63). Older cached turns lack
+                // the words and were produced from 66 s raw-format chunks,
+                // so a bump forces one clean re-transcribe.
+                case .whisper:       return "whisper:v3:"
                 case .groq:
                     // Groq Whisper-large-v3-turbo. Distinct prefix from
                     // .whisper so a flip between OpenAI and Groq never
@@ -463,7 +468,7 @@ final class TranscriptionPipeline {
                     // are close but not identical, large-v3 vs large-v2,
                     // and we don't run the gpt-4o-mini polish step
                     // on Groq, so the cleaned text differs as well).
-                    return "groq:v1:"
+                    return "groq:v2:"
                 case .whisperLocal:
                     // Local Whisper keeps its own cache namespace so a
                     // flip between cloud and local never replays the
@@ -1408,6 +1413,10 @@ final class TranscriptionPipeline {
         let minMs: Int64 = 900         // a one-word turn still gets a visible ~0.9 s block
         var capped = 0
         let out = turns.map { t -> GeminiTranscriber.Turn in
+            // A word-timed turn's span IS its spoken duration; the cap exists
+            // for proportionally re-laid turns that were stretched over
+            // silence, and would only ever cut a slow speaker's real tail.
+            guard !t.hasWordTiming else { return t }
             let dur = max(0, t.endMs - t.startMs)
             let cap = max(minMs, Int64(t.text.count) * msPerChar)
             guard dur > cap else { return t }
@@ -1989,8 +1998,14 @@ final class TranscriptionPipeline {
                 guard !text.isEmpty, !Hallucinations.isHallucination(text) else { continue }
                 let rs = min(we, ws + max(0, r.startMs))
                 let re = min(we + 500, max(rs + 400, ws + r.endMs))
+                // The window was cut from the track at `ws`, so the
+                // recovered words shift by the same offset as the turn.
+                let shiftedWords = r.words?.map {
+                    GeminiTranscriber.Turn.Word(text: $0.text, startMs: ws + $0.startMs, endMs: ws + $0.endMs)
+                }.filter { $0.startMs >= rs - 250 && $0.endMs <= re + 250 }
                 out.append(GeminiTranscriber.Turn(speakerLabel: r.speakerLabel,
-                                                  startMs: rs, endMs: re, text: text))
+                                                  startMs: rs, endMs: re, text: text,
+                                                  words: (shiftedWords?.isEmpty ?? true) ? nil : shiftedWords))
                 recoveredCount += 1
             }
         }
@@ -2305,14 +2320,26 @@ final class TranscriptionPipeline {
         return out
     }
 
-    private func applyTiming(rawTurns: [GeminiTranscriber.Turn],
+    private func applyTiming(rawTurns rawTurnsIn: [GeminiTranscriber.Turn],
                              wavURL: URL,
                              numSpeakers: Int?,
                              singlePass: Bool,
                              allowGeminiFallback: Bool,
                              keepRawIfNoDiar: Bool = false,
                              meetingId: String) async throws -> [GeminiTranscriber.Turn] {
-        guard !rawTurns.isEmpty else { return [] }
+        guard !rawTurnsIn.isEmpty else { return [] }
+
+        // Word-timed turns first get their over-long (pause-absorbing) words
+        // pulled onto the audio (see retimeWordsByEnergy). Done here, on the
+        // on-device re-derive step, so the cache keeps Whisper's own stamps
+        // and a better placement can always be re-derived for free.
+        var rawTurns = rawTurnsIn
+        if rawTurnsIn.contains(where: { $0.hasWordTiming }) {
+            let url = wavURL
+            if let rms = await Task.detached(operation: { Self.streamedFrameRMS(url, hopMs: 20) }).value {
+                rawTurns = Self.retimeWordsByEnergy(rawTurnsIn, rms: rms, hopMs: 20)
+            }
+        }
 
         // SINGLE-speaker track (the mic "you" track, numSpeakers == 1): there is
         // nothing to re-diarize, every turn is the one speaker, and the
@@ -2326,6 +2353,17 @@ final class TranscriptionPipeline {
         // dominance gate downstream still clamp durations and strip real
         // hallucinations (which keep their own silent timestamp and get gated).
         if numSpeakers == 1 {
+            // Word-timed turns (Whisper `words`, 0.15.63) already sit on the
+            // acoustic truth: tighten each turn to its first/last word and
+            // skip the dominance snap entirely. The snap's RELOCATE pass was
+            // built for coarse segment stamps that drifted across VAD joints;
+            // on word-timed turns it only did harm (measured: 61 of 588 real
+            // mic turns moved off their true time, two landing on the same
+            // instant as a neighbour and reading as duplicates).
+            if rawTurns.contains(where: { $0.hasWordTiming }) {
+                FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single speaker, keeping \(rawTurns.count) raw ASR turns on their own WORD timing (no re-derivation, no snap)")
+                return Self.splitAtWordGaps(rawTurns.map { $0.tightenedToWords() })
+            }
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single speaker, keeping \(rawTurns.count) raw ASR turns with Whisper's own timing (no re-derivation)")
             return Self.snapTurnsToDominantSpans(rawTurns, wavURL: wavURL,
                                                label: "\(wavURL.lastPathComponent) single-speaker")
@@ -2383,9 +2421,36 @@ final class TranscriptionPipeline {
         // tracks always re-lay (that is the only way to split WHO).
         let diarSpeakers = Set(diarSegs.map(\.speakerId)).count
         if diarSpeakers <= 1, currentProvider != .gemini {
+            if rawTurns.contains(where: { $0.hasWordTiming }) {
+                FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single diarized speaker, keeping \(rawTurns.count) raw ASR turns on their own WORD timing (no re-lay, no snap)")
+                return Self.splitAtWordGaps(rawTurns.map { $0.tightenedToWords() })
+            }
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), single diarized speaker + Whisper-reliable timing, keeping \(rawTurns.count) raw ASR turns (no re-lay)")
             return Self.snapTurnsToDominantSpans(rawTurns, wavURL: wavURL,
                                                label: "\(wavURL.lastPathComponent) single-diar")
+        }
+
+        // MULTI-speaker track under a WHISPER provider: attribute by overlap,
+        // keep Whisper's timing. The diarizer answers WHO for each word /
+        // segment; nothing is re-laid. The forced-alignment path below is
+        // now Gemini-only (its per-chunk timestamps are the unreliable
+        // thing it exists to fix). Measured on a real 38-minute Discord
+        // call the re-lay had scattered far-end phrases across the
+        // timeline (a phrase from 20:00 shown at 16:00 on a phantom
+        // speaker), squeezed sentences into 200 ms, and fed 48 real turns
+        // to the dominance gate as "silent"; overlap attribution keeps every
+        // one at the moment it was spoken.
+        if currentProvider != .gemini {
+            let result = Self.attributeByOverlap(asr: rawTurns, diar: diarSegs)
+            let timed = rawTurns.filter { $0.hasWordTiming }.count
+            FileLogger.log("applyTiming: \(wavURL.lastPathComponent), \(rawTurns.count) turns (\(timed) word-timed) ATTRIBUTED BY OVERLAP across \(diarSpeakers) speakers → \(result.count) turns, Whisper timing kept")
+            // Legacy cached turns without words still carry coarse segment
+            // stamps; give those the dominance snap they always had.
+            if timed == 0 {
+                return Self.snapTurnsToDominantSpans(result, wavURL: wavURL,
+                                                   label: "\(wavURL.lastPathComponent) multi-diar (no word timing)")
+            }
+            return result
         }
 
         // Forced-alignment when on-device ASR is available; fall back to
@@ -2610,6 +2675,290 @@ final class TranscriptionPipeline {
             out.append(GeminiTranscriber.Turn(
                 speakerLabel: diar.isEmpty ? turn.speakerLabel : speaker(at: start),
                 startMs: start, endMs: end, text: turn.text))
+        }
+        return out
+    }
+
+    /// Diarize-first attribution that KEEPS the ASR's own timing.
+    ///
+    /// Each raw ASR turn is labelled with the FluidAudio speaker whose spans
+    /// cover it, and a turn whose WORDS fall on two different speakers is
+    /// split at that word boundary. Whisper's segment/word timestamps stay
+    /// the timeline (they are reliable, the mic track has trusted them since
+    /// 0.15.37); the diarizer only answers WHO. Replaces the forced-alignment
+    /// re-lay for the multi-speaker far-end on Whisper providers.
+    ///
+    /// Per word: covering span → span with most overlap over the word →
+    /// carry the neighbour's speaker (diarizer boundaries are not word-exact,
+    /// a word in a 100 ms hole belongs to the speaker around it). A single
+    /// short word flipped between two runs of the same speaker is boundary
+    /// jitter, not a one-word interjection, and is absorbed. A turn without
+    /// words is labelled by overlap of its whole span, nearest span within
+    /// 2 s, else the previous turn's speaker. Pure value-in/value-out.
+    static func attributeByOverlap(asr rawAsr: [GeminiTranscriber.Turn],
+                                   diar: [DiarizedSegment]) -> [GeminiTranscriber.Turn] {
+        // One Whisper segment can span two speech islands of the VAD
+        // concat (the pause between them was a 400 ms join); cut it at the
+        // real silence first so each utterance is attributed on its own.
+        let asr = Self.splitAtWordGaps(rawAsr)
+        guard !asr.isEmpty else { return [] }
+        let segs = diar.sorted { $0.startMs < $1.startMs }
+        guard !segs.isEmpty else { return asr }
+
+        /// Speaker whose span contains `ms`, else nil.
+        func covering(_ ms: Int64) -> String? {
+            var lo = 0, hi = segs.count - 1, idx = -1
+            while lo <= hi {
+                let mid = (lo + hi) >> 1
+                if segs[mid].startMs <= ms { idx = mid; lo = mid + 1 } else { hi = mid - 1 }
+            }
+            // Spans can overlap slightly; look a few back.
+            var k = idx
+            while k >= 0, k > idx - 4 {
+                if ms >= segs[k].startMs, ms < segs[k].endMs { return segs[k].speakerId }
+                k -= 1
+            }
+            return nil
+        }
+        /// Speaker with the most overlap inside [s, e]; nil when none.
+        func dominantIn(_ s: Int64, _ e: Int64) -> String? {
+            var acc: [String: Int64] = [:]
+            for d in segs where d.endMs > s && d.startMs < e {
+                acc[d.speakerId, default: 0] += min(e, d.endMs) - max(s, d.startMs)
+            }
+            return acc.max { $0.value < $1.value }?.key
+        }
+        /// Speaker of the span nearest to `ms`, within `within` ms.
+        func nearest(_ ms: Int64, within: Int64) -> String? {
+            var best: (dist: Int64, spk: String)? = nil
+            for d in segs {
+                let dist = ms < d.startMs ? d.startMs - ms : (ms >= d.endMs ? ms - d.endMs : 0)
+                if dist <= within, best == nil || dist < best!.dist { best = (dist, d.speakerId) }
+            }
+            return best?.spk
+        }
+
+        var out: [GeminiTranscriber.Turn] = []
+        out.reserveCapacity(asr.count + 16)
+        var lastSpeaker: String? = nil
+        var splits = 0
+
+        for turn in asr {
+            let words = turn.words ?? []
+            guard words.count >= 2 else {
+                let mid = (turn.startMs + turn.endMs) / 2
+                let spk = dominantIn(turn.startMs, turn.endMs)
+                    ?? nearest(mid, within: 2000)
+                    ?? lastSpeaker
+                    ?? nearest(mid, within: .max)
+                    ?? segs[0].speakerId
+                let base = words.count == 1 ? turn.tightenedToWords() : turn
+                out.append(GeminiTranscriber.Turn(speakerLabel: spk, startMs: base.startMs,
+                                                  endMs: base.endMs, text: turn.text, words: turn.words))
+                lastSpeaker = spk
+                continue
+            }
+
+            var labels: [String?] = words.map { w in
+                covering((w.startMs + w.endMs) / 2) ?? dominantIn(w.startMs, w.endMs)
+            }
+            for i in labels.indices where labels[i] == nil && i > 0 { labels[i] = labels[i - 1] }
+            if let firstKnown = labels.compactMap({ $0 }).first {
+                for i in labels.indices where labels[i] == nil { labels[i] = firstKnown }
+            }
+            let fallback = dominantIn(turn.startMs, turn.endMs)
+                ?? lastSpeaker
+                ?? nearest((turn.startMs + turn.endMs) / 2, within: .max)
+                ?? segs[0].speakerId
+            var speakers = labels.map { $0 ?? fallback }
+            if speakers.count >= 3 {
+                for i in 1..<(speakers.count - 1)
+                where speakers[i] != speakers[i - 1] && speakers[i - 1] == speakers[i + 1]
+                    && words[i].endMs - words[i].startMs < 600 {
+                    speakers[i] = speakers[i - 1]
+                }
+            }
+
+            var cuts: [(from: Int, to: Int, spk: String)] = []
+            var runStart = 0
+            for i in 1...words.count where i == words.count || speakers[i] != speakers[runStart] {
+                cuts.append((runStart, i, speakers[runStart]))
+                runStart = i
+            }
+            if cuts.count == 1 {
+                let t = turn.tightenedToWords()
+                out.append(GeminiTranscriber.Turn(speakerLabel: cuts[0].spk, startMs: t.startMs,
+                                                  endMs: t.endMs, text: turn.text, words: words))
+            } else {
+                splits += cuts.count - 1
+                let pieces = Self.splitText(turn.text, wordCount: words.count, cuts: cuts.map { $0.from })
+                for (i, c) in cuts.enumerated() {
+                    let ws = Array(words[c.from..<c.to])
+                    let text = i < pieces.count ? pieces[i] : ""
+                    guard !text.trimmingCharacters(in: .whitespaces).isEmpty, let f = ws.first, let l = ws.last else { continue }
+                    out.append(GeminiTranscriber.Turn(speakerLabel: c.spk, startMs: f.startMs,
+                                                      endMs: max(f.startMs, l.endMs), text: text, words: ws))
+                }
+            }
+            lastSpeaker = cuts[cuts.count - 1].spk
+        }
+        out.sort { $0.startMs < $1.startMs }
+        if splits > 0 {
+            FileLogger.log("attributeByOverlap: split \(splits) turns at speaker changes (\(asr.count) → \(out.count))")
+        }
+        return out
+    }
+
+    /// Per-hop RMS of a whole file, streamed in bounded reads (the file is
+    /// never held in memory), channels averaged. nil on a read error.
+    nonisolated static func streamedFrameRMS(_ url: URL, hopMs: Int) -> [Float]? {
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let format = file.processingFormat
+        let sr = format.sampleRate
+        guard sr > 0, file.length > 0 else { return [] }
+        let hop = max(1, Int(Double(hopMs) * sr / 1000.0))
+        let block: AVAudioFrameCount = 1 << 16
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: block) else { return nil }
+        var out: [Float] = []
+        out.reserveCapacity(Int(file.length) / hop + 1)
+        let chCount = Int(format.channelCount)
+        var acc: Float = 0
+        var n = 0
+        while file.framePosition < file.length {
+            do { try file.read(into: buf, frameCount: block) } catch { return nil }
+            let frames = Int(buf.frameLength)
+            guard frames > 0, let chans = buf.floatChannelData else { break }
+            for i in 0..<frames {
+                var s: Float = 0
+                for c in 0..<chCount { let v = chans[c][i]; s += v * v }
+                acc += s / Float(chCount)
+                n += 1
+                if n == hop { out.append(sqrtf(acc / Float(n))); acc = 0; n = 0 }
+            }
+        }
+        if n > 0 { out.append(sqrtf(acc / Float(n))) }
+        return out
+    }
+
+    /// Pull each word onto the audio it was actually spoken on.
+    ///
+    /// Whisper's word stamps are a monotone DTW over the segment: silence
+    /// between words is not modelled, so a pause is absorbed into the
+    /// neighbouring word. Over a VAD-concatenated track those "pauses" are
+    /// whole islands of the other side's silence: measured, "что" spanned
+    /// 29.4 s → 109.4 s (80 s for one word) and "да" 7 s. Such a word says
+    /// nothing about WHEN and lands its midpoint on whatever the diarizer
+    /// thinks is there. The DTW error is always at a boundary with a
+    /// neighbour, so the word itself sits at one END of its span: a word
+    /// longer than its text could plausibly take (110 ms/char + 200 ms,
+    /// 0.25–2.5 s) is re-timed to whichever of its two edge windows of that
+    /// length carries more energy (start-anchored vs end-anchored), monotone
+    /// across the turn. "Anywhere in the span" was tried and picked the
+    /// decay of the PREVIOUS word over a quiet far-end word 80 s later.
+    /// Turns without words are untouched.
+    static func retimeWordsByEnergy(_ turns: [GeminiTranscriber.Turn],
+                                    rms: [Float], hopMs: Int) -> [GeminiTranscriber.Turn] {
+        guard !rms.isEmpty, hopMs > 0 else { return turns }
+        let hop = Int64(hopMs)
+        var out: [GeminiTranscriber.Turn] = []
+        out.reserveCapacity(turns.count)
+        var moved = 0
+        for t in turns {
+            guard let words = t.words, !words.isEmpty else { out.append(t); continue }
+            var cursor: Int64 = 0
+            var fixed: [GeminiTranscriber.Turn.Word] = []
+            fixed.reserveCapacity(words.count)
+            for w in words {
+                let chars = Int64(w.text.filter { $0.isLetter || $0.isNumber }.count)
+                let cap = min(2500, max(250, chars * 110 + 200))
+                var s = max(w.startMs, cursor)
+                var e = max(s, w.endMs)
+                if e - s > cap + cap / 3 {
+                    func energy(_ from: Int64, _ to: Int64) -> Float {
+                        let a = max(0, Int(from / hop)), b = min(rms.count, Int(to / hop))
+                        guard b > a else { return 0 }
+                        var sum: Float = 0
+                        for k in a..<b { sum += rms[k] }
+                        return sum
+                    }
+                    let headEnergy = energy(s, s + cap)
+                    let tailEnergy = energy(e - cap, e)
+                    if tailEnergy > headEnergy {
+                        s = e - cap
+                    } else {
+                        e = s + cap
+                    }
+                    moved += 1
+                }
+                fixed.append(.init(text: w.text, startMs: s, endMs: e))
+                cursor = e
+            }
+            out.append(GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                              startMs: fixed[0].startMs,
+                                              endMs: max(fixed[0].startMs, fixed[fixed.count - 1].endMs),
+                                              text: t.text, words: fixed))
+        }
+        if moved > 0 {
+            FileLogger.log("retimeWordsByEnergy: re-timed \(moved) over-long words onto their loudest window")
+        }
+        return out
+    }
+
+    /// Cut word-timed turns at silences of `gapMs` or more between two
+    /// consecutive words. A Whisper segment that straddles two VAD islands
+    /// keeps the real pause between its words once projected (18 s on a
+    /// measured far-end turn); left whole it is ordered by its first word and
+    /// its tail reads minutes early in the merged transcript. Consecutive
+    /// same-speaker lines are grouped by the UI, so over-cutting is free.
+    /// Turns without word timing pass through untouched.
+    static func splitAtWordGaps(_ turns: [GeminiTranscriber.Turn],
+                                gapMs: Int64 = 1000) -> [GeminiTranscriber.Turn] {
+        var out: [GeminiTranscriber.Turn] = []
+        out.reserveCapacity(turns.count)
+        var cutCount = 0
+        for t in turns {
+            guard let words = t.words, words.count >= 2 else { out.append(t); continue }
+            var cuts: [Int] = [0]
+            for i in 1..<words.count where words[i].startMs - words[i - 1].endMs >= gapMs {
+                cuts.append(i)
+            }
+            guard cuts.count > 1 else { out.append(t.tightenedToWords()); continue }
+            cutCount += cuts.count - 1
+            let pieces = Self.splitText(t.text, wordCount: words.count, cuts: cuts)
+            for (k, from) in cuts.enumerated() {
+                let to = k + 1 < cuts.count ? cuts[k + 1] : words.count
+                let ws = Array(words[from..<to])
+                let text = k < pieces.count ? pieces[k] : ""
+                guard !text.trimmingCharacters(in: .whitespaces).isEmpty,
+                      let f = ws.first, let l = ws.last else { continue }
+                out.append(GeminiTranscriber.Turn(speakerLabel: t.speakerLabel, startMs: f.startMs,
+                                                  endMs: max(f.startMs, l.endMs), text: text, words: ws))
+            }
+        }
+        if cutCount > 0 {
+            FileLogger.log("splitAtWordGaps: cut \(cutCount) silences ≥ \(gapMs)ms inside turns (\(turns.count) → \(out.count))")
+        }
+        return out
+    }
+
+    /// Split `text` into `cuts.count` pieces at WORD indices (`cuts[0]` is
+    /// 0). When the text's whitespace tokens match the ASR word count the
+    /// split is exact; a polished text whose token count drifted (a merged
+    /// hyphenation, a dropped filler) splits at the proportional token
+    /// index, never inside a token.
+    static func splitText(_ text: String, wordCount: Int, cuts: [Int]) -> [String] {
+        let tokens = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard !tokens.isEmpty, wordCount > 0, cuts.count > 1 else { return [text] }
+        func tokenIndex(_ wordIdx: Int) -> Int {
+            if tokens.count == wordCount { return wordIdx }
+            return Int((Double(wordIdx) / Double(wordCount) * Double(tokens.count)).rounded())
+        }
+        var bounds = cuts.map { min(tokens.count, max(0, tokenIndex($0))) }
+        bounds.append(tokens.count)
+        for i in 1..<bounds.count where bounds[i] < bounds[i - 1] { bounds[i] = bounds[i - 1] }
+        var out: [String] = []
+        for i in 0..<(bounds.count - 1) {
+            out.append(tokens[bounds[i]..<bounds[i + 1]].joined(separator: " "))
         }
         return out
     }

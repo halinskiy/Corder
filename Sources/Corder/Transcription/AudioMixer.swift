@@ -275,6 +275,66 @@ enum AudioMixer {
         }
     }
 
+    // MARK: - cloud ASR upload
+
+    /// Produce the file the cloud ASR is actually sent: 16 kHz MONO 16-bit
+    /// PCM (what Whisper decodes to internally, so nothing is lost), with
+    /// quiet speech lifted to a healthy level. Returns the gain applied, dB.
+    ///
+    /// Why the format: chunking used to be budgeted on the SOURCE byte-rate,
+    /// so a 48 kHz stereo Float32 far-end track (384 KB/s) was sliced into
+    /// 66-second pieces to fit the 24 MB upload cap, sixteen uploads and
+    /// sixteen hard context cuts for a 38-minute call, each cut a chance to
+    /// split a word and lose the sentence around it. At 32 KB/s the same
+    /// call is two 12-minute chunks.
+    ///
+    /// Why the gain: the far end of a Discord/Zoom call arrives through the
+    /// process tap 15-25 dB quieter than the user's own mic (measured -40
+    /// dBFS RMS vs -17). Whisper degrades on very quiet input. A robust
+    /// loudness target (95th-percentile 100 ms RMS → -20 dBFS, +30 dB max)
+    /// lifts a quiet track and is a no-op on a healthy one (never attenuates).
+    /// Peaks are hard-limited at 0.99 so the int16 write can't wrap.
+    static func prepareASRUpload(sourceURL: URL, outURL: URL) throws -> Float {
+        let target = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                   sampleRate: 16_000, channels: 1, interleaved: false)!
+        let buf = try readAndConvert(fileURL: sourceURL, targetFormat: target)
+        let n = Int(buf.frameLength)
+        guard n > 0, let ch = buf.floatChannelData?[0] else {
+            throw AudioMixerError.readerFailed("empty audio in \(sourceURL.lastPathComponent)")
+        }
+        let hop = 1600   // 100 ms at 16 kHz
+        var rms: [Float] = []
+        rms.reserveCapacity(n / hop + 1)
+        var pos = 0
+        while pos < n {
+            let end = min(pos + hop, n)
+            var s: Float = 0
+            for i in pos..<end { s += ch[i] * ch[i] }
+            rms.append(sqrtf(s / Float(end - pos)))
+            pos = end
+        }
+        var gainDb: Float = 0
+        let voiced = rms.filter { $0 > 0.002 }.sorted()
+        if !voiced.isEmpty {
+            let p95 = voiced[min(voiced.count - 1, Int(Double(voiced.count) * 0.95))]
+            let loudness: Float = 0.1      // -20 dBFS
+            if p95 > 0, p95 < loudness {
+                let gain = min(loudness / p95, 31.6)   // +30 dB ceiling
+                for i in 0..<n {
+                    var v = ch[i] * gain
+                    if v > 0.99 { v = 0.99 } else if v < -0.99 { v = -0.99 }
+                    ch[i] = v
+                }
+                gainDb = 20 * log10f(gain)
+            }
+        }
+        let out = try AVAudioFile(forWriting: outURL,
+                                  settings: playbackInt16Settings(sampleRate: 16_000, channels: 1),
+                                  commonFormat: .pcmFormatFloat32, interleaved: false)
+        try out.write(from: buf)
+        return gainDb
+    }
+
     // MARK: - audio file → target format
 
     private static func readAndConvert(fileURL: URL, targetFormat: AVAudioFormat) throws -> AVAudioPCMBuffer {

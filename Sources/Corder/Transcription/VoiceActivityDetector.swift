@@ -355,15 +355,26 @@ enum VoiceActivityDetector {
         let slots: [Slot]
 
         /// Translate a compressed timestamp back onto the original timeline.
-        /// If the timestamp falls in a gap (Gemini interpolated past the
-        /// end of one slot, rare), we snap to the start of the nearest
-        /// following slot rather than refusing the turn.
-        func toOriginal(compressedMs: Int64) -> Int64 {
-            for slot in slots where compressedMs < slot.compressedEndMs {
-                if compressedMs >= slot.compressedStartMs {
-                    return slot.originalStartMs + (compressedMs - slot.compressedStartMs)
+        /// A timestamp inside an inserted silence gap (see `concatenateSpeech`
+        /// `gapMs`) is snapped by what it marks: a START goes to the next
+        /// slot's start (the speech it opens), an END to the previous slot's
+        /// end (the speech it closes). Whisper stamps the first word of a
+        /// segment at the segment's start, which after concatenation sits in
+        /// the gap BEFORE the island; mapping that to the previous island's
+        /// end made a far-end utterance appear 18 s early, glued to the tail
+        /// of the previous one, and a two-word turn span 20 s of silence.
+        func toOriginal(compressedMs: Int64, isEnd: Bool = false) -> Int64 {
+            var prev: Slot? = nil
+            for slot in slots {
+                if compressedMs < slot.compressedEndMs {
+                    if compressedMs >= slot.compressedStartMs {
+                        return slot.originalStartMs + (compressedMs - slot.compressedStartMs)
+                    }
+                    // Inside the gap before this slot.
+                    if isEnd, let p = prev { return p.originalStartMs + p.durationMs }
+                    return slot.originalStartMs
                 }
-                return slot.originalStartMs
+                prev = slot
             }
             // Past the last slot. Gemini's per-chunk timestamps bunch
             // up near the end of a long file and routinely overshoot the
@@ -391,9 +402,18 @@ enum VoiceActivityDetector {
     /// We deliberately preserve the input format (sample rate, channel
     /// count, common format) so the existing upload + chunk paths in
     /// GeminiTranscriber don't have to special-case anything.
+    /// `gapMs` inserts that much digital silence BETWEEN consecutive
+    /// segments. Butting speech islands hard against each other (the old
+    /// behaviour) erases every pause the far end left, and Whisper then
+    /// merges several short replies into one run-on segment and garbles
+    /// the joins (measured on a real Discord call: 35 s of separate
+    /// far-end phrases came back as ONE 122 s "turn" of mush). A short
+    /// pause restores the sentence boundaries Whisper segments on. The
+    /// projection maps a timestamp inside a gap to the nearer slot edge.
     static func concatenateSpeech(audioURL: URL,
                                   segments: [SpeechSegment],
-                                  outURL: URL) throws -> Projection {
+                                  outURL: URL,
+                                  gapMs: Int64 = 0) throws -> Projection {
         let inFile = try AVAudioFile(forReading: audioURL)
         let format = inFile.processingFormat
         let sampleRate = format.sampleRate
@@ -405,6 +425,15 @@ enum VoiceActivityDetector {
 
         var slots: [Projection.Slot] = []
         var compressedCursorMs: Int64 = 0
+        let gapFrames = AVAudioFrameCount(max(0, Double(gapMs) / 1000.0 * sampleRate))
+        let gapBuf: AVAudioPCMBuffer? = gapFrames > 0
+            ? AVAudioPCMBuffer(pcmFormat: format, frameCapacity: gapFrames) : nil
+        if let g = gapBuf {
+            g.frameLength = gapFrames
+            // Explicit zero fill: buffer memory is not guaranteed cleared.
+            let abl = UnsafeMutableAudioBufferListPointer(g.mutableAudioBufferList)
+            for b in abl { if let p = b.mData { memset(p, 0, Int(b.mDataByteSize)) } }
+        }
 
         for seg in segments {
             let startFrame = AVAudioFramePosition(Double(seg.startMs) / 1000.0 * sampleRate)
@@ -414,6 +443,10 @@ enum VoiceActivityDetector {
             inFile.framePosition = startFrame
             guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { continue }
             try inFile.read(into: buf, frameCount: frameCount)
+            if let gap = gapBuf, !slots.isEmpty {
+                try outFile.write(from: gap)
+                compressedCursorMs += Int64(Double(gap.frameLength) / sampleRate * 1000.0)
+            }
             try outFile.write(from: buf)
 
             let actualMs = Int64(Double(buf.frameLength) / sampleRate * 1000.0)

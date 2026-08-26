@@ -239,10 +239,15 @@ enum WhisperCleanup {
             // Empty polished line is suspect, the model dropped a turn,
             // and we'd rather keep the original than serve a blank.
             let finalText = cleaned.isEmpty ? t.text : cleaned
+            // Words ride along untouched: polish changes punctuation /
+            // case / typos, never the spoken order, so the per-word
+            // timings still describe this text (attribution splits the
+            // polished text by word INDEX, see attributeByOverlap).
             out.append(GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
                                               startMs: t.startMs,
                                               endMs: t.endMs,
-                                              text: finalText))
+                                              text: finalText,
+                                              words: t.words))
         }
         FileLogger.log("WhisperCleanup: batch \(batchNo) polished \(batch.count) turns")
         return out

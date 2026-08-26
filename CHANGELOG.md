@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.63] - 2026-08-26
+
+### Fixed
+
+- The other side of a call is no longer scrambled in time. Their lines used to be re-timed through a second speech model and interpolated between anchor words, which could show a phrase minutes away from where it was said, hand it to the wrong speaker, squeeze a whole sentence into a fraction of a second, or drop it as silence. Every line now keeps the exact moment it was spoken, using per-word timing from the transcription itself, and goes to the speaker who was talking at that moment. Short replies from the other side that used to vanish between your own lines are back where they belong.
+- Phantom speakers. When the automatic speaker estimate produced an extra voice holding only a few seconds of the whole call, it appeared as a separate "Speaker N" with someone else's words. Such slivers are now folded back into the voice they came from.
+- Far-end transcription quality. The other side's audio was uploaded in 66-second pieces of the raw capture format with every pause removed, which merged short replies into run-on lines and garbled the joins. It now goes up as 16 kHz mono in 6-minute pieces cut at silence, with short pauses kept between utterances, and a quiet track is levelled before transcription.
+- Your own lines are no longer nudged onto a neighbouring moment. The old placement pass could move a short reply next to another line so the two read as duplicates.
+
 ## [0.15.62] - 2026-08-25
 
 ### Fixed

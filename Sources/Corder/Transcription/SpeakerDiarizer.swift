@@ -59,7 +59,7 @@ actor SpeakerDiarizer {
         }
 
         let result = try await manager.process(wavURL)
-        let segs = result.segments
+        var segs = result.segments
             .map {
                 DiarizedSegment(
                     speakerId: $0.speakerId,
@@ -68,8 +68,87 @@ actor SpeakerDiarizer {
                 )
             }
             .sorted { $0.startMs < $1.startMs }
+        let estimated = Set(segs.map(\.speakerId)).count
+        // Only the AUTO estimate gets the phantom sweep: an exact count from
+        // the clarify banner is the user's word and is honoured as-is.
+        if key == 0 {
+            segs = Self.mergePhantomSpeakers(segs, embeddings: result.speakerDatabase)
+        }
         FileLogger.log("SpeakerDiarizer: \(wavURL.lastPathComponent) → \(segs.count) spans, "
-            + "\(Set(segs.map(\.speakerId)).count) speakers (constraint=\(key == 0 ? "auto" : String(key)))")
+            + "\(Set(segs.map(\.speakerId)).count) speakers (constraint=\(key == 0 ? "auto" : String(key))"
+            + (key == 0 && estimated != Set(segs.map(\.speakerId)).count ? ", \(estimated) before phantom merge)" : ")"))
         return segs
+    }
+
+    /// Fold "phantom" speakers back into the voice they split off from.
+    ///
+    /// VBx's auto-estimate errs by ±1-2 on real far-end audio (measured
+    /// 2026-06-25: GT3→2, GT2→4, GT4→5), and the surplus cluster is almost
+    /// always tiny: a handful of seconds of one real speaker whose embedding
+    /// drifted (codec artefacts, a laugh, a shout). On a real 3-person call
+    /// the phantom held 7 s of 832 s and showed the user a "Speaker 3" that
+    /// did not exist. A cluster carrying less than max(5 s, 2.5 %) of the
+    /// track's speech is merged into the remaining speaker whose centroid
+    /// embedding is nearest (cosine); without embeddings, into the speaker
+    /// with the most speech within ±30 s of the phantom's spans. Smallest
+    /// first, never below one speaker. Pure value-in/value-out.
+    static func mergePhantomSpeakers(_ segs: [DiarizedSegment],
+                                     embeddings: [String: [Float]]?) -> [DiarizedSegment] {
+        var totals: [String: Int64] = [:]
+        for s in segs { totals[s.speakerId, default: 0] += max(0, s.endMs - s.startMs) }
+        guard totals.count > 1 else { return segs }
+        let total = totals.values.reduce(0, +)
+        let threshold = max(5000, Int64(Double(total) * 0.025))
+
+        func cosine(_ a: [Float], _ b: [Float]) -> Float {
+            guard a.count == b.count, !a.isEmpty else { return -1 }
+            var dot: Float = 0, na: Float = 0, nb: Float = 0
+            for i in 0..<a.count { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }
+            let d = sqrtf(na) * sqrtf(nb)
+            return d > 0 ? dot / d : -1
+        }
+
+        var mapping: [String: String] = [:]
+        var remaining = totals
+        for (spk, ms) in totals.sorted(by: { $0.value < $1.value }) {
+            guard ms < threshold, remaining.count > 1 else { continue }
+            let real = remaining.keys.filter { $0 != spk && (remaining[$0] ?? 0) >= threshold }
+            let pool = real.isEmpty ? remaining.keys.filter { $0 != spk } : real
+            guard !pool.isEmpty else { continue }
+            var target: String? = nil
+            var how = "neighbourhood"
+            if let db = embeddings, let e = db[spk] {
+                var best: (sim: Float, spk: String)? = nil
+                for c in pool {
+                    guard let f = db[c] else { continue }
+                    let sim = cosine(e, f)
+                    if best == nil || sim > best!.sim { best = (sim, c) }
+                }
+                if let b = best { target = b.spk; how = String(format: "cosine %.2f", b.sim) }
+            }
+            if target == nil {
+                var score: [String: Int64] = [:]
+                for p in segs where p.speakerId == spk {
+                    for d in segs where pool.contains(d.speakerId)
+                        && d.endMs > p.startMs - 30_000 && d.startMs < p.endMs + 30_000 {
+                        score[d.speakerId, default: 0] += d.endMs - d.startMs
+                    }
+                }
+                target = score.max { $0.value < $1.value }?.key
+                    ?? pool.max { (remaining[$0] ?? 0) < (remaining[$1] ?? 0) }
+            }
+            guard let t = target else { continue }
+            mapping[spk] = t
+            remaining[t, default: 0] += ms
+            remaining.removeValue(forKey: spk)
+            FileLogger.log("SpeakerDiarizer: phantom \(spk) (\(ms / 1000)s of \(total / 1000)s) merged into \(t) by \(how)")
+        }
+        guard !mapping.isEmpty else { return segs }
+        func resolve(_ s: String) -> String {
+            var x = s, hops = 0
+            while let m = mapping[x], hops < 8 { x = m; hops += 1 }
+            return x
+        }
+        return segs.map { DiarizedSegment(speakerId: resolve($0.speakerId), startMs: $0.startMs, endMs: $0.endMs) }
     }
 }
