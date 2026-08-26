@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.64] - 2026-08-26
+
+### Fixed
+
+- Passages the speech model silently collapsed are recovered. A decode window can come back as a few repeated tokens ("50 50", "да, да, да") standing in for 10 to 40 seconds of real talk; those stretches are now detected, transcribed again on their own, and replaced. Audio is also uploaded in 3-minute pieces so one bad window can no longer poison the minutes after it.
+- Speech under cross-talk is no longer skipped. When both sides talk at once, the other person's words (and yours) used to be treated as "not yours to recover" and left out; each track is now checked for untranscribed speech on its own, since a headphone call and the far-end tap never carry the other voice. On a real 38-minute call this brought back about 100 seconds of the other side that had gone missing.
+
 ## [0.15.63] - 2026-08-26
 
 ### Fixed

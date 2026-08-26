@@ -108,6 +108,24 @@ actor SpeakerDiarizer {
             return d > 0 ? dot / d : -1
         }
 
+        // Diagnostic: how far apart the clusters actually are. Two "speakers"
+        // with a centroid cosine near 0.8 are almost certainly one voice;
+        // genuinely different people sit well below. Logged so a wrong
+        // count can be judged from the log without re-running anything.
+        if let db = embeddings {
+            let ids = totals.keys.sorted()
+            var pairs: [String] = []
+            for i in 0..<ids.count {
+                for j in (i + 1)..<ids.count {
+                    if let a = db[ids[i]], let b = db[ids[j]] {
+                        pairs.append(String(format: "%@~%@=%.2f", ids[i], ids[j], cosine(a, b)))
+                    }
+                }
+            }
+            let share = ids.map { "\($0):\((totals[$0] ?? 0) / 1000)s" }.joined(separator: " ")
+            FileLogger.log("SpeakerDiarizer: clusters \(share); centroid cosine \(pairs.joined(separator: " "))")
+        }
+
         var mapping: [String: String] = [:]
         var remaining = totals
         for (spk, ms) in totals.sorted(by: { $0.value < $1.value }) {

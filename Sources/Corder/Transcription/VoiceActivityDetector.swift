@@ -252,23 +252,41 @@ enum VoiceActivityDetector {
 
     static let dominanceWindowMs: Int64 = 300
 
+    /// `referenceURL` nil = no rival track to test against: the map is then
+    /// the adaptive-floor VAD of the primary alone (every window above
+    /// 0.4× its own 90th-percentile level), which is the right gate for a
+    /// track that can only ever contain its own speaker (the far-end tap,
+    /// or a mic the echo suppressor found free of bleed). Cross-track
+    /// dominance there only hid real speech under the other side's
+    /// cross-talk (measured: 5 s of the far end lost under the user
+    /// talking over it).
     static func dominanceMap(primaryURL: URL,
-                             referenceURL: URL) -> DominanceMap? {
+                             referenceURL: URL?) -> DominanceMap? {
         var cfg = Config()
         cfg.windowMs = Int(dominanceWindowMs)
         cfg.hopMs = 100
-        guard let prim = windowRMS(audioURL: primaryURL, config: cfg),
-              let ref = windowRMS(audioURL: referenceURL, config: cfg) else { return nil }
+        guard let prim = windowRMS(audioURL: primaryURL, config: cfg) else { return nil }
+        var refValues: [Float] = []
+        if let referenceURL {
+            guard let ref = windowRMS(audioURL: referenceURL, config: cfg) else { return nil }
+            refValues = ref.values
+        }
         guard !prim.values.isEmpty else {
             return DominanceMap(stepMs: 100, dominant: [], spans: [])
         }
         let sortedVals = prim.values.sorted()
         let p90 = sortedVals[min(sortedVals.count - 1, Int(Double(sortedVals.count) * 0.90))]
-        let floor = max(0.005, 0.4 * p90)
+        // 0.15× the loud level, not 0.4×: on a loud speaker (p90 -13 dBFS)
+        // 0.4× put the floor at -21 dB, above the quieter syllables of a
+        // normal phrase, so whole short sentences read as "silence" and
+        // were never recovered (measured: "Как-то воспользовался
+        // привилегиями пространства", peak -13 dB, 42 % above the floor).
+        // -29.5 dB on that mic is still 15 dB above its noise floor.
+        let floor = max(0.005, 0.15 * p90)
         var dom: [Bool] = []
         dom.reserveCapacity(prim.values.count)
         for (i, p) in prim.values.enumerated() {
-            let r = i < ref.values.count ? ref.values[i] : 0
+            let r = i < refValues.count ? refValues[i] : 0
             dom.append(p >= floor && p > 1.2 * r)
         }
         let spans = collapse(voiced: dom,

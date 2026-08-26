@@ -134,6 +134,35 @@ enum Hallucinations {
         return false
     }
 
+    /// True when the text is a Whisper repetition loop: the same 1-4 word
+    /// phrase repeated back-to-back at least 3 times making up most of the
+    /// segment ("были в России, были в России, были в России"). Emphatic
+    /// "да, да, да" is 1-word repeats and is real speech, so a 1-word phrase
+    /// needs ≥ 5 repeats. Used on turns the dominance gate already found to
+    /// carry no own-track speech; never on a healthy voiced turn.
+    static func isRepetitionLoop(_ text: String) -> Bool {
+        let words = text.lowercased().unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
+            .reduce(into: "") { $0.append($1) }
+            .split(separator: " ").map(String.init)
+        guard words.count >= 6 else { return false }
+        for n in 1...4 where words.count >= n * 3 {
+            var best = 1, run = 1
+            var i = n
+            while i + n <= words.count {
+                if Array(words[i..<(i + n)]) == Array(words[(i - n)..<i]) {
+                    run += 1; best = max(best, run)
+                } else {
+                    run = 1
+                }
+                i += n
+            }
+            let needed = n == 1 ? 5 : 3
+            if best >= needed, Double(best * n) / Double(words.count) >= 0.5 { return true }
+        }
+        return false
+    }
+
     static func isHallucination(_ text: String) -> Bool {
         // Bracket/music captions normalise to empty or a bare word, so check
         // the raw text first.

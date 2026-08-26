@@ -681,13 +681,20 @@ final class TranscriptionPipeline {
                     }
                     // Fill voiced-but-untranscribed holes BEFORE polish so
                     // recovered text gets the same cleanup pass.
+                    // Gap detection needs a rival track ONLY where the mic
+                    // carries the far end's bleed (the echo suppressor ran,
+                    // i.e. micTranscribeURL != micURL). A bleed-free mic and
+                    // the far-end tap contain nothing but their own speaker,
+                    // and cross-track dominance there only hid real speech
+                    // under the other side's cross-talk.
+                    let micHasBleed = micTranscribeURL != micURL
                     rawUserTurns = await recoverVoicedGaps(
                         turns: rawUserTurns, wavURL: micTranscribeURL,
-                        referenceURL: systemURL,
+                        referenceURL: micHasBleed ? systemURL : nil,
                         meetingId: meetingId, languageISO: meetingLang)
                     rawOtherTurns = await recoverVoicedGaps(
                         turns: rawOtherTurns, wavURL: systemURL,
-                        referenceURL: micTranscribeURL,
+                        referenceURL: nil,
                         meetingId: meetingId, languageISO: meetingLang)
                     if currentProvider != .gemini {
                         // Give polish the DETECTED meeting language, not the
@@ -1520,8 +1527,12 @@ final class TranscriptionPipeline {
                 // No own-dominant frame. If the own track is also silent over
                 // the whole span, there's no real speech to attribute → drop
                 // the turn (hallucination/bleed). Otherwise it's quiet real
-                // speech beaten by a louder rival → keep the text as a point.
+                // speech beaten by a louder rival → keep the text as a point,
+                // unless the text itself is a Whisper repetition loop (a
+                // phrase echoed 3+ times over audio it never dominated is
+                // the classic silence artefact, measured at -63 dB peak).
                 if maxOwn < speechFloor { dropped += 1; return nil }
+                if Hallucinations.isRepetitionLoop(t.text) { dropped += 1; return nil }
                 gated += 1
                 return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
                                               startMs: t.startMs, endMs: t.startMs, text: t.text)
@@ -1920,14 +1931,45 @@ final class TranscriptionPipeline {
         // only the truly-dominant ones held real skipped speech. Dominant
         // spans keep exactly the stretches where THIS track's speaker is
         // the one talking.
-        let spans: [VoiceActivityDetector.SpeechSegment]?
-        if let referenceURL, FileManager.default.fileExists(atPath: referenceURL.path) {
-            spans = VoiceActivityDetector.dominanceMap(primaryURL: wavURL,
-                                                       referenceURL: referenceURL)?.spans
-        } else {
-            spans = VoiceActivityDetector.detect(audioURL: wavURL)
-        }
+        // No reference (the far-end tap, or a bleed-free mic) → the adaptive
+        // VAD of the track alone; a plain fixed-threshold `detect` flagged
+        // keyboard clicks and breaths as gaps.
+        let rival: URL? = (referenceURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false)
+            ? referenceURL : nil
+        let spans = VoiceActivityDetector.dominanceMap(primaryURL: wavURL, referenceURL: rival)?.spans
         guard let spans, let lastSpan = spans.last else { return turns }
+
+        // DEGENERATE turns: a span that is clearly voiced for seconds yet came
+        // back with a handful of tokens is a Whisper decoding collapse, not
+        // sparse speech. Measured against an independent reference on a real
+        // call: "434 62 62" over 24 s, "70 70" over 44 s, "Да, да, да." over
+        // 10 s of the other side talking non-stop, each a whole 30-s decode
+        // window stuck on a number or a filler. Normal Russian runs 2-3
+        // tokens per voiced second; below 0.6 with ≥ 4 s of voiced audio the
+        // turn does not count as coverage, its span is re-ASR'd on its own
+        // (a short, fresh context reliably decodes what the long chunk
+        // collapsed), and it is replaced by whatever comes back.
+        func voicedMs(_ a: Int64, _ b: Int64) -> Int64 {
+            var acc: Int64 = 0
+            for sp in spans where sp.endMs > a && sp.startMs < b {
+                acc += min(b, sp.endMs) - max(a, sp.startMs)
+            }
+            return acc
+        }
+        func isDegenerate(_ t: GeminiTranscriber.Turn) -> Bool {
+            let v = voicedMs(t.startMs, t.endMs)
+            guard v >= 4000 else { return false }
+            let tokens = t.text.split(whereSeparator: { $0.isWhitespace }).count
+            return Double(tokens) / (Double(v) / 1000.0) < 0.6
+        }
+        let degenerate = Set(turns.indices.filter { isDegenerate(turns[$0]) })
+        if !degenerate.isEmpty {
+            let sample = degenerate.sorted().prefix(4).map { i -> String in
+                let t = turns[i]
+                return "[\(t.startMs / 1000)-\(t.endMs / 1000)s '\(t.text.prefix(24))']"
+            }.joined(separator: " ")
+            FileLogger.log("gap recovery: \(wavURL.lastPathComponent), \(degenerate.count) degenerate (collapsed) turns will be re-ASR'd: \(sample)")
+        }
 
         // 100 ms bitmap: voiced AND not within 1 s of any existing turn.
         let stepMs: Int64 = 100
@@ -1938,7 +1980,7 @@ final class TranscriptionPipeline {
             let hi = min(n, Int(sp.endMs / stepMs))
             for k in lo..<hi { uncovered[k] = true }
         }
-        for t in turns {
+        for (i, t) in turns.enumerated() where !degenerate.contains(i) {
             let lo = max(0, Int((t.startMs - 1000) / stepMs))
             let hi = min(n, Int((t.endMs + 1000) / stepMs))
             guard hi > lo else { continue }
@@ -1962,14 +2004,22 @@ final class TranscriptionPipeline {
             }
             k = j
         }
-        windows = windows.filter { $0.voicedMs >= 3500 }
+        // 1.5 s of voiced audio is a short sentence ("И я так ищу", "Вот это,
+        // блядь" were 0.8-1.1 s and stayed lost at the old 3.5 s floor); the
+        // adaptive floor keeps clicks and breaths out of the windows.
+        windows = windows.filter { $0.voicedMs >= 1200 }
         guard !windows.isEmpty else { return turns }
-        if windows.count > 6 {
-            FileLogger.log("gap recovery: \(wavURL.lastPathComponent), \(windows.count) windows found, capping at 6")
-            windows = Array(windows.prefix(6))
+        // One small request per window; 40 is well under a minute of wall
+        // clock and covers an hour-long call with a bad far-end link. The
+        // old cap of 6 left half the skipped passages on the floor
+        // (measured 13 windows).
+        if windows.count > 40 {
+            FileLogger.log("gap recovery: \(wavURL.lastPathComponent), \(windows.count) windows found, capping at 40")
+            windows = Array(windows.prefix(40))
         }
 
-        var out = turns
+        var recoveredTurns: [GeminiTranscriber.Turn] = []
+        var recoveredWindows: [(start: Int64, end: Int64)] = []
         var recoveredCount = 0
         for w in windows {
             let ws = max(0, w.start - 500)
@@ -1993,6 +2043,7 @@ final class TranscriptionPipeline {
                 recovered = try? await geminiRawTurns(wavURL: tmp, meetingId: meetingId)
             }
             guard let recovered, !recovered.isEmpty else { continue }
+            var got = 0
             for r in recovered {
                 let text = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty, !Hallucinations.isHallucination(text) else { continue }
@@ -2003,16 +2054,36 @@ final class TranscriptionPipeline {
                 let shiftedWords = r.words?.map {
                     GeminiTranscriber.Turn.Word(text: $0.text, startMs: ws + $0.startMs, endMs: ws + $0.endMs)
                 }.filter { $0.startMs >= rs - 250 && $0.endMs <= re + 250 }
-                out.append(GeminiTranscriber.Turn(speakerLabel: r.speakerLabel,
-                                                  startMs: rs, endMs: re, text: text,
-                                                  words: (shiftedWords?.isEmpty ?? true) ? nil : shiftedWords))
+                recoveredTurns.append(GeminiTranscriber.Turn(speakerLabel: r.speakerLabel,
+                                                             startMs: rs, endMs: re, text: text,
+                                                             words: (shiftedWords?.isEmpty ?? true) ? nil : shiftedWords))
                 recoveredCount += 1
+                got += 1
             }
+            if got > 0 { recoveredWindows.append((ws, we)) }
         }
         guard recoveredCount > 0 else {
             FileLogger.log("gap recovery: \(wavURL.lastPathComponent), \(windows.count) voiced-untranscribed windows, nothing recovered")
             return turns
         }
+        // A degenerate turn whose span was re-ASR'd successfully is replaced
+        // by the recovery; one whose window yielded nothing is kept as-is
+        // (a few tokens beat a hole).
+        var replaced = 0
+        var out: [GeminiTranscriber.Turn] = []
+        out.reserveCapacity(turns.count + recoveredTurns.count)
+        for (i, t) in turns.enumerated() {
+            if degenerate.contains(i),
+               recoveredWindows.contains(where: { $0.end > t.startMs && $0.start < t.endMs }) {
+                replaced += 1
+                continue
+            }
+            out.append(t)
+        }
+        if replaced > 0 {
+            FileLogger.log("gap recovery: \(wavURL.lastPathComponent), replaced \(replaced) collapsed turns with their re-ASR")
+        }
+        out.append(contentsOf: recoveredTurns)
         out.sort { $0.startMs < $1.startMs }
         let totalVoiced = windows.reduce(Int64(0)) { $0 + $1.voicedMs }
         FileLogger.log("gap recovery: \(wavURL.lastPathComponent), recovered \(recoveredCount) turns from \(windows.count) windows (\(totalVoiced / 1000)s voiced audio ASR had skipped)")

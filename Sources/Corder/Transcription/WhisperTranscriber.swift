@@ -175,9 +175,16 @@ enum WhisperTranscriber {
     /// 48 kHz stereo float WAV (25.2 MB on the wire) passed, while a 720 s
     /// chunk of 16 kHz mono int16 (23.0 MB) came back 413 "request_too_large".
     /// So the limit is applied AFTER decoding (~25 MB of 16 kHz float32 =
-    /// ~390 s of audio). 6 minutes keeps a healthy margin; a 413 on any
-    /// chunk still splits it in half and retries (see `transcribeSplittingOn413`).
-    private static let maxSecondsPerChunk: Double = 6 * 60
+    /// ~390 s of audio); a 413 on any chunk still splits it in half and
+    /// retries (see `transcribeSplittingOn413`). 3 minutes, not the cap:
+    /// Whisper conditions each 30-s window on the previous window's text,
+    /// so a decode that collapses ("70 70", "62 62") poisons everything
+    /// after it inside the chunk. Measured on a real call: 6-min chunks
+    /// lost whole passages the old 66-s chunks had kept. Every chunk cut
+    /// resets that conditioning; 3 min (6 windows) bounds the damage while
+    /// keeping context across sentences, and the collapse detector in gap
+    /// recovery re-ASRs what still slips through.
+    private static let maxSecondsPerChunk: Double = 3 * 60
 
     /// VAD pre-pass thresholds, mirror `GeminiTranscriber`. Talk-heavy
     /// meetings sail through unchanged; idle mic tracks get squeezed.
@@ -185,7 +192,7 @@ enum WhisperTranscriber {
     private static let vadEmptyFloorMs: Int64 = 500
     /// Silence inserted between concatenated speech islands so Whisper
     /// still hears sentence boundaries (see `concatenateSpeech(gapMs:)`).
-    private static let vadJoinGapMs: Int64 = 400
+    private static let vadJoinGapMs: Int64 = 250
     /// When a chunk boundary must be cut, look back this far for the
     /// quietest 100 ms window and cut there instead of mid-word.
     private static let chunkCutSearchSec: Double = 30
@@ -433,7 +440,7 @@ enum WhisperTranscriber {
         let langTag = (WhisperTranscriber.languageOverride ?? AppSettings.transcriptionLanguage).nilIfEmpty ?? "auto"
         // `w2` = parse revision: cached chunk turns carry the parsed word
         // pairing, so a parser change must miss the old entries.
-        let cacheTag = "\(backend):\(mode):\(langTag):w5"
+        let cacheTag = "\(backend):\(mode):\(langTag):w6"
         for (i, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
             // Real progress: fraction of chunks finished so far. Reported at
