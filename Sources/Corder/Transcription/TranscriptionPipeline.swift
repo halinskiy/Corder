@@ -1010,8 +1010,13 @@ final class TranscriptionPipeline {
             guard let updated = try? repo.meeting(id: meetingId) else { return }
             meeting = updated
             // Success, clear the attempt counter so a future failure gets
-            // the full retry budget again.
-            if meeting.status == .ready { try? repo.resetTranscribeAttempts(meetingId: meetingId) }
+            // the full retry budget again (and the cloud row's failure
+            // reason from an earlier attempt).
+            if meeting.status == .ready {
+                try? repo.resetTranscribeAttempts(meetingId: meetingId)
+                let mid = meetingId
+                Task { @MainActor in SupabaseSync.setLastError(nil, meetingId: mid) }
+            }
 
             // 3.5. Auto-title: one cheap text-only Gemini call from the
             //      fresh transcript. Best-effort + idempotent, only when
@@ -1165,6 +1170,14 @@ final class TranscriptionPipeline {
             // retry budget (failedRetriableMeetingIds would never exclude a
             // permanently-failing row → unbounded paid re-transcribe loop).
             try? repo.setStatus(meetingId: meetingId, status: .failed)
+            // Mirror the reason to the cloud row. A failed meeting used to
+            // reach Supabase as status=failed and nothing else, so a user
+            // who never sends a bug report (a new signup whose first two
+            // recordings failed, July 2026) left no trace of WHY. No user
+            // content in the message, only the error description.
+            let reason = TranscriptionErrors.read(meetingId: meetingId) ?? String(describing: error)
+            let mid = meetingId
+            Task { @MainActor in SupabaseSync.setLastError(String(reason.prefix(400)), meetingId: mid) }
             // Surface a Library-window toast for the failure. One
             // string for every failure mode on purpose, Костя's call:
             // no model-load vs network vs auth branching, no jargon.

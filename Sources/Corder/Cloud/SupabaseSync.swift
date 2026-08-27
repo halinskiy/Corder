@@ -313,6 +313,31 @@ enum SupabaseSync {
         }
     }
 
+    /// Explicit-null patch: a plain `String?` property is DROPPED by
+    /// JSONEncoder when nil, so clearing the column would silently no-op.
+    private struct LastErrorPatch: Encodable {
+        let last_error: String?
+        enum CodingKeys: String, CodingKey { case last_error }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(last_error, forKey: .last_error)
+        }
+    }
+
+    /// Set / clear the transcription failure reason on the cloud meeting
+    /// row (`meetings.last_error`, existed in the schema but was never
+    /// written). Read by the admin console so a failed meeting of a user
+    /// who never sends a bug report still says WHY.
+    static func setLastError(_ message: String?, meetingId: String) {
+        push {
+            try await SupabaseClientHolder.shared
+                .from("meetings")
+                .update(LastErrorPatch(last_error: message))
+                .eq("id", value: meetingId)
+                .execute()
+        }
+    }
+
     /// Set / clear the summary markdown for a meeting. Upserts the
     /// `summaries` row (PK = meeting_id).
     static func setSummary(_ markdown: String?, meetingId: String, model: String? = nil) {

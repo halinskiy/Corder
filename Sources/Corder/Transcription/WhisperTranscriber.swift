@@ -210,6 +210,32 @@ enum WhisperTranscriber {
     /// time for never tripping the limiter. Cleanup after Tier 2
     /// (50,000 → 500,000 TPM): bump the value or remove the gate.
     private static let inflight = WhisperInflightLimiter(maxConcurrent: 1)
+
+    /// Process-wide "Groq is rate-limited until …" mark. Groq's hourly
+    /// audio cap (7200 s/h on the shared key) answers EVERY request with
+    /// 429 for the rest of the hour; without a memory of that each chunk
+    /// burned the full retry ladder (1+2+4+8 s) before falling back to
+    /// whisper-1, so a 13-chunk track wasted 3+ minutes and a free user
+    /// waited that long to be told to use the on-device model. While the
+    /// mark is in the future every Groq chunk goes straight to the
+    /// fallback route. Set from the Retry-After the Worker now forwards
+    /// (capped at 15 min), or 60 s when the header is absent.
+    private static let groqCooldownLock = NSLock()
+    nonisolated(unsafe) private static var groqCooldownUntil: Date? = nil
+    private static func groqCoolingDown() -> TimeInterval? {
+        groqCooldownLock.lock(); defer { groqCooldownLock.unlock() }
+        guard let until = groqCooldownUntil else { return nil }
+        let left = until.timeIntervalSinceNow
+        if left <= 0 { groqCooldownUntil = nil; return nil }
+        return left
+    }
+    private static func markGroqCooldown(seconds: TimeInterval) {
+        let s = min(900, max(60, seconds))
+        groqCooldownLock.lock(); defer { groqCooldownLock.unlock() }
+        let until = Date().addingTimeInterval(s)
+        if let cur = groqCooldownUntil, cur > until { return }
+        groqCooldownUntil = until
+    }
     /// `whisper-1` is the only OpenAI ASR that returns
     /// `verbose_json` (= segment-level timestamps we need to project
     /// turns onto the original timeline). The newer `gpt-4o-transcribe`
@@ -621,6 +647,19 @@ enum WhisperTranscriber {
                                                    mode: WMode,
                                                    initialPrompt: String?,
                                                    backend: Backend) async throws -> [GeminiTranscriber.Turn] {
+        // Groq already told us it is out of budget: don't knock again,
+        // hand this chunk to the fallback route at once. For paid tiers
+        // that is OpenAI whisper-1 (metered under the same cap); the
+        // Worker answers a free user's whisper call with the tier-gate
+        // 403, which the pipeline turns into the on-device model, so a
+        // free user is redirected in one request instead of ~15 s of
+        // retries per chunk.
+        if backend == .groq, let left = groqCoolingDown() {
+            FileLogger.log("WhisperTranscriber: Groq rate-limited for another \(Int(left))s, routing \(audioURL.lastPathComponent) to OpenAI whisper-1")
+            return try await transcribeSingleUnguarded(audioURL: audioURL, apiKey: apiKey,
+                                                       offsetMs: offsetMs, mode: mode,
+                                                       initialPrompt: initialPrompt, backend: .openai)
+        }
         // Groq exposes only one Whisper variant per request, the
         // diarize-aware OpenAI endpoint doesn't exist there, so we
         // pin the model by backend rather than by mode. The pipeline
@@ -716,13 +755,28 @@ enum WhisperTranscriber {
             let isTransientServer = (status == 502 || status == 503 || status == 504)
                 || (status == 500 && bodyText.isEmpty)
             if !isRateLimit && !isTransientServer { break }
-            if attempt == maxAttempts { break }
-            // Respect Retry-After header when present, otherwise
-            // exponential backoff (1s, 2s, 4s, 8s).
+            // Retry-After (seconds; the Worker forwards Groq's / OpenAI's
+            // header). A per-minute limit says a few seconds and is worth
+            // waiting out; the hourly audio cap says minutes, and waiting
+            // for that would idle the meeting while the fallback model
+            // sits unused, so anything beyond 20 s on Groq skips the
+            // ladder and goes straight to the fallback below, remembering
+            // the wait so the next chunks don't knock at all.
             let headerWait = (r as? HTTPURLResponse)?
                 .value(forHTTPHeaderField: "Retry-After")
                 .flatMap(Double.init) ?? 0
-            let waitSec = max(headerWait, pow(2.0, Double(attempt - 1)))
+            if isRateLimit, backend == .groq, headerWait > 20 {
+                markGroqCooldown(seconds: headerWait)
+                FileLogger.log("WhisperTranscriber: Groq 429 with Retry-After \(Int(headerWait))s, not waiting, falling back")
+                break
+            }
+            if attempt == maxAttempts {
+                if isRateLimit, backend == .groq { markGroqCooldown(seconds: max(60, headerWait)) }
+                break
+            }
+            // Otherwise exponential backoff (1s, 2s, 4s, 8s), never longer
+            // than 30 s for a single wait whatever the header says.
+            let waitSec = min(30, max(headerWait, pow(2.0, Double(attempt - 1))))
             FileLogger.log("WhisperTranscriber: \(status) \(isRateLimit ? "rate-limit" : "transient server"), retry \(attempt)/\(maxAttempts - 1) after \(waitSec)s")
             try await Task.sleep(nanoseconds: UInt64(waitSec * 1_000_000_000))
         }

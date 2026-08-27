@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.66] - 2026-08-27
+
+### Fixed
+
+- When the primary speech service is out of capacity, the rest of the recording switches to the backup model at once. Every piece used to retry the exhausted service for 15 seconds before switching, so a long recording could sit for minutes; the service's own "try again in N seconds" is now honoured and remembered for the following pieces. Free plans are pointed to the on-device model just as quickly.
+- A failed transcription now records its reason in your account, so support can see what went wrong even if you never send a report.
+
 ## [0.15.65] - 2026-08-27
 
 ### Fixed
