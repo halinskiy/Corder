@@ -1052,8 +1052,12 @@ final class TranscriptionPipeline {
                     // Auto path is best-effort: a tier-gate (throws
                     // PaidFeatureError) or any failure just skips silently
                     // the on-demand route surfaces the upsell when the user
-                    // opens the tab.
-                    if let summary = try? await GeminiSummarizer.generate(transcript: text) {
+                    // opens the tab. Shares one in-flight run with that
+                    // route (DerivedContentJobs) so a "Generate" click during
+                    // this step doesn't bill a second recap.
+                    if let summary = try? await DerivedContentJobs.shared.run("summary:\(meetingId)", {
+                        try await GeminiSummarizer.generate(transcript: text)
+                    }) {
                         try? repo.setSummary(meetingId: meetingId, summary: summary)
                         FileLogger.log("transcribe(): summarised \(meetingId) (\(summary.count) chars)")
                     }
@@ -1071,8 +1075,11 @@ final class TranscriptionPipeline {
                (meeting.chapters?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
                 let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
                 if !segs.isEmpty {
-                    let timed = segs.map { ($0.startMs, $0.text) }
-                    if let chapters = try? await GeminiChapters.generate(timedLines: timed),
+                    let timed: [(startMs: Int64, text: String)] = segs.map { (startMs: $0.startMs, text: $0.text) }
+                    let durationMs = meeting.durationMs ?? segs.last?.endMs
+                    if let chapters = try? await DerivedContentJobs.shared.run("chapters:\(meetingId)", {
+                           try await GeminiChapters.generate(timedLines: timed, durationMs: durationMs)
+                       }),
                        !chapters.isEmpty,
                        let data = try? JSONEncoder().encode(chapters),
                        let json = String(data: data, encoding: .utf8) {
@@ -1240,6 +1247,7 @@ final class TranscriptionPipeline {
         // this meeting before. clearTranscript was called once at the
         // start of transcribe(); for cache-hit re-maps we still need to
         // clear here because no fresh transcription was done.
+        let before = Self.snapshotTranscript(meetingId: meetingId, repo: repo)
         try? repo.clearTranscript(meetingId: meetingId)
 
         // Pick userLabel. If the caller already knows it (cache hit), use
@@ -1321,6 +1329,7 @@ final class TranscriptionPipeline {
         // Only refresh transcribedAt on a REAL run, a cache-hit re-map keeps
         // the original timestamp so an old meeting isn't pulled into the
         // current usage month and re-credited as if freshly transcribed.
+        Self.finishTranscriptReplace(meetingId: meetingId, before: before, repo: repo)
         try repo.setTranscribeFinished(
             meetingId: meetingId, status: .ready,
             transcribedAt: stampNow ? Int64(Date().timeIntervalSince1970 * 1000) : nil)
@@ -1558,6 +1567,7 @@ final class TranscriptionPipeline {
                                    inPerson: Bool = false,
                                    stampNow: Bool = true,
                                    repo: MeetingRepository) throws {
+        let before = Self.snapshotTranscript(meetingId: meetingId, repo: repo)
         try? repo.clearTranscript(meetingId: meetingId)
 
         // ── In-person: everyone (incl. the device owner) is on the one
@@ -1573,7 +1583,8 @@ final class TranscriptionPipeline {
         //    collapse to 1 unless the user explicitly said "Just me".
         if inPerson {
             try mapInPersonTurns(meetingId: meetingId, meeting: meeting,
-                                 turns: otherTurns, stampNow: stampNow, repo: repo)
+                                 turns: otherTurns, stampNow: stampNow,
+                                 snapshot: before, repo: repo)
             return
         }
 
@@ -1678,6 +1689,7 @@ final class TranscriptionPipeline {
         // Targeted write (NOT full updateMeeting) so concurrent pin / title /
         // expected-speaker edits made during the run aren't reverted from the
         // stale snapshot; cache-hit re-map keeps the original month.
+        Self.finishTranscriptReplace(meetingId: meetingId, before: before, repo: repo)
         try repo.setTranscribeFinished(
             meetingId: meetingId, status: .ready,
             transcribedAt: stampNow ? Int64(Date().timeIntervalSince1970 * 1000) : nil)
@@ -1709,7 +1721,12 @@ final class TranscriptionPipeline {
     private func mapInPersonTurns(meetingId: String, meeting: Meeting,
                                   turns: [GeminiTranscriber.Turn],
                                   stampNow: Bool = true,
+                                  snapshot: TranscriptSnapshot? = nil,
                                   repo: MeetingRepository) throws {
+        // The dual-track entry point has already snapshotted (and wiped) the
+        // old transcript by the time it delegates here; a direct call takes
+        // its own snapshot before wiping.
+        let before = snapshot ?? Self.snapshotTranscript(meetingId: meetingId, repo: repo)
         try? repo.clearTranscript(meetingId: meetingId)
 
         // Per-label totals drive both the keep/merge ranking (by
@@ -1796,10 +1813,89 @@ final class TranscriptionPipeline {
         // Targeted write (NOT full updateMeeting) so concurrent pin / title /
         // expected-speaker edits made during the run aren't reverted from the
         // stale snapshot; cache-hit re-map keeps the original month.
+        Self.finishTranscriptReplace(meetingId: meetingId, before: before, repo: repo)
         try repo.setTranscribeFinished(
             meetingId: meetingId, status: .ready,
             transcribedAt: stampNow ? Int64(Date().timeIntervalSince1970 * 1000) : nil)
         FileLogger.log("mapInPerson: stored \(stored) segs, kept \(keptLabels.count) speakers (expectedOther=\(expected.map(String.init) ?? "nil"), distinct=\(distinctLabels.count)) for \(meetingId)")
+    }
+
+    // MARK: - Transcript replacement bookkeeping
+
+    /// What a mapping step is about to overwrite. Every mapping step wipes
+    /// the speaker + segment rows and writes fresh ones, and two things have
+    /// to survive that wipe or follow it:
+    /// - the user's speaker names: re-transcribing after naming "Speaker 2"
+    ///   silently dropped the name;
+    /// - the cached Summary / Chapters, which describe the OLD transcript.
+    ///   They stayed put, so a re-transcribe that fixed the speakers still
+    ///   showed a recap about "Speaker 4" (a phantom the new run no longer
+    ///   had), and the auto-summary step skipped because "a summary exists".
+    ///   A changed transcript now clears both so they regenerate.
+    struct TranscriptSnapshot {
+        let fingerprint: String
+        let customNames: [String: String]
+        let speakerIds: Set<String>
+        let hadSummary: Bool
+        let hadChapters: Bool
+    }
+
+    /// Speaker attribution + text of every line, in order. Timing is left
+    /// out on purpose: a re-derive that only nudges timestamps keeps a recap
+    /// that is still true.
+    private static func transcriptFingerprint(meetingId: String, repo: MeetingRepository) -> String {
+        let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
+        return segs.map { "\($0.speakerId)\t\($0.text)" }.joined(separator: "\n")
+    }
+
+    static func snapshotTranscript(meetingId: String, repo: MeetingRepository) -> TranscriptSnapshot {
+        let spks = (try? repo.speakers(forMeeting: meetingId)) ?? []
+        var names: [String: String] = [:]
+        for s in spks {
+            if let n = s.customName?.trimmingCharacters(in: .whitespaces), !n.isEmpty { names[s.id] = n }
+        }
+        let m = try? repo.meeting(id: meetingId)
+        return TranscriptSnapshot(
+            fingerprint: transcriptFingerprint(meetingId: meetingId, repo: repo),
+            customNames: names,
+            speakerIds: Set(spks.map(\.id)),
+            hadSummary: !(m?.summary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+            hadChapters: !(m?.chapters?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
+    }
+
+    /// Runs after the fresh speakers + segments are written and BEFORE the
+    /// row flips to `.ready`, so the UI never pairs the new transcript with
+    /// the old recap.
+    static func finishTranscriptReplace(meetingId: String, before: TranscriptSnapshot, repo: MeetingRepository) {
+        // Speaker names. Ids are positional ("-other-0" = first far-end
+        // voice), so a name is carried over only when the run produced the
+        // SAME set of ids; with a different speaker count the positions may
+        // point at different people and a wrong name is worse than none.
+        if !before.customNames.isEmpty {
+            let spks = (try? repo.speakers(forMeeting: meetingId)) ?? []
+            if Set(spks.map(\.id)) == before.speakerIds {
+                var restored = 0
+                for s in spks where (s.customName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
+                    guard let name = before.customNames[s.id] else { continue }
+                    if (try? repo.renameSpeaker(speakerId: s.id, customName: name)) != nil { restored += 1 }
+                }
+                if restored > 0 {
+                    FileLogger.log("transcript replace: restored \(restored) speaker name(s) for \(meetingId)")
+                }
+            } else {
+                FileLogger.log("transcript replace: speaker set changed (\(before.speakerIds.count) → \(spks.count)), \(before.customNames.count) custom name(s) not carried over for \(meetingId)")
+            }
+        }
+
+        guard before.hadSummary || before.hadChapters else { return }
+        guard transcriptFingerprint(meetingId: meetingId, repo: repo) != before.fingerprint else {
+            FileLogger.log("transcript replace: transcript unchanged, keeping summary/chapters for \(meetingId)")
+            return
+        }
+        var cleared: [String] = []
+        if before.hadSummary, (try? repo.setSummary(meetingId: meetingId, summary: nil)) != nil { cleared.append("summary") }
+        if before.hadChapters, (try? repo.setChapters(meetingId: meetingId, chapters: nil)) != nil { cleared.append("chapters") }
+        FileLogger.log("transcript replace: transcript changed → cleared \(cleared.joined(separator: " + ")) for \(meetingId), regenerating from the new transcript")
     }
 
     /// Diarize-first transcription of one track. FluidAudio decides WHO
@@ -2009,8 +2105,7 @@ final class TranscriptionPipeline {
         // adaptive floor keeps clicks and breaths out of the windows.
         windows = windows.filter { $0.voicedMs >= 1200 }
         guard !windows.isEmpty else { return turns }
-        // One small request per window; 40 is well under a minute of wall
-        // clock and covers an hour-long call with a bad far-end link. The
+        // 40 windows covers an hour-long call with a bad far-end link. The
         // old cap of 6 left half the skipped passages on the floor
         // (measured 13 windows).
         if windows.count > 40 {
@@ -2018,19 +2113,43 @@ final class TranscriptionPipeline {
             windows = Array(windows.prefix(40))
         }
 
-        var recoveredTurns: [GeminiTranscriber.Turn] = []
-        var recoveredWindows: [(start: Int64, end: Int64)] = []
-        var recoveredCount = 0
+        // One upload per BATCH of windows, not per window. Groq caps
+        // requests per minute, and a burst of single-window requests had
+        // every one of them 429 and back off 1-3 s before succeeding
+        // (measured on a real call: ~4 s per window instead of 0.5 s; on a
+        // shared key busy with other users the retries run out and the chunk
+        // falls through to the costlier OpenAI backstop). The windows of a
+        // batch are cut out and joined with 400 ms of silence, exactly like
+        // the main upload, and the projection puts every returned word back
+        // where it was spoken; a segment Whisper ran across a join is split
+        // at the (now real) gap. Batches stay short so a decode collapse in
+        // one window can't poison a whole track's worth of recovery.
+        let batchMaxAudioMs: Int64 = 60_000
+        let batchMaxWindows = 8
+        var batches: [[(start: Int64, end: Int64)]] = []
         for w in windows {
             let ws = max(0, w.start - 500)
             let we = w.end + 500
+            if var last = batches.last,
+               last.count < batchMaxWindows,
+               last.reduce(Int64(0), { $0 + ($1.end - $1.start) }) + (we - ws) <= batchMaxAudioMs {
+                last.append((start: ws, end: we))
+                batches[batches.count - 1] = last
+            } else {
+                batches.append([(start: ws, end: we)])
+            }
+        }
+
+        var recoveredTurns: [GeminiTranscriber.Turn] = []
+        for batch in batches {
+            guard let firstWindow = batch.first else { continue }
             let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("corder-gap-\(meetingId)-\(ws).wav")
+                .appendingPathComponent("corder-gap-\(meetingId)-\(firstWindow.start).wav")
             defer { try? FileManager.default.removeItem(at: tmp) }
-            guard (try? VoiceActivityDetector.concatenateSpeech(
+            guard let proj = try? VoiceActivityDetector.concatenateSpeech(
                 audioURL: wavURL,
-                segments: [.init(startMs: ws, endMs: we)],
-                outURL: tmp)) != nil else { continue }
+                segments: batch.map { .init(startMs: $0.start, endMs: $0.end) },
+                outURL: tmp, gapMs: 400) else { continue }
             let recovered: [GeminiTranscriber.Turn]?
             if let iso = languageISO, currentProvider != .gemini {
                 // Force the meeting language: a 10-second mumble chunk is
@@ -2043,28 +2162,43 @@ final class TranscriptionPipeline {
                 recovered = try? await geminiRawTurns(wavURL: tmp, meetingId: meetingId)
             }
             guard let recovered, !recovered.isEmpty else { continue }
-            var got = 0
             for r in recovered {
                 let text = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty, !Hallucinations.isHallucination(text) else { continue }
-                let rs = min(we, ws + max(0, r.startMs))
-                let re = min(we + 500, max(rs + 400, ws + r.endMs))
-                // The window was cut from the track at `ws`, so the
-                // recovered words shift by the same offset as the turn.
-                let shiftedWords = r.words?.map {
-                    GeminiTranscriber.Turn.Word(text: $0.text, startMs: ws + $0.startMs, endMs: ws + $0.endMs)
-                }.filter { $0.startMs >= rs - 250 && $0.endMs <= re + 250 }
-                recoveredTurns.append(GeminiTranscriber.Turn(speakerLabel: r.speakerLabel,
-                                                             startMs: rs, endMs: re, text: text,
-                                                             words: (shiftedWords?.isEmpty ?? true) ? nil : shiftedWords))
-                recoveredCount += 1
-                got += 1
+                // Batch timeline → track timeline. A start inside a join
+                // snaps forward to the window it opens, an end backward to
+                // the window it closes (Projection rules).
+                let words = r.words?.map { w -> GeminiTranscriber.Turn.Word in
+                    let s = proj.toOriginal(compressedMs: max(0, w.startMs))
+                    let e = max(s, proj.toOriginal(compressedMs: max(w.startMs, w.endMs), isEnd: true))
+                    return GeminiTranscriber.Turn.Word(text: w.text, startMs: s, endMs: e)
+                }
+                var rs = proj.toOriginal(compressedMs: max(0, r.startMs))
+                var re = proj.toOriginal(compressedMs: max(r.startMs, r.endMs), isEnd: true)
+                if let words, !words.isEmpty {
+                    rs = words[0].startMs
+                    re = max(rs, words[words.count - 1].endMs)
+                } else if let w = batch.first(where: { rs >= $0.start && rs < $0.end }) {
+                    // No word timing (Gemini): keep the turn inside the
+                    // window it starts in rather than across a join.
+                    re = min(re, w.end)
+                }
+                re = max(re, rs + 400)
+                let mapped = GeminiTranscriber.Turn(speakerLabel: r.speakerLabel,
+                                                    startMs: rs, endMs: re, text: text,
+                                                    words: (words?.isEmpty ?? true) ? nil : words)
+                // A segment that straddled two windows keeps the real
+                // distance between them once projected; cut it there.
+                recoveredTurns.append(contentsOf: Self.splitAtWordGaps([mapped], gapMs: 1000))
             }
-            if got > 0 { recoveredWindows.append((ws, we)) }
         }
+        let recoveredCount = recoveredTurns.count
         guard recoveredCount > 0 else {
-            FileLogger.log("gap recovery: \(wavURL.lastPathComponent), \(windows.count) voiced-untranscribed windows, nothing recovered")
+            FileLogger.log("gap recovery: \(wavURL.lastPathComponent), \(windows.count) voiced-untranscribed windows in \(batches.count) request(s), nothing recovered")
             return turns
+        }
+        let recoveredWindows: [(start: Int64, end: Int64)] = batches.flatMap { $0 }.filter { w in
+            recoveredTurns.contains { $0.endMs > w.start && $0.startMs < w.end }
         }
         // A degenerate turn whose span was re-ASR'd successfully is replaced
         // by the recovery; one whose window yielded nothing is kept as-is
@@ -2086,7 +2220,7 @@ final class TranscriptionPipeline {
         out.append(contentsOf: recoveredTurns)
         out.sort { $0.startMs < $1.startMs }
         let totalVoiced = windows.reduce(Int64(0)) { $0 + $1.voicedMs }
-        FileLogger.log("gap recovery: \(wavURL.lastPathComponent), recovered \(recoveredCount) turns from \(windows.count) windows (\(totalVoiced / 1000)s voiced audio ASR had skipped)")
+        FileLogger.log("gap recovery: \(wavURL.lastPathComponent), recovered \(recoveredCount) turns from \(windows.count) windows in \(batches.count) request(s) (\(totalVoiced / 1000)s voiced audio ASR had skipped)")
         return out
     }
 

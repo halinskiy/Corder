@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.65] - 2026-08-27
+
+### Fixed
+
+- Summary and Chapters follow the transcript. Re-transcribing a recording used to keep the recap and chapters generated from the old transcript, so they could still describe speakers the new transcript no longer had; a changed transcript now clears both and regenerates them.
+- Speaker names survive a re-transcribe. Names you gave to speakers were silently dropped when a recording was transcribed again; they are carried over whenever the run finds the same speakers.
+- Chapters are sized to the meeting: about one per 5 minutes (2 to 12), instead of a chapter every couple of lines (a 38-minute call came back with 28). Long meetings are chaptered end to end; the last part of a 2-hour recording used to be left out.
+- A recap cut off at the output limit is retried with a larger one, and generating the recap while the automatic one is still running no longer produces it twice.
+- Recovering untranscribed passages now sends a few short uploads instead of one request per passage; the per-passage requests were tripping the speech service's rate limit and each waiting seconds to retry.
+
 ## [0.15.64] - 2026-08-26
 
 ### Fixed

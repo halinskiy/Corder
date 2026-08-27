@@ -101,6 +101,12 @@ enum GeminiSummarizer {
           wasn't.
         - Quotes only when exact wording matters. Russian guillemets
           «…» for Russian.
+        - People: refer to a named speaker by first name as written in
+          the transcript (a "Kostiantyn Halynskyi" line is "Kostiantyn";
+          never bolt a Russian case ending onto a Latin name, rephrase
+          instead). An unnamed speaker keeps their label EXACTLY as in
+          the transcript ("Speaker 2"), never translated or renumbered,
+          so it matches the transcript view.
         - Close with `### Дальше` (RU) / `### Next` (EN) listing action
           items, one per bullet, responsible party in **bold** when it is
           actually known from the transcript. Skip the section entirely
@@ -123,53 +129,105 @@ enum GeminiSummarizer {
         - **Костя**: подготовить cap-table к пятнице
         - **Михаил**: встреча с инвестором X в понедельник
         """
-        let body: [String: Any] = [
-            "systemInstruction": ["parts": [["text": system]]],
-            "contents": [[
-                "role": "user",
-                "parts": [["text": "Transcript:\n\n\(snippet)"]]
-            ]],
-            "generationConfig": [
-                "temperature": 0.35,
-                // Structured Markdown is a one-shot rewrite, not a chain
-                // of reasoning, thinking budget burns output tokens for
-                // no quality gain on this kind of task. Output budget is
-                // generous (was 600) because a real structured recap of a
-                // 30-minute call needs ~1200–2000 tokens.
-                "thinkingConfig": ["thinkingBudget": 0],
-                // Bullet recaps of a long call run longer than the prose ones
-                // did (Granola's notes on a 65-min call are ~3.5k characters,
-                // ≈1.7k Cyrillic tokens), and a truncated recap loses its tail
-                // sections silently. 2200 was cutting them off.
-                "maxOutputTokens": 4000
+        /// One generateContent round-trip. Returns the recap text and the
+        /// model's finishReason; nil on any failure, each of which is
+        /// logged ("Summary didn't work" reports used to arrive with
+        /// nothing in the log to say why).
+        func ask(maxOutputTokens: Int) async throws -> (text: String, finish: String)? {
+            let body: [String: Any] = [
+                "systemInstruction": ["parts": [["text": system]]],
+                "contents": [[
+                    "role": "user",
+                    "parts": [["text": "Transcript:\n\n\(snippet)"]]
+                ]],
+                "generationConfig": [
+                    "temperature": 0.35,
+                    // Structured Markdown is a one-shot rewrite, not a chain
+                    // of reasoning, thinking budget burns output tokens for
+                    // no quality gain on this kind of task. Output budget is
+                    // generous (was 600) because a real structured recap of a
+                    // 30-minute call needs ~1200–2000 tokens.
+                    "thinkingConfig": ["thinkingBudget": 0],
+                    // Bullet recaps of a long call run longer than the prose
+                    // ones did (Granola's notes on a 65-min call are ~3.5k
+                    // characters, ≈1.7k Cyrillic tokens), and a truncated
+                    // recap loses its tail sections silently. 2200 was
+                    // cutting them off; 4000 is the first try and a
+                    // MAX_TOKENS finish retries once with double.
+                    "maxOutputTokens": maxOutputTokens
+                ]
             ]
-        ]
 
-        guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
-              let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !jwt.isEmpty {
-            req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+            guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
+                  let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if !jwt.isEmpty {
+                req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+            }
+            req.timeoutInterval = 90
+            req.httpBody = payload
+
+            let data: Data
+            let http: HTTPURLResponse
+            do {
+                let (d, resp) = try await URLSession.shared.data(for: req)
+                guard let h = resp as? HTTPURLResponse else { return nil }
+                data = d
+                http = h
+            } catch {
+                FileLogger.log("GeminiSummarizer: request failed (\(error.localizedDescription))")
+                return nil
+            }
+            // Surface the Worker's tier-gate distinctly so the route returns a
+            // real 403 → Upgrade upsell, not a generic "generation failed".
+            if http.statusCode == 403 { throw PaidFeatureError.tierRequired }
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            guard (200..<300).contains(http.statusCode) else {
+                FileLogger.log("GeminiSummarizer: HTTP \(http.statusCode) \(bodyText.prefix(300))")
+                return nil
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let candidates = json["candidates"] as? [[String: Any]],
+                  let first = candidates.first else {
+                // No candidates = the prompt itself was refused
+                // (promptFeedback.blockReason) or the proxy answered with
+                // something that isn't a Gemini response.
+                FileLogger.log("GeminiSummarizer: no candidates in response: \(bodyText.prefix(300))")
+                return nil
+            }
+            let finish = first["finishReason"] as? String ?? "?"
+            guard let content = first["content"] as? [String: Any],
+                  let parts = content["parts"] as? [[String: Any]] else {
+                FileLogger.log("GeminiSummarizer: empty content, finishReason=\(finish)")
+                return nil
+            }
+            let raw = parts.compactMap { $0["text"] as? String }.joined()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (raw, finish)
         }
-        req.timeoutInterval = 90
-        req.httpBody = payload
 
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse else { return nil }
-        // Surface the Worker's tier-gate distinctly so the route returns a
-        // real 403 → Upgrade upsell, not a generic "generation failed".
-        if http.statusCode == 403 { throw PaidFeatureError.tierRequired }
-        guard (200..<300).contains(http.statusCode),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let content = candidates.first?["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]] else { return nil }
-
-        let raw = parts.compactMap { $0["text"] as? String }.joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return raw
+        guard var result = try await ask(maxOutputTokens: 4000) else { return nil }
+        if result.finish == "MAX_TOKENS" {
+            // The tail sections are the action items; a recap cut there is
+            // the one that is missing the part people open it for.
+            FileLogger.log("GeminiSummarizer: recap hit MAX_TOKENS at 4000, retrying with 8000")
+            if let again = try await ask(maxOutputTokens: 8000), !again.text.isEmpty {
+                result = again
+            }
+        }
+        var text = result.text
+        if result.finish == "MAX_TOKENS", let nl = text.lastIndex(of: "\n") {
+            // Still truncated: drop the half-written last line rather than
+            // show a bullet that stops mid-word.
+            FileLogger.log("GeminiSummarizer: recap still truncated at 8000 tokens, trimming the partial last line")
+            text = String(text[..<nl]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !text.isEmpty else {
+            FileLogger.log("GeminiSummarizer: empty recap (finishReason=\(result.finish))")
+            return nil
+        }
+        return text
     }
 }

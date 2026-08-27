@@ -1622,7 +1622,14 @@ enum Routes {
         var result: String?
         var tierGated = false
         Task {
-            do { result = try await GeminiSummarizer.generate(transcript: text) }
+            // Joins the pipeline's auto-summary if it is still running for
+            // this meeting (the row flips to ready a few seconds before the
+            // recap lands, which is exactly when the user clicks Generate).
+            do {
+                result = try await DerivedContentJobs.shared.run("summary:\(id)") {
+                    try await GeminiSummarizer.generate(transcript: text)
+                }
+            }
             catch is PaidFeatureError { tierGated = true }
             catch { }
             sema.signal()
@@ -1664,11 +1671,17 @@ enum Routes {
         let timed: [(startMs: Int64, text: String)] = segs.map {
             (startMs: Int64($0.startMs), text: $0.text)
         }
+        let durationMs = m.durationMs ?? segs.last?.endMs
         let sema = DispatchSemaphore(value: 0)
         var result: [GeminiChapters.Chapter]?
         var tierGated = false
         Task {
-            do { result = try await GeminiChapters.generate(timedLines: timed) }
+            // Same in-flight sharing as summarize(): one run per meeting.
+            do {
+                result = try await DerivedContentJobs.shared.run("chapters:\(id)") {
+                    try await GeminiChapters.generate(timedLines: timed, durationMs: durationMs)
+                }
+            }
             catch is PaidFeatureError { tierGated = true }
             catch { }
             sema.signal()
