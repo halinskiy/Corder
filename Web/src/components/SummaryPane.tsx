@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { RefreshCw, Search, Copy } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { MeetingDetail, summarize, submitLogs, openWelcome } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
+import { CopyIconButton } from "./CopyIconButton";
 
 declare global {
   interface Window {
@@ -200,25 +201,14 @@ export function SummaryPane({ detail, onToast, readOnly = false, t }: Props) {
           />
         </div>
         <span className="toolbar-sep" />
-        <Tooltip label={t.btn_copy}>
-          <button
-            className="toolbar-icon-btn"
-            onClick={() => {
-              if (!summary) return;
-              try {
-                if (window.corderCopy) window.corderCopy(summary);
-                else navigator.clipboard?.writeText(summary);
-                onToast?.(t.toast_copied, "success");
-              } catch {
-                onToast?.(t.toast_copy_failed, "error");
-              }
-            }}
-            disabled={!summary}
-            aria-label={t.btn_copy}
-          >
-            <Copy size={16} strokeWidth={2} />
-          </button>
-        </Tooltip>
+        <CopyIconButton
+          getText={() => summary ?? ""}
+          onToast={onToast}
+          okText={t.toast_copied}
+          failText={t.toast_copy_failed}
+          label={t.btn_copy}
+          disabled={!summary}
+        />
         {!readOnly && (
           <Tooltip label={t.summary_regenerate}>
             <button

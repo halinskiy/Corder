@@ -945,7 +945,10 @@ enum Routes {
             meeting_blacklist: AppSettings.meetingBlacklist,
             detected_mic_apps: MicAppsSnapshot.read(),
             mic_device_uid: AppSettings.micDeviceUID,
-            audio_input_devices: AudioInputDevices.list().map {
+            // Cached: the live CoreAudio walk blocks for seconds with a BT
+            // headset connected, and the UI polls settings every 4s. See
+            // AudioInputDevices.cachedList().
+            audio_input_devices: AudioInputDevices.cachedList().map {
                 DTO.AudioInputDeviceDTO(
                     uid: $0.uid,
                     name: $0.name,

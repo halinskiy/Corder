@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.67] - 2026-08-31
+
+### Fixed
+
+- Playback no longer goes dead with Bluetooth headphones connected. The app was re-scanning audio devices on every settings poll, each scan could stall for seconds on the Bluetooth stack, and those stalls starved the player's own connection: pressing Play did nothing. Device scans are now cached off the request path, so the app stays responsive.
+- A stuck audio export can no longer hang its download forever: it is cancelled after a timeout instead of holding the connection.
+- Pressing Play recovers itself: if the audio fails to load on the first try, the player reloads it and starts as soon as data arrives.
+
+### Changed
+
+- The Copy button now shows that it worked: it flashes green with a drawn-in checkmark, alongside the usual toast. Same feedback on the Transcript, Summary and Chapters tabs.
+
 ## [0.15.66] - 2026-08-27
 
 ### Fixed

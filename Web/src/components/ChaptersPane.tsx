@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { RefreshCw, Copy, Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { MeetingDetail, generateChapters, submitLogs, openWelcome } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
+import { CopyIconButton } from "./CopyIconButton";
 
 declare global {
   interface Window {
@@ -219,24 +220,14 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
           />
         </div>
         <span className="toolbar-sep" />
-        <Tooltip label={t.btn_copy}>
-          <button
-            className="toolbar-icon-btn"
-            onClick={() => {
-              try {
-                if (window.corderCopy) window.corderCopy(plain);
-                else navigator.clipboard?.writeText(plain);
-                onToast?.(t.toast_copied, "success");
-              } catch {
-                onToast?.(t.toast_copy_failed, "error");
-              }
-            }}
-            disabled={chapters.length === 0}
-            aria-label={t.btn_copy}
-          >
-            <Copy size={16} strokeWidth={2} />
-          </button>
-        </Tooltip>
+        <CopyIconButton
+          getText={() => plain}
+          onToast={onToast}
+          okText={t.toast_copied}
+          failText={t.toast_copy_failed}
+          label={t.btn_copy}
+          disabled={chapters.length === 0}
+        />
         <Tooltip label={t.chapters_regenerate ?? t.summary_regenerate}>
           <button
             className="toolbar-icon-btn"

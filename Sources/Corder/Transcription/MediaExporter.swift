@@ -50,7 +50,14 @@ enum MediaExporter {
     private static func runExport(_ session: AVAssetExportSession) -> Bool {
         let sem = DispatchSemaphore(value: 0)
         session.exportAsynchronously { sem.signal() }
-        sem.wait()
+        // Bounded wait: a wedged AVFoundation export must not hold a Swifter
+        // worker thread (and its keep-alive connection) forever. Observed
+        // 2026-08-31: /audio.m4a never returned and the socket just hung.
+        if sem.wait(timeout: .now() + 180) == .timedOut {
+            session.cancelExport()
+            FileLogger.log("MediaExporter: export timed out after 180s, cancelled")
+            return false
+        }
         if session.status != .completed {
             FileLogger.log("MediaExporter: export failed, \(session.error?.localizedDescription ?? "unknown") (status \(session.status.rawValue))")
         }

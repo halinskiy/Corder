@@ -5966,3 +5966,21 @@ body.resizing { cursor: col-resize; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   .trans-upsell-sparkles span { animation: none; opacity: 0; }
 }
+
+/* Copy button success state (CopyIconButton): the circle fills accent green
+   while a checkmark draws itself in, then the component reverts the class
+   after ~1.8s. Hover must not wash the fill out mid-feedback. */
+.toolbar-icon-btn.copied,
+.toolbar-icon-btn.copied:not(:disabled):hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.copy-check-path {
+  stroke-dasharray: 15;
+  stroke-dashoffset: 15;
+  animation: copy-check-draw 260ms cubic-bezier(0.2, 0.8, 0.2, 1) 40ms forwards;
+}
+@keyframes copy-check-draw {
+  to { stroke-dashoffset: 0; }
+}

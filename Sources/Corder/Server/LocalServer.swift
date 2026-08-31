@@ -7,6 +7,10 @@ final class LocalServer {
 
     func start(routes: (HttpServer) -> Void) throws {
         routes(server)
+        // Warm the CoreAudio device cache off-thread so the first
+        // /api/settings call serves real devices without paying the
+        // seconds-long Bluetooth enumeration on a request thread.
+        AudioInputDevices.warmCache()
         // Bind to LOOPBACK ONLY. Swifter defaults to INADDR_ANY (0.0.0.0)
         // when no listen address is set, which would expose the entire
         // unauthenticated /api/* surface, every recording, transcript and

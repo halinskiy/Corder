@@ -49,6 +49,25 @@ export function AudioCard({
     }
   }, [detail.id]);
 
+  // Retry timer for a reload that never reaches `canplay` (a starved
+  // request, a dead keep-alive socket). One extra load() 5s later turns a
+  // silently dead click into a self-healing one; the canplay listener stays
+  // armed so playback starts whenever data finally arrives.
+  const recoverTimer = React.useRef<number | null>(null);
+  React.useEffect(() => () => {
+    if (recoverTimer.current) window.clearTimeout(recoverTimer.current);
+  }, []);
+
+  const playViaReload = (a: HTMLAudioElement) => {
+    const onReady = () => { a.removeEventListener("canplay", onReady); a.play().catch(() => {}); };
+    a.addEventListener("canplay", onReady);
+    try { a.load(); } catch { /* not ready */ }
+    if (recoverTimer.current) window.clearTimeout(recoverTimer.current);
+    recoverTimer.current = window.setTimeout(() => {
+      if (a.readyState === 0 && a.paused) { try { a.load(); } catch { /* still not ready */ } }
+    }, 5000);
+  };
+
   const togglePlay = () => {
     const a = audioRef.current; if (!a) return;
     if (!a.paused) { a.pause(); return; }
@@ -61,12 +80,12 @@ export function AudioCard({
     // media isn't fetched yet, so the click did nothing and the user had to
     // press twice. Deferring play() to `canplay` makes a single click work.
     if (a.error || a.readyState === 0) {
-      const onReady = () => { a.removeEventListener("canplay", onReady); a.play().catch(() => {}); };
-      a.addEventListener("canplay", onReady);
-      try { a.load(); } catch { /* not ready */ }
+      playViaReload(a);
       return;
     }
-    a.play().catch(() => {});
+    // A rejected play() (WKWebView's media stack can wedge after a starved
+    // load) gets one reload-and-retry instead of dying silently.
+    a.play().catch(() => playViaReload(a));
   };
   // Press-and-drag scrubbing with pointer capture: once the button is
   // down, the position follows the pointer even OUTSIDE the track, so

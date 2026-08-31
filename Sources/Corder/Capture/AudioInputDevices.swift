@@ -229,3 +229,47 @@ enum AudioInputDevices {
         }
     }
 }
+
+// MARK: - Cached enumeration (server hot path)
+//
+// A full CoreAudio walk can block for SECONDS while a Bluetooth headset is
+// connected (property reads round-trip the BT stack), and /api/settings ran
+// it on every call while the UI polls settings every 4s. The server spent
+// ~4s per request, the WKWebView's per-host connection pool filled with
+// stacked polls, and the <audio> element's request never got a slot: Play
+// did nothing (2026-08-31). The settings route now serves this cached
+// snapshot instantly; the walk happens OFF the request thread.
+extension AudioInputDevices {
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cachedInfos: [Info] = []
+    nonisolated(unsafe) private static var cacheFetchedAt: Date? = nil
+    nonisolated(unsafe) private static var cacheRefreshing = false
+    private static let cacheTTL: TimeInterval = 20
+
+    /// Never blocks: returns the last snapshot (possibly empty right after
+    /// launch, `warmCache()` at server start closes that window) and kicks a
+    /// background refresh when the snapshot is older than `cacheTTL`.
+    static func cachedList() -> [Info] {
+        cacheLock.lock()
+        let stale = cacheFetchedAt.map { Date().timeIntervalSince($0) > cacheTTL } ?? true
+        let snapshot = cachedInfos
+        let kick = stale && !cacheRefreshing
+        if kick { cacheRefreshing = true }
+        cacheLock.unlock()
+        if kick {
+            DispatchQueue.global(qos: .utility).async {
+                let fresh = list()
+                cacheLock.lock()
+                cachedInfos = fresh
+                cacheFetchedAt = Date()
+                cacheRefreshing = false
+                cacheLock.unlock()
+            }
+        }
+        return snapshot
+    }
+
+    /// Fire the first background walk early (server start) so the first
+    /// /api/settings call already has real devices to serve.
+    static func warmCache() { _ = cachedList() }
+}

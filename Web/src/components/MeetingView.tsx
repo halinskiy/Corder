@@ -1,8 +1,9 @@
 import React from "react";
-import { Copy, Users, Search, X, Scissors } from "lucide-react";
+import { Users, Search, X, Scissors } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { ShareModal } from "./ShareModal";
 import { Tooltip } from "./Tooltip";
+import { CopyIconButton } from "./CopyIconButton";
 import { MainHeader } from "./MainHeader";
 import type { Lang, T } from "../i18n";
 
@@ -30,33 +31,8 @@ function writeClarifyState(meetingId: string, state: "open" | "closed") {
   } catch {}
 }
 
-/// Clipboard via native bridge. WKWebView blocks both
-/// `navigator.clipboard.writeText` and `document.execCommand('copy')` in our
-/// Library window, so we ask Swift to write to NSPasteboard. Falls back to
-/// the web APIs when the bridge isn't available (e.g. running in a regular
-/// browser during dev with `npm run dev`).
-async function copyText(text: string): Promise<void> {
-  const native = (window as any).corderCopy;
-  if (typeof native === "function") {
-    if (native(text)) return;
-  }
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-  } catch {}
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.style.position = "fixed";
-  ta.style.left = "-9999px";
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  const ok = document.execCommand("copy");
-  document.body.removeChild(ta);
-  if (!ok) throw new Error("clipboard unavailable");
-}
+// Clipboard writing moved to ../clipboard.ts (shared with the Summary and
+// Chapters panes via CopyIconButton).
 import { formatDate, formatClock } from "../format";
 import { TranscriptPane } from "./TranscriptPane";
 import { SummaryPane } from "./SummaryPane";
@@ -484,13 +460,8 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     setCurrentTime(sec);
   };
 
-  const onCopy = async () => {
-    try {
-      const text = await getTranscriptText(detail.id);
-      await copyText(text);
-      onToast(t.toast_copied, "success");
-    } catch { onToast(t.toast_copy_failed, "error"); }
-  };
+  // Transcript copy lives in the CopyIconButton in the toolbar below
+  // (fetch + clipboard + green-check feedback + toast).
 
   const toggleClip = () => {
     setClipMode((on) => {
@@ -681,16 +652,14 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                   </button>
                 </Tooltip>
               )}
-              <Tooltip label={t.btn_copy}>
-                <button
-                  className="toolbar-icon-btn"
-                  onClick={onCopy}
-                  disabled={detail.segments.length === 0}
-                  aria-label={t.btn_copy}
-                >
-                  <Copy size={16} strokeWidth={2} />
-                </button>
-              </Tooltip>
+              <CopyIconButton
+                getText={() => getTranscriptText(detail.id)}
+                onToast={onToast}
+                okText={t.toast_copied}
+                failText={t.toast_copy_failed}
+                label={t.btn_copy}
+                disabled={detail.segments.length === 0}
+              />
             </div>
             <TranscriptPane
               detail={detail}
