@@ -1173,11 +1173,12 @@ enum WhisperTranscriber {
     /// The Supabase SDK's session accessor is async; we wrap in
     /// `try?` so a signed-out build just returns "".
     private static func currentJWT() async -> String {
-        await MainActor.run { _currentJWTSync() }
-    }
-    @MainActor
-    private static func _currentJWTSync() -> String {
-        SupabaseClientHolder.shared.auth.currentSession?.accessToken ?? ""
+        // The ASYNC session accessor refreshes an expired access token before
+        // returning; `currentSession` hands back whatever is in memory, and
+        // after an hour idle that token is dead — the Worker then 401s the
+        // proxy call (same stale-capture bug as ShareService, 2026-09-08).
+        // Signed out → throws → "".
+        (try? await SupabaseClientHolder.shared.auth.session)?.accessToken ?? ""
     }
     private static func hasSupabaseSession() async -> Bool {
         await !Self.currentJWT().isEmpty

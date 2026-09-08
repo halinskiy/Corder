@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.68] - 2026-09-08
+
+### Fixed
+
+- Sharing a link now works on the first try after the app has been open for a while. The sign-in token could quietly expire, the first Share attempt failed (or shared without audio), and only a retry went through. The token is refreshed before every share, cloud transcription and summary call now.
+
 ## [0.15.67] - 2026-08-31
 
 ### Fixed

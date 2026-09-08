@@ -188,7 +188,9 @@ enum GoogleCalendar {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let jwt = SupabaseClientHolder.shared.auth.currentSession?.accessToken {
+        // Async accessor refreshes an expired access token first (the stale
+        // `currentSession` read 401'd Worker calls after an hour idle).
+        if let jwt = (try? await SupabaseClientHolder.shared.auth.session)?.accessToken {
             req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])

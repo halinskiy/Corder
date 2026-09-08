@@ -46,8 +46,14 @@ enum ShareService {
     /// the shared slice and nothing else.
     static func createShare(meetingId: String, repo: MeetingRepository, clip: Clip? = nil) async throws -> URL {
         // 1. Live Supabase session (NOT the AppSettings.isSignedIn UserDefaults
-        //    mirror, which can diverge from the real session).
-        guard let session = SupabaseClientHolder.shared.auth.currentSession else {
+        //    mirror, which can diverge from the real session). The ASYNC
+        //    accessor refreshes an expired access token before returning;
+        //    `currentSession` just hands back whatever is in memory, and after
+        //    an hour idle that token is dead — the Worker then 401s the
+        //    /share/upload-url and /share/create calls even though the
+        //    PostgREST push (which auto-refreshes) succeeded a second earlier
+        //    (hit live 2026-09-08).
+        guard let session = try? await SupabaseClientHolder.shared.auth.session else {
             throw ShareError.notSignedIn
         }
         let jwt = session.accessToken

@@ -110,9 +110,9 @@ enum WhisperCleanup {
     }
 
     private static func jwt() async -> String {
-        await MainActor.run {
-            SupabaseClientHolder.shared.auth.currentSession?.accessToken ?? ""
-        }
+        // Async accessor = auto-refresh of an expired token (see the same fix
+        // in ShareService / WhisperTranscriber, 2026-09-08). Signed out → "".
+        (try? await SupabaseClientHolder.shared.auth.session)?.accessToken ?? ""
     }
 
     // MARK: - Single batch
