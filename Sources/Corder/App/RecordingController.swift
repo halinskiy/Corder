@@ -512,6 +512,18 @@ extension RecordingController: CaptureEngineDelegate {
     func captureEngineFarEndUnavailable(_ engine: CaptureEngine) {
         guard !farEndWarnedThisSession else { return }
         guard case .recording = AppContext.shared.recordingState else { return }
+        // Only meaningful for a CALL: on a call the far end arrives via the
+        // system-audio tap, and losing it (BT HFP/SCO, a dead aggregate) is
+        // worth interrupting the user for. An IN-PERSON recording has no far
+        // end at all — the Mac plays nothing, the tap stays silent, and this
+        // warning fired 30 s into a real-life meeting and scared the user
+        // (2026-09-08). Call context = Bluetooth output route at start, or a
+        // known call app holding the mic right now.
+        let btRoute = AppContext.shared.capture.outputBluetoothAtStart
+        guard btRoute || MeetingDetector.callAppHoldsMicNow() else {
+            FileLogger.log("RecordingController: tap gave up but no call context (non-BT output, no call app on mic) — in-person recording, suppressing the far-end warning")
+            return
+        }
         farEndWarnedThisSession = true
         FileLogger.log("RecordingController: far end uncapturable (tap watchdog gave up after warm-up grace; BT HFP/SCO or a Mac that never brought the aggregate up), warning mid-recording")
         if AppSettings.notificationsEnabled {

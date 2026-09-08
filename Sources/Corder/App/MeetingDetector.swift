@@ -313,6 +313,22 @@ final class MeetingDetector {
     /// already depend on for system-audio capture (`SystemAudioTap`).
     ///
     /// This is what lets the detector tell *who* owns the mic: a
+    /// True when a known call surface (or a user-whitelisted meeting app) is
+    /// holding the microphone RIGHT NOW. Used to tell a real call apart from
+    /// an in-person recording when the system-audio tap delivers nothing: the
+    /// "other side not recorded" warning is only meaningful on a call — an
+    /// in-person meeting has NO far end, the Mac simply plays nothing, and
+    /// the warning just scared a user mid-meeting (2026-09-08). Helper
+    /// bundles (com.hnc.Discord.helper.Renderer) match by prefix.
+    static func callAppHoldsMicNow() -> Bool {
+        guard let owners = bundlesRunningInput(), !owners.isEmpty else { return false }
+        var callBundles = knownApps.map(\.bundle)
+        callBundles.append(contentsOf: AppSettings.meetingWhitelist)
+        return owners.contains { owner in
+            callBundles.contains { owner == $0 || owner.hasPrefix($0 + ".") }
+        }
+    }
+
     /// background Zoom while Loom / OBS / Terminal / QuickTime is the
     /// real recorder no longer mis-fires an offer, because none of
     /// those is a known meeting app that's *itself* on the input.

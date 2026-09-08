@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.69] - 2026-09-08
+
+### Fixed
+
+- Recording an in-person meeting no longer shows the false "Other side not recorded" warning. That warning is about losing the other side of a call; it now appears only when a call is actually happening (Bluetooth route or a call app using the microphone), never when you are just recording the room.
+
 ## [0.15.68] - 2026-09-08
 
 ### Fixed
