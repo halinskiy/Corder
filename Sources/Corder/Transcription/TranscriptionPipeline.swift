@@ -716,13 +716,36 @@ final class TranscriptionPipeline {
                     let why = micOnly ? "no system.wav (mic-only)" : "system.wav has no speech"
                     FileLogger.log("transcribe(): \(why), in-person \(currentProvider.rawValue) .single on mic.wav (raw text only)")
                     usingDualTrack = true
-                    rawOtherTurns = try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
+                    // Language-drift guard for the ROOM track. The original
+                    // guard only covered the dual-track call fork, so an
+                    // in-person recording (one mic, everyone in the room) had
+                    // no tally and no rescue — a real Russian meeting came
+                    // back half-TRANSLATED into English (2026-09-08 report).
+                    let micTally = WhisperTranscriber.LanguageTally()
+                    rawOtherTurns = try await WhisperTranscriber.$languageTally.withValue(micTally) {
+                        try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
+                    }
                     rawUserTurns = []
+                    var meetingLang: String? = nil
+                    if currentProvider != .gemini {
+                        let snapshot = micTally.snapshot()
+                        let meetingName = snapshot.dominantName
+                        meetingLang = meetingName.flatMap(WhisperTranscriber.iso639)
+                        detectedMeetingLang = meetingLang
+                        FileLogger.log("transcribe(): in-person language '\(meetingName ?? "?")' → iso '\(meetingLang ?? "?")', mic \(snapshot.counts)")
+                        if let name = meetingName, let iso = meetingLang {
+                            rawOtherTurns = await rescueDriftedTrack(
+                                turns: rawOtherTurns, tally: micTally, meetingName: name,
+                                forcedISO: iso, wavURL: micURL, meetingId: meetingId)
+                        }
+                    }
                     rawOtherTurns = await recoverVoicedGaps(
                         turns: rawOtherTurns, wavURL: micURL,
-                        meetingId: meetingId, languageISO: nil)
+                        meetingId: meetingId, languageISO: meetingLang)
                     if currentProvider != .gemini {
-                        let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? AppLanguage.current
+                        // Detected meeting language, NOT the English-only UI
+                        // default, or polish re-introduces the drift.
+                        let lang = AppSettings.transcriptionLanguage.nilIfEmpty ?? meetingLang ?? AppLanguage.current
                         rawOtherTurns = await WhisperCleanup.polish(
                             rawOtherTurns, language: lang, highQuality: forceFresh)
                     }

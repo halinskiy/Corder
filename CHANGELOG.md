@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.70] - 2026-09-09
+
+### Fixed
+
+- In-person recordings no longer come back half-translated into English. The language guard that catches Whisper mishearing a few chunks as English (and translating them instead of transcribing) only protected calls; a meeting recorded in one room on the microphone had no guard at all. The same majority-language check and forced re-pass now cover in-person recordings, and the text cleanup pass is told the detected language instead of assuming English.
+
 ## [0.15.69] - 2026-09-08
 
 ### Fixed
