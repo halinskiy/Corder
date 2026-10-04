@@ -187,9 +187,14 @@ final class TranscriptionPipeline {
         // legitimately-slow first runs. So we fire ONLY after 45 CONTIGUOUS
         // minutes with NO forward progress: the idle timer resets whenever the
         // on-device model is actively loading (download bytes or the silent
-        // compile) OR the transcription fraction advances. Decoupled from this
-        // task's own cancellability so even a wedged uncancellable call still
-        // flips the DB status and unblocks the polling Library UI.
+        // compile), the transcription fraction advances, OR the on-device
+        // decoder produced a token in the last two minutes. The last one is
+        // what keeps a slow Mac alive: an 8 GB Mac took over 45 minutes
+        // between two fraction steps while decoding the whole time, and was
+        // failed three times in a row with its transcript half done.
+        // Decoupled from this task's own cancellability so even a wedged
+        // uncancellable call still flips the DB status and unblocks the
+        // polling Library UI.
         let watchdog = Task.detached {
             let variant = AppSettings.whisperLocalVariant
             var idleMin = 0
@@ -199,8 +204,9 @@ final class TranscriptionPipeline {
                 if Task.isCancelled { return }
                 let loading = LocalWhisperTranscriber.currentProgress(variant) != nil
                     || LocalWhisperTranscriber.isPreparing(variant)
+                let decoding = (LocalWhisperTranscriber.secondsSinceDecodeActivity() ?? .infinity) < 120
                 let frac = TranscriptionProgressStore.read(meetingId: meetingId) ?? 0
-                if loading || frac > lastFrac {
+                if loading || decoding || frac > lastFrac {
                     idleMin = 0
                     lastFrac = frac
                 } else {
@@ -1979,6 +1985,32 @@ final class TranscriptionPipeline {
             audioURL: wavURL, mode: .single, variant: variant, initialPrompt: prompt)
     }
 
+    /// Cloud way out for a Mac whose on-device decode runs slower than real
+    /// time (see `LocalWhisperTranscriber.decodeChunked`). Same route and
+    /// same limits as the "model can't run on this Mac" fallback in
+    /// `geminiRawTurns`: Groq through the Worker, which needs a JWT and
+    /// meters the monthly cloud budget. A guest has no cloud, so no rescue;
+    /// a refusal (budget spent, offline) returns nil and the track simply
+    /// keeps decoding on-device. No `localFallbackVariant`: local is the
+    /// thing being rescued.
+    private static func slowLocalRescue(wavURL: URL,
+                                        onProgress: (@Sendable (Double) -> Void)?) -> LocalWhisperTranscriber.SlowRescue? {
+        guard AppSettings.isSignedIn else { return nil }
+        let prompt = AppVocabulary.current.nilIfEmpty
+        return {
+            do {
+                let turns = try await WhisperTranscriber.transcribe(
+                    audioURL: wavURL, mode: .single, initialPrompt: prompt,
+                    backend: .groq, onProgress: onProgress)
+                FileLogger.log("LocalWhisper: \(wavURL.lastPathComponent) transcribed in the cloud, this Mac decodes slower than real time")
+                return turns
+            } catch {
+                FileLogger.log("LocalWhisper: cloud rescue for \(wavURL.lastPathComponent) failed (\(error))")
+                return nil
+            }
+        }
+    }
+
     /// Thread-safe combiner for the two concurrent tracks' real progress.
     /// Each track reports 0…1; we publish the average scaled to 0…0.9
     /// (the final 10% is the on-device diarize/map stage). Monotonic via
@@ -2394,7 +2426,8 @@ final class TranscriptionPipeline {
                 let prompt = AppVocabulary.current.nilIfEmpty
                 return try await LocalWhisperTranscriber.transcribe(
                     audioURL: wavURL, mode: .single, variant: variant,
-                    initialPrompt: prompt, onProgress: onProgress)
+                    initialPrompt: prompt, onProgress: onProgress,
+                    slowRescue: Self.slowLocalRescue(wavURL: wavURL, onProgress: onProgress))
             } catch let err as LocalWhisperTranscriber.LocalWhisperError {
                 // Free cloud fallback (the audit's #1 safety net). The on-device
                 // model couldn't run on THIS Mac, a slow/old/8 GB cold compile

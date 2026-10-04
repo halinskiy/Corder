@@ -88,6 +88,13 @@ enum WhisperCleanup {
             FileLogger.log("WhisperCleanup: no OpenAI key and not signed in, returning turns unchanged")
             return turns
         }
+        // The Worker serves polish to Pro and Max only and answers a Free
+        // account with a 403 on every batch (8 refused round-trips on one
+        // real 33-minute meeting). Don't make calls it is certain to refuse.
+        if !jwt.isEmpty, AppSettings.userTier == .free {
+            FileLogger.log("WhisperCleanup: polish is a Pro/Max step, returning turns unchanged")
+            return turns
+        }
 
         // Batched calls preserve order, we never touch a turn outside
         // its own batch, so the global sequence is just batches glued

@@ -883,7 +883,8 @@ enum LocalWhisperTranscriber {
                            mode: WMode,
                            variant: Variant,
                            initialPrompt: String?,
-                           onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
+                           onProgress: (@Sendable (Double) -> Void)? = nil,
+                           slowRescue: SlowRescue? = nil) async throws -> [GeminiTranscriber.Turn] {
         guard isAvailable() else { throw LocalWhisperError.notAvailableOnIntel }
         guard mode == .single else { throw LocalWhisperError.diarizeNotSupported }
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -979,25 +980,23 @@ enum LocalWhisperTranscriber {
             decodeOpts.promptTokens = tokenizer.encode(text: " " + prompt)
         }
 
-        // Real progress: WhisperKit decodes in ~30s windows, reporting the
-        // current `windowId` per callback. Estimate total windows from the
-        // WORK audio length (VAD-compressed if used) and report the
-        // fraction. Real, monotonic, and tied to actual ASR work, not a
-        // wall-clock guess.
-        let workSec = useVad ? Double(speechMs) / 1000.0 : durationSec
-        let estWindows = max(1.0, (workSec / 30.0).rounded(.up))
-        let progressCb: TranscriptionCallback? = onProgress.map { cb in
-            { @Sendable (p: TranscriptionProgress) -> Bool? in
-                cb(min(0.99, Double(p.windowId + 1) / estWindows))
-                return nil   // never request cancellation from here
-            }
-        }
-
+        // Decode through our own chunk scheduler instead of WhisperKit's
+        // built-in chunked path (see `decodeChunked`): bounded concurrency,
+        // per-chunk progress and a way out to the cloud on a Mac that
+        // decodes slower than real time.
         let results: [TranscriptionResult]
         do {
-            results = try await pipe.transcribe(audioPath: workURL.path,
-                                                 decodeOptions: decodeOpts,
-                                                 callback: progressCb)
+            switch try await decodeChunked(pipe: pipe,
+                                           workURL: workURL,
+                                           options: decodeOpts,
+                                           label: audioURL.lastPathComponent,
+                                           onProgress: onProgress,
+                                           slowRescue: slowRescue) {
+            case .rescued(let turns):
+                return turns
+            case .decoded(let decoded):
+                results = decoded
+            }
         } catch is CancellationError {
             // User-initiated cancel, bubble a clean CancellationError
             // so `TranscriptionPipeline.transcribe()` catches it in its
@@ -1069,6 +1068,277 @@ enum LocalWhisperTranscriber {
             bound = max(0, s - 1)
         }
         return out
+    }
+
+    // MARK: - Decode scheduling
+
+    /// Asked once per track when this Mac decodes slower than real time.
+    /// Returns the whole track's turns from another source (the cloud), or
+    /// nil to keep decoding on-device.
+    typealias SlowRescue = @Sendable () async -> [GeminiTranscriber.Turn]?
+
+    /// How many ~30 s chunks decode at once, PROCESS-WIDE. WhisperKit's own
+    /// chunked path runs 16 per call, and a dual-track meeting makes two
+    /// calls, so 32 decodes ran at once (64+ after a second Re-transcribe).
+    /// Measured on an M1 / 16 GB, two 400 s tracks, wall time and peak
+    /// memory footprint:
+    ///   GPU encoder:    stock 2x16  163 s, 3.5 GB
+    ///                   16 total    170 s, 3.0 GB
+    ///                    2 total    204 s, 2.3 GB
+    ///   Neural Engine:  stock 2x16  180 s, 1.7 GB
+    ///                    8 total    171 s, 0.9 GB
+    /// The engine is the bottleneck, so concurrency buys little speed and
+    /// costs over a gigabyte, which an 8 GB Mac does not have to spare (one
+    /// took 83 minutes over 12 minutes of speech). So 8 GB Macs get 2 and the
+    /// rest get 8.
+    nonisolated static let decodeWorkers: Int =
+        ProcessInfo.processInfo.physicalMemory / 1_073_741_824 <= 8 ? 2 : 8
+
+    /// A track is handed to `slowRescue` when, this long into continuous
+    /// decoding, the Mac has produced less than `slowRealtimeFloor` seconds
+    /// of audio per wall second. A healthy Apple Silicon Mac runs at 2-5x.
+    private nonisolated static let slowProbeAfter: TimeInterval = 180
+    private nonisolated static let slowRealtimeFloor: Double = 0.5
+
+    private nonisolated static let decodeGate = DecodeGate(permits: decodeWorkers)
+
+    /// FIFO counting semaphore. One instance guards every on-device decode
+    /// in the process, so tracks and meetings interleave chunk by chunk
+    /// instead of multiplying the worker count.
+    private actor DecodeGate {
+        private var free: Int
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        init(permits: Int) { free = permits }
+        func acquire() async {
+            if free > 0 { free -= 1; return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+        func release() {
+            if waiters.isEmpty { free += 1 } else { waiters.removeFirst().resume() }
+        }
+    }
+
+    /// Wall-clock bookkeeping shared by every on-device decode: when a token
+    /// was last produced (the transcribe watchdog's liveness signal) and how
+    /// fast the current busy stretch is decoding (the slow-Mac test).
+    private enum DecodeMeter {
+        private static let lock = NSLock()
+        nonisolated(unsafe) private static var nextID = 0
+        /// Chunks decoding right now: when each started and how much audio it holds.
+        nonisolated(unsafe) private static var inFlight: [Int: (start: Date, audioSec: Double)] = [:]
+        nonisolated(unsafe) private static var windowStart: Date?
+        nonisolated(unsafe) private static var doneAudioSec = 0.0
+        nonisolated(unsafe) private static var doneWallSec = 0.0
+        nonisolated(unsafe) private static var idleSince: Date?
+        nonisolated(unsafe) private static var lastActivity: Date?
+
+        static func began(audioSec: Double) -> Int {
+            lock.lock(); defer { lock.unlock() }
+            let now = Date()
+            // A new busy stretch starts after the decoder sat idle; chunks
+            // that follow each other within seconds belong to the same one.
+            if inFlight.isEmpty, windowStart == nil || now.timeIntervalSince(idleSince ?? .distantPast) > 10 {
+                windowStart = now
+                doneAudioSec = 0
+                doneWallSec = 0
+            }
+            nextID += 1
+            inFlight[nextID] = (now, audioSec)
+            lastActivity = now
+            return nextID
+        }
+        static func ended(_ id: Int) {
+            lock.lock(); defer { lock.unlock() }
+            let now = Date()
+            if let chunk = inFlight.removeValue(forKey: id) {
+                doneAudioSec += chunk.audioSec
+                doneWallSec += now.timeIntervalSince(chunk.start)
+            }
+            if inFlight.isEmpty { idleSince = now }
+            lastActivity = now
+        }
+        static func touch() {
+            lock.lock(); lastActivity = Date(); lock.unlock()
+        }
+        static func secondsSinceActivity() -> TimeInterval? {
+            lock.lock(); defer { lock.unlock() }
+            return lastActivity.map { Date().timeIntervalSince($0) }
+        }
+        /// Audio seconds decoded per wall second over the current busy
+        /// stretch, nil until the stretch is `minElapsed` old. Finished
+        /// chunks alone would lag by a whole round (with 8 in flight the
+        /// first results land a minute or more in), so the rate is taken per
+        /// decode slot and scaled by how many slots were busy. The oldest chunk
+        /// still decoding counts as finishing right now, which keeps the
+        /// estimate on the generous side.
+        static func realtimeFactor(minElapsed: TimeInterval) -> Double? {
+            lock.lock(); defer { lock.unlock() }
+            let now = Date()
+            guard let start = windowStart,
+                  let oldest = inFlight.values.min(by: { $0.start < $1.start }) else { return nil }
+            let elapsed = now.timeIntervalSince(start)
+            guard elapsed >= minElapsed else { return nil }
+            let inFlightWall = inFlight.values.reduce(0.0) { $0 + now.timeIntervalSince($1.start) }
+            let slotsBusy = (doneWallSec + inFlightWall) / elapsed
+            let audio = doneAudioSec + oldest.audioSec
+            let wall = doneWallSec + now.timeIntervalSince(oldest.start)
+            guard wall > 0 else { return nil }
+            return audio / wall * slotsBusy
+        }
+    }
+
+    /// Seconds since the on-device decoder last produced a token, nil if it
+    /// never ran. Read by the transcribe watchdog: a slow Mac that is still
+    /// decoding is not a hang.
+    nonisolated static func secondsSinceDecodeActivity() -> TimeInterval? {
+        DecodeMeter.secondsSinceActivity()
+    }
+
+    private enum DecodeOutcome {
+        case decoded([TranscriptionResult])
+        case rescued([GeminiTranscriber.Turn])
+    }
+
+    private enum DecodeEvent: Sendable {
+        case chunk(Int, Result<[TranscriptionResult], Error>)
+        case tick
+    }
+
+    /// Decode `workURL` chunk by chunk. Same chunker, same per-chunk call
+    /// and same timestamp stitching as `WhisperKit.transcribe(audioPath:)`
+    /// with `.vad` chunking (verified: identical text), but the chunk loop
+    /// is ours. WhisperKit's loop only reports a batch index, so with 16
+    /// workers the progress fraction moved once per 8 minutes of audio; on a
+    /// slow Mac that read as "no forward progress for 45 min" and the
+    /// watchdog failed transcripts that were still decoding.
+    private nonisolated static func decodeChunked(pipe: WhisperKit,
+                                                  workURL: URL,
+                                                  options: DecodingOptions,
+                                                  label: String,
+                                                  onProgress: (@Sendable (Double) -> Void)?,
+                                                  slowRescue: SlowRescue?) async throws -> DecodeOutcome {
+        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: workURL.path)
+        let window = pipe.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
+        let chunker = VADAudioChunker()
+        let chunks = try await chunker.chunkAll(audioArray: audio, maxChunkLength: window, decodeOptions: options)
+        // The audio is already cut, so per-chunk options carry no seek clips
+        // (mirrors WhisperKit's chunked path).
+        var chunkOptions = options
+        chunkOptions.clipTimestamps = []
+
+        // WhisperKit swaps its shared `progress` object out whenever it
+        // reports finished, unsynchronised, from whichever chunk task got
+        // there. A total it can never reach keeps that object in place.
+        pipe.progress.totalUnitCount = 1_000_000_000_000
+
+        let heartbeat: TranscriptionCallback = { _ in
+            DecodeMeter.touch()
+            return nil   // never request cancellation from here
+        }
+        let tickNs: UInt64 = 30 * 1_000_000_000
+        let total = chunks.count
+        var slots = [Result<[TranscriptionResult], Error>?](repeating: nil, count: total)
+        var rescue = slowRescue
+
+        return try await withThrowingTaskGroup(of: DecodeEvent.self) { group in
+            var next = 0
+            var inFlight = 0
+            var done = 0
+            // The timer lets the slow-Mac test run even when no chunk has
+            // finished yet (a Mac slow enough to need minutes per chunk).
+            if rescue != nil {
+                group.addTask { try? await Task.sleep(nanoseconds: tickNs); return .tick }
+            }
+            while done < total {
+                while inFlight < decodeWorkers, next < total {
+                    let index = next
+                    let samples = chunks[index].audioSamples
+                    next += 1
+                    inFlight += 1
+                    group.addTask {
+                        await decodeGate.acquire()
+                        if Task.isCancelled {
+                            await decodeGate.release()
+                            return .chunk(index, .failure(CancellationError()))
+                        }
+                        let ticket = DecodeMeter.began(audioSec: Double(samples.count) / Double(WhisperKit.sampleRate))
+                        let result: Result<[TranscriptionResult], Error>
+                        do {
+                            result = .success(try await pipe.transcribe(audioArray: samples,
+                                                                        decodeOptions: chunkOptions,
+                                                                        callback: heartbeat))
+                        } catch {
+                            result = .failure(error)
+                        }
+                        DecodeMeter.ended(ticket)
+                        await decodeGate.release()
+                        return .chunk(index, result)
+                    }
+                }
+                guard let event = try await group.next() else { break }
+                switch event {
+                case .chunk(let index, let result):
+                    slots[index] = result
+                    inFlight -= 1
+                    done += 1
+                    onProgress?(min(0.99, Double(done) / Double(total)))
+                case .tick:
+                    if rescue != nil {
+                        group.addTask { try? await Task.sleep(nanoseconds: tickNs); return .tick }
+                    }
+                }
+                try Task.checkCancellation()
+
+                if let ask = rescue,
+                   let factor = DecodeMeter.realtimeFactor(minElapsed: slowProbeAfter),
+                   factor < slowRealtimeFloor {
+                    rescue = nil   // one attempt per track
+                    FileLogger.log(String(format: "LocalWhisperTranscriber: %@ decoding at %.2fx real time (%d/%d chunks), this Mac is too slow, asking for a cloud rescue",
+                                          label, factor, done, total))
+                    if let turns = await ask() {
+                        group.cancelAll()
+                        return .rescued(turns)
+                    }
+                    try Task.checkCancellation()
+                    FileLogger.log("LocalWhisperTranscriber: \(label) no cloud rescue, staying on-device")
+                }
+            }
+            group.cancelAll()   // stops the timer
+
+            // WhisperKit drops a failed chunk without a word, so its 30 s of
+            // speech just go missing from the transcript. A busy Neural
+            // Engine does reject single requests ("Program Inference error",
+            // seen with 32 decodes queued on it: a tenth of the text was
+            // lost), and the same chunk decodes fine a moment later, so each
+            // failure gets one more try, alone.
+            var ordered = slots.map { $0 ?? .failure(CancellationError()) }
+            var firstError: Error?
+            var failed = 0
+            for index in ordered.indices {
+                guard case .failure(let error) = ordered[index] else { continue }
+                try Task.checkCancellation()
+                await decodeGate.acquire()
+                let retry = try? await pipe.transcribe(audioArray: chunks[index].audioSamples,
+                                                       decodeOptions: chunkOptions,
+                                                       callback: heartbeat)
+                await decodeGate.release()
+                if let retry {
+                    ordered[index] = .success(retry)
+                } else {
+                    failed += 1
+                    if firstError == nil { firstError = error }
+                }
+            }
+            try Task.checkCancellation()
+            // A hole or two is survivable (gap recovery re-transcribes voiced
+            // stretches that came back empty), but every chunk failing must
+            // not pass for an empty transcript.
+            if let error = firstError {
+                guard failed < total else { throw error }
+                FileLogger.log("LocalWhisperTranscriber: \(label) \(failed)/\(total) chunks failed twice (\(error.localizedDescription)), keeping the rest")
+            }
+            return .decoded(chunker.updateSeekOffsetsForResults(chunkedResults: ordered, audioChunks: chunks))
+        }
     }
 
     // Hallucination filtering lives in the shared `Hallucinations` helper.

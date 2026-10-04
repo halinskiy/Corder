@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.71] - 2026-10-04
+
+### Fixed
+
+- On-device transcription no longer fails on slower Macs. A Mac with 8 GB of memory could spend more than 45 minutes on a long meeting, and the freeze detector took that for a hang and marked the recording as failed while it was still working. Pressing Re-transcribe then started it over from zero. Progress is now counted chunk by chunk, so a transcript that is still moving is never stopped.
+- On-device transcription needs about a third less memory on 8 GB Macs, and several recordings queued at once now take turns instead of all decoding together.
+- If a Mac still transcribes slower than real time, a signed-in user's recording is finished in the cloud instead of taking hours.
+- The "Other side not recorded" warning no longer appears while you wait for a call to start. Before anyone has spoken there is nothing to record. The warning now shows only when audio is playing and Corder is not capturing it.
+- Free accounts no longer send text cleanup requests that the server always refuses.
+
 ## [0.15.70] - 2026-09-09
 
 ### Fixed

@@ -80,10 +80,27 @@ final class SystemAudioTap {
     // a true BT-switch wedge now takes ~10 s to trigger its first rebuild
     // instead of 1.5 s; that case is rare and re-recordable, whereas the
     // slow-Mac false alarm hit a paying tester's real meeting.
+    //
+    // And a third case that is not a failure at all: NOTHING IS PLAYING. The
+    // tap is fed by other processes' output, so while no process plays audio
+    // (a Zoom waiting room, an in-person meeting) the IOProc has nothing to
+    // deliver. The watchdog used to read that as a dead tap, spend both
+    // rebuilds on it and give up for good 30 s in, with the "other side not
+    // recorded" warning on a call where the other side had not said a word
+    // yet (bug report 2026-10-01: two recordings warned and abandoned, the
+    // third, started once the call was live, captured fine). So the watchdog
+    // now asks Core Audio whether any other process is running output. While
+    // none is, it only waits; rebuilds and the give-up are kept for a tap
+    // that stays silent while audio is actually playing.
     private let stateLock = NSLock()
     private var gotFirstBuffer = false
     private var generation = 0
     private var restarts = 0
+    /// The last watchdog check found nothing playing. The first check that
+    /// then sees audio grants one more full delay: the audio may have started
+    /// a moment ago and a healthy tap needs ~100 ms to deliver.
+    private var idleAtLastCheck = false
+    private var loggedIdle = false
     private let maxRestarts = 2
     private let watchdogDelay: TimeInterval = 10.0
     private let watchdogQueue = DispatchQueue(label: "com.3mpq.corder.systemtap.watchdog")
@@ -112,6 +129,8 @@ final class SystemAudioTap {
         stateLock.lock()
         gotFirstBuffer = false
         restarts = 0
+        idleAtLastCheck = false
+        loggedIdle = false
         generation += 1
         let gen = generation
         stateLock.unlock()
@@ -125,11 +144,29 @@ final class SystemAudioTap {
     private func armWatchdog(generation gen: Int) {
         watchdogQueue.asyncAfter(deadline: .now() + watchdogDelay) { [weak self] in
             guard let self = self else { return }
+            let playing = Self.otherProcessIsPlaying()
             self.stateLock.lock()
             let stale = gen != self.generation          // a stop()/restart superseded us
             let healthy = self.gotFirstBuffer
             let canRetry = self.restarts < self.maxRestarts
             if stale || healthy { self.stateLock.unlock(); return }
+            if !playing {
+                let firstTime = !self.loggedIdle
+                self.loggedIdle = true
+                self.idleAtLastCheck = true
+                self.stateLock.unlock()
+                if firstTime {
+                    FileLogger.log("SystemAudioTap: no IOProc audio yet and nothing is playing on this Mac, tap idle (not a failure), waiting for audio.")
+                }
+                self.armWatchdog(generation: gen)
+                return
+            }
+            if self.idleAtLastCheck {
+                self.idleAtLastCheck = false
+                self.stateLock.unlock()
+                self.armWatchdog(generation: gen)
+                return
+            }
             if !canRetry {
                 self.stateLock.unlock()
                 FileLogger.log("SystemAudioTap: still no audio after \(self.maxRestarts) restarts + \(self.watchdogDelay)s warm-up grace, giving up (tap genuinely not delivering: BT HFP/SCO, or a Mac that never brought the aggregate up; remote side not capturable).")
@@ -301,6 +338,42 @@ final class SystemAudioTap {
     }
 
     // MARK: - Core Audio helpers
+
+    /// True when any process other than Corder is running audio OUTPUT right
+    /// now, i.e. there is something for the tap to capture. Answers true
+    /// when Core Audio can't say (older macOS, a failed read), so an unknown
+    /// state keeps the rebuild-and-warn behaviour.
+    private static func otherProcessIsPlaying() -> Bool {
+        guard #available(macOS 14.4, *) else { return true }
+        var listAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject),
+                &listAddr, 0, nil, &size) == noErr else { return true }
+        let count = Int(size) / MemoryLayout<AudioObjectID>.size
+        guard count > 0 else { return false }
+        var procs = [AudioObjectID](repeating: AudioObjectID(kAudioObjectUnknown), count: count)
+        guard AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &listAddr, 0, nil, &size, &procs) == noErr else { return true }
+
+        let ours = processObject(forPID: getpid())
+        for proc in procs where proc != AudioObjectID(kAudioObjectUnknown) && proc != ours {
+            var running: UInt32 = 0
+            var rSize = UInt32(MemoryLayout<UInt32>.size)
+            var rAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioProcessPropertyIsRunningOutput,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            if AudioObjectGetPropertyData(proc, &rAddr, 0, nil, &rSize, &running) == noErr, running != 0 {
+                return true
+            }
+        }
+        return false
+    }
 
     private static func processObject(forPID pid: pid_t) -> AudioObjectID {
         var pidValue = pid
