@@ -7,6 +7,8 @@ transcribes either fully on-device (Apple Silicon Whisper, $0,
 nothing leaves your Mac) or through a single cloud Whisper provider
 you opted into.
 
+Download the app at [getcorder.com](https://getcorder.com).
+
 > Status-bar app. macOS 14+ (Sonoma). Apple Silicon recommended.
 
 ## What it does
@@ -53,6 +55,9 @@ When you opt into the cloud transcriber instead, only the audio for
 that one call is sent, to a single Whisper provider, for that one job.
 
 ## Install
+
+The signed, notarized build is at [getcorder.com](https://getcorder.com). To
+build from source:
 
 ```bash
 git clone https://github.com/halinskiy/Corder.git
