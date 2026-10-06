@@ -234,11 +234,9 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   };
 
   // Upsells are live again (0.15.72): the paid plans sell at launch prices
-  // since 2026-10-05. The speed variant waits 30 s so a short meeting that
-  // transcribes in under a minute is never interrupted by it; the other
-  // two are actionable at once.
-  const resolved = resolveUpsell(settings, usage);
-  const upsell: UpsellKind = resolved === "speed" && elapsed < 30 ? null : resolved;
+  // since 2026-10-05. Shown from the first second of transcribing (0.15.73,
+  // the maker's call; 0.15.72 held the speed variant back for 30 s).
+  const upsell: UpsellKind = resolveUpsell(settings, usage);
 
   const onUpsell = async () => {
     if (upsell === "best") {

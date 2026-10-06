@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.73] - 2026-10-06
+
+### Changed
+
+- The cloud plans offer on the transcribing card now appears as soon as transcription starts, not after 30 seconds.
+
 ## [0.15.72] - 2026-10-06
 
 ### Changed
