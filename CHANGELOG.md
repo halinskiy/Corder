@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.72] - 2026-10-06
+
+### Changed
+
+- While a recording is being transcribed on your Mac, the card now offers the cloud plans: on the same Mac, cloud transcription finishes 5 to 10 times sooner, and Pro starts at $3 a month. The offer appears after 30 seconds of waiting, and the cross hides it for four hours.
+
 ## [0.15.71] - 2026-10-04
 
 ### Fixed

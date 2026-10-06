@@ -233,11 +233,12 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
     }
   };
 
-  // Upsells are hidden for now: no paid plans are offered yet and the
-  // transcription flow is still being polished. Re-enable by assigning
-  // `resolveUpsell(settings, usage)` here once the pricing flow is ready.
-  const upsell: UpsellKind = null;
-  void resolveUpsell(settings, usage);
+  // Upsells are live again (0.15.72): the paid plans sell at launch prices
+  // since 2026-10-05. The speed variant waits 30 s so a short meeting that
+  // transcribes in under a minute is never interrupted by it; the other
+  // two are actionable at once.
+  const resolved = resolveUpsell(settings, usage);
+  const upsell: UpsellKind = resolved === "speed" && elapsed < 30 ? null : resolved;
 
   const onUpsell = async () => {
     if (upsell === "best") {
@@ -283,9 +284,9 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
   const upsellCopy =
     upsell === "speed"
       ? {
-          title: t.trans_upsell_speed_title ?? "Upgrade for speed",
-          desc: t.trans_upsell_speed_desc ?? "Cloud transcription runs several times faster than local.",
-          cta: t.trans_upsell_speed_cta ?? "Upgrade to Pro",
+          title: t.trans_upsell_speed_title ?? "Too slow?",
+          desc: t.trans_upsell_speed_desc ?? "Cloud transcription is 5 to 10 times faster. Pro starts at $3 a month.",
+          cta: t.trans_upsell_speed_cta ?? "See plans",
         }
       : upsell === "best"
       ? {
