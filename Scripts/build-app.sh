@@ -86,6 +86,12 @@ fi
 # TCC grants (the designated requirement changes), which is expected and
 # unavoidable when moving off the self-signed cert.
 SIGN_IDENTITY="${CORDER_SIGN_IDENTITY:-ScreenOCR Dev}"
+# Pin the keychain the identity is taken from. Another project's build
+# keychain earlier in the search list may hold a copy of the same Developer ID
+# and codesign would then prompt for that keychain's password, e.g.
+# CORDER_SIGN_KEYCHAIN=~/Library/Keychains/login.keychain-db
+KEYCHAIN_OPT=()
+[ -n "${CORDER_SIGN_KEYCHAIN:-}" ] && KEYCHAIN_OPT=(--keychain "$CORDER_SIGN_KEYCHAIN")
 ENTITLEMENTS="$ROOT/Corder.entitlements"
 # Notarization requires a secure timestamp on every signature. A
 # self-signed cert can't timestamp (no trusted TSA chain) and doesn't
@@ -144,20 +150,20 @@ if [ -d "$APP/Contents/Frameworks/Sparkle.framework" ]; then
         # sailed through the local build and only bounced back "Invalid" from
         # Apple ~5 min into notarization. Fail loudly instead.
         _tries=0
-        until codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --preserve-metadata=entitlements,flags "$helper"; do
+        until codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_OPT[@]+${KEYCHAIN_OPT[@]}}" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --preserve-metadata=entitlements,flags "$helper"; do
             _tries=$((_tries + 1))
             if [ "$_tries" -ge 3 ]; then
                 echo "ERROR: failed to codesign $helper after $_tries attempts (is a Corder instance running?)" >&2
                 exit 1
             fi
-            echo "codesign $helper failed, retry $_tries…" >&2
+            echo "codesign $helper failed, retry ${_tries}…" >&2
             sleep 1
         done
     done
-    codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" "$APP/Contents/Frameworks/Sparkle.framework"
+    codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_OPT[@]+${KEYCHAIN_OPT[@]}}" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" "$APP/Contents/Frameworks/Sparkle.framework"
 fi
-codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --entitlements "$ENTITLEMENTS" --identifier com.3mpq.Corder "$APP/Contents/MacOS/Corder"
-codesign --force --sign "$SIGN_IDENTITY" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --entitlements "$ENTITLEMENTS" --identifier com.3mpq.Corder "$APP"
+codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_OPT[@]+${KEYCHAIN_OPT[@]}}" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --entitlements "$ENTITLEMENTS" --identifier com.3mpq.Corder "$APP/Contents/MacOS/Corder"
+codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_OPT[@]+${KEYCHAIN_OPT[@]}}" "${TS_OPT[@]}" "${RUNTIME_OPT[@]+${RUNTIME_OPT[@]}}" --entitlements "$ENTITLEMENTS" --identifier com.3mpq.Corder "$APP"
 
 # 4b. On the notarizable (Developer ID) path, fail fast if ANY nested binary
 # is still adhoc-signed, Apple rejects adhoc, but `codesign --verify` treats
