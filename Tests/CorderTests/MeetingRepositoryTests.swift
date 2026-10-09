@@ -3,6 +3,23 @@ import GRDB
 @testable import Corder
 
 final class MeetingRepositoryTests: XCTestCase {
+    func test_purgeSegments_deletesOnlyExactHallucinations() throws {
+        let dbq = try freshDB()
+        let repo = MeetingRepository(dbq: dbq)
+        try repo.insertMeeting(Meeting.fixture(id: "m1"))
+        try repo.insertSpeaker(Speaker(id: "s1", meetingId: "m1", label: "Speaker 1", customName: nil, colorHex: "#000"))
+        try repo.insertSegment(Segment(id: nil, meetingId: "m1", speakerId: "s1", startMs: 0, endMs: 1000, text: "Спасибо за просмотр!", wordsJson: nil))
+        try repo.insertSegment(Segment(id: nil, meetingId: "m1", speakerId: "s1", startMs: 1000, endMs: 2000, text: "спасибо за просмотр друзья, идём дальше по плану", wordsJson: nil))
+        try repo.insertSegment(Segment(id: nil, meetingId: "m1", speakerId: "s1", startMs: 2000, endMs: 3000, text: "real sentence about the budget", wordsJson: nil))
+
+        let purged = try repo.purgeSegments(where: Hallucinations.isExactHallucination)
+        XCTAssertEqual(purged, 1)
+        let left = try repo.segments(forMeeting: "m1").map { $0.text }
+        XCTAssertEqual(left.count, 2)
+        XCTAssertFalse(left.contains("Спасибо за просмотр!"))
+        XCTAssertEqual(try repo.purgeSegments(where: Hallucinations.isExactHallucination), 0)
+    }
+
     private func freshDB() throws -> DatabaseQueue {
         let dbq = try DatabaseQueue()
         try Migrations.register().migrate(dbq)

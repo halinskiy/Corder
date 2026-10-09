@@ -23,7 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var chip = [CChar](repeating: 0, count: max(size, 1))
             sysctlbyname("machdep.cpu.brand_string", &chip, &size, nil, 0)
             let ram = ProcessInfo.processInfo.physicalMemory / 1_073_741_824
-            FileLogger.log("AppDelegate: Corder \(ver) (\(build)), \(ProcessInfo.processInfo.operatingSystemVersionString), \(String(cString: chip)), \(ram) GB RAM")
+            let pi = ProcessInfo.processInfo
+            FileLogger.log("AppDelegate: Corder \(ver) (\(build)), \(pi.operatingSystemVersionString), \(String(cString: chip)), \(ram) GB RAM, thermal \(pi.thermalState.rawValue), low power \(pi.isLowPowerModeEnabled)")
         }
         // Single-instance guard. THIS instance is the newest (a fresh
         // launch, a Sparkle update, or a CorderRelaunch), so reap any older

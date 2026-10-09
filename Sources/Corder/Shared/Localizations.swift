@@ -12,6 +12,10 @@ enum L {
         return dict[key] ?? en[key] ?? key
     }
     private static let en: [String: String] = [
+        // Recording errors (RecordingController.present)
+        "record_start_failed": "Could not start recording",
+        "record_save_failed": "Could not save the recording",
+        "record_low_disk": "Not enough disk space ({mb} MB free). Free up space first; the recording was not started so it cannot be lost when the disk fills up.",
         // Menu-bar popover
         "idle": "Not recording",
         "recording": "Recording",
@@ -75,6 +79,9 @@ enum L {
         "transcribe_failed_title": "Transcription error. Send a report.",
     ]
     private static let ru: [String: String] = [
+        "record_start_failed": "Не удалось начать запись",
+        "record_save_failed": "Не удалось сохранить запись",
+        "record_low_disk": "Мало места на диске ({mb} МБ). Освободи место, запись не начата, чтобы не потерять её при заполнении диска.",
         "idle": "Запись не идёт",
         "recording": "Идёт запись",
         "saving": "Сохраняем…",

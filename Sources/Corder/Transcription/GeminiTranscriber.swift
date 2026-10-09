@@ -518,7 +518,9 @@ enum GeminiTranscriber {
         // happily returns 200 with an empty body and no `X-Goog-Upload-URL`
         // header, the previous code path was failing here every time.
         let base = await Self.endpointBase()
-        let startURL = URL(string: "\(base.replacingOccurrences(of: "/v1beta", with: "/upload/v1beta"))/files?key=\(apiKey)")!
+        guard let startURL = URL(string: "\(base.replacingOccurrences(of: "/v1beta", with: "/upload/v1beta"))/files?key=\(apiKey)") else {
+            throw GError.network("bad upload URL")
+        }
         var startReq = URLRequest(url: startURL)
         startReq.httpMethod = "POST"
         startReq.setValue("resumable", forHTTPHeaderField: "X-Goog-Upload-Protocol")
@@ -581,7 +583,9 @@ enum GeminiTranscriber {
         // strip and rebuild.
         let name = (fileURI as NSString).lastPathComponent  // "abc123"
         let base = await Self.endpointBase()
-        let statusURL = URL(string: "\(base)/files/\(name)?key=\(apiKey)")!
+        guard let statusURL = URL(string: "\(base)/files/\(name)?key=\(apiKey)") else {
+            throw GError.network("bad file status URL")
+        }
         let proxyAuth = await Self.proxyAuthHeader()
 
         let deadline = Date().addingTimeInterval(120)
@@ -615,7 +619,9 @@ enum GeminiTranscriber {
     /// turn). Salvage is only allowed once we can't split any further.
     private static func generate(fileURI: String, apiKey: String, mode: TranscribeMode, expectedSpeakers: Int? = nil, salvageOnTruncation: Bool = true) async throws -> [Turn] {
         let base = await Self.endpointBase()
-        let url = URL(string: "\(base)/models/\(model):generateContent?key=\(apiKey)")!
+        guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(apiKey)") else {
+            throw GError.network("bad generateContent URL")
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -860,7 +866,9 @@ enum GeminiTranscriber {
     private static func deleteFile(fileURI: String, apiKey: String) async throws {
         let name = (fileURI as NSString).lastPathComponent
         let base = await Self.endpointBase()
-        let url = URL(string: "\(base)/files/\(name)?key=\(apiKey)")!
+        guard let url = URL(string: "\(base)/files/\(name)?key=\(apiKey)") else {
+            throw GError.network("bad file delete URL")
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
         if let h = await Self.proxyAuthHeader() {

@@ -6,11 +6,8 @@ import Foundation
 /// public and safe to ship in the binary (RLS is the security
 /// boundary, not these keys).
 ///
-/// The legacy `GoogleOAuth.swift` (loopback) and the Cloudflare
-/// Worker `/signup` path stay alive for the brief overlap period
-/// while the wizard learns to drive `client.auth.signInWithOAuth`
-/// instead. Once the new auth flow is the only path, both can be
-/// retired.
+/// Sign-in goes through `client.auth` (email + password, or Google via
+/// `signInWithOAuth`). The old loopback `GoogleOAuth.swift` is gone.
 enum SupabaseEnvironment {
     /// Project ref: `cfsajlsctzxgixjwslni`. Hosted in West EU.
     static let url = URL(string: "https://cfsajlsctzxgixjwslni.supabase.co")!

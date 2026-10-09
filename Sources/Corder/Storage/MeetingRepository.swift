@@ -624,6 +624,25 @@ struct MeetingRepository {
         }
     }
 
+    /// Delete every segment whose text matches `isJunk`, reading and
+    /// deleting inside ONE write transaction so a concurrent transcription
+    /// (clear + reinsert, which can reuse SQLite rowids) cannot slip in
+    /// between the snapshot and the delete. Returns the number deleted.
+    func purgeSegments(where isJunk: @escaping (String) -> Bool) throws -> Int {
+        try dbq.write { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT id, text FROM segments")
+            let ids: [Int64] = rows.compactMap { r in
+                let text: String = r["text"]
+                return isJunk(text) ? r["id"] : nil
+            }
+            guard !ids.isEmpty else { return 0 }
+            let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM segments WHERE id IN (\(placeholders))",
+                           arguments: StatementArguments(ids))
+            return ids.count
+        }
+    }
+
     func allSegments() throws -> [Segment] {
         try dbq.read { db in
             try Segment.order(Column("start_ms")).fetchAll(db)

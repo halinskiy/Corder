@@ -684,7 +684,10 @@ enum WhisperTranscriber {
         let route = await Self.resolveRoute(apiKey: apiKey, backend: backend)
 
         let boundary = "----CorderWhisperBoundary-\(UUID().uuidString)"
-        var req = URLRequest(url: URL(string: route.endpoint)!)
+        guard let endpointURL = URL(string: route.endpoint) else {
+            throw WhisperError.network("bad transcription endpoint: \(route.endpoint)")
+        }
+        var req = URLRequest(url: endpointURL)
         req.httpMethod = "POST"
         req.setValue(route.authHeader, forHTTPHeaderField: "Authorization")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")

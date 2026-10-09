@@ -76,7 +76,7 @@ final class RecordingController {
         // start under ~500 MB free instead of recording into a wall.
         if let free = Self.freeDiskBytes(), free < 500 * 1024 * 1024 {
             let mb = free / (1024 * 1024)
-            present(error: "Мало места на диске (\(mb) МБ). Освободи место, запись не начата, чтобы не потерять её при заполнении диска.")
+            present(error: L.notif("record_low_disk").replacingOccurrences(of: "{mb}", with: "\(mb)"))
             return
         }
 
@@ -121,7 +121,7 @@ final class RecordingController {
             FileLogger.log("RecordingController: started \(id)")
         } catch {
             FileLogger.log("RecordingController: start failed for \(id): \(error)")
-            present(error: "Не удалось начать запись: \(error.localizedDescription)")
+            present(error: "\(L.notif("record_start_failed")): \(error.localizedDescription)")
             try? AppContext.shared.repo.deleteMeeting(id: id)
             AppContext.shared.recordingState = .idle
         }
@@ -366,7 +366,7 @@ final class RecordingController {
                     kind: "info")
             }
         } catch {
-            present(error: "Не удалось сохранить запись: \(error.localizedDescription)")
+            present(error: "\(L.notif("record_save_failed")): \(error.localizedDescription)")
         }
 
         AppContext.shared.recordingState = .idle

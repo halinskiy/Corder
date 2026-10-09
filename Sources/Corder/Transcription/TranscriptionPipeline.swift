@@ -160,10 +160,14 @@ final class TranscriptionPipeline {
         FileLogger.log("cancel(): cancelling transcription for \(meetingId)")
         task.cancel()
         activeTasks[meetingId] = nil
-        let repo = AppContext.shared.repo
-        if var meeting = (try? repo.meeting(id: meetingId)) {
-            meeting.status = .failed
-            try? repo.updateMeeting(meeting)
+        // Targeted status write, never a full-row update: the row may be
+        // mid-change (title, pin, speakers) and a stale copy would clobber it.
+        do { try AppContext.shared.repo.setStatus(meetingId: meetingId, status: .failed) }
+        catch { FileLogger.log("cancel(): setStatus(.failed) failed for \(meetingId): \(error)") }
+        // The old full-row update also mirrored the row to Supabase; keep
+        // that so the cloud copy does not stay "transcribing".
+        if let m = (try? AppContext.shared.repo.meeting(id: meetingId)) ?? nil {
+            SupabaseSync.upsertMeeting(m)
         }
     }
 
@@ -221,7 +225,8 @@ final class TranscriptionPipeline {
                     FileLogger.log("transcribe(): WATCHDOG, \(meetingId) no forward progress for 45 min, marking failed")
                     TranscriptionErrors.record(meetingId: meetingId,
                                                message: "Transcription took too long and was stopped. Please try again.")
-                    try? repo.setStatus(meetingId: meetingId, status: .failed)
+                    do { try repo.setStatus(meetingId: meetingId, status: .failed) }
+                    catch { FileLogger.log("watchdog: setStatus(.failed) failed for \(meetingId): \(error)") }
                 }
             }
         }
@@ -295,7 +300,8 @@ final class TranscriptionPipeline {
                         FileLogger.log("transcribe(): advanced cap reached on Intel (\(usedAdv)s/\(limit)s, no on-device fallback), refusing cloud for this run")
                         TranscriptionErrors.record(meetingId: meetingId,
                                                    message: "Monthly cloud limit reached. Upgrade your plan or wait for next month.")
-                        try? repo.setStatus(meetingId: meetingId, status: .failed)
+                        do { try repo.setStatus(meetingId: meetingId, status: .failed) }
+                        catch { FileLogger.log("transcribe(): setStatus(.failed) failed for \(meetingId): \(error)") }
                         return
                     }
                 }
@@ -730,7 +736,11 @@ final class TranscriptionPipeline {
                     // back half-TRANSLATED into English (2026-09-08 report).
                     let micTally = WhisperTranscriber.LanguageTally()
                     rawOtherTurns = try await WhisperTranscriber.$languageTally.withValue(micTally) {
-                        try await geminiRawTurns(wavURL: micURL, meetingId: meetingId)
+                        // Same 0.9 ceiling as the dual-track ProgressAggregator; the
+                        // last 10% is the post-processing after ASR.
+                        try await geminiRawTurns(wavURL: micURL, meetingId: meetingId, onProgress: { f in
+                            TranscriptionProgressStore.set(meetingId: meetingId, fraction: f * 0.9)
+                        })
                     }
                     rawUserTurns = []
                     var meetingLang: String? = nil
@@ -1199,7 +1209,8 @@ final class TranscriptionPipeline {
             // the whole struct would revert the attempt counter, breaking the
             // retry budget (failedRetriableMeetingIds would never exclude a
             // permanently-failing row → unbounded paid re-transcribe loop).
-            try? repo.setStatus(meetingId: meetingId, status: .failed)
+            do { try repo.setStatus(meetingId: meetingId, status: .failed) }
+            catch { FileLogger.log("transcribe(): setStatus(.failed) failed for \(meetingId): \(error)") }
             // Mirror the reason to the cloud row. A failed meeting used to
             // reach Supabase as status=failed and nothing else, so a user
             // who never sends a bug report (a new signup whose first two
@@ -1224,7 +1235,8 @@ final class TranscriptionPipeline {
         await syncToSupabase(meetingId: meetingId)
     }
 
-    /// Mirror this meeting's transcript + audio to Supabase.
+    /// Mirror this meeting's transcript to Supabase (audio only when the
+    /// `cloudAudioBackup` switch is on, see `SupabaseSync.uploadRecording`).
     /// Idempotent, speakers/segments are wholesale-replaced server-
     /// side, recordings_meta upserts on `(meeting_id, kind)`. Safe
     /// to call repeatedly (e.g. after a re-transcribe).
@@ -1291,7 +1303,8 @@ final class TranscriptionPipeline {
         // start of transcribe(); for cache-hit re-maps we still need to
         // clear here because no fresh transcription was done.
         let before = Self.snapshotTranscript(meetingId: meetingId, repo: repo)
-        try? repo.clearTranscript(meetingId: meetingId)
+        do { try repo.clearTranscript(meetingId: meetingId) }
+        catch { FileLogger.log("transcribe(): clearTranscript failed for \(meetingId) (\(error)), inserts may duplicate") }
 
         // Pick userLabel. If the caller already knows it (cache hit), use
         // that and skip the channel-gate. Otherwise compare mic.wav vs
@@ -1611,7 +1624,8 @@ final class TranscriptionPipeline {
                                    stampNow: Bool = true,
                                    repo: MeetingRepository) throws {
         let before = Self.snapshotTranscript(meetingId: meetingId, repo: repo)
-        try? repo.clearTranscript(meetingId: meetingId)
+        do { try repo.clearTranscript(meetingId: meetingId) }
+        catch { FileLogger.log("transcribe(): clearTranscript failed for \(meetingId) (\(error)), inserts may duplicate") }
 
         // ── In-person: everyone (incl. the device owner) is on the one
         //    mic, so there is NO dedicated "you" track. The call-path
@@ -1770,7 +1784,8 @@ final class TranscriptionPipeline {
         // old transcript by the time it delegates here; a direct call takes
         // its own snapshot before wiping.
         let before = snapshot ?? Self.snapshotTranscript(meetingId: meetingId, repo: repo)
-        try? repo.clearTranscript(meetingId: meetingId)
+        do { try repo.clearTranscript(meetingId: meetingId) }
+        catch { FileLogger.log("transcribe(): clearTranscript failed for \(meetingId) (\(error)), inserts may duplicate") }
 
         // Per-label totals drive both the keep/merge ranking (by
         // speaking time) and the display order (by first appearance,
@@ -2057,8 +2072,14 @@ final class TranscriptionPipeline {
         let drifted = snapshot.counts.filter { $0.key != meetingName }
             .map { "\($0.key)×\($0.value)" }.joined(separator: ",")
         FileLogger.log("transcribe(): \(wavURL.lastPathComponent) language drift (\(drifted)) vs meeting '\(meetingName)', re-transcribing forced to '\(forcedISO)'")
-        let forced = try? await WhisperTranscriber.$languageOverride.withValue(forcedISO) {
-            try await geminiRawTurns(wavURL: wavURL, meetingId: meetingId)
+        let forced: [GeminiTranscriber.Turn]?
+        do {
+            forced = try await WhisperTranscriber.$languageOverride.withValue(forcedISO) {
+                try await geminiRawTurns(wavURL: wavURL, meetingId: meetingId)
+            }
+        } catch {
+            FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass threw: \(error)")
+            forced = nil
         }
         guard let forced, !forced.isEmpty else {
             FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass empty/failed, keeping original")
@@ -2224,11 +2245,20 @@ final class TranscriptionPipeline {
                 // Force the meeting language: a 10-second mumble chunk is
                 // exactly what per-chunk auto-detect mishears (and Whisper
                 // then translates instead of transcribing).
-                recovered = try? await WhisperTranscriber.$languageOverride.withValue(iso) {
-                    try await self.geminiRawTurns(wavURL: tmp, meetingId: meetingId)
+                do {
+                    recovered = try await WhisperTranscriber.$languageOverride.withValue(iso) {
+                        try await self.geminiRawTurns(wavURL: tmp, meetingId: meetingId)
+                    }
+                } catch {
+                    FileLogger.log("gap recovery: forced re-ASR threw for \(meetingId): \(error)")
+                    recovered = nil
                 }
             } else {
-                recovered = try? await geminiRawTurns(wavURL: tmp, meetingId: meetingId)
+                do { recovered = try await geminiRawTurns(wavURL: tmp, meetingId: meetingId) }
+                catch {
+                    FileLogger.log("gap recovery: re-ASR threw for \(meetingId): \(error)")
+                    recovered = nil
+                }
             }
             guard let recovered, !recovered.isEmpty else { continue }
             for r in recovered {
@@ -3309,22 +3339,26 @@ final class TranscriptionPipeline {
     /// One-time scrub at app launch, sweeps known hallucinated lines out
     /// of the existing transcripts so users don't have to re-run anything.
     static func purgeKnownHallucinations(repo: MeetingRepository) {
-        do {
-            let segs = try repo.allSegments()
-            // EXACT-only here (not isHallucination's 60% substring rule):
-            // this is a permanent DELETE of already-stored transcript lines,
-            // so only nuke a segment that is ENTIRELY a known artefact. A
-            // real sentence that merely contains a pattern must survive.
-            let badIds = segs.compactMap { s -> Int64? in
-                guard let id = s.id else { return nil }
-                return Hallucinations.isExactHallucination(s.text) ? id : nil
+        // Off the main actor: on a large library this walked every segment
+        // synchronously before the menu bar icon appeared. The launch
+        // re-enqueue only inserts segments that already passed
+        // isHallucination (a superset of isExactHallucination), so a
+        // concurrent transcription cannot hand this purge real speech.
+        Task.detached(priority: .utility) {
+            do {
+                // EXACT-only here (not isHallucination's 60% substring rule):
+                // this is a permanent DELETE of already-stored transcript
+                // lines, so only nuke a segment that is ENTIRELY a known
+                // artefact. Snapshot and delete happen in one transaction
+                // (purgeSegments), so a reused rowid cannot be mistaken for
+                // a junk line.
+                let purged = try repo.purgeSegments(where: Hallucinations.isExactHallucination)
+                if purged > 0 {
+                    FileLogger.log("startup: purged \(purged) hallucinated segments from existing transcripts")
+                }
+            } catch {
+                FileLogger.log("startup: purgeKnownHallucinations failed: \(error)")
             }
-            if !badIds.isEmpty {
-                try repo.deleteSegments(ids: badIds)
-                FileLogger.log("startup: purged \(badIds.count) hallucinated segments from existing transcripts")
-            }
-        } catch {
-            FileLogger.log("startup: purgeKnownHallucinations failed: \(error)")
         }
     }
 

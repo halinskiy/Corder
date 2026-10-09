@@ -813,7 +813,7 @@ const en: Strings = {
   settings_stats_title: "Statistics",
   settings_stats_desc: "Show recording counters on the dashboard.",
   settings_preroll_title: "Catch the start of calls",
-  settings_preroll_desc: "Keep the beginning of a detected call.",
+  settings_preroll_desc: "When a call is detected, keeps a few seconds of audio from before you press Record. Discarded unless you start the recording.",
   transcribe_failed_short: "Transcription failed.",
   summary_failed_short: "Summary didn't work.",
   chapters_failed_short: "Chapters didn't work.",

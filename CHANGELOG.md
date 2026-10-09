@@ -16,6 +16,23 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.79] - 2026-10-09
+
+### Changed
+
+- Recordings with only a microphone track now show transcription progress instead of a still bar.
+- The pre-roll setting explains what it keeps: a few seconds of audio from before you press Record when a call is detected, and nothing before the click when it is off.
+- Error messages when a recording cannot start or be saved are now in the app language instead of Russian only.
+- Diagnostics while signed out use a random per-install identifier, so guest devices are counted as devices instead of all sharing one id.
+
+### Fixed
+
+- Cancelling a transcription no longer writes the whole meeting row, so a title or pin changed at the same moment is kept.
+- Database errors while a transcript is being replaced are logged instead of silently ignored.
+- A malformed transcription endpoint fails that meeting instead of crashing the app.
+- The launch cleanup of known hallucinated lines runs in the background instead of delaying the menu bar icon on large libraries.
+- The log now records time spent waiting for a decode slot, the pinned language and vocabulary prompt size, thermal state and Low Power Mode, the WhisperKit version, mic write errors and a failed screen stream in the recording summary.
+
 ## [0.15.78] - 2026-10-09
 
 ### Changed

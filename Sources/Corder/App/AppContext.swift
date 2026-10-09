@@ -785,7 +785,7 @@ enum RecordingState: Equatable {
     /// "record this call?" offer it's promoted to `.recording` keeping the
     /// captured-from-the-start audio/video; if they decline (or the call
     /// ends first) it's discarded as if it never happened. Opt-in, gated by
-    /// `AppSettings.prerollEnabled` (default OFF).
+    /// `AppSettings.prerollEnabled` (default ON since 2026-06-23).
     case preroll(meetingId: String, startedAt: Date)
 }
 

@@ -26,7 +26,7 @@ let package = Package(
         // ~50-100 MB of Core ML runtime to the bundle; the model itself
         // is fetched on-demand the first time the user flips to the
         // `whisperLocal` provider, not bundled. Apple Silicon only, // Intel callers fall back to Gemini at the pipeline level.
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.0.0"),
         // Supabase backend client (Auth + PostgREST + Storage + Realtime).
         // Replaces the GRDB local DB / loopback Google OAuth /
         // Cloudflare Worker signup chain. Used for account-scoped

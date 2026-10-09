@@ -111,6 +111,13 @@ final class CaptureEngine: NSObject {
     // stays at 0 across a recording, AVAudioEngine isn't getting any audio
     // (mic disabled / device race with Telegram / etc.).
     private var micFramesWritten: Int64 = 0
+    // Stop-summary diagnostics: how many mic buffers failed to write (the
+    // first error is logged in full, the rest only counted) and whether the
+    // screen stream failed to start, in which case the recording went on
+    // without video. Both used to be a single log line that was easy to miss.
+    private var micWriteErrors: Int = 0
+    private var micFirstWriteError: String?
+    private var videoStartFailed = false
     // Lazily-built converter used ONLY after a mid-recording input-device
     // switch, when the new device delivers a different format than mic.wav was
     // opened with (a headphones/AirPods mic ≠ the built-in mic). The normal
@@ -180,6 +187,11 @@ final class CaptureEngine: NSObject {
     nonisolated(unsafe) private var loggedFirstSCKBuffer = false
 
     func start(meetingId: String, source: CaptureSource) async throws {
+        // Stop-summary diagnostics reset before anything can set them
+        // (the SCStream start below may flag videoStartFailed).
+        micWriteErrors = 0
+        micFirstWriteError = nil
+        videoStartFailed = false
         FileLogger.log("CaptureEngine.start: meetingId=\(meetingId) source=\(source)")
         // Reject re-entry synchronously, BEFORE any await, so two near-
         // simultaneous starts (manual + auto-detect) can't
@@ -515,6 +527,7 @@ final class CaptureEngine: NSObject {
                     FileLogger.log("CaptureEngine.start: SCStream.startCapture OK")
                 } catch {
                     FileLogger.log("CaptureEngine.start: SCStream.startCapture FAILED: \(error). Continuing, audio tap + mic still record; no video.")
+                    self.videoStartFailed = true
                 }
                 self.stream = activeStream
             } catch {
@@ -813,6 +826,11 @@ final class CaptureEngine: NSObject {
         // makes closing them safe now that the writers run off the MainActor.
         writeQueue.sync { }
         FileLogger.log("CaptureEngine.stop: mic frames captured = \(micFramesWritten)")
+        if micWriteErrors > 0 || videoStartFailed {
+            let first = micFirstWriteError.map { " (first: \($0))" } ?? ""
+            let video = videoStartFailed ? ", video: SCStream start failed, no video for this recording" : ""
+            FileLogger.log("CaptureEngine.stop: degraded recording: mic write errors = \(micWriteErrors)\(first)\(video)")
+        }
         FileLogger.log("CaptureEngine.stop: system frames captured = \(systemFramesWritten) (BT/SCO scenario shows 0 here)")
 
         // Close system audio file so it's safe to read for transcription.
@@ -1064,7 +1082,11 @@ extension CaptureEngine: SCStreamOutput {
                     try micFile.write(from: toWrite)
                     self.micFramesWritten &+= Int64(toWrite.frameLength)
                 } catch {
-                    FileLogger.log("CaptureEngine: mic.wav write failed, \(error)")
+                    self.micWriteErrors += 1
+                    if self.micFirstWriteError == nil {
+                        self.micFirstWriteError = "\(error)"
+                        FileLogger.log("CaptureEngine: mic.wav write failed, \(error) (further failures are counted in the stop summary)")
+                    }
                 }
             }
             // Push raw peak to the level meter, the floating HUD pill. Always

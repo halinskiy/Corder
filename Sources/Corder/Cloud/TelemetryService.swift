@@ -18,6 +18,16 @@ enum TelemetryService {
     private static let endpoint = URL(string: "https://corder-api.empqwork.workers.dev/telemetry")!
     private static let lastSentKey = "Corder.telemetry.lastSentAt"
     private static let oneDay: TimeInterval = 24 * 3600
+    private static let installIDKey = "Corder.telemetry.installId"
+    /// Random id made once per install, used while signed out. Before this
+    /// every guest hashed an empty email and collapsed into one id, so the
+    /// device count in the admin stats was wrong by the number of guests.
+    private static var installID: String {
+        if let id = UserDefaults.standard.string(forKey: installIDKey) { return id }
+        let id = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(id, forKey: installIDKey)
+        return id
+    }
 
     // MARK: - Reliability counters (the whole point: measure far-end loss)
     //
@@ -62,8 +72,15 @@ enum TelemetryService {
     }
 
     private static func send() async {
-        let email = AppSettings.userEmail ?? ""
-        let anonID = sha256(email.lowercased())
+        // Signed in: a stable hash of the email (one id per account across
+        // Macs). Signed out: the per-install id.
+        let anonID: String
+        if let email = AppSettings.userEmail, !email.isEmpty {
+            anonID = sha256(email.lowercased())
+        } else {
+            anonID = installID
+        }
+        FileLogger.log("TelemetryService: daily ping as \(anonID.prefix(8)) (\(AppSettings.userEmail == nil ? "guest, install id" : "account hash"))")
         let macModel = readMacModel()
         let macOS = ProcessInfo.processInfo.operatingSystemVersionString
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"

@@ -40,6 +40,11 @@ enum LocalWhisperTranscriber {
     /// packages on disk are a touch larger). The string raw value
     /// matches the directory WhisperKit creates under
     /// `<downloadBase>/argmaxinc/whisperkit-coreml/<repoName>/`.
+    /// Pinned with `exact:` in Package.swift: `decodeChunked` leans on
+    /// WhisperKit internals (VADAudioChunker, seek offsets), so a silent
+    /// minor bump could change decoding. Logged with every decode summary.
+    static let whisperKitVersion = "1.0.0"
+
     enum Variant: String, CaseIterable {
         /// OpenAI Whisper large-v3-turbo (the September 2024 release: the
         /// large-v3 encoder with a 4-layer decoder), the default on-device
@@ -1035,6 +1040,15 @@ enum LocalWhisperTranscriber {
            let tokenizer = pipe.tokenizer {
             decodeOpts.promptTokens = tokenizer.encode(text: " " + prompt)
         }
+        let promptTokenCount = decodeOpts.promptTokens?.count ?? 0
+        FileLogger.log("LocalWhisperTranscriber: \(audioURL.lastPathComponent) language=\(forcedLang ?? "auto") promptTokens=\(promptTokenCount)")
+        if promptTokenCount > 223 {
+            // WhisperKit 1.0.0 keeps only the LAST 223 prompt tokens
+            // (TextDecoder maxPromptLen), so a long vocabulary silently
+            // loses its first terms. Log-only until a benchmark says how
+            // to cap it.
+            FileLogger.log("LocalWhisperTranscriber: vocabulary prompt is \(promptTokenCount) tokens, WhisperKit keeps the last 223, the first terms are dropped")
+        }
 
         // Decode through our own chunk scheduler instead of WhisperKit's
         // built-in chunked path (see `decodeChunked`): bounded concurrency,
@@ -1178,6 +1192,15 @@ enum LocalWhisperTranscriber {
     /// FIFO counting semaphore. One instance guards every on-device decode
     /// in the process, so tracks and meetings interleave chunk by chunk
     /// instead of multiplying the worker count.
+    /// Total time this decode spent waiting for a DecodeGate permit across
+    /// its concurrent chunk tasks. Log-only, feeds the decode summary.
+    private final class GateWaitMeter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var total: TimeInterval = 0
+        func add(_ seconds: TimeInterval) { lock.lock(); total += seconds; lock.unlock() }
+        var seconds: TimeInterval { lock.lock(); defer { lock.unlock() }; return total }
+    }
+
     private actor DecodeGate {
         private var free: Int
         private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -1291,6 +1314,7 @@ enum LocalWhisperTranscriber {
                                                   onProgress: (@Sendable (Double) -> Void)?,
                                                   slowRescue: SlowRescue?) async throws -> DecodeOutcome {
         let decodeStart = Date()
+        let gateWait = GateWaitMeter()
         let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: workURL.path)
         let window = pipe.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
         let chunker = VADAudioChunker()
@@ -1330,7 +1354,9 @@ enum LocalWhisperTranscriber {
                     next += 1
                     inFlight += 1
                     group.addTask {
+                        let gateT0 = Date()
                         await decodeGate.acquire()
+                        gateWait.add(Date().timeIntervalSince(gateT0))
                         if Task.isCancelled {
                             await decodeGate.release()
                             return .chunk(index, .failure(CancellationError()))
@@ -1391,7 +1417,9 @@ enum LocalWhisperTranscriber {
             for index in ordered.indices {
                 guard case .failure(let error) = ordered[index] else { continue }
                 try Task.checkCancellation()
+                let gateT0 = Date()
                 await decodeGate.acquire()
+                gateWait.add(Date().timeIntervalSince(gateT0))
                 let retry = try? await pipe.transcribe(audioArray: chunks[index].audioSamples,
                                                        decodeOptions: chunkOptions,
                                                        callback: heartbeat)
@@ -1413,7 +1441,7 @@ enum LocalWhisperTranscriber {
             }
             logDecodeSummary(label: label, chunks: total, audioSamples: audio.count,
                              results: ordered.compactMap { try? $0.get() }.flatMap { $0 },
-                             since: decodeStart)
+                             since: decodeStart, gateWait: gateWait.seconds)
             return .decoded(chunker.updateSeekOffsetsForResults(chunkedResults: ordered, audioChunks: chunks))
         }
     }
@@ -1428,7 +1456,8 @@ enum LocalWhisperTranscriber {
                                                      chunks: Int,
                                                      audioSamples: Int,
                                                      results: [TranscriptionResult],
-                                                     since start: Date) {
+                                                     since start: Date,
+                                                     gateWait: TimeInterval) {
         let audioSec = Double(audioSamples) / Double(WhisperKit.sampleRate)
         let wall = Date().timeIntervalSince(start)
         var languages: [String: Int] = [:]
@@ -1442,9 +1471,10 @@ enum LocalWhisperTranscriber {
         }
         let langs = languages.sorted { $0.value > $1.value }
             .map { "\($0.key) \($0.value)" }.joined(separator: ", ")
-        FileLogger.log(String(format: "LocalWhisperTranscriber: %@ decoded %d chunks, %.0f s of audio in %.1f s (%.2fx real time), encode %.1f s, decode %.1f s, %.0f decoder loops, %.0f fallbacks, languages: %@",
+        let thermal = ProcessInfo.processInfo.thermalState.rawValue
+        FileLogger.log(String(format: "LocalWhisperTranscriber: %@ decoded %d chunks, %.0f s of audio in %.1f s (%.2fx real time), encode %.1f s, decode %.1f s, %.0f decoder loops, %.0f fallbacks, gate wait %.1f s, thermal %d, WhisperKit %@, languages: %@",
                               label, chunks, audioSec, wall, audioSec / max(wall, 0.001),
-                              encode, decode, loops, fallbacks, langs.isEmpty ? "none" : langs))
+                              encode, decode, loops, fallbacks, gateWait, thermal, whisperKitVersion, langs.isEmpty ? "none" : langs))
     }
 
     // Hallucination filtering lives in the shared `Hallucinations` helper.
