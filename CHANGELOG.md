@@ -24,8 +24,11 @@ behaviour, not internal refactors.
 - On-device transcripts now get the same language guard as cloud ones: a track with a few windows misheard as English is re-transcribed in the meeting's language, and summaries and titles follow that language too.
 - Speech islands on the on-device path are now joined with a short pause, as on the cloud path, so Whisper keeps sentence boundaries instead of running short replies together.
 
+- The cloud plans card shown during on-device transcription now says cloud transcription is about twice as fast, not 5 to 10 times: with the new model that is the honest figure.
+
 ### Fixed
 
+- Signed in but not admin, and "sign in to share" while signed in: when the account's refresh token had been revoked (a sign-out on another Mac, or two Macs sharing one migrated session), Corder kept the cached email but dropped the admin role and tier, and cloud calls went out unauthenticated. A dead token now signs the app out properly, explains why, and opens the sign-in modal; a network blip no longer touches the cached role or tier. Signing out on one Mac no longer signs out your other Macs.
 - The log now records the app version, macOS version and hardware at launch, and one line per transcribed track with decoding time, decoder steps, fallbacks and detected languages, so a slow transcription can be diagnosed from a report.
 
 ## [0.15.74] - 2026-10-09

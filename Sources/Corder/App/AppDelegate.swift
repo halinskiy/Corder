@@ -262,7 +262,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // mirror the signed-in identity + backfill cloud meetings. Never
         // blocks the Library and never gates: signed-out is a fine state.
         Task { @MainActor in
-            let session = try? await SupabaseClientHolder.shared.auth.session
+            let session: Session?
+            do {
+                session = try await SupabaseClientHolder.shared.auth.session
+            } catch {
+                // A dead refresh token (revoked elsewhere, rotated away by a
+                // cloned session) is a sign-out and is announced as one; a
+                // network blip keeps the cached email, role and tier exactly
+                // as they were (the old code cleared admin/tier on ANY
+                // failure, so a paid admin launching offline, or with a dead
+                // token, looked signed in but lost admin and could not share).
+                if AuthSessionLoss.isDefinitive(error) {
+                    if AppSettings.userEmail != nil || SupabaseClientHolder.shared.auth.currentUser != nil {
+                        AuthController.shared.sessionLost(error)
+                    } else {
+                        AppSettings.setIsAdmin(false)
+                        AppSettings.setUserTier(.free)
+                    }
+                } else {
+                    FileLogger.log("AppDelegate: session restore failed transiently (\(error)), keeping the cached identity, role and tier")
+                }
+                return
+            }
             guard session != nil,
                   let user = SupabaseClientHolder.shared.auth.currentUser else {
                 // Signed-out (guest): clear any stale admin/tier left over from

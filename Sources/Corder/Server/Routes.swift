@@ -506,7 +506,11 @@ enum Routes {
             // is what gates the UI; the dangling server session can
             // expire on its own.
             do {
-                try await SupabaseClientHolder.shared.auth.signOut()
+                // LOCAL scope: only this Mac's refresh token is revoked. The
+                // default (global) scope revoked every session of the user,
+                // so signing out on one Mac silently killed the other Mac's
+                // session, which then showed "signed in" with a dead token.
+                try await SupabaseClientHolder.shared.auth.signOut(scope: .local)
             } catch {
                 FileLogger.log("AccountAPI: Supabase signOut failed (\(error)), clearing local state anyway")
             }

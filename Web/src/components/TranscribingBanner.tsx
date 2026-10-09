@@ -283,7 +283,7 @@ export function TranscribingBanner({ meetingId, startedAtMs, progress, modelDown
     upsell === "speed"
       ? {
           title: t.trans_upsell_speed_title ?? "Too slow?",
-          desc: t.trans_upsell_speed_desc ?? "Cloud transcription is 5 to 10 times faster. Pro starts at $3 a month.",
+          desc: t.trans_upsell_speed_desc ?? "Cloud transcription is about twice as fast and keeps your Mac cool. Pro starts at $3 a month.",
           cta: t.trans_upsell_speed_cta ?? "See plans",
         }
       : upsell === "best"

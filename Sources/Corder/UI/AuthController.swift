@@ -42,6 +42,33 @@ final class AuthController {
         }
     }
 
+    /// The account's session is gone for good (see `AuthSessionLoss`): drop
+    /// the SDK's dead stored session and every cached identity bit, so the
+    /// app stops presenting a signed-in user it can no longer act for, then
+    /// open the sign-in modal with the reason. No-op for a plain guest (no
+    /// cached email and no stored user), so a signed-out Mac calling a cloud
+    /// route never gets nagged. Runs the LOCAL half of `accountSignOut`:
+    /// nothing is sent to the server (the token is already dead there) and
+    /// the app is not relaunched (the account folder stays, re-signing in
+    /// lands in the same one).
+    func sessionLost(_ error: Error?) {
+        let hasIdentity = AppSettings.userEmail != nil
+            || SupabaseClientHolder.shared.auth.currentUser != nil
+        guard hasIdentity else { return }
+        FileLogger.log("AuthController: session lost (\(error.map { "\($0)" } ?? "no stored session")), signing out locally")
+        Task { @MainActor in
+            try? await SupabaseClientHolder.shared.auth.signOut(scope: .local)
+            AppSettings.setLicenceKey(nil)
+            AppSettings.setUserName(nil)
+            AppSettings.setUserEmail(nil)
+            AppSettings.setUserTier(.free)
+            AppSettings.setIsAdmin(false)
+            let why = "Your session expired or was signed out on another Mac. Sign in again to share and sync."
+            LibraryWindow.shared.postToast(title: "Signed out", body: why, kind: "info")
+            push(visible: true, error: why)
+        }
+    }
+
     // MARK: - Email + password
 
     private func submit(email rawEmail: String, password: String, mode: String, agreed: Bool) {

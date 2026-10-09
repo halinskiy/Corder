@@ -133,7 +133,17 @@ enum GeminiTranscriber {
     static func jwtForProxy() async -> String {
         // Async accessor = auto-refresh of an expired token (see the same fix
         // in ShareService / WhisperTranscriber, 2026-09-08). Signed out → "".
-        (try? await SupabaseClientHolder.shared.auth.session)?.accessToken ?? ""
+        // A refresh token that is dead for good signs the account out
+        // visibly (AuthController.sessionLost) instead of silently sending
+        // every cloud call unauthenticated from a "signed-in" app.
+        do {
+            return try await SupabaseClientHolder.shared.auth.session.accessToken
+        } catch {
+            if AuthSessionLoss.isDefinitive(error) {
+                await MainActor.run { AuthController.shared.sessionLost(error) }
+            }
+            return ""
+        }
     }
     /// Authorization header to attach to proxy requests. Returns
     /// `nil` for direct (signed-out) traffic, Google reads the

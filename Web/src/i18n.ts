@@ -686,7 +686,7 @@ const en: Strings = {
   trans_stop: "Stop transcription",
   trans_cancelled: "Transcription stopped",
   trans_upsell_speed_title: "Too slow?",
-  trans_upsell_speed_desc: "Cloud transcription is 5 to 10 times faster. Pro starts at $3 a month.",
+  trans_upsell_speed_desc: "Cloud transcription is about twice as fast and keeps your Mac cool. Pro starts at $3 a month.",
   trans_upsell_speed_cta: "See plans",
   trans_upsell_best_title: "Try our best model",
   trans_upsell_best_desc: "Cloud transcription is faster and more accurate. Included in your plan.",

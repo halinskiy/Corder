@@ -13,6 +13,7 @@ import Foundation
 enum ShareService {
     enum ShareError: LocalizedError {
         case notSignedIn
+        case sessionExpired
         case notReady
         case syncFailed(Error)
         case audioUnavailable
@@ -22,6 +23,7 @@ enum ShareService {
         var errorDescription: String? {
             switch self {
             case .notSignedIn:     return "Sign in to share a link."
+            case .sessionExpired:  return "Your session expired or was signed out on another Mac. Sign in again to share."
             case .notReady:        return "Transcribe the meeting before sharing it."
             case .syncFailed:      return "Could not sync the transcript, so the link was not created."
             case .audioUnavailable: return "The audio for this meeting is not available to share."
@@ -53,7 +55,16 @@ enum ShareService {
         //    /share/upload-url and /share/create calls even though the
         //    PostgREST push (which auto-refreshes) succeeded a second earlier
         //    (hit live 2026-09-08).
-        guard let session = try? await SupabaseClientHolder.shared.auth.session else {
+        let session: Session
+        do {
+            session = try await SupabaseClientHolder.shared.auth.session
+        } catch {
+            if AuthSessionLoss.isDefinitive(error), AppSettings.isSignedIn {
+                // The cached email says signed in but the token is dead: fix
+                // the app's own state and say why, instead of a bare "sign in".
+                AuthController.shared.sessionLost(error)
+                throw ShareError.sessionExpired
+            }
             throw ShareError.notSignedIn
         }
         let jwt = session.accessToken

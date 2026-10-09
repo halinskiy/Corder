@@ -74,8 +74,25 @@ enum SupabaseTierSync {
         guard now.timeIntervalSince(lastRefresh) >= throttleSeconds else { return }
         lastRefresh = now
         Task { @MainActor in
-            try? await SupabaseClientHolder.shared.auth.refreshSession()
+            await refreshThenApply()
+        }
+    }
+
+    /// Refresh the session and mirror its claims. A definitive loss of the
+    /// refresh token signs the account out (see `AuthSessionLoss`); a
+    /// transient failure applies NOTHING, because the SDK keeps the stale
+    /// stored user after a failed refresh and mirroring its claims would
+    /// flip admin/tier back and forth between a dead token and the cache.
+    static func refreshThenApply() async {
+        do {
+            _ = try await SupabaseClientHolder.shared.auth.refreshSession()
             applyFromCurrentSession()
+        } catch {
+            if AuthSessionLoss.isDefinitive(error) {
+                AuthController.shared.sessionLost(error)
+            } else {
+                FileLogger.log("SupabaseTierSync: refresh failed transiently (\(error)), keeping role and tier")
+            }
         }
     }
 
@@ -97,8 +114,7 @@ enum SupabaseTierSync {
             let deadline = Date().addingTimeInterval(seconds)
             while Date() < deadline {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                try? await SupabaseClientHolder.shared.auth.refreshSession()
-                applyFromCurrentSession()
+                await refreshThenApply()
                 if AppSettings.userTier != .free { break }
             }
         }
