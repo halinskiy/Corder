@@ -1243,6 +1243,13 @@ input[type="search"]::-webkit-search-decoration {
   border-radius: 0;
   pointer-events: none;
 }
+/* No divider on a selected row, nor right under it: a straight line
+   across (or hugging) the rounded active fill read as a lid on a box
+   (Kostya, 2026-10-09). Same as the Finder sidebar. */
+.meeting-item.active::before,
+.meeting-item.active + .meeting-item::before {
+  background: transparent;
+}
 /* Sidebar lives on `--bg-elev`, so a hover that uses the toolbar's
    `--bg-hover` (which is whiter than `--bg-elev`) actually makes items
    *lighter* than the surrounding panel, invisible. Use explicit darker

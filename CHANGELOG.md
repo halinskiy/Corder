@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.77] - 2026-10-09
+
+### Changed
+
+- The sidebar no longer draws a divider on the selected session or directly under it, so the straight line no longer crosses the rounded highlight.
+
 ## [0.15.76] - 2026-10-09
 
 ### Changed
