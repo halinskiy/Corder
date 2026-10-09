@@ -1,5 +1,5 @@
 import React from "react";
-import { Users, Search, X, Scissors } from "lucide-react";
+import { ArrowLeft, Users, Search, X, Scissors } from "lucide-react";
 import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
 import { ShareModal } from "./ShareModal";
 import { Tooltip } from "./Tooltip";
@@ -559,13 +559,22 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
           <div className="detail-tab-col detail-tab-col-right">
             {inSettings ? (
               // Settings opens from the header (profile menu OR the
-              // gear in MainHeader). The strip then shows
-              // `← General Settings` + `Advanced Settings` chips. The
-              // chevron lives inside the General chip, clicking it
-              // when already on General returns to the Recording pane
-              // (same back affordance as the old single Settings
-              // chip), clicking it from Advanced switches to General.
+              // gear in MainHeader). The strip then shows a back arrow
+              // (leaves Settings, back to the Recording pane) +
+              // `General` + `Advanced` tabs.
               <>
+                {/* Arrow to the left of General leaves Settings (back to the
+                    Recording pane). It is the one explicit exit in the strip,
+                    the General chip no longer doubles as one. */}
+                <span
+                  className="tab tab-back"
+                  role="button"
+                  aria-label={t.settings_back ?? "Back"}
+                  title={t.settings_back ?? "Back"}
+                  onClick={() => setRightTab("recording")}
+                >
+                  <ArrowLeft size={16} strokeWidth={2} />
+                </span>
                 <span
                   className={"tab" + (rightTab === "settings-general" ? " active" : "")}
                   role="button"

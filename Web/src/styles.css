@@ -2141,8 +2141,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--fg-muted);
   padding: 4px 0 12px;
   cursor: pointer;
+  /* The transparent bottom border only reserves the indicator's 2 px, the
+     active bar itself is painted by `.tab.active::after` (see below). */
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   margin-bottom: -1px;
+  position: relative;
   transition: color 60ms ease;
   /* No focus ring, the active state is the bottom border + bold text,
      not the browser's default rounded outline on <button>. */
@@ -2155,7 +2159,31 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* No font-weight change on active, bolder text is wider and shifted
    the layout when switching tabs. Active = colour + bottom border only,
    constant metrics. */
-.tab.active { color: var(--fg); border-bottom-color: var(--fg); }
+.tab.active { color: var(--fg); }
+/* The active indicator is a FILLED 2 px bar, not the border: WebKit paints a
+   lone bottom border with softened, rounded-looking ends (reported on the
+   Settings / Transcript strips), a painted rect keeps the ends square. It sits
+   exactly on the reserved border area, so the strip's geometry is unchanged. */
+.tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background: var(--fg);
+  border-radius: 0;
+  pointer-events: none;
+}
+/* Icon-only "leave Settings" tab to the left of General. Same box as a text
+   tab (stretches to the strip's row, same reserved bottom border) so the
+   hairline geometry does not move; the arrow centres in the content box.
+   Never `.active`, so it never draws the indicator. */
+.tab-back {
+  display: inline-flex;
+  align-items: center;
+}
+.tab-back svg { display: block; }
 .tab.disabled { color: var(--fg-dim); cursor: pointer; }
 .tab.disabled:hover { color: var(--fg-dim); }
 

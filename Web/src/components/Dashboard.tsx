@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { getSettings } from "../api";
 import { NewsBanner } from "./NewsBanner";
 import type { Lang, T } from "../i18n";
@@ -176,11 +176,22 @@ export function Dashboard({ onStart, isRecording, onStop, t, lang, onResizeSplit
         </div>
         <div className="detail-tab-col detail-tab-col-right">
           {inSettings && (
-            // Settings mode, `← General Settings` doubles as back
-            // affordance (returns to Recent when clicked while
-            // General is already active), `Advanced Settings` is a
-            // plain sibling tab. Same pattern as MeetingView's strip.
+            // Settings mode: a back arrow (leaves Settings, back to
+            // Recent) + `General` + `Advanced` tabs. Same pattern as
+            // MeetingView's strip.
             <>
+              {/* Arrow to the left of General leaves Settings (back to the
+                  Recent / ghost column). It is the one explicit exit in the
+                  strip, the General chip no longer doubles as one. */}
+              <span
+                className="tab tab-back"
+                role="button"
+                aria-label={t.settings_back ?? "Back"}
+                title={t.settings_back ?? "Back"}
+                onClick={() => setRightSection("recent")}
+              >
+                <ArrowLeft size={16} strokeWidth={2} />
+              </span>
               <span
                 className={"tab" + (rightSection === "settings-general" ? " active" : "")}
                 role="button"

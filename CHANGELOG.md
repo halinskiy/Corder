@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.74] - 2026-10-09
+
+### Fixed
+
+- The line under the active tab (Transcript, Summary, Chapters, Recording, General, Advanced) now has square ends instead of rounded ones.
+
+### Added
+
+- A back arrow to the left of General closes Settings with one click.
+
 ## [0.15.73] - 2026-10-06
 
 ### Changed

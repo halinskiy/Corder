@@ -51,6 +51,7 @@ interface Strings {
   tab_settings: string;
   tab_general_settings?: string;
   tab_advanced_settings?: string;
+  settings_back?: string;
   tab_integrations: string;
   toast_soon: string;
   settings_draft_note: string;
@@ -475,6 +476,7 @@ const en: Strings = {
   tab_settings: "Settings",
   tab_general_settings: "General",
   tab_advanced_settings: "Advanced",
+  settings_back: "Back",
   settings_draft_note: "Draft. Settings still in progress.",
   settings_sec_notifications: "Notifications",
   settings_notifications: "System notifications",
