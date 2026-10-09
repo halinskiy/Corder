@@ -258,9 +258,8 @@ ours.
 
 ## Telemetry
 
-Opt-in (`Help improve Corder` toggle in Settings → General, default
-ON during the test period, will revert to default-OFF before paid
-plans ship). When on, Corder sends a single envelope once per 24 h
+On by default, opt-out with the `Help improve Corder` toggle in
+Settings → General. When on, Corder sends a single envelope once per 24 h
 to the Worker `/telemetry` endpoint:
 
 - App version, macOS version, Mac model, RAM, tier

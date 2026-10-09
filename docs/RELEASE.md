@@ -32,12 +32,9 @@ The version lives in two files:
    automatically.
 2. A `corder-updates` GitHub repo with a `gh-pages` branch and a
    `appcast.xml` pointing at release zips on `https://halinskiy.github.io/corder-updates/`.
-3. `~/.config/corder/notary-creds.json` with Apple ID + app-specific
-   password for `xcrun notarytool`. Format:
-
-   ```json
-   {"apple_id":"…","team_id":"…","password":"…"}
-   ```
+3. A notarytool keychain profile named `Corder`, created once with
+   `xcrun notarytool store-credentials Corder --apple-id <id> --team-id PDB9JGGX74 --password <app-specific>`
+   and passed to the scripts as `NOTARY_KEYCHAIN_PROFILE=Corder`.
 
 ## Step-by-step
 
@@ -145,7 +142,7 @@ Optional: open a GitHub Release with the same notes.
     <item>
       <title>0.7.0</title>
       <pubDate>Mon, 04 May 2026 14:00:00 +0000</pubDate>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.2</sparkle:minimumSystemVersion>
       <enclosure
         url="https://halinskiy.github.io/corder-updates/Corder-0.7.0.zip"
         sparkle:version="0.7.0"

@@ -198,8 +198,9 @@ Settings {
   // on the meeting row. Frontend Summary tab then renders cached.
   auto_summary?: boolean;
   auto_chapters?: boolean;
-  // Opt-in, default OFF (absent ≡ off): telemetry, launch_at_login, and
-  // stats_enabled. stats_enabled shows the Welcome (home) statistics card.
+  // telemetry is ON by default (absent ≡ on) and opt-out; launch_at_login
+  // and stats_enabled are opt-in, default OFF (absent ≡ off).
+  // stats_enabled shows the Welcome (home) statistics card.
   // (The Statistics settings block was removed from the Settings UI.)
   telemetry?: boolean;
   launch_at_login?: boolean;

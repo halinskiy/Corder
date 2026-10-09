@@ -9,13 +9,13 @@ you opted into.
 
 Download the app at [getcorder.com](https://getcorder.com).
 
-> Status-bar app. macOS 14+ (Sonoma). Apple Silicon recommended.
+> Status-bar app. macOS 14.2 or newer, Apple Silicon only (the binary is arm64).
 
 ## What it does
 
 - **Records**, single click in the menu bar or the in-app Start
   button inside the Library window. Captures system
-  audio (Core-Audio process tap + ScreenCaptureKit backup) and your
+  audio (Core Audio process tap) and your
   microphone (via AVAudioEngine) onto **separate** `.wav` tracks. The
   HUD pill floats over every Space while you're recording, with a live
   waveform meter so you can tell capture is actually working.
@@ -51,8 +51,11 @@ Off-the-shelf meeting tools (Grain, Otter, Fireflies) ship audio to
 their own servers and join the call as a participant. Corder runs on
 your machine, never joins anything, and can transcribe entirely
 on-device (Apple Silicon Whisper) so no audio ever leaves your Mac.
-When you opt into the cloud transcriber instead, only the audio for
-that one call is sent, to a single Whisper provider, for that one job.
+When a transcript runs in the cloud instead (paid tiers, or the free
+tier's fallback when the Mac cannot run the model), only the audio for
+that one call is sent through our relay to a Whisper provider (Groq,
+then Cloudflare Workers AI, then OpenAI Whisper) for that one job.
+Summaries, titles and chapters use Google Gemini on the transcript text.
 
 ## Install
 

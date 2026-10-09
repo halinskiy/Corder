@@ -6,9 +6,12 @@
 
 ## Prerequisites
 
-- macOS 14 (Sonoma) or newer. Apple Silicon strongly preferred.
-- Xcode 15+ (for the bundled SDK / Swift 6 compiler), or just the
-  Command Line Tools if you don't need the IDE.
+- macOS 14.2 or newer on Apple Silicon (the app is arm64 only).
+- Command Line Tools (Swift 6.2, SDK 26.x) for building the app: prefix
+  every build script with `DEVELOPER_DIR=/Library/Developer/CommandLineTools`.
+  Xcode 27 is only needed for `swift test` (XCTest), run it without that
+  prefix. Xcode's own SwiftPM lays out the resource bundle differently and
+  the scripts refuse the result.
 - Node 20+ (for the Vite frontend).
 - A self-signed code-signing identity called `ScreenOCR Dev` in your
   Keychain, or whatever identity is referenced in
