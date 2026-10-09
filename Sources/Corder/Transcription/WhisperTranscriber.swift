@@ -79,18 +79,25 @@ enum WhisperTranscriber {
     static func iso639(_ language: String) -> String? {
         let l = language.lowercased()
         if l.count == 2, l.allSatisfy({ $0.isLetter }) { return l }  // already ISO
-        let map: [String: String] = [
-            "english": "en", "russian": "ru", "ukrainian": "uk", "german": "de",
-            "french": "fr", "spanish": "es", "italian": "it", "portuguese": "pt",
-            "polish": "pl", "dutch": "nl", "turkish": "tr", "arabic": "ar",
-            "chinese": "zh", "japanese": "ja", "korean": "ko", "hindi": "hi",
-            "czech": "cs", "swedish": "sv", "romanian": "ro", "greek": "el",
-            "hebrew": "he", "hungarian": "hu", "finnish": "fi", "danish": "da",
-            "norwegian": "no", "bulgarian": "bg", "belarusian": "be",
-            "kazakh": "kk", "serbian": "sr", "croatian": "hr", "slovak": "sk",
-            "catalan": "ca", "indonesian": "id", "vietnamese": "vi", "thai": "th",
-        ]
-        return map[l]
+        return languageNameToISO[l]
+    }
+    private static let languageNameToISO: [String: String] = [
+        "english": "en", "russian": "ru", "ukrainian": "uk", "german": "de",
+        "french": "fr", "spanish": "es", "italian": "it", "portuguese": "pt",
+        "polish": "pl", "dutch": "nl", "turkish": "tr", "arabic": "ar",
+        "chinese": "zh", "japanese": "ja", "korean": "ko", "hindi": "hi",
+        "czech": "cs", "swedish": "sv", "romanian": "ro", "greek": "el",
+        "hebrew": "he", "hungarian": "hu", "finnish": "fi", "danish": "da",
+        "norwegian": "no", "bulgarian": "bg", "belarusian": "be",
+        "kazakh": "kk", "serbian": "sr", "croatian": "hr", "slovak": "sk",
+        "catalan": "ca", "indonesian": "id", "vietnamese": "vi", "thai": "th",
+    ]
+    /// The reverse of `iso639`: the lowercase English NAME the `LanguageTally`
+    /// is keyed by, for a provider that reports ISO codes (WhisperKit on
+    /// device). Unmapped codes come back unchanged so they still tally.
+    static func languageName(forISO iso: String) -> String {
+        let code = iso.lowercased()
+        return languageNameToISO.first { $0.value == code }?.key ?? code
     }
 
     enum WMode {

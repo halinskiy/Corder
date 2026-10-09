@@ -99,6 +99,7 @@ final class TranscriptionPipeline {
             do {
                 try await LocalWhisperTranscriber.downloadOnly(variant)
                 FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) ready")
+                LocalWhisperTranscriber.reclaimLegacyModelIfUnused()
             } catch {
                 FileLogger.log("TranscriptionPipeline.prewarm: \(variant.rawValue) download failed, \(error)")
             }

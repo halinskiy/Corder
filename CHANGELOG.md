@@ -16,6 +16,18 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.75] - 2026-10-09
+
+### Changed
+
+- On-device transcription now uses Whisper large-v3-turbo, the same model family as the cloud. The model that shipped as "Turbo" until now was the full large-v3 with a 32-layer decoder; the real turbo has 4. Measured on an M1 Air with a 7-minute two-track call: both tracks decoded in 30 seconds instead of 131, and the text agreed with the cloud transcript slightly better. The 1.5 GB model downloads in the background on the first launch after the update; the old 3 GB model is removed once the new one is on disk.
+- On-device transcripts now get the same language guard as cloud ones: a track with a few windows misheard as English is re-transcribed in the meeting's language, and summaries and titles follow that language too.
+- Speech islands on the on-device path are now joined with a short pause, as on the cloud path, so Whisper keeps sentence boundaries instead of running short replies together.
+
+### Fixed
+
+- The log now records the app version, macOS version and hardware at launch, and one line per transcribed track with decoding time, decoder steps, fallbacks and detected languages, so a slow transcription can be diagnosed from a report.
+
 ## [0.15.74] - 2026-10-09
 
 ### Fixed

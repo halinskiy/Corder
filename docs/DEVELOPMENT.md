@@ -159,10 +159,16 @@ KEPT and unrelated to `i18n.ts`.
 ### Bump the on-device (WhisperKit) model
 
 `Sources/Corder/Transcription/LocalWhisperTranscriber.swift` →
-`Variant`. There is **one** variant now, `.turbo`
-(`openai_whisper-large-v3_turbo`, ~1.5 GB); Small/base/tiny were dropped
-(Small removed 2026-06-26), and `defaultVariant`, `offlineFallbackVariant`
-and `firstDownloadedVariant` all return `.turbo`. To add a size, add a
+`Variant`. The default is `.turbo`, OpenAI's large-v3-turbo
+(`openai_whisper-large-v3-v20240930_turbo`, ~1.5 GB, 4-layer decoder). Two
+more cases exist for admins only: `.turboCompact`
+(`openai_whisper-large-v3-v20240930_626MB`, Argmax's compressed turbo) and
+`.largeV3` (`openai_whisper-large-v3_turbo`, the FULL large-v3 with a
+32-layer decoder that shipped as "Turbo" up to 0.15.74; in WhisperKit's
+naming the `_turbo` suffix is a compression variant, not OpenAI's turbo).
+Small/base/tiny were dropped (Small removed 2026-06-26);
+`defaultVariant` and `offlineFallbackVariant` return `.turbo`, and
+`firstDownloadedVariant` prefers it. To add a size, add a
 `case` to the enum, give it `displayName` / size / tokenizer repo, and
 decide whether it should change `defaultVariant`. The Core ML package
 downloads on first use into `AppPaths.modelsDir`

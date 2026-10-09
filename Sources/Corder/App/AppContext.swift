@@ -306,6 +306,21 @@ enum AppSettings {
         UserDefaults.standard.set(true, forKey: key)
         FileLogger.log("AppSettings: one-time forced System notifications OFF for all users (0.15.18)")
     }
+    /// 0.15.75 moved the default on-device model from the full large-v3
+    /// (which had shipped under the name "Turbo") to the real large-v3-turbo.
+    /// An admin who had explicitly picked the old model carries a stored raw
+    /// value that now resolves to `.largeV3`; clear it ONCE so every Mac moves
+    /// to the new default. The legacy model stays selectable afterwards.
+    static func migrateLegacyLocalVariantOnce() {
+        let key = "Corder.migration.localVariantTurbo.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        if UserDefaults.standard.string(forKey: kWhisperLocalVariant)
+            == LocalWhisperTranscriber.Variant.largeV3.rawValue {
+            UserDefaults.standard.removeObject(forKey: kWhisperLocalVariant)
+            FileLogger.log("AppSettings: one-time reset of the on-device model pick to the default (0.15.75)")
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
     static func setCaptureAudio(_ v: Bool)   { setFlag(kCaptureAudio, v) }
     static func setAutoTranscribe(_ v: Bool) { setFlag(kAutoTranscribe, v) }
     static func setAutoTitle(_ v: Bool)      { setFlag(kAutoTitle, v) }

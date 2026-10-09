@@ -11,6 +11,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         FileLogger.log("AppDelegate: applicationDidFinishLaunching")
+        // Version, OS and hardware first thing in the log: a slow or failed
+        // transcription report is unreadable without knowing which build ran
+        // on what (the 2026-10-07 slow run could not even be tied to a version).
+        do {
+            let info = Bundle.main.infoDictionary
+            let ver = info?["CFBundleShortVersionString"] as? String ?? "?"
+            let build = info?["CFBundleVersion"] as? String ?? "?"
+            var size = 0
+            sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0)
+            var chip = [CChar](repeating: 0, count: max(size, 1))
+            sysctlbyname("machdep.cpu.brand_string", &chip, &size, nil, 0)
+            let ram = ProcessInfo.processInfo.physicalMemory / 1_073_741_824
+            FileLogger.log("AppDelegate: Corder \(ver) (\(build)), \(ProcessInfo.processInfo.operatingSystemVersionString), \(String(cString: chip)), \(ram) GB RAM")
+        }
         // Single-instance guard. THIS instance is the newest (a fresh
         // launch, a Sparkle update, or a CorderRelaunch), so reap any older
         // Corder still running, otherwise two processes race the same
@@ -22,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // One-time: force System notifications OFF for the whole base (default
         // flipped to opt-in in 0.15.18). Same idempotent migration shape.
         AppSettings.forceNotificationsOffOnceIfNeeded()
+        AppSettings.migrateLegacyLocalVariantOnce()
         // Multi-account local layout: if there's still a legacy
         // flat `corder.db` at supportRoot AND we already know
         // which user owns this Mac (email persisted from previous
@@ -80,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // longer write it). One-time-per-launch, guarded to never remove a
         // meeting's only system track.
         Self.reclaimDeadSCKBackups()
+        LocalWhisperTranscriber.reclaimLegacyModelIfUnused()
         // Shrink retained audio (mic/system/playback) to 16 kHz mono 16-bit PCM,
         // the format ASR + playback actually use, reclaiming the capture-time
         // 44.1/48 kHz stereo Float32 waste. Heavy (transcodes files), so it runs

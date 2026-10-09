@@ -41,29 +41,48 @@ enum LocalWhisperTranscriber {
     /// matches the directory WhisperKit creates under
     /// `<downloadBase>/argmaxinc/whisperkit-coreml/<repoName>/`.
     enum Variant: String, CaseIterable {
-        /// Multilingual large-v3 turbo, the ONLY on-device model now,
-        /// ~1.5 GB on disk, ≥10x real-time on M-series. Whisper Small was
-        /// dropped (2026-06-26): Turbo is the single model everywhere, no
-        /// picker. (base/tiny were dropped earlier for quality.) Re-add a
-        /// case here to bring a second size back.
-        case turbo = "openai_whisper-large-v3_turbo"
+        /// OpenAI Whisper large-v3-turbo (the September 2024 release: the
+        /// large-v3 encoder with a 4-layer decoder), the default on-device
+        /// model and the same model family the cloud path runs on Groq.
+        /// In WhisperKit's naming this is `large-v3-v20240930`; the `_turbo`
+        /// SUFFIX there means Argmax's compressed variant of whatever model
+        /// precedes it, NOT OpenAI's turbo. Until 0.15.75 Corder loaded
+        /// `openai_whisper-large-v3_turbo` believing it was turbo: that is
+        /// the FULL large-v3 with a 32-layer decoder (config.json
+        /// `decoder_layers: 32`, 1.7 GB TextDecoder), which is why on-device
+        /// decoding ran 5 to 10 times slower than whisper.cpp with the real
+        /// turbo. See `largeV3` below.
+        case turbo = "openai_whisper-large-v3-v20240930_turbo"
+        /// Same turbo model, further compressed by Argmax (626 MB on disk).
+        /// Candidate for 8 GB Macs; admin-only until measured.
+        case turboCompact = "openai_whisper-large-v3-v20240930_626MB"
+        /// The full large-v3 (32-layer decoder) that shipped as "Turbo" up to
+        /// 0.15.74. Kept selectable for admins (A/B against `turbo`) and so a
+        /// folder already on disk still resolves; it is NOT a default anymore.
+        case largeV3 = "openai_whisper-large-v3_turbo"
 
         /// Display name shown in the (admin-only) picker / download button.
         var label: String {
             switch self {
             case .turbo: return "Whisper Turbo"
+            case .turboCompact: return "Whisper Turbo compact"
+            case .largeV3: return "Whisper Large v3 (full, legacy)"
             }
         }
         /// Human-readable approximate download size (HuggingFace).
         var sizeLabel: String {
             switch self {
             case .turbo: return "1.5 GB"
+            case .turboCompact: return "600 MB"
+            case .largeV3: return "3 GB"
             }
         }
         /// Integer MB for sorting / UI conditionals.
         var sizeMB: Int {
             switch self {
-            case .turbo: return 1500
+            case .turbo: return 1555
+            case .turboCompact: return 596
+            case .largeV3: return 3000
             }
         }
     }
@@ -138,6 +157,12 @@ enum LocalWhisperTranscriber {
     /// sail through unchanged; idle mic tracks get squeezed.
     private static let vadMinSavings: Double = 0.10
     private static let vadEmptyFloorMs: Int64 = 500
+    /// Silence inserted between concatenated speech islands so Whisper still
+    /// hears sentence boundaries, same value as the cloud path
+    /// (`WhisperTranscriber.vadJoinGapMs`). The local pass used to butt the
+    /// islands together (0 ms), which merges short replies into run-on
+    /// segments and cuts windows mid-sentence.
+    private static let vadJoinGapMs: Int64 = 250
 
     /// Lazily-initialised WhisperKit instance plus the variant it was
     /// loaded for, so a variant switch tears down the old pipe and
@@ -303,7 +328,7 @@ enum LocalWhisperTranscriber {
     /// connection mid-run, we can only fall back to a model that's
     /// already on disk (the network just dropped).
     nonisolated static func firstDownloadedVariant() -> Variant? {
-        for v in [Variant.turbo] where isModelDownloaded(v) {
+        for v in [Variant.turbo, .turboCompact, .largeV3] where isModelDownloaded(v) {
             return v
         }
         return nil
@@ -319,6 +344,35 @@ enum LocalWhisperTranscriber {
     nonisolated static func fallbackVariant() -> Variant? {
         if isModelDownloaded(offlineFallbackVariant) { return offlineFallbackVariant }
         return firstDownloadedVariant()
+    }
+
+    /// Up to 0.15.74 the on-device model was the full large-v3 (3 GB on
+    /// disk, see `Variant.largeV3`). Once the real turbo default is on disk
+    /// and nobody picked the legacy model, its folder and HuggingFace download
+    /// cache are dead weight on every Mac that updated, so they are reclaimed
+    /// at launch and right after the prewarm download. An admin who picks
+    /// `largeV3` again simply re-downloads it. Never runs while the default
+    /// model is still downloading (the legacy model is the only one that could
+    /// serve a transcript until then).
+    nonisolated static func reclaimLegacyModelIfUnused() {
+        let legacy = Variant.largeV3
+        guard AppSettings.whisperLocalVariant != legacy,
+              currentProgress(defaultVariant) == nil,
+              isModelDownloaded(defaultVariant) else { return }
+        let fm = FileManager.default
+        let targets = [modelFolderURL(legacy), huggingFaceDownloadCacheURL(legacy)]
+            .filter { fm.fileExists(atPath: $0.path) }
+        guard !targets.isEmpty else { return }
+        var bytes: Int64 = 0
+        for url in targets {
+            if let walker = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
+                for case let file as URL in walker {
+                    bytes += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                }
+            }
+            try? fm.removeItem(at: url)
+        }
+        FileLogger.log("LocalWhisper: removed the legacy full large-v3 model (\(legacy.rawValue)), freed \(bytes / 1_000_000) MB")
     }
 
     nonisolated private static var downloadBaseURL: URL { AppPaths.modelsDir }
@@ -790,7 +844,7 @@ enum LocalWhisperTranscriber {
     nonisolated private static func tokenizerRepoFolderURL(_ variant: Variant) -> URL {
         let repo: String
         switch variant {
-        case .turbo: repo = "openai/whisper-large-v3"
+        case .turbo, .turboCompact, .largeV3: repo = "openai/whisper-large-v3"
         }
         return downloadBaseURL
             .appendingPathComponent("models", isDirectory: true)
@@ -801,8 +855,10 @@ enum LocalWhisperTranscriber {
     /// Turbo shares the large-v3 tokenizer (`openai/whisper-large-v3`).
     /// Mirrors WhisperKit's internal `tokenizerNameForVariant`.
     nonisolated private static func tokenizerModelVariant(_ variant: Variant) -> ModelVariant {
+        // large-v3-turbo shares large-v3's vocabulary (51866 tokens), so every
+        // variant stages the same `openai/whisper-large-v3` tokenizer.
         switch variant {
-        case .turbo: return .largev3
+        case .turbo, .turboCompact, .largeV3: return .largev3
         }
     }
 
@@ -933,12 +989,12 @@ enum LocalWhisperTranscriber {
             let concat = dir.appendingPathComponent("speech.wav")
             do {
                 let proj = try VoiceActivityDetector.concatenateSpeech(
-                    audioURL: audioURL, segments: segs, outURL: concat)
+                    audioURL: audioURL, segments: segs, outURL: concat, gapMs: vadJoinGapMs)
                 workURL = concat
                 projection = proj
                 tmpDir = dir
-                FileLogger.log(String(format: "LocalWhisperTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments)",
-                                      Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count))
+                FileLogger.log(String(format: "LocalWhisperTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments, %dms joins)",
+                                      Int(durationSec), Int(speechMs / 1000), savingsRatio * 100, segs.count, Int(vadJoinGapMs)))
             } catch {
                 try? FileManager.default.removeItem(at: dir)
                 FileLogger.log("LocalWhisperTranscriber: VAD concat failed (\(error)), using original")
@@ -1021,6 +1077,21 @@ enum LocalWhisperTranscriber {
             throw LocalWhisperError.transcribeFailed(error.localizedDescription)
         }
 
+        // Report the language WhisperKit detected per window into the
+        // pipeline's per-track tally, exactly as the cloud parser does, so the
+        // language-drift guard (majority language, forced re-pass of a track
+        // with a few windows misheard as English, polish and title in the
+        // meeting's language) works for on-device transcripts too. Before
+        // 0.15.75 the local path dropped `result.language`, so the tally
+        // stayed empty, the meeting language read as '?' and the guard that
+        // 0.15.39 / 0.15.70 added only ever protected cloud users. The tally
+        // is keyed by language NAME; WhisperKit reports ISO codes.
+        if let tally = WhisperTranscriber.languageTally {
+            for r in results where !r.segments.isEmpty {
+                tally.add(WhisperTranscriber.languageName(forISO: r.language), weight: r.segments.count)
+            }
+        }
+
         // WhisperKit's chunked transcribe returns an array of results, one
         // per window. Flatten segments across all windows; each segment
         // already carries absolute start/end in seconds (Float).
@@ -1047,11 +1118,13 @@ enum LocalWhisperTranscriber {
         // if VAD chopped silence out. Identical to the Gemini / cloud
         // Whisper paths.
         guard let proj = projection else { return rawTurns }
-        let projected = rawTurns.map {
-            GeminiTranscriber.Turn(speakerLabel: $0.speakerLabel,
-                                   startMs: proj.toOriginal(compressedMs: $0.startMs),
-                                   endMs: proj.toOriginal(compressedMs: $0.endMs),
-                                   text: $0.text)
+        // A start inside an inserted gap snaps to the island it opens, an
+        // end to the island it closes (see `Projection.toOriginal`).
+        let projected = rawTurns.map { t -> GeminiTranscriber.Turn in
+            let s = proj.toOriginal(compressedMs: t.startMs)
+            let e = max(s, proj.toOriginal(compressedMs: t.endMs, isEnd: true))
+            return GeminiTranscriber.Turn(speakerLabel: t.speakerLabel,
+                                          startMs: s, endMs: e, text: t.text)
         }
         // Monotonic clamp pass, same as cloud Whisper. A turn near the
         // tail can over-shoot the real duration after projection;
@@ -1217,6 +1290,7 @@ enum LocalWhisperTranscriber {
                                                   label: String,
                                                   onProgress: (@Sendable (Double) -> Void)?,
                                                   slowRescue: SlowRescue?) async throws -> DecodeOutcome {
+        let decodeStart = Date()
         let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: workURL.path)
         let window = pipe.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
         let chunker = VADAudioChunker()
@@ -1337,8 +1411,40 @@ enum LocalWhisperTranscriber {
                 guard failed < total else { throw error }
                 FileLogger.log("LocalWhisperTranscriber: \(label) \(failed)/\(total) chunks failed twice (\(error.localizedDescription)), keeping the rest")
             }
+            logDecodeSummary(label: label, chunks: total, audioSamples: audio.count,
+                             results: ordered.compactMap { try? $0.get() }.flatMap { $0 },
+                             since: decodeStart)
             return .decoded(chunker.updateSeekOffsetsForResults(chunkedResults: ordered, audioChunks: chunks))
         }
+    }
+
+    /// One line per decoded track with what WhisperKit measured: wall time
+    /// against audio time, encoder and decoder seconds, decoder loops and
+    /// temperature fallbacks, and the language it detected per window. This
+    /// is the evidence a slow-transcription report needs; before 0.15.75 the
+    /// log had only the chunk count, so nothing distinguished a heavy model
+    /// from a fallback storm or a mis-detected language.
+    private nonisolated static func logDecodeSummary(label: String,
+                                                     chunks: Int,
+                                                     audioSamples: Int,
+                                                     results: [TranscriptionResult],
+                                                     since start: Date) {
+        let audioSec = Double(audioSamples) / Double(WhisperKit.sampleRate)
+        let wall = Date().timeIntervalSince(start)
+        var languages: [String: Int] = [:]
+        var encode = 0.0, decode = 0.0, loops = 0.0, fallbacks = 0.0
+        for r in results {
+            languages[r.language, default: 0] += 1
+            encode += r.timings.encoding
+            decode += r.timings.decodingLoop
+            loops += r.timings.totalDecodingLoops
+            fallbacks += r.timings.totalDecodingFallbacks
+        }
+        let langs = languages.sorted { $0.value > $1.value }
+            .map { "\($0.key) \($0.value)" }.joined(separator: ", ")
+        FileLogger.log(String(format: "LocalWhisperTranscriber: %@ decoded %d chunks, %.0f s of audio in %.1f s (%.2fx real time), encode %.1f s, decode %.1f s, %.0f decoder loops, %.0f fallbacks, languages: %@",
+                              label, chunks, audioSec, wall, audioSec / max(wall, 0.001),
+                              encode, decode, loops, fallbacks, langs.isEmpty ? "none" : langs))
     }
 
     // Hallucination filtering lives in the shared `Hallucinations` helper.
