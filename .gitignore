@@ -1,7 +1,8 @@
 # Swift / SwiftPM
 .build/
 .swiftpm/
-Package.resolved
+# Package.resolved is committed on purpose: a fresh clone must build the same
+# WhisperKit / supabase-swift / Sparkle versions as the release machine.
 build/
 DerivedData/
 *.xcodeproj/
