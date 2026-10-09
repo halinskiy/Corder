@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.78] - 2026-10-09
+
+### Changed
+
+- Hovering a session in the sidebar hides the divider above it and the one below it, the same way selecting it does, so the rounded hover fill never touches a straight line.
+
 ## [0.15.77] - 2026-10-09
 
 ### Changed
