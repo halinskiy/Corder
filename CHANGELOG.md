@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.76] - 2026-10-09
+
+### Changed
+
+- The divider line above each session in the sidebar list now has square ends. It was drawn as the top border of a rounded row, so it curved down at both corners.
+
 ## [0.15.75] - 2026-10-09
 
 ### Changed

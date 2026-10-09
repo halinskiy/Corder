@@ -1222,9 +1222,26 @@ input[type="search"]::-webkit-search-decoration {
 }
 .arc-item .arc-item-restore { flex-shrink: 0; }
 .meeting-item + .meeting-item {
-  border-top: 1px solid var(--border);
+  position: relative;
   margin-top: 4px;
-  padding-top: 14px;
+  /* 15 = the old 14 px padding + the 1 px border that used to live
+     here, so row geometry is unchanged. */
+  padding-top: 15px;
+}
+/* The divider is a pseudo-element, not `border-top`: the row keeps
+   `border-radius: 6px` for its hover/active fill, and a border on a
+   rounded box curves at both ends. Kostya wants this line dead straight
+   with square ends (asked three times, 2026-10-09). */
+.meeting-item + .meeting-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--border);
+  border-radius: 0;
+  pointer-events: none;
 }
 /* Sidebar lives on `--bg-elev`, so a hover that uses the toolbar's
    `--bg-hover` (which is whiter than `--bg-elev`) actually makes items
