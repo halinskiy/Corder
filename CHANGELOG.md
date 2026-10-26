@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.114] - 2026-10-26
+
+### Fixed
+
+- Hovering a stack in the dark theme no longer shows the cards beneath it.
+
 ## [0.15.113] - 2026-10-26
 
 ### Fixed

@@ -6334,9 +6334,10 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-elev);
   gap: 6px;
 }
-/* Same hover as an ordinary session row (.meeting-item:hover). */
+/* Same hover as an ordinary session row (.meeting-item:hover), kept opaque
+   so the plates under the card never show through. */
 .meeting-stack-wrap .meeting-stack:not(.active):hover { background: #ececea; }
-.dark .meeting-stack-wrap .meeting-stack:not(.active):hover { background: rgba(255, 255, 255, 0.055); }
+.dark .meeting-stack-wrap .meeting-stack:not(.active):hover { background: linear-gradient(rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.055)), var(--bg-elev); }
 .meeting-stack-wrap[data-expanded="true"] .meeting-stack:not(.active) {
   background: var(--bg-active);
   border-color: var(--border-strong);
@@ -6415,4 +6416,4 @@ html:not(.dark) .meeting-stack-plate-back {
 }
 /* Hover wins over the open-stack fill too, same as a session row. */
 .meeting-stack-wrap[data-expanded] .meeting-stack:not(.active):hover { background: #ececea; }
-.dark .meeting-stack-wrap[data-expanded] .meeting-stack:not(.active):hover { background: rgba(255, 255, 255, 0.055); }
+.dark .meeting-stack-wrap[data-expanded] .meeting-stack:not(.active):hover { background: linear-gradient(rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.055)), var(--bg-elev); }
