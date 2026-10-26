@@ -671,7 +671,7 @@ const en: Strings = {
   btn_theme_to_dark: "Dark theme",
   btn_theme_to_light: "Light theme",
   settings_theme_enable_dark: "Dark theme",
-  settings_theme_enable_dark_desc: "Dark interface.",
+  settings_theme_enable_dark_desc: "Dark UI.",
   settings_model_label: "Transcription model",
   settings_model_desc: "Which model the next recording is transcribed with.",
   settings_offline_model_label: "Offline transcription",

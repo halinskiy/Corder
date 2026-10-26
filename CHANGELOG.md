@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.107] - 2026-10-26
+
+### Changed
+
+- Dark theme description reads Dark UI.
+
 ## [0.15.106] - 2026-10-26
 
 ### Changed

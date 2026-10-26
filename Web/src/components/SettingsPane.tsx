@@ -756,7 +756,7 @@ function ThemeToggleRow({ t }: { t: T }) {
     <div ref={rowRef}>
       <Toggle
         label={t.settings_theme_enable_dark ?? "Dark theme"}
-        desc={t.settings_theme_enable_dark_desc ?? "Dark interface."}
+        desc={t.settings_theme_enable_dark_desc ?? "Dark UI."}
         checked={isDark}
         onChange={(v) => {
           const r = rowRef.current?.getBoundingClientRect();
