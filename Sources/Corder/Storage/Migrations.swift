@@ -259,6 +259,10 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE meetings ADD COLUMN source TEXT;")
         }
 
+        m.registerMigration("v25_detected_meeting_lang") { db in
+            try db.execute(sql: "ALTER TABLE meetings ADD COLUMN detected_meeting_lang TEXT;")
+        }
+
         return m
     }
 }

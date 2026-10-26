@@ -30,7 +30,7 @@ const RATING_SHOWN_FOR_KEY = "corder.ratingPromptShownForId";
 // the first 1-2 might just be tests, and we don't want to ask
 // for feedback on a 5-second smoke recording.
 const RATING_THRESHOLD = 1;
-const RATING_API_URL = "https://corder-api.empqwork.workers.dev/feedback";
+const RATING_API_URL = "/api/feedback";
 // Bumped manually when the native shell version moves. The wizard
 // already POSTs `version` to /signup so once we wire it through the
 // Swift bridge we can drop the hardcode; until then it stays in sync

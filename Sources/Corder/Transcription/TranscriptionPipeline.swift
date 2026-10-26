@@ -34,7 +34,7 @@ final class TranscriptionPipeline {
     /// nothing is active (e.g. prewarm-time reads at launch).
     private var activeProvider: TranscriptionProvider?
     private var currentProvider: TranscriptionProvider {
-        activeProvider ?? AppSettings.transcriptionProvider
+        NetworkPolicy.transcriptionProvider(activeProvider ?? AppSettings.transcriptionProvider)
     }
 
     /// True when the cloud provider can serve this transcribe call
@@ -319,9 +319,9 @@ final class TranscriptionPipeline {
         // An explicit on-device run (MCP "local") must never hand the audio
         // to the cloud: no first-transcript bridge, no slow-Mac rescue, no
         // "model unavailable" fallback. It waits for the model instead.
-        if forced == .whisperLocal { strictLocalMeetings.insert(meetingId) }
+        if forced == .whisperLocal || AppSettings.localOnly { strictLocalMeetings.insert(meetingId) }
         defer { strictLocalMeetings.remove(meetingId) }
-        let userPick = forced ?? AppSettings.transcriptionProvider
+        let userPick = NetworkPolicy.transcriptionProvider(forced ?? AppSettings.transcriptionProvider)
         var effective = userPick
         if userPick.usageClass == "advanced" {
             // No API key on disk for the chosen cloud provider →
@@ -1057,6 +1057,10 @@ final class TranscriptionPipeline {
             // stampNow=false on a cache hit: don't refresh transcribedAt /
             // re-credit usage for a run that did no cloud work (see the
             // mappers). A fresh run (haveRaw=false) stamps as normal.
+            if let language = detectedMeetingLang {
+                try? repo.setDetectedMeetingLanguage(meetingId: meetingId, language: language)
+            }
+
             if usingDualTrack {
                 try mapDualTrackTurns(meetingId: meetingId, meeting: meeting,
                                       userTurns: userTurns, otherTurns: otherTurns,
@@ -1151,13 +1155,16 @@ final class TranscriptionPipeline {
                 }
             }
 
+            let notes = try? MeetingNotes()
+            let notesLanguage = AppSettings.transcriptionLanguage.nilIfEmpty ?? detectedMeetingLang ?? meeting.detectedMeetingLang
+
             // 3b. Optional auto-summary, run once per meeting after
             //     transcription finishes, only when the user opted in
             //     and the row doesn't already have a structured summary
             //     (handles re-transcribe + interrupted-app scenarios).
             //     Mirrors the auto-title invariant: bills once, can be
             //     re-triggered by clearing the cached summary.
-            if AppSettings.autoSummary,
+            if let notes, AppSettings.autoSummary,
                meeting.status == .ready,
                (meeting.summary?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
                 let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
@@ -1170,8 +1177,8 @@ final class TranscriptionPipeline {
                     // opens the tab. Shares one in-flight run with that
                     // route (DerivedContentJobs) so a "Generate" click during
                     // this step doesn't bill a second recap.
-                    if let summary = try? await DerivedContentJobs.shared.run("summary:\(meetingId)", {
-                        try await GeminiSummarizer.generate(transcript: text)
+                    if let summary = try? await DerivedContentJobs.shared.run("summary:\(meetingId):\(notes.jobTag)", {
+                        try await notes.summarize(text, languageISO: notesLanguage)
                     }) {
                         try? repo.setSummary(meetingId: meetingId, summary: summary)
                         FileLogger.log("transcribe(): summarised \(meetingId) (\(summary.count) chars)")
@@ -1185,15 +1192,15 @@ final class TranscriptionPipeline {
             //     the cached `chapters` column. Feeds the model the
             //     per-segment start_ms so chapter timestamps can
             //     map cleanly to seek points.
-            if AppSettings.autoChapters,
+            if let notes, AppSettings.autoChapters,
                meeting.status == .ready,
                (meeting.chapters?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
                 let segs = (try? repo.segments(forMeeting: meetingId)) ?? []
                 if !segs.isEmpty {
                     let timed: [(startMs: Int64, text: String)] = segs.map { (startMs: $0.startMs, text: $0.text) }
                     let durationMs = meeting.durationMs ?? segs.last?.endMs
-                    if let chapters = try? await DerivedContentJobs.shared.run("chapters:\(meetingId)", {
-                           try await GeminiChapters.generate(timedLines: timed, durationMs: durationMs)
+                    if let chapters = try? await DerivedContentJobs.shared.run("chapters:\(meetingId):\(notes.jobTag)", {
+                           try await notes.chapters(timed, durationMs: durationMs, languageISO: notesLanguage)
                        }),
                        !chapters.isEmpty,
                        let data = try? JSONEncoder().encode(chapters),
@@ -2447,6 +2454,9 @@ final class TranscriptionPipeline {
             // provider lock), so only admins fall back to Gemini; non-admins
             // use Groq (paid), and Free, no cloud at all, hard-fails.
             guard LocalWhisperTranscriber.isAvailable() else {
+                if AppSettings.localOnly || strictLocalMeetings.contains(meetingId) {
+                    throw LocalWhisperTranscriber.LocalWhisperError.modelNotReady
+                }
                 if AppSettings.isAdmin {
                     FileLogger.log("LocalWhisper: Intel + admin, falling back to Gemini for this track")
                     do {
@@ -2488,7 +2498,7 @@ final class TranscriptionPipeline {
             // free monthly cloud budget), so a guest has no cloud to fall back
             // to and waits for the model exactly as before.
             let localVariant = AppSettings.whisperLocalVariant
-            let strictLocal = strictLocalMeetings.contains(meetingId)
+            let strictLocal = strictLocalMeetings.contains(meetingId) || AppSettings.localOnly
             if !LocalWhisperTranscriber.isModelDownloaded(localVariant), AppSettings.isSignedIn, !strictLocal {
                 let pct = LocalWhisperTranscriber.currentProgress(localVariant).map { Int($0 * 100) }
                 FileLogger.log("LocalWhisper: model still downloading (\(pct.map { "\($0)%" } ?? "queued")), transcribing this track in the cloud so the first transcript isn't blocked")
@@ -2743,7 +2753,7 @@ final class TranscriptionPipeline {
         }
 
         if diarSegs.isEmpty {
-            if allowGeminiFallback {
+            if allowGeminiFallback, NetworkPolicy.allows(.cloudTranscription) {
                 do {
                     return try await GeminiTranscriber.transcribe(
                         audioURL: wavURL, mode: .diarize,

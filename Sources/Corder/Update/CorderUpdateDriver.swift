@@ -48,6 +48,19 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
         reply(.install)
     }
 
+    /// The user clicked the pill while a silent update waits for a quiet
+    /// moment. Sparkle ignores a new check while that session is open, so
+    /// the click must answer the held reply or it does nothing.
+    func installPendingNow() -> Bool {
+        guard let reply = pendingQuietInstall else { return false }
+        guard RecordingStateSnapshot.read() == .idle, !AppContext.shared.recordingStarting else { return false }
+        pendingQuietInstall = nil
+        quietInstallTimer?.invalidate(); quietInstallTimer = nil
+        FileLogger.log("UpdateDriver: pill clicked with a downloaded silent update, installing now")
+        reply(.install)
+        return true
+    }
+
     /// The app is about to quit with a silent update still waiting for a
     /// quiet moment: hand it back to Sparkle as "install after quit".
     func releasePendingInstallForQuit() {

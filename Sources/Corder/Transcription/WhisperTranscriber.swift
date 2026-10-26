@@ -281,6 +281,7 @@ enum WhisperTranscriber {
                            backend: Backend = .openai,
                            localFallbackVariant: LocalWhisperTranscriber.Variant? = nil,
                            onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> [GeminiTranscriber.Turn] {
+        try NetworkPolicy.require(.cloudTranscription)
         // Signed-in users go through the Worker proxy (server-side
         // OpenAI key). Only when there's no Supabase session do we
         // require the legacy local key, keeps `swift test` / dev
@@ -756,7 +757,7 @@ enum WhisperTranscriber {
         for attempt in 1...maxAttempts {
             let d: Data, r: URLResponse
             do {
-                (d, r) = try await Self.transcribeSession.data(for: req)
+                (d, r) = try await NetworkPolicy.data(for: req, channel: .cloudTranscription, session: Self.transcribeSession)
             } catch let err as URLError where (err.code == .networkConnectionLost || err.code == .timedOut) && dropRetries < 2 && attempt < maxAttempts {
                 // A dropped connection on a multi-MB POST (Wi-Fi blip, sleep)
                 // used to leave the loop at once and push the chunk to the
@@ -1116,12 +1117,12 @@ enum WhisperTranscriber {
     /// timeout, so a connection that trickles bytes (never idle long enough
     /// for the per-request timeout) held the single Whisper permit, and with
     /// it every meeting's transcription, indefinitely.
-    static let transcribeSession: URLSession = {
+    nonisolated static let transcribeSession: URLSession = {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 120
         c.timeoutIntervalForResource = 15 * 60
         c.waitsForConnectivity = false
-        return URLSession(configuration: c)
+        return URLSession(configuration: c, delegate: PolicyRedirectDelegate(), delegateQueue: nil)
     }()
 
     private static func isNetworkError(_ err: URLError) -> Bool {

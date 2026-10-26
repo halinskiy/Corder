@@ -48,8 +48,31 @@ interface Strings {
   chapters_search?: string;
   settings_auto_chapters_title?: string;
   settings_auto_chapters_desc?: string;
+  settings_sync_transcripts: string;
+  settings_sync_transcripts_desc: string;
+  settings_summaries: string;
+  settings_summaries_desc: string;
+  settings_summaries_cloud: string;
+  settings_summaries_local: string;
+  settings_local_llm_endpoint: string;
+  settings_local_llm_model: string;
+  settings_local_llm_auto: string;
+  settings_local_llm_context: string;
+  settings_local_llm_check: string;
+  settings_local_llm_checking: string;
+  settings_local_llm_found: string;
+  local_llm_unavailable: string;
+  local_llm_invalid_endpoint: string;
+  local_llm_no_model: string;
+  local_llm_context_truncated: string;
+  local_llm_context_too_small: string;
+  local_llm_output_truncated: string;
+  local_llm_invalid_response: string;
+  local_llm_request_failed: string;
+  settings_local_only: string;
+  settings_local_only_desc: string;
   settings_telemetry_title?: string;
-  settings_telemetry_desc?: string;
+  settings_telemetry_desc: string;
   tab_settings: string;
   tab_general_settings?: string;
   tab_advanced_settings?: string;
@@ -494,8 +517,31 @@ const en: Strings = {
   chapters_search: "Search chapters…",
   settings_auto_chapters_title: "Auto-chapters",
   settings_auto_chapters_desc: "Split a finished transcript.",
+  settings_sync_transcripts: "Sync transcripts to your account",
+  settings_sync_transcripts_desc: "Sync meeting details, transcripts and summaries for access from another Mac. Required to create share links. On by default.",
+  settings_summaries: "Summaries",
+  settings_summaries_desc: "Choose how summaries and chapters are generated. Local models work without an account.",
+  settings_summaries_cloud: "Cloud",
+  settings_summaries_local: "Local model",
+  settings_local_llm_endpoint: "Server address",
+  settings_local_llm_model: "Model",
+  settings_local_llm_auto: "First loaded model",
+  settings_local_llm_context: "Context size (tokens)",
+  settings_local_llm_check: "Test connection",
+  settings_local_llm_checking: "Checking connection...",
+  settings_local_llm_found: "Connected: {model}",
+  local_llm_unavailable: "Cannot connect to the local model server. Start LM Studio, llama.cpp or Ollama, then check the server address in Settings > Advanced > Summaries.",
+  local_llm_invalid_endpoint: "Enter a loopback server address, such as http://127.0.0.1:1234/v1 or http://127.0.0.1:11434/api/chat.",
+  local_llm_no_model: "No matching loaded model was found. Load a text model in your local server or enter its model name in Settings.",
+  local_llm_context_truncated: "The local model may have cut off the transcript. Increase the context size in Settings and in your model server, then try again.",
+  local_llm_context_too_small: "The context is too small for the prompt and response. Increase the context size in Settings and in your model server.",
+  local_llm_output_truncated: "The local model stopped before finishing its response. Increase its context size or try another model.",
+  local_llm_invalid_response: "The local model returned an unreadable response. Try again or choose another text model.",
+  local_llm_request_failed: "The local server rejected the request. Check the model, context size and server settings, then try again.",
+  settings_local_only: "Local only",
+  settings_local_only_desc: "Use on-device transcription with no cloud fallback. Use local models for summaries and chapters. Block cloud sync, titles, sharing, diagnostics, calendar and news. Only local servers, WhisperKit model downloads and app updates can connect.",
   settings_telemetry_title: "Help improve Corder",
-  settings_telemetry_desc: "Send anonymous diagnostic counts to the maintainer once a day.",
+  settings_telemetry_desc: "On by default. Send pseudonymous diagnostic counts once a day using an email hash when signed in or a random install ID. No meeting content. Turn off here.",
   tab_settings: "Settings",
   tab_general_settings: "General",
   tab_advanced_settings: "Advanced",
@@ -539,8 +585,8 @@ const en: Strings = {
   settings_sec_transcription: "Transcription",
   settings_autotranscribe: "Auto-transcribe",
   settings_autotranscribe_desc: "Transcribe the recording automatically after you stop.",
-  settings_autotitle: "Auto-title",
-  settings_autotitle_desc: "Generate a short meeting title from the transcript.",
+  settings_autotitle: "Auto titles",
+  settings_autotitle_desc: "Generate titles in the cloud from three short transcript excerpts. On by default. Turn off to keep date-only names; imports keep their filename.",
   settings_autosummary: "Auto-summary",
   settings_autosummary_desc: "Generate a structured recap as soon as the transcript is ready.",
   settings_delete_account_label: "Delete account",

@@ -69,6 +69,7 @@ enum SupabaseTierSync {
     /// endpoint. Called on `applicationDidBecomeActive`, i.e. the moment
     /// the user switches back to Corder after paying in the browser.
     static func refreshTier(throttleSeconds: TimeInterval = 12) {
+        guard NetworkPolicy.allows(.account) else { return }
         guard SupabaseClientHolder.shared.auth.currentUser != nil else { return }
         let now = Date()
         guard now.timeIntervalSince(lastRefresh) >= throttleSeconds else { return }
@@ -84,6 +85,7 @@ enum SupabaseTierSync {
     /// stored user after a failed refresh and mirroring its claims would
     /// flip admin/tier back and forth between a dead token and the cache.
     static func refreshThenApply() async {
+        guard NetworkPolicy.allows(.account) else { return }
         do {
             _ = try await SupabaseClientHolder.shared.auth.refreshSession()
             applyFromCurrentSession()
@@ -105,6 +107,7 @@ enum SupabaseTierSync {
     private static var pollTask: Task<Void, Never>?
 
     static func pollAfterUpgrade(seconds: TimeInterval = 150, interval: TimeInterval = 6) {
+        guard NetworkPolicy.allows(.account) else { return }
         guard SupabaseClientHolder.shared.auth.currentUser != nil else { return }
         guard AppSettings.userTier == .free else { return }
         // Single-flight: a poll already running covers a repeat tap.

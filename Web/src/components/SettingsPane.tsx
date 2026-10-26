@@ -11,6 +11,7 @@ import { type T } from "../i18n";
 import { copyText } from "../clipboard";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
+import { SummariesSettingsRow } from "./SummariesSettingsRow";
 import { OfflineModelRow } from "./OfflineModelRow";
 import { useTheme } from "../theme";
 
@@ -76,6 +77,17 @@ export function SettingsPane({
     // rows just fall back to showing the raw bundle id.
     getInstalledApps().then((a) => { if (alive) setApps(a); }).catch(() => {});
     return () => { alive = false; };
+  }, []);
+
+  // General and Advanced stay mounted separately. Share persisted settings so
+  // changing the notes provider also updates the guest auto-notes rows.
+  React.useEffect(() => {
+    const update = (event: Event) => {
+      const fresh = (event as CustomEvent<Settings>).detail;
+      setS({ ...fresh, ...pending.current });
+    };
+    window.addEventListener("corder-settings-updated", update);
+    return () => window.removeEventListener("corder-settings-updated", update);
   }, []);
 
   // Poll /api/settings every second while at least one Whisper Local
@@ -172,12 +184,32 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        {/* Auto-summary / Auto-chapters are cloud notes flows: free for every
-            tier, but the Worker still needs a signed-in JWT, so gate the rows
-            on sign-in (a guest would otherwise see a toggle that can't run).
-            They used to live in Advanced, which was guest-hidden; now that the
-            Advanced tab is visible to guests these carry their own guard. */}
+        {/* Sync and cloud titles require an account. Local notes do not. */}
         {!!s?.user_email && (
+          <>
+            <SoloCard>
+              <Toggle
+                label={t.settings_sync_transcripts}
+                desc={t.settings_sync_transcripts_desc}
+                checked={on("sync_transcripts")}
+                disabled={!loaded}
+                onChange={(v) => patch({ sync_transcripts: v })}
+              />
+            </SoloCard>
+
+            <SoloCard>
+              <Toggle
+                label={t.settings_autotitle}
+                desc={t.settings_autotitle_desc}
+                checked={on("auto_title")}
+                disabled={!loaded}
+                onChange={(v) => patch({ auto_title: v })}
+              />
+            </SoloCard>
+
+          </>
+        )}
+        {(!!s?.user_email || s?.local_only || s?.summary_provider === "local") && (
           <>
             <SoloCard>
               <Toggle
@@ -211,6 +243,9 @@ export function SettingsPane({
       </div>
 
       <div style={{ display: section === "advanced" ? "contents" : "none" }}>
+        <SoloCard>
+          <SummariesSettingsRow s={s} patch={patch} t={t} />
+        </SoloCard>
         {/* Transcription model picker, ADMIN-ONLY. Normal users have no
             model choice (the hard provider lock pins them to Groq cloud +
             on-device), so the whole block is hidden for non-admins; only
@@ -350,9 +385,19 @@ export function SettingsPane({
 
         <SoloCard>
           <Toggle
+            label={t.settings_local_only}
+            desc={t.settings_local_only_desc}
+            checked={s?.local_only ?? false}
+            disabled={!loaded}
+            onChange={(v) => patch({ local_only: v })}
+          />
+        </SoloCard>
+
+        <SoloCard>
+          <Toggle
             label={t.settings_telemetry_title ?? "Help improve Corder"}
-            desc={t.settings_telemetry_desc ?? "Send anonymous diagnostic counts to the maintainer once a day."}
-            checked={(s?.telemetry as boolean | undefined) ?? false}
+            desc={t.settings_telemetry_desc}
+            checked={on("telemetry")}
             disabled={!loaded}
             onChange={(v) => patch({ telemetry: v })}
           />

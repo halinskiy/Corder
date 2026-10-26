@@ -1,53 +1,15 @@
 import Foundation
 
-/// Thrown by a paid-feature generator (Summary / Chapters) when the Worker
-/// returns HTTP 403, a tier gate, NOT a generic failure. The route maps it
-/// to a real 403 so the frontend shows the Upgrade upsell instead of the
-/// "didn't work, send a report" error card. A 403 is an upsell, never a
-/// failure card.
 enum PaidFeatureError: Error { case tierRequired }
 
-/// Generates a Markdown meeting summary from a finished transcript via
-/// a text-only Gemini call. Heavier than the title (longer input +
-/// output) so it runs on demand, only when the user opens the Summary
-/// tab, and the result is cached on the meeting row.
-///
-/// Best-effort: any failure returns nil and the UI shows a retry state.
+/// Shared recap prompt and output policy for cloud and local transports.
 enum GeminiSummarizer {
-    // flash-lite: a short plain-prose recap doesn't need full Flash;
-    // ~3–5× cheaper on text with no meaningful quality loss here.
-    private static let model = "gemini-2.5-flash-lite"
-
-    static func generate(transcript: String) async throws -> String? {
+    static func generate(transcript: String, languageISO: String? = nil,
+                         llm: any TextLLM = GeminiTextLLM(channel: .summary)) async throws -> String? {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        // Same routing as GeminiTranscriber / GeminiTitler, go
-        // through the Worker proxy when signed in so Pro / Max users
-        // get auto-summary without needing a local Google API key.
-        let jwt = await GeminiTranscriber.jwtForProxy()
-        let key = GeminiTranscriber.apiKey ?? ""
-        if jwt.isEmpty && key.isEmpty { return nil }
-        let base = await GeminiTranscriber.endpointBaseForProxy()
-
-        // Summaries need broad context; cap generously but bound it so a
-        // 3-hour transcript can't blow the request up. Over the cap we SAMPLE
-        // across the whole meeting rather than crop the head — a recap of a
-        // 3-hour call that silently stops at minute 90 is worse than one that
-        // is thin everywhere (see `TranscriptSampling`).
         let snippet = TranscriptSampling.evenSample(trimmed, budget: 120000, windows: 8)
-
-        // Dense nested bullets, one fact per line. History: v1 was a
-        // per-speaker bullet log ("Speaker 2 said X, Speaker 2 said Y…"),
-        // which read as a transcript dump, so v2 swung to flowing prose
-        // paragraphs. Prose turned out to cost DETAIL — measured against
-        // Granola's notes on the same 65-minute call (2026-08-17): they kept
-        // the reference titles, the per-item decisions and the one-line bugs,
-        // ours dissolved them into "стороны пришли к соглашению о
-        // необходимости…". A recap is read for exactly those specifics.
-        // v3 keeps the per-fact bullet SHAPE of v1 but bans the per-speaker
-        // logging that made it a dump: each bullet is a decision, a fact or a
-        // number, never "кто что сказал".
-        let system = """
+        let system = MeetingNotes.languageInstruction(languageISO) + "\n\n" + """
         You write meeting recaps in Markdown. Quality bar: a senior PM
         reading the recap (instead of the call) walks away with what
         was decided, what positions were taken, and the numbers that
@@ -74,7 +36,7 @@ enum GeminiSummarizer {
           необходимости реструктуризации" ❌. Never open a bullet with
           "Обсуждалось", "Стороны пришли", "Было решено рассмотреть".
         - Punctuation: use a colon or a comma where you would reach for a
-          dash. Never write an em dash (—) in the output.
+          dash. Never write em or en dashes in the output.
         - Bold key numbers, names, decisions, dates, percentages with
           `**…**`.
         - Order sections the way the meeting weighted them: what took the
@@ -83,12 +45,12 @@ enum GeminiSummarizer {
         Content rules:
         - Be specific. Numbers, names, dates, deadlines, percentages,
           counts, tool and product names, references someone cited, the
-          concrete example given — KEEP them ("обсуждали зарплаты" ❌ →
+          concrete example given: KEEP them ("обсуждали зарплаты" ❌ →
           "сошлись на зарплате **£35k фикс**" ✅). These specifics are
           the whole reason someone reads the recap instead of the call;
           a bullet that survives without them was not worth writing.
         - Synthesise, do not transcribe. A bullet states WHAT holds, not
-          who uttered it — no "Speaker 2 сказал…" / "Speaker 1 ответил…"
+          who uttered it; no "Speaker 2 сказал…" / "Speaker 1 ответил…"
           chains. If both sides agreed, state the agreement; if they
           disagreed, state the split in one bullet ("Разошлись в оценке
           X: один считал A, другой B").
@@ -129,105 +91,22 @@ enum GeminiSummarizer {
         - **Костя**: подготовить cap-table к пятнице
         - **Михаил**: встреча с инвестором X в понедельник
         """
-        /// One generateContent round-trip. Returns the recap text and the
-        /// model's finishReason; nil on any failure, each of which is
-        /// logged ("Summary didn't work" reports used to arrive with
-        /// nothing in the log to say why).
-        func ask(maxOutputTokens: Int) async throws -> (text: String, finish: String)? {
-            let body: [String: Any] = [
-                "systemInstruction": ["parts": [["text": system]]],
-                "contents": [[
-                    "role": "user",
-                    "parts": [["text": "Transcript:\n\n\(snippet)"]]
-                ]],
-                "generationConfig": [
-                    "temperature": 0.35,
-                    // Structured Markdown is a one-shot rewrite, not a chain
-                    // of reasoning, thinking budget burns output tokens for
-                    // no quality gain on this kind of task. Output budget is
-                    // generous (was 600) because a real structured recap of a
-                    // 30-minute call needs ~1200–2000 tokens.
-                    "thinkingConfig": ["thinkingBudget": 0],
-                    // Bullet recaps of a long call run longer than the prose
-                    // ones did (Granola's notes on a 65-min call are ~3.5k
-                    // characters, ≈1.7k Cyrillic tokens), and a truncated
-                    // recap loses its tail sections silently. 2200 was
-                    // cutting them off; 4000 is the first try and a
-                    // MAX_TOKENS finish retries once with double.
-                    "maxOutputTokens": maxOutputTokens
-                ]
-            ]
-
-            guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
-                  let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            if !jwt.isEmpty {
-                req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
-            }
-            req.timeoutInterval = 90
-            req.httpBody = payload
-
-            let data: Data
-            let http: HTTPURLResponse
-            do {
-                let (d, resp) = try await URLSession.shared.data(for: req)
-                guard let h = resp as? HTTPURLResponse else { return nil }
-                data = d
-                http = h
-            } catch {
-                FileLogger.log("GeminiSummarizer: request failed (\(error.localizedDescription))")
-                return nil
-            }
-            // Surface the Worker's tier-gate distinctly so the route returns a
-            // real 403 → Upgrade upsell, not a generic "generation failed".
-            if http.statusCode == 403 { throw PaidFeatureError.tierRequired }
-            let bodyText = String(data: data, encoding: .utf8) ?? ""
-            guard (200..<300).contains(http.statusCode) else {
-                FileLogger.log("GeminiSummarizer: HTTP \(http.statusCode) \(bodyText.prefix(300))")
-                return nil
-            }
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let candidates = json["candidates"] as? [[String: Any]],
-                  let first = candidates.first else {
-                // No candidates = the prompt itself was refused
-                // (promptFeedback.blockReason) or the proxy answered with
-                // something that isn't a Gemini response.
-                FileLogger.log("GeminiSummarizer: no candidates in response: \(bodyText.prefix(300))")
-                return nil
-            }
-            let finish = first["finishReason"] as? String ?? "?"
-            guard let content = first["content"] as? [String: Any],
-                  let parts = content["parts"] as? [[String: Any]] else {
-                FileLogger.log("GeminiSummarizer: empty content, finishReason=\(finish)")
-                return nil
-            }
-            let raw = parts.compactMap { $0["text"] as? String }.joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return (raw, finish)
-        }
-
-        guard var result = try await ask(maxOutputTokens: 4000) else { return nil }
-        if result.finish == "MAX_TOKENS" {
-            // The tail sections are the action items; a recap cut there is
-            // the one that is missing the part people open it for.
-            FileLogger.log("GeminiSummarizer: recap hit MAX_TOKENS at 4000, retrying with 8000")
-            if let again = try await ask(maxOutputTokens: 8000), !again.text.isEmpty {
+        guard var result = try await llm.complete(system: system, transcript: snippet, maxOutputTokens: 4000, json: false) else { return nil }
+        if result.truncated {
+            FileLogger.log("MeetingNotes: recap output reached 4000 tokens, retrying with 8000")
+            if let again = try await llm.complete(system: system, transcript: snippet, maxOutputTokens: 8000, json: false) {
                 result = again
             }
         }
         var text = result.text
-        if result.finish == "MAX_TOKENS", let nl = text.lastIndex(of: "\n") {
-            // Still truncated: drop the half-written last line rather than
-            // show a bullet that stops mid-word.
-            FileLogger.log("GeminiSummarizer: recap still truncated at 8000 tokens, trimming the partial last line")
-            text = String(text[..<nl]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if result.truncated {
+            if llm is LocalTextLLM { throw LocalTextLLM.Failure.outputTruncated }
+            if let nl = text.lastIndex(of: "\n") {
+                text = String(text[..<nl]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
         }
-        guard !text.isEmpty else {
-            FileLogger.log("GeminiSummarizer: empty recap (finishReason=\(result.finish))")
-            return nil
-        }
+        guard !text.isEmpty else { return nil }
+        if llm is LocalTextLLM, !Routes.isStructuredMarkdown(text) { throw LocalTextLLM.Failure.invalidResponse }
         return text
     }
 }

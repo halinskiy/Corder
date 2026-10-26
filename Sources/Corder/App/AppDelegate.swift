@@ -298,6 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // mirror the signed-in identity + backfill cloud meetings. Never
         // blocks the Library and never gates: signed-out is a fine state.
         Task { @MainActor in
+            guard NetworkPolicy.allows(.account) else { return }
             let session: Session?
             do {
                 session = try await SupabaseClientHolder.shared.auth.session
@@ -449,8 +450,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startServer() {
         do {
-            try AppContext.shared.server.start { httpServer in
-                Routes.register(server: httpServer, repo: AppContext.shared.repo)
+            try AppContext.shared.server.start { httpServer, port in
+                Routes.register(server: httpServer, repo: AppContext.shared.repo, port: port)
             }
             FileLogger.log("AppDelegate: server on \(AppContext.shared.server.baseURL)")
         } catch {

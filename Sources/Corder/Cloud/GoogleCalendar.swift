@@ -49,6 +49,7 @@ enum GoogleCalendar {
     /// Build the incremental OAuth URL (calendar scope + offline access so
     /// a refresh token is issued) and open it in the browser.
     static func startConnect() {
+        guard NetworkPolicy.allows(.calendar) else { return }
         let port = AppContext.shared.server.port
         guard let redirect = URL(string: "http://127.0.0.1:\(port)/auth/callback") else { return }
         let signedInEmail = SupabaseClientHolder.shared.auth.currentUser?.email
@@ -164,6 +165,7 @@ enum GoogleCalendar {
     /// cache is older than `maxAgeSeconds`. Best-effort: any failure leaves
     /// the existing cache untouched.
     static func refreshIfStale(maxAgeSeconds: Double = 30 * 60) async {
+        guard NetworkPolicy.allows(.calendar) else { return }
         guard let cache = readCache(), cache.connected,
               let refresh = cache.refreshToken, !refresh.isEmpty else { return }
         if Date().timeIntervalSince1970 - cache.fetchedAt < maxAgeSeconds { return }
@@ -184,6 +186,7 @@ enum GoogleCalendar {
     /// Cloudflare Worker (which holds GOOGLE_CLIENT_SECRET). The app never
     /// sees the client secret. Returns nil on any failure.
     private static func exchangeRefreshToken(_ refreshToken: String) async -> String? {
+        guard NetworkPolicy.allows(.calendar) else { return nil }
         guard let url = URL(string: "https://corder-api.empqwork.workers.dev/calendar/refresh") else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -194,7 +197,7 @@ enum GoogleCalendar {
             req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+        guard let (data, resp) = try? await NetworkPolicy.data(for: req, channel: .calendar),
               let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = json["access_token"] as? String, !token.isEmpty else { return nil }
@@ -219,6 +222,7 @@ enum GoogleCalendar {
     /// GET primary calendar events in the next 30 days, expanded to single
     /// instances and ordered by start. Maps to the frontend DTO.
     static func fetchUpcoming(accessToken: String) async throws -> [DTO.UpcomingEvent] {
+        try NetworkPolicy.require(.calendar)
         let now = Date()
         let iso = ISO8601DateFormatter()
         let timeMin = iso.string(from: now)
@@ -233,7 +237,7 @@ enum GoogleCalendar {
         ]
         var req = URLRequest(url: comps.url!)
         req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await NetworkPolicy.data(for: req, channel: .calendar)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw NSError(domain: "GoogleCalendar", code: (resp as? HTTPURLResponse)?.statusCode ?? -1)
         }

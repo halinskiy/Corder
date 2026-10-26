@@ -16,6 +16,26 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.96] - 2026-10-26
+
+### Added
+
+- Summaries and chapters can now run on your Mac through LM Studio, Ollama or llama.cpp server. Pick Local model in Settings, Advanced. It works without an account and in the meeting's own language.
+- Local only mode in Settings, Advanced: Corder stops every cloud request and only downloads the speech model and app updates.
+- Settings, General: switches for syncing transcripts to your account and for automatic titles.
+
+### Changed
+
+- Automatic titles now send three short excerpts of the transcript instead of the whole text.
+- Dropbox keys moved from a plain file to the macOS Keychain.
+- Clearer wording about diagnostics: they are on by default and can be turned off in Settings.
+- Corder checks for news every 6 hours instead of every 30 minutes.
+
+### Fixed
+
+- Security: a website open in your browser could read recordings and transcripts through Corder's local server. Corder now answers only requests addressed to itself.
+- The Update available button did nothing when the update had already downloaded in the background. Now it installs right away.
+
 ## [0.15.95] - 2026-10-26
 
 ### Fixed

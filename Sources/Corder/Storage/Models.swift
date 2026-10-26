@@ -76,6 +76,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
     /// nil = recorded; "import" = dropped file; "mcp" = handed over by an
     /// AI assistant (see migration v24_source).
     var source: String? = nil
+    var detectedMeetingLang: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -103,6 +104,7 @@ struct Meeting: Codable, FetchableRecord, PersistableRecord {
         case chapters
         case transcribeAttempts = "transcribe_attempts"
         case dirName = "dir_name"
+        case detectedMeetingLang = "detected_meeting_lang"
         case source
     }
 }

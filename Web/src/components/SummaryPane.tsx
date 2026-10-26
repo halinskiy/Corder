@@ -4,6 +4,7 @@ import { MeetingDetail, summarize, submitLogs, openWelcome } from "../api";
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
+import { localLLMError } from "./localLLMError";
 import { CopyIconButton } from "./CopyIconButton";
 
 declare global {
@@ -82,7 +83,8 @@ export function SummaryPane({ detail, onToast, readOnly = false, t }: Props) {
     } catch (e) {
       const msg = String((e as Error)?.message || "");
       // Paid-feature gate → upsell, not an error card.
-      if (msg.includes("403")) setLocked(true);
+      if (msg.startsWith("local_llm_")) setError(msg);
+      else if (msg.includes("403")) setLocked(true);
       // Signed-out guest → sign-in CTA, not an error card.
       else if (msg.includes("sign_in_required")) setNeedSignIn(true);
       else setError(t.summary_error);
@@ -104,7 +106,7 @@ export function SummaryPane({ detail, onToast, readOnly = false, t }: Props) {
 
   // Error body with a green, clickable "report" link (same vocabulary
   // as the header report action).
-  const errorBody: ReactNode = (
+  const errorBody: ReactNode = localLLMError(error ?? "", t) ?? (
     <>
       {t.summary_failed_short ?? "Summary didn't work."}{" "}
       <button type="button" className="report-link" onClick={sendReport}>
@@ -222,6 +224,7 @@ export function SummaryPane({ detail, onToast, readOnly = false, t }: Props) {
           </Tooltip>
         )}
       </div>
+      {error && <SummaryBanner title={t.summary_empty_title} body={errorBody} />}
       <div className="summary-content ovsb-scroll" ref={contentRef}>
         {renderMarkdown(summary, search)}
       </div>

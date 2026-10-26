@@ -4,6 +4,7 @@ import { MeetingDetail, generateChapters, submitLogs, openWelcome } from "../api
 import type { T } from "../i18n";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { Tooltip } from "./Tooltip";
+import { localLLMError } from "./localLLMError";
 import { CopyIconButton } from "./CopyIconButton";
 
 declare global {
@@ -67,7 +68,8 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
       setChapters(parse(raw));
     } catch (e) {
       const msg = String((e as Error)?.message || "");
-      if (msg.includes("403")) setLocked(true);
+      if (msg.startsWith("local_llm_")) setError(msg);
+      else if (msg.includes("403")) setLocked(true);
       else if (msg.includes("sign_in_required")) setNeedSignIn(true);
       else setError(t.chapters_error ?? t.summary_error);
     } finally {
@@ -81,7 +83,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
     submitLogs().catch(() => onToast?.(t.toast_settings_failed, "error"));
   }
 
-  const errorBody: ReactNode = (
+  const errorBody: ReactNode = localLLMError(error ?? "", t) ?? (
     <>
       {t.chapters_failed_short ?? "Chapters didn't work."}{" "}
       <button type="button" className="report-link" onClick={sendReport}>
@@ -239,6 +241,7 @@ export function ChaptersPane({ detail, onSeek, currentTimeSec = 0, onToast, t }:
           </button>
         </Tooltip>
       </div>
+      {error && <ChaptersBanner title={t.chapters_empty_title ?? t.summary_empty_title} body={errorBody} />}
       <div className="summary-content ovsb-scroll" ref={scrollRef}>
         {filtered.map((c, i) => (
           // The whole row is the click target and lights up on hover,

@@ -214,21 +214,42 @@ enum AppSettings {
     static var captureVideoHiresEffective: Bool { captureVideoHires && isSignedIn }
     static var captureAudio: Bool          { flag(kCaptureAudio) }
     static var autoTranscribe: Bool        { flag(kAutoTranscribe) }
-    // Auto-title is ALWAYS on now, it has no Settings toggle (recording folder
-    // names depend on a title being generated). The stored key is ignored; a
-    // stale client POSTing auto_title:false can't turn it off.
-    static var autoTitle: Bool             { true }
+    // Untitled recordings use date-only folders; imports retain their filename.
+    static var autoTitle: Bool { autoTitle(in: .standard) }
+    static func autoTitle(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: kAutoTitle) as? Bool ?? true
+    }
+    static var syncTranscripts: Bool { syncTranscripts(in: .standard) }
+    static func syncTranscripts(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: "Corder.set.syncTranscripts") as? Bool ?? true
+    }
+    static var localOnly: Bool { localOnly(in: .standard) }
+    static func localOnly(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: "Corder.set.localOnly") as? Bool ?? false
+    }
+    static func setSyncTranscripts(_ value: Bool) { setFlag("Corder.set.syncTranscripts", value) }
+    static func setLocalOnly(_ value: Bool) {
+        setFlag("Corder.set.localOnly", value)
+        if value { NetworkPolicy.cancelCloudRequests() }
+    }
+    static var summaryProvider: String { UserDefaults.standard.string(forKey: "Corder.set.summaryProvider") == "local" ? "local" : "cloud" }
+    static var localLLMEndpoint: String { UserDefaults.standard.string(forKey: "Corder.set.localLLMEndpoint") ?? LocalTextLLM.defaultEndpoint }
+    static var localLLMModel: String { UserDefaults.standard.string(forKey: "Corder.set.localLLMModel") ?? "" }
+    static func localLLMContextTokens(in defaults: UserDefaults = .standard) -> Int {
+        let value = defaults.object(forKey: "Corder.set.localLLMContextTokens") as? Int ?? 16384
+        return min(262144, max(4096, value))
+    }
+    static func setSummaryProvider(_ value: String) { UserDefaults.standard.set(value, forKey: "Corder.set.summaryProvider") }
+    static func setLocalLLMEndpoint(_ value: String) { UserDefaults.standard.set(value, forKey: "Corder.set.localLLMEndpoint") }
+    static func setLocalLLMModel(_ value: String) { UserDefaults.standard.set(value, forKey: "Corder.set.localLLMModel") }
+    static func setLocalLLMContextTokens(_ value: Int) { UserDefaults.standard.set(value, forKey: "Corder.set.localLLMContextTokens") }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
-    /// Diagnostic telemetry. Default ON now (opt-OUT), capture reliability
-    /// (far-end lost on Bluetooth) is the product's core risk and can't be
-    /// measured without real-world numbers. Strictly ANONYMOUS aggregate
-    /// counts: no transcripts, no titles, no speaker names, no raw email
-    /// (SHA-256 id only), no audio. The landing copy was updated to match
-    /// ("anonymous diagnostics, opt-out anytime; never your meeting content").
-    /// A user who explicitly turned it OFF keeps their stored false.
-    static var telemetryEnabled: Bool {
-        UserDefaults.standard.object(forKey: kTelemetry) as? Bool ?? true
+    /// Pseudonymous diagnostics, ON by default and optional in Settings.
+    /// Account email hash or random install ID, aggregate counts, no meeting content.
+    static var telemetryEnabled: Bool { telemetryEnabled(in: .standard) }
+    static func telemetryEnabled(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: kTelemetry) as? Bool ?? true
     }
     /// Silent pre-roll: start capturing the instant a call is detected so
     /// that accepting the "record this call?" offer keeps the audio/video

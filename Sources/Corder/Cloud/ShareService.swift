@@ -47,6 +47,7 @@ enum ShareService {
     /// the Worker trims + re-bases the transcript, so the recipient gets exactly
     /// the shared slice and nothing else.
     static func createShare(meetingId: String, repo: MeetingRepository, clip: Clip? = nil) async throws -> URL {
+        try NetworkPolicy.require(.share)
         // 1. Live Supabase session (NOT the AppSettings.isSignedIn UserDefaults
         //    mirror, which can diverge from the real session). The ASYNC
         //    accessor refreshes an expired access token before returning;
@@ -136,7 +137,7 @@ enum ShareService {
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        let (respData, resp) = try await URLSession.shared.data(for: req)
+        let (respData, resp) = try await NetworkPolicy.data(for: req, channel: .share)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let body = String(data: respData, encoding: .utf8) ?? ""
             throw ShareError.workerFailed(String(body.prefix(200)))
@@ -167,7 +168,7 @@ enum ShareService {
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: uploadBody)
 
-        let (signData, signResp) = try await URLSession.shared.data(for: req)
+        let (signData, signResp) = try await NetworkPolicy.data(for: req, channel: .share)
         guard let signHTTP = signResp as? HTTPURLResponse,
               (200..<300).contains(signHTTP.statusCode) else {
             let body = String(data: signData, encoding: .utf8) ?? ""
@@ -189,7 +190,7 @@ enum ShareService {
         put.setValue("3600", forHTTPHeaderField: "cache-control")
         // A long meeting's .m4a is a few tens of MB on a possibly slow uplink.
         put.timeoutInterval = 300
-        let (putData, putResp) = try await URLSession.shared.upload(for: put, from: data)
+        let (putData, putResp) = try await NetworkPolicy.upload(for: put, from: data, channel: .share)
         guard let putHTTP = putResp as? HTTPURLResponse,
               (200..<300).contains(putHTTP.statusCode) else {
             let body = String(data: putData, encoding: .utf8) ?? ""

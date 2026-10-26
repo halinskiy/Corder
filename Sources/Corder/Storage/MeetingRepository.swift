@@ -492,6 +492,12 @@ struct MeetingRepository {
         }
     }
 
+    func setDetectedMeetingLanguage(meetingId: String, language: String?) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET detected_meeting_lang = ? WHERE id = ?", arguments: [language, meetingId])
+        }
+    }
+
     func setSummary(meetingId: String, summary: String?) throws {
         try dbq.write { db in
             try db.execute(sql: "UPDATE meetings SET summary = ? WHERE id = ?",

@@ -32,15 +32,16 @@ enum SupabaseSync {
 
     /// Fire-and-forget background push. Logs failures, never throws.
     /// Use for write-through mirroring of local mutations.
-    static func push(_ work: @escaping () async throws -> Void) {
+    static func push(channel: NetworkPolicy.Channel = .transcriptSync, _ work: @escaping () async throws -> Void) {
         // SKIP entirely when signed out. A guest has no Supabase session, so
         // every write lands as `anon` and the RLS policy rejects it with 42501
         // ("new row violates row-level security policy for table speakers")
         // pure log noise that made testers think their recording failed to
         // save (it didn't; local GRDB is the source of truth and is untouched).
         // Cloud mirroring only makes sense once there's an authenticated user.
-        guard userId() != nil else { return }
+        guard NetworkPolicy.allows(channel), userId() != nil else { return }
         Task.detached {
+            guard NetworkPolicy.allows(channel) else { return }
             do { try await work() }
             catch { FileLogger.log("SupabaseSync: push failed, \(error)") }
         }
@@ -156,6 +157,7 @@ enum SupabaseSync {
     static func upsertMeeting(_ m: Meeting) {
         guard let row = toRow(m) else { return }
         push {
+            try NetworkPolicy.require(.transcriptSync)
             try await SupabaseClientHolder.shared
                 .from("meetings")
                 .upsert(row, onConflict: "id")
@@ -167,6 +169,7 @@ enum SupabaseSync {
     /// takes care of speakers/segments/summaries/recordings_meta).
     static func deleteMeeting(id: String) {
         push {
+            try NetworkPolicy.require(.transcriptSync)
             try await SupabaseClientHolder.shared
                 .from("meetings")
                 .delete()
@@ -181,6 +184,7 @@ enum SupabaseSync {
     /// `setSpeakers` as a wholesale replacement.
     static func replaceSpeakers(_ speakers: [Speaker], meetingId: String) {
         push {
+            try NetworkPolicy.require(.transcriptSync)
             try await SupabaseClientHolder.shared
                 .from("speakers")
                 .delete()
@@ -201,6 +205,7 @@ enum SupabaseSync {
                     kind: s.label == "user" ? "user" : "other",
                     position: idx)
             }
+            try NetworkPolicy.require(.transcriptSync)
             try await SupabaseClientHolder.shared
                 .from("speakers")
                 .insert(rows)
@@ -221,6 +226,7 @@ enum SupabaseSync {
 
     private static func _replaceSegmentsAwait(_ segments: [Segment], meetingId: String,
                                               speakerIdByLocalId: [String: UUID]) async throws {
+        try NetworkPolicy.require(.transcriptSync)
         try await SupabaseClientHolder.shared
             .from("segments")
             .delete()
@@ -239,6 +245,7 @@ enum SupabaseSync {
                 position: idx)
         }
         guard !rows.isEmpty else { return }
+        try NetworkPolicy.require(.transcriptSync)
         try await SupabaseClientHolder.shared
             .from("segments")
             .insert(rows)
@@ -272,11 +279,13 @@ enum SupabaseSync {
                 guard let m = (try? AppContext.shared.repo.meeting(id: meetingId)) ?? nil else { return nil }
                 return toRow(m)
             }) {
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("meetings")
                     .upsert(row, onConflict: "id")
                     .execute()
             }
+            try NetworkPolicy.require(.transcriptSync)
             try await SupabaseClientHolder.shared
                 .from("speakers")
                 .delete()
@@ -303,6 +312,7 @@ enum SupabaseSync {
                         kind: s.label == "user" ? "user" : "other",
                         position: idx)
                 }
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("speakers")
                     .insert(rows)
@@ -329,7 +339,8 @@ enum SupabaseSync {
     /// written). Read by the admin console so a failed meeting of a user
     /// who never sends a bug report still says WHY.
     static func setLastError(_ message: String?, meetingId: String) {
-        push {
+        push(channel: .lastError) {
+            try NetworkPolicy.require(.lastError)
             try await SupabaseClientHolder.shared
                 .from("meetings")
                 .update(LastErrorPatch(last_error: message))
@@ -344,11 +355,13 @@ enum SupabaseSync {
         push {
             if let md = markdown, !md.isEmpty {
                 let row = SummaryRow(meeting_id: meetingId, markdown: md, model: model)
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("summaries")
                     .upsert(row, onConflict: "meeting_id")
                     .execute()
             } else {
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("summaries")
                     .delete()
@@ -385,7 +398,7 @@ enum SupabaseSync {
             FileLogger.log("SupabaseSync.uploadRecording(\(kind)) skipped, cloud audio backup disabled pending R2 migration")
             return nil
         }
-        guard let uid = userId() else { return nil }
+        guard NetworkPolicy.allows(.cloudMedia), let uid = userId() else { return nil }
         let ext = fileURL.pathExtension
         // RLS on `storage.objects` compares the first path segment to
         // `auth.uid()::text`, Postgres renders UUIDs LOWERCASE. Swift
@@ -396,6 +409,7 @@ enum SupabaseSync {
         do {
             let data = try Data(contentsOf: fileURL)
             let opts = FileOptions(cacheControl: "3600", upsert: true)
+            try NetworkPolicy.require(.cloudMedia)
             _ = try await SupabaseClientHolder.shared.storage
                 .from("recordings")
                 .upload(key, data: data, options: opts)
@@ -407,6 +421,7 @@ enum SupabaseSync {
                 storage_path: key,
                 size_bytes: size,
                 duration_ms: durationMs)
+            try NetworkPolicy.require(.cloudMedia)
             try await SupabaseClientHolder.shared
                 .from("recordings_meta")
                 .upsert(meta, onConflict: "meeting_id,kind")
@@ -430,19 +445,23 @@ enum SupabaseSync {
     /// the dangling auth row carries only the email + sub claim
     /// and we can purge it via a follow-up Edge Function later.
     static func deleteEverything() async throws {
+        try NetworkPolicy.require(.account)
         guard let uid = userId() else { return }
         let uidString = uid.uuidString.lowercased()
 
         // Postgres cascade fans out from meetings; profile has its
         // own FK on auth.users so we delete it explicitly.
+        try NetworkPolicy.require(.account)
         try await SupabaseClientHolder.shared
             .from("meetings").delete().eq("user_id", value: uid).execute()
+        try NetworkPolicy.require(.account)
         try await SupabaseClientHolder.shared
             .from("profiles").delete().eq("id", value: uid).execute()
 
         // Storage objects under `<uid>/...`. List + remove. Iterate
         // in pages to handle users with many recordings.
         do {
+            try NetworkPolicy.require(.account)
             let listed = try await SupabaseClientHolder.shared.storage
                 .from("recordings")
                 .list(path: uidString,
@@ -457,6 +476,7 @@ enum SupabaseSync {
                 if let _ = entry.id {
                     paths.append(sub)
                 } else {
+                    try NetworkPolicy.require(.account)
                     let inner = try await SupabaseClientHolder.shared.storage
                         .from("recordings")
                         .list(path: sub,
@@ -465,6 +485,7 @@ enum SupabaseSync {
                 }
             }
             if !paths.isEmpty {
+                try NetworkPolicy.require(.account)
                 _ = try await SupabaseClientHolder.shared.storage
                     .from("recordings")
                     .remove(paths: paths)
@@ -479,6 +500,7 @@ enum SupabaseSync {
         AppSettings.setCloudBackfillDone(false)
         AppSettings.setLastSyncedUserId(nil)
 
+        try NetworkPolicy.require(.account)
         try await SupabaseClientHolder.shared.auth.signOut()
     }
 
@@ -490,6 +512,7 @@ enum SupabaseSync {
     /// duplicate anything. Sets `AppSettings.cloudBackfillDone` on
     /// success so subsequent launches skip the work.
     static func backfillIfNeeded(repo: MeetingRepository) async {
+        guard NetworkPolicy.allows(.transcriptSync) else { return }
         guard userId() != nil else { return }
         if AppSettings.cloudBackfillDone { return }
         let meetings = (try? repo.listMeetings()) ?? []
@@ -514,6 +537,7 @@ enum SupabaseSync {
         // log line so we know which files to chase later.
         let uploadCeilingBytes: Int64 = 40 * 1024 * 1024
         for m in meetings {
+            guard NetworkPolicy.allows(.transcriptSync) else { return }
             // SYNCHRONOUS chain (not fire-and-forget) so meetings
             // commit BEFORE speakers, speakers BEFORE segments.
             // The earlier `push {}` helpers fired all three in
@@ -522,6 +546,7 @@ enum SupabaseSync {
             // ahead of their speaker rows.
             do {
                 guard let row = toRow(m) else { continue }
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("meetings")
                     .upsert(row, onConflict: "id")
@@ -535,6 +560,7 @@ enum SupabaseSync {
             var speakerUUIDs: [String: UUID] = [:]
             for s in speakers { speakerUUIDs[s.id] = UUID(uuidString: s.id) ?? UUID() }
             do {
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("speakers")
                     .delete()
@@ -550,6 +576,7 @@ enum SupabaseSync {
                             kind: s.label == "user" ? "user" : "other",
                             position: idx)
                     }
+                    try NetworkPolicy.require(.transcriptSync)
                     try await SupabaseClientHolder.shared
                         .from("speakers")
                         .insert(rows)
@@ -560,6 +587,7 @@ enum SupabaseSync {
                 continue
             }
             do {
+                try NetworkPolicy.require(.transcriptSync)
                 try await SupabaseClientHolder.shared
                     .from("segments")
                     .delete()
@@ -578,6 +606,7 @@ enum SupabaseSync {
                             position: idx)
                     }
                     if !rows.isEmpty {
+                        try NetworkPolicy.require(.transcriptSync)
                         try await SupabaseClientHolder.shared
                             .from("segments")
                             .insert(rows)
@@ -623,17 +652,20 @@ enum SupabaseSync {
     /// mints a link after the rows are verified in place. Audio is uploaded
     /// separately by the Share flow (to R2), not here.
     static func pushForShare(meetingId: String, repo: MeetingRepository) async throws {
+        try NetworkPolicy.require(.share)
         guard userId() != nil else { throw ShareSyncError.notSignedIn }
         guard let m = try repo.meeting(id: meetingId), let row = toRow(m) else {
             throw ShareSyncError.meetingMissing
         }
         // 1. meeting first (speakers/segments FK-depend on it).
+        try NetworkPolicy.require(.share)
         try await SupabaseClientHolder.shared
             .from("meetings").upsert(row, onConflict: "id").execute()
         // 2. speakers (replace).
         let speakers = (try? repo.speakers(forMeeting: meetingId)) ?? []
         var speakerUUIDs: [String: UUID] = [:]
         for s in speakers { speakerUUIDs[s.id] = UUID(uuidString: s.id) ?? UUID() }
+        try NetworkPolicy.require(.share)
         try await SupabaseClientHolder.shared
             .from("speakers").delete().eq("meeting_id", value: meetingId).execute()
         if !speakers.isEmpty {
@@ -642,11 +674,13 @@ enum SupabaseSync {
                            label: s.label, display_name: s.customName,
                            kind: s.label == "user" ? "user" : "other", position: idx)
             }
+            try NetworkPolicy.require(.share)
             try await SupabaseClientHolder.shared.from("speakers").insert(rows).execute()
         }
         // 3. segments (replace). A share with no segments would render an empty
         //    page, so treat "no segments" as a hard error the caller can gate on.
         let segments = (try? repo.segments(forMeeting: meetingId)) ?? []
+        try NetworkPolicy.require(.share)
         try await SupabaseClientHolder.shared
             .from("segments").delete().eq("meeting_id", value: meetingId).execute()
         let segRows: [SegmentRow] = segments.enumerated().compactMap { idx, s in
@@ -655,10 +689,12 @@ enum SupabaseSync {
                               start_ms: s.startMs, end_ms: s.endMs, text: s.text, position: idx)
         }
         guard !segRows.isEmpty else { throw ShareSyncError.noSegments }
+        try NetworkPolicy.require(.share)
         try await SupabaseClientHolder.shared.from("segments").insert(segRows).execute()
         // 4. summary (optional — a meeting may not have one yet).
         if let md = m.summary, !md.isEmpty {
             let srow = SummaryRow(meeting_id: meetingId, markdown: md, model: nil)
+            try NetworkPolicy.require(.share)
             try await SupabaseClientHolder.shared
                 .from("summaries").upsert(srow, onConflict: "meeting_id").execute()
         }
@@ -674,6 +710,7 @@ enum SupabaseSync {
     /// rows from the cloud get empty paths (they live in Storage
     /// only, playback will hit the Storage signed-URL path).
     static func pullAll(repo: MeetingRepository) async {
+        guard NetworkPolicy.allows(.transcriptSync) else { return }
         guard let uid = userId() else { return }
 
         // NOTE: we used to wipe the local cache on account-switch
@@ -695,6 +732,7 @@ enum SupabaseSync {
         }
 
         do {
+            try NetworkPolicy.require(.transcriptSync)
             let rows: [MeetingRow] = try await SupabaseClientHolder.shared
                 .from("meetings")
                 .select()

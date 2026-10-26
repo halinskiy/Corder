@@ -41,10 +41,13 @@ actor ForcedAligner {
         if let warm = manager {
             mgr = warm
         } else {
+            try NetworkPolicy.require(.auxiliaryModels)
             // Downloads parakeet-tdt-0.6b-v3 on the very first run ever;
             // afterwards loads from the on-disk cache (Core ML compile,
             // seconds). Same lifecycle as the diarizer models.
-            let models = try await AsrModels.downloadAndLoad(version: .v3)
+            let models = try await NetworkPolicy.withAuxiliaryModels {
+                try await AsrModels.downloadAndLoad(version: .v3)
+            }
             let m = AsrManager(config: .default)
             try await m.loadModels(models)
             manager = m

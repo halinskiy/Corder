@@ -194,7 +194,7 @@ Settings {
   auto_transcribe?: boolean; // off ⇒ recording kept .ready, transcribe on demand
   auto_title?: boolean;
   // When true (default), after auto-transcribe completes the pipeline
-  // also asks Gemini for a structured-markdown summary and persists it
+  // also asks the selected notes backend for a structured-markdown summary and persists it
   // on the meeting row. Frontend Summary tab then renders cached.
   auto_summary?: boolean;
   auto_chapters?: boolean;
@@ -308,3 +308,42 @@ the v1 migration keep it in sync with `segments`.
   during recording, that's the moment to revisit.
 - No GraphQL. Three endpoints would be GraphQL by accident, the rest
   REST by accident.
+
+### Cloud privacy settings
+
+`GET /api/settings` returns `sync_transcripts` (default true), `auto_title`
+(default true) and `local_only` (default false). `POST /api/settings` accepts
+optional booleans for each; omitted fields stay unchanged. Local only overrides
+cloud feature settings without changing their stored values. Share requires sync.
+
+`GET /api/news` serves the shared six-hour news cache through NetworkPolicy.
+`POST /api/feedback` forwards the existing feedback JSON only when networking is
+allowed. Both return no cloud data or send no request in Local only.
+
+## Local meeting notes
+
+`POST /api/settings` accepts optional `summary_provider` (`cloud` or `local`),
+`local_llm_endpoint` (default `http://127.0.0.1:1234/v1`), `local_llm_model`
+(empty selects the first loaded text model), and `local_llm_context_tokens`
+(default 16384, range 4096 to 262144). Missing fields remain unchanged.
+Endpoints must be loopback HTTP(S) URLs without credentials, query or fragment.
+Set the context size in the app and model server to the same value.
+
+`POST /api/settings/local-llm/test` accepts those local settings as an unsaved
+probe and returns `{model}` or `{error: "local_llm_..."}`. It only lists models,
+never loads one or sends a transcript. OpenAI-compatible discovery uses
+`GET /v1/models`; LM Studio's optional `/api/v1/models` inventory excludes
+unloaded JIT entries. Native Ollama discovery uses `GET /api/ps`.
+An explicitly configured model is sent directly during generation.
+
+Summary and chapters routes retain their existing response formats and cache.
+Local generation requires no account or paid tier. Local only forces the local
+backend even when the stored provider is cloud. Local failures use HTTP 200
+with a `local_llm_...` error code, including an upstream local HTTP 403; they
+must render the error card, never sign-in or Upgrade. Input saturation raises
+`local_llm_context_truncated` rather than saving potentially incomplete notes.
+No local failure retries through the cloud. Prompts name the ASR meeting
+language directly, using the persisted `detected_meeting_lang` for manual jobs.
+
+The transport follows the [Ollama chat API](https://docs.ollama.com/api/chat)
+and [LM Studio model API](https://lmstudio.ai/docs/developer/rest/list).

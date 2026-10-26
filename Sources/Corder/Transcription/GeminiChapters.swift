@@ -1,17 +1,7 @@
 import Foundation
 
-/// Generates a Loom-style chapter list for a finished transcript via
-/// a cheap text-only Gemini call. Returns a handful of chapters with
-/// `start_ms` timestamps and short titles, ready to render as a
-/// clickable third tab next to Transcript / Summary.
-///
-/// Routing mirrors GeminiTitler / GeminiSummarizer: a signed-in
-/// user goes through the Cloudflare Worker proxy (server-side
-/// Google key, JWT auth, tier-gated). A signed-out build / dev
-/// shell falls back to the local key file. Best-effort: any failure
-/// returns nil and the UI shows an "no chapters yet" placeholder.
+/// Shared chapter prompt, timestamp mapping and output policy for both transports.
 enum GeminiChapters {
-    private static let model = "gemini-2.5-flash-lite"
 
     struct Chapter: Codable, Equatable, Sendable {
         let startMs: Int64
@@ -40,13 +30,9 @@ enum GeminiChapters {
     /// length) sizes the chapter count; without it the last line's
     /// start stands in.
     static func generate(timedLines: [(startMs: Int64, text: String)],
-                         durationMs: Int64? = nil) async throws -> [Chapter]? {
+                         durationMs: Int64? = nil, languageISO: String? = nil,
+                         llm: any TextLLM = GeminiTextLLM(channel: .chapters)) async throws -> [Chapter]? {
         guard !timedLines.isEmpty else { return nil }
-        let jwt = await GeminiTranscriber.jwtForProxy()
-        let key = GeminiTranscriber.apiKey ?? ""
-        if jwt.isEmpty && key.isEmpty { return nil }
-        let base = await GeminiTranscriber.endpointBaseForProxy()
-
         // Prompt lines are TIME BLOCKS of the transcript, about 200 per
         // meeting (15 s each on a 38-minute call, ~36 s on a 2-hour one), so
         // the WHOLE meeting is in view. The old hard `prefix(2000)` silently
@@ -91,22 +77,32 @@ enum GeminiChapters {
             // mm:ss→milliseconds math and returned 0 / seconds /
             // garbage, every chapter rendered as 0:00. Echoing an
             // integer index is mechanical and bulletproof.
-            lines += "\(idx) [\(String(format: "%02d:%02d", mm, ss))] \(line.text)\n"
+            let prefix = "\(idx) [\(String(format: "%02d:%02d", mm, ss))] "
+            if llm is LocalTextLLM {
+                // Repeat the real index on short lines so even sampling cannot
+                // leave a long block's tail without its timestamp/index.
+                let chars = Array(line.text)
+                for start in stride(from: 0, to: chars.count, by: 400) {
+                    lines += prefix + String(chars[start..<min(start + 400, chars.count)]) + "\n"
+                }
+            } else {
+                lines += prefix + line.text + "\n"
+            }
         }
 
-        let system = """
+        let system = MeetingNotes.languageInstruction(languageISO) + "\n\n" + """
         You generate Loom-style chapters for a meeting transcript.
         Each transcript line is prefixed with its integer INDEX, then
         a [mm:ss] timestamp, then the text.
         Output ONLY a JSON object with a `chapters` array. Each
         chapter has `start_index` (the integer index of the line where
         that chapter begins, copy it exactly from the line prefix)
-        and `title` (3–7 words describing the topic of that segment).
+        and `title` (3-7 words describing the topic of that segment).
 
         Language: every `title` MUST be in the SAME language as the
         transcript (Russian transcript → Russian titles, English →
         English, and so on). NEVER translate titles into English when
-        the transcript is in another language — this is the single most
+        the transcript is in another language; this is the single most
         common mistake on this task, do not make it. Match the language
         of the line text, not this instruction.
 
@@ -123,76 +119,18 @@ enum GeminiChapters {
           "Hiring freeze decision"), not boilerplate
           ("Introduction", "Discussion", "Next steps").
         - No surrounding text, no markdown, no preamble, JSON only.
+        - Never write em or en dashes in titles.
+        - The transcript may be evenly sampled with […] marking gaps.
+          Cover every sampled window, including the end of the meeting.
+          Repeated indices identify excerpts of the same time block.
         - If the transcript has no discernible content, return
           `{"chapters": []}`.
         """
 
-        let body: [String: Any] = [
-            "systemInstruction": ["parts": [["text": system]]],
-            "contents": [[
-                "role": "user",
-                "parts": [["text": "Transcript:\n\n\(lines)"]]
-            ]],
-            "generationConfig": [
-                "temperature": 0.3,
-                // Same disable-thinking trick as GeminiTitler
-                // chapter selection is mechanical, not reasoning.
-                "thinkingConfig": ["thinkingBudget": 0],
-                // A dozen chapters pretty-printed is ~400 tokens; 1024 was
-                // hit the moment the model over-chaptered (28+ entries) and
-                // the whole tab came up empty. Room for any count, the
-                // thinning below caps what is kept.
-                "maxOutputTokens": 4096,
-                "responseMimeType": "application/json"
-            ]
-        ]
-
-        guard let url = URL(string: "\(base)/models/\(model):generateContent?key=\(key)"),
-              let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !jwt.isEmpty {
-            req.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
-        }
-        req.timeoutInterval = 60
-        req.httpBody = payload
-
-        // Every failure below is logged: "Chapters didn't work" reports used
-        // to arrive with nothing in the log to say why.
-        let data: Data
-        let http: HTTPURLResponse
-        do {
-            let (d, resp) = try await URLSession.shared.data(for: req)
-            guard let h = resp as? HTTPURLResponse else { return nil }
-            data = d
-            http = h
-        } catch {
-            FileLogger.log("GeminiChapters: request failed (\(error.localizedDescription))")
-            return nil
-        }
-        // Surface the Worker's tier-gate distinctly (see PaidFeatureError).
-        if http.statusCode == 403 { throw PaidFeatureError.tierRequired }
-        let bodyText = String(data: data, encoding: .utf8) ?? ""
-        guard (200..<300).contains(http.statusCode) else {
-            FileLogger.log("GeminiChapters: HTTP \(http.statusCode) \(bodyText.prefix(300))")
-            return nil
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let first = candidates.first else {
-            FileLogger.log("GeminiChapters: no candidates in response: \(bodyText.prefix(300))")
-            return nil
-        }
-        let finish = first["finishReason"] as? String ?? "?"
-        guard let content = first["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]] else {
-            FileLogger.log("GeminiChapters: empty content, finishReason=\(finish)")
-            return nil
-        }
-
-        let raw = parts.compactMap { $0["text"] as? String }.joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let reply = try await llm.complete(system: system, transcript: lines, maxOutputTokens: 4096, json: true) else { return nil }
+        if reply.truncated, llm is LocalTextLLM { throw LocalTextLLM.Failure.outputTruncated }
+        let raw = reply.text
+        let finish = reply.truncated ? "MAX_TOKENS" : "STOP"
         let chaptersArr: [[String: Any]]
         if let inner = raw.data(using: .utf8),
            let payloadObj = try? JSONSerialization.jsonObject(with: inner) as? [String: Any],
@@ -205,7 +143,7 @@ enum GeminiChapters {
             // are the ones that would have been kept.
             let salvaged = Self.completeObjects(in: raw)
             guard !salvaged.isEmpty else {
-                FileLogger.log("GeminiChapters: unparseable JSON (finishReason=\(finish)): \(raw.prefix(300))")
+                FileLogger.log("GeminiChapters: unparseable JSON (finishReason=\(finish))")
                 return nil
             }
             FileLogger.log("GeminiChapters: salvaged \(salvaged.count) chapter objects from unparseable output (finishReason=\(finish))")

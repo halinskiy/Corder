@@ -509,6 +509,7 @@ final class RecordingController {
                     FileLogger.log("stopRecording: playback mix failed (\(error)) for \(id), playback falls back to mic.wav")
                 }
             }
+            RecordingDirNaming.renameToTitled(repo: AppContext.shared.repo, meetingId: id)
             return
         }
 

@@ -70,6 +70,7 @@ enum WhisperCleanup {
             FileLogger.log("WhisperCleanup: disabled via AppSettings, returning turns unchanged")
             return turns
         }
+        guard NetworkPolicy.allows(.cleanup) else { return turns }
         guard !turns.isEmpty else { return turns }
         let totalChars = turns.reduce(0) { $0 + $1.text.count }
         guard totalChars >= minTotalCharsToCall else {
@@ -210,7 +211,7 @@ enum WhisperCleanup {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await URLSession.shared.data(for: req)
+            (data, resp) = try await NetworkPolicy.data(for: req, channel: .cleanup)
         } catch {
             FileLogger.log("WhisperCleanup: batch \(batchNo) network error (\(error)), returning unchanged")
             return batch

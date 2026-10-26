@@ -42,6 +42,7 @@ enum GeminiTitler {
     }
 
     static func generate(transcript: String, languageISO: String? = nil) async -> String? {
+        guard NetworkPolicy.allows(.title) else { return nil }
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         // Match GeminiTranscriber's routing: a signed-in user goes
@@ -53,11 +54,9 @@ enum GeminiTitler {
         if jwt.isEmpty && key.isEmpty { return nil }
         let base = await GeminiTranscriber.endpointBaseForProxy()
 
-        // Whole transcript when it fits, otherwise an even sample of it (see
-        // `TranscriptSampling`, and the cake-title bug it documents). ~24k
-        // characters is ≈8k tokens on flash-lite — well under a tenth of a
-        // cent per title, so there is no reason to read only the opening.
-        let snippet = TranscriptSampling.evenSample(trimmed, budget: 24000)
+        // Small excerpts keep the whole meeting represented while limiting
+        // the transcript content sent for a short title.
+        let snippet = TranscriptSampling.titleExcerpt(trimmed)
 
         // The language rule is stated FIRST and by NAME whenever the
         // pipeline knows it (from the ASR's own per-chunk language
@@ -91,7 +90,7 @@ enum GeminiTitler {
           that. Weigh the middle and the end at least as much as the
           opening.
         - The transcript may arrive as an even SAMPLE of the meeting, with
-          `[…]` marking a skipped stretch. Judge the subject from all the
+          `[...]` marking a skipped stretch. Judge the subject from all the
           windows together, never from the first one alone.
         - ALWAYS produce a real title whenever there is any discernible
           topic, even from a short or rough transcript. Be decisive.
@@ -135,7 +134,7 @@ enum GeminiTitler {
             req.timeoutInterval = 30
             req.httpBody = payload
 
-            guard let (data, resp) = try? await URLSession.shared.data(for: req),
+            guard let (data, resp) = try? await NetworkPolicy.data(for: req, channel: .title),
                   let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let candidates = json["candidates"] as? [[String: Any]],

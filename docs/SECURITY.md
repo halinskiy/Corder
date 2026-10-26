@@ -114,7 +114,8 @@ attendee count, join URL) is read, into the upcoming list.
 | Supabase service-role JWT    | Cloudflare Worker secret (`SUPABASE_SERVICE_ROLE`)            |
 | Resend API key (transactional email) | Cloudflare Worker secret (`RESEND_API_KEY`)         |
 | GitHub bot token (bug-report → issue) | Cloudflare Worker secret (`GITHUB_TOKEN`)          |
-| Dropbox refresh token        | `~/.config/corder/dropbox.json` (user-side, mode 0600)        |
+| Dropbox app secret           | macOS Keychain, service `com.3mpq.Corder.dropbox`, account `app_secret` |
+| Dropbox refresh token        | macOS Keychain, service `com.3mpq.Corder.dropbox`, account `refresh_token` |
 | Sparkle EdDSA private key    | macOS Keychain (Sparkle stores it there)                      |
 | Developer ID signing cert    | macOS Keychain (`Developer ID Application: …`)                |
 
@@ -126,6 +127,20 @@ Keychain item and is short-lived (≈1 h JWT, refresh-rotated by the
 SDK). Even a stolen JWT can only burn the user's monthly cap until
 expiry; it cannot reach the OpenAI/Gemini secrets directly because
 those never leave the Worker.
+
+Dropbox uses non-synchronizable `kSecClassGenericPassword` items in
+the macOS Keychain. Access tokens are cached only in memory.
+`~/.config/corder/dropbox.json` holds only `app_key` and optional
+`remote_root` after migration. On the first credential read, legacy
+`app_secret` and `refresh_token` values are written to Keychain and both
+are read back and compared before removing them from JSON. A temporary
+file in the same directory is created with mode 0600, written, flushed
+and atomically renamed over the config. Any write, readback or file
+replacement failure leaves the original file usable and retries on the
+next credential read. In particular, an unavailable Keychain keeps the
+legacy plaintext fallback intact. After successful
+migration, a locked or unavailable Keychain prevents credential loading
+until access returns; no plaintext secret copy is recreated.
 
 ### What's NOT a secret (committed on purpose)
 
@@ -202,6 +217,18 @@ $EDITOR ~/.config/corder/dropbox.json
 `bootstrap.sh` never copies anything if the destination already
 exists, so re-running it is safe.
 
+For initial setup, fill in the legacy `app_secret` and `refresh_token`
+alongside `app_key` and optional `remote_root`, and set the config mode
+to 0600. The next Dropbox credential read migrates the secrets as above.
+To forget Dropbox auth, quit Corder to clear the cached access token,
+then remove both Keychain items and the config:
+
+```bash
+security delete-generic-password -s com.3mpq.Corder.dropbox -a app_secret
+security delete-generic-password -s com.3mpq.Corder.dropbox -a refresh_token
+rm ~/.config/corder/dropbox.json
+```
+
 ## Local network surface
 
 The app starts a Swifter HTTP server that binds to **127.0.0.1** on a
@@ -236,8 +263,8 @@ followed by `:` or end-of-string, so an attacker-registrable
 contained under the web / assets root (`target.path.hasPrefix(base.path + "/")`).
 Before this, the raw `:path` segment plus Swifter's split-then-percent-decode
 let a request like `GET /assets/..%2f..%2fetc%2fpasswd` (or, worse,
-`~/.config/corder/dropbox.json` with the Dropbox `app_secret` +
-refresh token) read ANY file readable by the user. Verified: a
+legacy `~/.config/corder/dropbox.json` before Keychain migration)
+read ANY file readable by the user. Verified: a
 traversal path now returns 404, a legitimate asset returns 200.
 
 ## Update channel
@@ -259,17 +286,39 @@ ours.
 ## Telemetry
 
 On by default, opt-out with the `Help improve Corder` toggle in
-Settings → General. When on, Corder sends a single envelope once per 24 h
+Settings > Advanced. When on, Corder sends a single envelope once per 24 h
 to the Worker `/telemetry` endpoint:
 
 - App version, macOS version, Mac model, RAM, tier
 - Aggregate counts: meetings total / ready / failed / transcribing,
   advanced-vs-local minute usage
-- `anonymous_id` = SHA-256 of the lowercased account email
+- `anonymous_id` is pseudonymous: SHA-256 of the lowercased account email
+  when signed in, or a random installation ID when signed out
 
-No transcripts, no audio, no raw email. The Worker persists the
+No meeting content (transcripts, titles, speaker names or audio), no raw email. The Worker persists the
 envelope into a Cloudflare D1 database (`corder-telemetry`) for the
 maintainer's continuous health view.
+
+## Cloud controls
+
+General offers signed-in users `Sync transcripts to your account` and `Auto titles`,
+both on by default. Sync controls meetings, speakers, segments and summaries,
+including backfill and pulls. Share links require sync. Turning sync off keeps
+account/tier requests and last_error updates available; it does not erase data
+already synced. Auto titles sends at most three 900-character transcript excerpts
+from the beginning, middle and end, separated by `[...]`. Off means no title
+request, including manual retitle and launch backfill. Imports retain filenames.
+
+Advanced > `Local only` defaults off. NetworkPolicy blocks cloud requests,
+including SDK auth refresh, telemetry, news, sync, sharing, calendar, reports and
+cloud transcription. Transcription uses strict WhisperKit without cloud fallback.
+Only WhisperKit model downloads and Sparkle updates may connect. Cached diarizer
+models load through an offline loader without SDK downloads or repair. Missing
+models keep raw ASR timings. Enabling Local only cancels auxiliary model tasks,
+including their recovery requests. The cloud-only forced aligner cannot cold-load
+in this mode.
+The embedded frontend uses loopback endpoints for news and feedback, with CSP
+blocking direct external requests. News shares a six-hour fetch cache.
 
 ## Bug reports (`/submit-logs`)
 

@@ -381,7 +381,7 @@ export interface NewsItem {
 
 export async function getNews(): Promise<NewsItem[]> {
   try {
-    const r = await fetch("https://corder-api.empqwork.workers.dev/news", { cache: "no-store" });
+    const r = await fetch("/api/news", { cache: "no-store" });
     if (!r.ok) return [];
     const j = await r.json();
     if (!Array.isArray(j.items)) return [];
@@ -481,6 +481,12 @@ export interface Settings {
   capture_audio?: boolean;
   auto_transcribe?: boolean;
   auto_title?: boolean;
+  sync_transcripts?: boolean;
+  local_only?: boolean;
+  summary_provider?: "cloud" | "local";
+  local_llm_endpoint?: string;
+  local_llm_model?: string;
+  local_llm_context_tokens?: number;
   auto_summary?: boolean;
   auto_chapters?: boolean;
   /** Dashboard statistics block visibility (paid-only toggle, default off). */
@@ -604,7 +610,9 @@ export async function setSettings(s: Settings): Promise<Settings> {
     body: JSON.stringify(s),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  const fresh: Settings = await r.json();
+  window.dispatchEvent(new CustomEvent<Settings>("corder-settings-updated", { detail: fresh }));
+  return fresh;
 }
 
 export interface InstalledApp {
@@ -719,4 +727,13 @@ export async function archiveOldSessions(): Promise<number> {
 
 export async function dismissStorageAdvice(): Promise<void> {
   await fetch("/api/storage-advice/dismiss", { method: "POST" });
+}
+
+export async function testLocalLLM(settings: Settings): Promise<string> {
+  const response = await fetch("/api/settings/local-llm/test", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings),
+  });
+  const result = await response.json();
+  if (!response.ok || result.error || !result.model) throw new Error(result.error || "local_llm_request_failed");
+  return result.model as string;
 }

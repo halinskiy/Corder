@@ -26,9 +26,10 @@ enum SupabaseClientHolder {
     /// touches Supabase. After wizard sign-in it's effectively
     /// permanent, the session refresher runs in the background.
     static let shared: SupabaseClient = {
-        SupabaseClient(
+        return SupabaseClient(
             supabaseURL: SupabaseEnvironment.url,
-            supabaseKey: SupabaseEnvironment.publishableKey
+            supabaseKey: SupabaseEnvironment.publishableKey,
+            options: .init(global: .init(session: SupabasePolicyProtocol.transport))
         )
     }()
 }

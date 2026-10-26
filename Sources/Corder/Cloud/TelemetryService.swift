@@ -2,17 +2,9 @@ import Foundation
 import CryptoKit
 import IOKit
 
-/// Opt-in diagnostic telemetry. Default OFF, toggled on by the
-/// user in Settings ("Help improve Corder"). Once on, fires once
-/// per 24h from `tick()` (called on app launch and every hour
-/// while the app is alive). Payload is intentionally narrow:
-///   • anonymous_id = SHA-256(email lowercased)
-///   • app version, macOS version, Mac model, RAM gigabytes, tier
-///   • events[], counts of meetings by status + provider used.
-///
-/// Explicitly NOT included: transcript text, meeting titles,
-/// speaker names, audio, IP address (Cloudflare strips it from
-/// the request body server-side; the Worker doesn't log it).
+/// Pseudonymous diagnostic telemetry, ON by default, optional in Settings.
+/// One daily ping: email SHA-256 when signed in, random install ID otherwise;
+/// device/version/tier and aggregate reliability counts, no meeting content.
 @MainActor
 enum TelemetryService {
     private static let endpoint = URL(string: "https://corder-api.empqwork.workers.dev/telemetry")!
@@ -49,8 +41,7 @@ enum TelemetryService {
         let d = UserDefaults.standard
         d.set(d.integer(forKey: c.rawValue) + 1, forKey: c.rawValue)
     }
-    private static func drainCounters() -> [String: Int] {
-        let d = UserDefaults.standard
+    nonisolated static func drainCounters(in d: UserDefaults = .standard) -> [String: Int] {
         var out: [String: Int] = [:]
         for c in [Counter.recordings, .btRecordings, .farEndLost, .btFarEndLost, .tapRebuilds] {
             out[c.rawValue.replacingOccurrences(of: "Corder.tele.", with: "")] = d.integer(forKey: c.rawValue)
@@ -63,7 +54,7 @@ enum TelemetryService {
     /// timer. Returns immediately if telemetry is off or the 24h
     /// window hasn't elapsed yet.
     static func tickIfDue() {
-        guard AppSettings.telemetryEnabled else { return }
+        guard NetworkPolicy.allows(.telemetry) else { return }
         let last = UserDefaults.standard.double(forKey: lastSentKey)
         let now = Date().timeIntervalSince1970
         if now - last < oneDay { return }
@@ -72,6 +63,7 @@ enum TelemetryService {
     }
 
     private static func send() async {
+        guard NetworkPolicy.allows(.telemetry) else { return }
         // Signed in: a stable hash of the email (one id per account across
         // Macs). Signed out: the per-install id.
         let anonID: String
@@ -87,51 +79,18 @@ enum TelemetryService {
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
         let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
         let tier = AppSettings.userTier.rawValue
-        let events = await collectEvents()
-        let payload: [String: Any] = [
-            "anonymous_id": anonID,
-            "app_version": "\(version) (\(build))",
-            "macos_version": macOS,
-            "mac_model": macModel,
-            "ram_gb": ramGB,
-            "tier": tier,
-            "events": events,
-        ]
+        let sinceMs = Int64((Date().timeIntervalSince1970 - oneDay) * 1000)
+        let recent = ((try? AppContext.shared.repo.listMeetings()) ?? []).filter { $0.startedAt >= sinceMs }
+        let payload = TelemetryPayload.make(id: anonID, appVersion: "\(version) (\(build))",
+            macOS: macOS, macModel: macModel, ramGB: ramGB, tier: tier,
+            meetings: recent, counters: drainCounters())
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return }
         var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
         req.timeoutInterval = 15
-        _ = try? await URLSession.shared.data(for: req)
-    }
-
-    /// Aggregate counts over the last 24h of meetings: how many
-    /// ended `ready`, how many `failed`, average duration. Just
-    /// numbers, no per-meeting identifiers. Safe under the
-    /// privacy contract above.
-    private static func collectEvents() async -> [[String: Any]] {
-        let repo = AppContext.shared.repo
-        let sinceMs = Int64((Date().timeIntervalSince1970 - oneDay) * 1000)
-        var stats: [String: Any] = ["window_hours": 24]
-        if let rows = try? repo.listMeetings() {
-            let recent = rows.filter { ($0.startedAt) >= sinceMs }
-            stats["meetings_total"] = recent.count
-            stats["meetings_ready"] = recent.filter { $0.status == .ready }.count
-            stats["meetings_failed"] = recent.filter { $0.status == .failed }.count
-            stats["meetings_transcribing"] = recent.filter { $0.status == .transcribing }.count
-            let advCount = recent.filter { $0.transcriptionClass == "advanced" }.count
-            let localCount = recent.filter { $0.transcriptionClass == "local" }.count
-            stats["transcribed_advanced"] = advCount
-            stats["transcribed_local"] = localCount
-            let totalDur = recent.compactMap { $0.durationMs }.reduce(0, +)
-            stats["total_duration_ms"] = totalDur
-        }
-        // Capture-reliability counters (drained + reset for this window).
-        // This is what tells us how often the far end is lost, and how
-        // much of it is Bluetooth, the core risk we couldn't see before.
-        for (k, v) in drainCounters() { stats["reliab_\(k)"] = v }
-        return [stats]
+        _ = try? await NetworkPolicy.data(for: req, channel: .telemetry)
     }
 
     private static func sha256(_ input: String) -> String {

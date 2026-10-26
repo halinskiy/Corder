@@ -14,16 +14,50 @@ enum NewsPoller {
     private static let endpoint = URL(string: "https://corder-api.empqwork.workers.dev/news")!
     private static let kSeenKey = "Corder.news.seenIds"
     private static let kSeededKey = "Corder.news.seeded"
-    /// 30 min, same cadence as the frontend `NewsBanner` falls back
-    /// to. Cheap GET, single Worker round-trip.
-    private static let interval: TimeInterval = 30 * 60
+    /// Shared by native banners and the loopback frontend endpoint.
+    private static let interval: TimeInterval = 6 * 3600
+    private static var cachedFeed: [[String: Any]] = []
+    private static var fetchedAt: Date = .distantPast
+    private static var inFlight: Task<[[String: Any]]?, Never>?
+
+    static func feed() async -> [[String: Any]] {
+        await feedIfAvailable() ?? []
+    }
+
+    static func feedIfAvailable(load: @escaping () async -> [[String: Any]]? = loadFeed) async -> [[String: Any]]? {
+        guard NetworkPolicy.allows(.news) else { return nil }
+        if let inFlight {
+            let items = await inFlight.value
+            return NetworkPolicy.allows(.news) ? items : nil
+        }
+        if Date().timeIntervalSince(fetchedAt) < interval { return cachedFeed }
+        let task = Task { await load() }
+        inFlight = task
+        let items = await task.value
+        inFlight = nil
+        guard NetworkPolicy.allows(.news), let items else { return nil }
+        fetchedAt = Date()
+        cachedFeed = items
+        return cachedFeed
+    }
+
+    private static func loadFeed() async -> [[String: Any]]? {
+        var req = URLRequest(url: endpoint)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 10
+        guard let (data, resp) = try? await NetworkPolicy.data(for: req, channel: .news),
+              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = obj["items"] as? [[String: Any]] else { return nil }
+        return items
+    }
 
     private static var timer: Timer?
 
     static func start() {
         timer?.invalidate()
         Task { await tick() }
-        let t = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+        let t = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { _ in
             Task { @MainActor in await tick() }
         }
         timer = t
@@ -63,13 +97,7 @@ enum NewsPoller {
     }
 
     private static func fetch() async -> [NewsItem]? {
-        var req = URLRequest(url: endpoint)
-        req.cachePolicy = .reloadIgnoringLocalCacheData
-        req.timeoutInterval = 10
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let arr = obj["items"] as? [[String: Any]] else { return nil }
+        guard let arr = await feedIfAvailable() else { return nil }
         return arr.compactMap { dict in
             guard let id = dict["id"] as? String, !id.isEmpty,
                   let title = dict["title"] as? String, !title.isEmpty else { return nil }

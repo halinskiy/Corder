@@ -5,8 +5,14 @@ final class LocalServer {
     private let server = HttpServer()
     private(set) var port: UInt16 = 0
 
-    func start(routes: (HttpServer) -> Void) throws {
-        routes(server)
+    func start(routes: (HttpServer, @escaping () -> UInt16) -> Void) throws {
+        // Swifter binds before accepting requests, but an ephemeral port is
+        // unknown at route registration. Read the bound socket on each request
+        // so the Host guard also covers the interval before start() returns.
+        routes(server, { [weak server] in
+            guard let server, let boundPort = try? server.port() else { return 0 }
+            return UInt16(exactly: boundPort) ?? 0
+        })
         // Warm the CoreAudio device cache off-thread so the first
         // /api/settings call serves real devices without paying the
         // seconds-long Bluetooth enumeration on a request thread.

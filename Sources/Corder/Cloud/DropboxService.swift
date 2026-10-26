@@ -5,9 +5,9 @@ import Foundation
 /// then deleted locally. When the user later opens an archived meeting we ask
 /// Dropbox for a short-lived `temporary_link` and stream from there.
 ///
-/// Auth uses a refresh-token flow: the long-lived refresh token lives in
-/// `~/.config/corder/dropbox.json`, and we exchange it for a fresh
-/// short-lived access token whenever the cached one is about to expire.
+/// Auth uses a refresh-token flow with secrets in Keychain. Legacy JSON
+/// credentials migrate on first read, retaining the file on any failure.
+/// The short-lived access token is cached only in memory.
 actor DropboxService {
     static let shared = DropboxService()
 
@@ -25,7 +25,7 @@ actor DropboxService {
 
         var errorDescription: String? {
             switch self {
-            case .missingCredentials:    return "Dropbox credentials missing (~/.config/corder/dropbox.json)"
+            case .missingCredentials:    return "Dropbox credentials missing (Keychain or ~/.config/corder/dropbox.json)"
             case .http(let s, let body): return "Dropbox API \(s): \(body.prefix(280))"
             case .decode(let m):         return "Dropbox decode failed: \(m)"
             }
@@ -43,10 +43,7 @@ actor DropboxService {
 
     private func loadCreds() throws -> Credentials {
         let url = URL(fileURLWithPath: Self.credsPath)
-        guard let data = try? Data(contentsOf: url) else {
-            throw DropboxError.missingCredentials
-        }
-        return try JSONDecoder().decode(Credentials.self, from: data)
+        return try DropboxCredentialStore(fileURL: url, secrets: DropboxKeychainSecrets()).load()
     }
 
     /// Returns the configured remote root (defaults to `/Corder`).
@@ -58,6 +55,7 @@ actor DropboxService {
     /// Refresh-or-reuse access token. Dropbox short-lived tokens last ~4h,
     /// we refresh 60 s early to be safe.
     private func getAccessToken() async throws -> String {
+        try NetworkPolicy.require(.dropbox)
         if let token = cachedAccessToken, let expiry = cachedExpiry, Date() < expiry {
             return token
         }
@@ -68,7 +66,7 @@ actor DropboxService {
         let body = "grant_type=refresh_token&refresh_token=\(creds.refresh_token)&client_id=\(creds.app_key)&client_secret=\(creds.app_secret)"
         req.httpBody = body.data(using: .utf8)
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await NetworkPolicy.data(for: req, channel: .dropbox)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw DropboxError.http(status, String(data: data, encoding: .utf8) ?? "")
@@ -120,7 +118,7 @@ actor DropboxService {
         // small chunks instead of buffering the whole file into RAM (which
         // `Data(contentsOf:)` + `httpBody` did). Critical for hour-long
         // recordings where the .wav reaches ~110 MB.
-        let (respData, resp) = try await URLSession.shared.upload(for: req, fromFile: localFile)
+        let (respData, resp) = try await NetworkPolicy.upload(for: req, fromFile: localFile, channel: .dropbox)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw DropboxError.http(status, String(data: respData, encoding: .utf8) ?? "")
@@ -152,7 +150,7 @@ actor DropboxService {
         startReq.setValue(String(data: startArg, encoding: .utf8), forHTTPHeaderField: "Dropbox-API-Arg")
         startReq.httpBody = first
 
-        let (startData, startResp) = try await URLSession.shared.data(for: startReq)
+        let (startData, startResp) = try await NetworkPolicy.data(for: startReq, channel: .dropbox)
         var status = (startResp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw DropboxError.http(status, String(data: startData, encoding: .utf8) ?? "")
@@ -189,7 +187,7 @@ actor DropboxService {
                 finReq.setValue(String(data: finArgData, encoding: .utf8), forHTTPHeaderField: "Dropbox-API-Arg")
                 finReq.httpBody = chunk
 
-                let (finData, finResp) = try await URLSession.shared.data(for: finReq)
+                let (finData, finResp) = try await NetworkPolicy.data(for: finReq, channel: .dropbox)
                 status = (finResp as? HTTPURLResponse)?.statusCode ?? 0
                 guard (200..<300).contains(status) else {
                     throw DropboxError.http(status, String(data: finData, encoding: .utf8) ?? "")
@@ -213,7 +211,7 @@ actor DropboxService {
                 apReq.setValue(String(data: apArgData, encoding: .utf8), forHTTPHeaderField: "Dropbox-API-Arg")
                 apReq.httpBody = chunk
 
-                let (apData, apResp) = try await URLSession.shared.data(for: apReq)
+                let (apData, apResp) = try await NetworkPolicy.data(for: apReq, channel: .dropbox)
                 status = (apResp as? HTTPURLResponse)?.statusCode ?? 0
                 guard (200..<300).contains(status) else {
                     throw DropboxError.http(status, String(data: apData, encoding: .utf8) ?? "")
@@ -243,7 +241,7 @@ actor DropboxService {
         let arg = try JSONSerialization.data(withJSONObject: ["path": remotePath])
         req.setValue(String(data: arg, encoding: .utf8), forHTTPHeaderField: "Dropbox-API-Arg")
 
-        let (tempURL, resp) = try await URLSession.shared.download(for: req)
+        let (tempURL, resp) = try await NetworkPolicy.download(for: req, channel: .dropbox)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
@@ -270,7 +268,7 @@ actor DropboxService {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: ["path": remotePath])
-            _ = try await URLSession.shared.data(for: req)
+            _ = try await NetworkPolicy.data(for: req, channel: .dropbox)
         } catch {
             FileLogger.log("Dropbox: delete \(remotePath) failed: \(error)")
         }

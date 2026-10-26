@@ -6,7 +6,26 @@ import UserNotifications
 @preconcurrency import Supabase
 
 enum Routes {
-    static func register(server: HttpServer, repo: MeetingRepository) {
+    static func isAllowedHost(_ host: String?, port: UInt16) -> Bool {
+        guard port != 0, let host else { return false }
+        let authority = host.lowercased()
+        return authority == "127.0.0.1" || authority == "localhost"
+            || authority == "127.0.0.1:\(port)" || authority == "localhost:\(port)"
+            || authority == "[::1]:\(port)"
+    }
+
+    static func register(server: HttpServer, repo: MeetingRepository, port: @escaping () -> UInt16) {
+        // DNS rebinding makes an attacker domain same-origin with loopback.
+        // Validate Host before any middleware or route, including GET/HEAD.
+        server.middleware.insert({ req in
+            let host = req.headers["host"]
+            guard isAllowedHost(host, port: port()) else {
+                FileLogger.log("Routes: rejected Host=\(host ?? "<missing>")")
+                return .raw(421, "Misdirected Request", nil, nil)
+            }
+            return nil
+        }, at: 0)
+
         // CSRF guard for the loopback API. The server binds 127.0.0.1 only,
         // but a malicious web page the user is browsing can still fire
         // "simple" cross-origin POSTs at http://127.0.0.1:<port>/api/... (the
@@ -16,8 +35,8 @@ enum Routes {
         // WKWebView app's own requests carry a loopback Origin (or none), and
         // native clients send no Origin at all. So: reject any
         // state-changing request whose Origin is present AND not loopback.
-        // GET/HEAD pass through: no route hands out a credential, and we send
-        // no CORS headers, so a cross-origin page cannot read a response.
+        // GET/HEAD pass through this CSRF guard: we send no CORS headers,
+        // and the preceding Host guard blocks same-origin DNS rebinding reads.
         server.middleware.append { req in
             let method = req.method.uppercased()
             guard method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"
@@ -143,6 +162,7 @@ enum Routes {
         server.post["/api/recording/stop"] = { _ in stopRecordingNow() }
         server.get["/api/settings"] = { _ in settingsGet() }
         server.post["/api/settings"] = { req in settingsSet(req: req) }
+        server.post["/api/settings/local-llm/test"] = { req in testLocalLLM(req: req) }
         server.get["/api/usage"] = { _ in usageGet(repo: repo) }
         // Upcoming calendar meetings for the Dashboard "Upcoming" tab
         // served from the GoogleCalendar cache (connected:false until the
@@ -154,6 +174,29 @@ enum Routes {
         server.post["/api/calendar/connect"] = { _ in
             Task { @MainActor in GoogleCalendar.startConnect() }
             return jsonResponse(["ok": true])
+        }
+        server.get["/api/news"] = { _ in
+            let items = awaitBlocking(timeout: 15, label: "news") { await NewsPoller.feed() } ?? []
+            return jsonResponse(["items": items])
+        }
+        server.post["/api/feedback"] = { req in
+            guard NetworkPolicy.allows(.feedback) else {
+                return .forbidden
+            }
+            guard req.body.count <= 64_000,
+                  let url = URL(string: "https://corder-api.empqwork.workers.dev/feedback") else { return .badRequest(nil) }
+            var outgoing = URLRequest(url: url)
+            outgoing.httpMethod = "POST"
+            outgoing.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            outgoing.httpBody = Data(req.body)
+            outgoing.timeoutInterval = 15
+            let request = outgoing
+            let sent = awaitBlocking(timeout: 20, label: "feedback") {
+                guard let (_, response) = try? await NetworkPolicy.data(for: request, channel: .feedback),
+                      let http = response as? HTTPURLResponse else { return false }
+                return (200..<300).contains(http.statusCode)
+            } ?? false
+            return sent ? .ok(.text("ok")) : .badRequest(.text("Feedback could not be sent."))
         }
         server.post["/api/submit-logs"] = { _ in submitLogs() }
         server.get["/api/has-bug-events"] = { _ in hasBugEvents() }
@@ -588,7 +631,10 @@ enum Routes {
               let data = try? Data(contentsOf: url) else {
             return .notFound
         }
-        return .raw(200, "OK", ["Content-Type": "text/html; charset=utf-8"]) { writer in
+        return .raw(200, "OK", [
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:"
+        ]) { writer in
             try writer.write(data)
         }
     }
@@ -958,6 +1004,12 @@ enum Routes {
             capture_audio: AppSettings.captureAudio,
             auto_transcribe: AppSettings.autoTranscribe,
             auto_title: AppSettings.autoTitle,
+            sync_transcripts: AppSettings.syncTranscripts,
+            local_only: AppSettings.localOnly,
+            summary_provider: AppSettings.summaryProvider,
+            local_llm_endpoint: AppSettings.localLLMEndpoint,
+            local_llm_model: AppSettings.localLLMModel,
+            local_llm_context_tokens: AppSettings.localLLMContextTokens(),
             auto_summary: AppSettings.autoSummary,
             auto_chapters: AppSettings.autoChapters,
             launch_at_login: AppSettings.launchAtLogin,
@@ -1205,6 +1257,7 @@ enum Routes {
     }
 
     private static func submitLogs() -> HttpResponse {
+        guard NetworkPolicy.allows(.diagnostics) else { return .forbidden }
         let tail = bugEventLog()
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
@@ -1230,7 +1283,7 @@ enum Routes {
         // round-trip, not fire-and-forget.
         let sem = DispatchSemaphore(value: 0)
         var ok = false
-        URLSession.shared.dataTask(with: req) { _, resp, _ in
+        NetworkPolicy.callbackSession.dataTask(with: req) { _, resp, _ in
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             ok = (200..<300).contains(code)
             sem.signal()
@@ -1247,6 +1300,7 @@ enum Routes {
     /// Used by the Settings → General "Upgrade / Downgrade" testing
     /// block; intended to be removed before real billing ships.
     private static func setTestTier(req: HttpRequest) -> HttpResponse {
+        guard NetworkPolicy.allows(.billing) else { return .forbidden }
         let bodyData = Data(req.body)
         guard let obj = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
               let tier = (obj["tier"] as? String)?.lowercased(),
@@ -1278,7 +1332,7 @@ enum Routes {
         let sem = DispatchSemaphore(value: 0)
         var ok = false
         var responseTier = "free"
-        URLSession.shared.dataTask(with: rq) { data, resp, _ in
+        NetworkPolicy.callbackSession.dataTask(with: rq) { data, resp, _ in
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if (200..<300).contains(code), let d = data,
                let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
@@ -1407,6 +1461,15 @@ enum Routes {
         do {
             let body = Data(req.body)
             let parsed = try JSONDecoder().decode(DTO.Settings.self, from: body)
+            if let provider = parsed.summary_provider, !["cloud", "local"].contains(provider) {
+                return .badRequest(.text("invalid summary provider"))
+            }
+            if let context = parsed.local_llm_context_tokens, !(4096...262144).contains(context) {
+                return .badRequest(.text("invalid local context budget"))
+            }
+            if let endpoint = parsed.local_llm_endpoint {
+                _ = try LocalTextLLM.Configuration(endpoint: endpoint)
+            }
             // Persist ANY supported UI locale (must match the frontend's
             // LANGS list), not just ru/en, otherwise a German/French/etc.
             // pick was silently dropped here and reset to English on reload.
@@ -1454,6 +1517,12 @@ enum Routes {
             if let v = parsed.capture_audio    { AppSettings.setCaptureAudio(v) }
             if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
+            if let v = parsed.sync_transcripts { AppSettings.setSyncTranscripts(v) }
+            if let v = parsed.local_only       { AppSettings.setLocalOnly(v) }
+            if let v = parsed.summary_provider { AppSettings.setSummaryProvider(v) }
+            if let v = parsed.local_llm_endpoint { AppSettings.setLocalLLMEndpoint(v) }
+            if let v = parsed.local_llm_model { AppSettings.setLocalLLMModel(v) }
+            if let v = parsed.local_llm_context_tokens { AppSettings.setLocalLLMContextTokens(v) }
             if let v = parsed.auto_summary     { AppSettings.setAutoSummary(v) }
             if let v = parsed.auto_chapters    { AppSettings.setAutoChapters(v) }
             if let v = parsed.launch_at_login  { AppSettings.setLaunchAtLogin(v) }
@@ -1612,6 +1681,25 @@ enum Routes {
         return .ok(.text("queued"))
     }
 
+    /// Discovery only: never loads a model or sends meeting content.
+    private static func testLocalLLM(req: HttpRequest) -> HttpResponse {
+        do {
+            let parsed = try JSONDecoder().decode(DTO.Settings.self, from: Data(req.body))
+            let config = try LocalTextLLM.Configuration(
+                endpoint: parsed.local_llm_endpoint ?? AppSettings.localLLMEndpoint,
+                model: parsed.local_llm_model ?? AppSettings.localLLMModel,
+                contextTokens: parsed.local_llm_context_tokens ?? AppSettings.localLLMContextTokens())
+            let result: [String: String]? = awaitBlocking(timeout: 15, label: "local LLM test") {
+                do { return ["model": try await LocalTextLLM(config: config).discoverModel()] }
+                catch let error as LocalTextLLM.Failure { return ["error": error.rawValue] }
+                catch { return ["error": LocalTextLLM.Failure.unavailable.rawValue] }
+            }
+            return jsonResponse(result ?? ["error": LocalTextLLM.Failure.unavailable.rawValue])
+        } catch {
+            return jsonResponse(["error": LocalTextLLM.Failure.invalidEndpoint.rawValue])
+        }
+    }
+
     /// On-demand summary. Returns the cached `summary` if present;
     /// otherwise generates one from the transcript (blocking this
     /// Swifter worker for the Gemini round-trip, same accepted pattern
@@ -1632,12 +1720,11 @@ enum Routes {
         guard !segs.isEmpty else {
             return jsonResponse(["summary": "", "error": "no transcript"])
         }
-        // Summary/Chapters run through the Worker (Gemini), which needs a
-        // Supabase JWT. A signed-OUT guest has none, so generation would fail
-        // with a bare "generation failed" card (what a tester reported). Tell
-        // the frontend to show a "Sign in to generate" CTA instead, the
-        // feature is free, it just needs an account.
-        guard AppSettings.isSignedIn else {
+        // Only cloud notes require a Worker JWT; local notes work for guests.
+        let notes: MeetingNotes
+        do { notes = try MeetingNotes() }
+        catch { return jsonResponse(["error": LocalTextLLM.Failure.invalidEndpoint.rawValue]) }
+        guard notes.local || AppSettings.isSignedIn else {
             return jsonResponse(["summary": "", "error": "sign_in_required"])
         }
         let spks = (try? repo.speakers(forMeeting: id)) ?? []
@@ -1646,26 +1733,32 @@ enum Routes {
         // Joins the pipeline's auto-summary if it is still running for
         // this meeting (the row flips to ready a few seconds before the
         // recap lands, which is exactly when the user clicks Generate).
-        let outcome: GatedOutcome<String> = awaitBlocking(timeout: 240, label: "summary \(id)") {
+        let language = AppSettings.transcriptionLanguage.nilIfEmpty ?? m.detectedMeetingLang
+        let outcome: GatedOutcome<String> = awaitBlocking(timeout: notes.local ? 1250 : 240, label: "summary \(id)") {
             do {
-                let r = try await DerivedContentJobs.shared.run("summary:\(id)") {
-                    try await GeminiSummarizer.generate(transcript: text)
+                let r = try await DerivedContentJobs.shared.run("summary:\(id):\(notes.jobTag)") {
+                    try await notes.summarize(text, languageISO: language)
                 }
                 return .value(r)
             }
+            catch let error as LocalTextLLM.Failure { return .failure(error.rawValue) }
             catch is PaidFeatureError { return .tierGated }
             catch { return .value(nil) }
         } ?? .value(nil)
         var result: String?
         var tierGated = false
-        switch outcome { case .value(let v): result = v; case .tierGated: tierGated = true }
+        switch outcome {
+        case .value(let v): result = v
+        case .tierGated: tierGated = true
+        case .failure(let error): return jsonResponse(["error": error])
+        }
 
         // A 403 tier-gate must surface as a real 403 so the frontend shows the
         // Upgrade upsell (api.ts throws "HTTP 403", SummaryPane keys off it),
         // NOT the generic "generation failed" error card. Load-bearing.
         if tierGated { return tierGatedResponse("summary") }
         guard let summary = result, !summary.isEmpty else {
-            return jsonResponse(["summary": "", "error": "generation failed"])
+            return jsonResponse(["summary": "", "error": notes.local ? LocalTextLLM.Failure.unavailable.rawValue : "generation failed"])
         }
         try? repo.setSummary(meetingId: id, summary: summary)
         FileLogger.log("summarize: generated summary for \(id) (\(summary.count) chars)")
@@ -1689,7 +1782,10 @@ enum Routes {
         guard !segs.isEmpty else {
             return jsonResponse(["chapters": "", "error": "no transcript"])
         }
-        guard AppSettings.isSignedIn else {
+        let notes: MeetingNotes
+        do { notes = try MeetingNotes() }
+        catch { return jsonResponse(["error": LocalTextLLM.Failure.invalidEndpoint.rawValue]) }
+        guard notes.local || AppSettings.isSignedIn else {
             return jsonResponse(["chapters": "", "error": "sign_in_required"])
         }
         let timed: [(startMs: Int64, text: String)] = segs.map {
@@ -1697,25 +1793,31 @@ enum Routes {
         }
         let durationMs = m.durationMs ?? segs.last?.endMs
         // Same in-flight sharing as summarize(): one run per meeting.
-        let outcome: GatedOutcome<[GeminiChapters.Chapter]> = awaitBlocking(timeout: 240, label: "chapters \(id)") {
+        let language = AppSettings.transcriptionLanguage.nilIfEmpty ?? m.detectedMeetingLang
+        let outcome: GatedOutcome<[GeminiChapters.Chapter]> = awaitBlocking(timeout: notes.local ? 650 : 240, label: "chapters \(id)") {
             do {
-                let r = try await DerivedContentJobs.shared.run("chapters:\(id)") {
-                    try await GeminiChapters.generate(timedLines: timed, durationMs: durationMs)
+                let r = try await DerivedContentJobs.shared.run("chapters:\(id):\(notes.jobTag)") {
+                    try await notes.chapters(timed, durationMs: durationMs, languageISO: language)
                 }
                 return .value(r)
             }
+            catch let error as LocalTextLLM.Failure { return .failure(error.rawValue) }
             catch is PaidFeatureError { return .tierGated }
             catch { return .value(nil) }
         } ?? .value(nil)
         var result: [GeminiChapters.Chapter]?
         var tierGated = false
-        switch outcome { case .value(let v): result = v; case .tierGated: tierGated = true }
+        switch outcome {
+        case .value(let v): result = v
+        case .tierGated: tierGated = true
+        case .failure(let error): return jsonResponse(["error": error])
+        }
         // Real 403 on a tier-gate so the upsell fires (see summarize()).
         if tierGated { return tierGatedResponse("chapters") }
         guard let chapters = result, !chapters.isEmpty,
               let data = try? JSONEncoder().encode(chapters),
               let json = String(data: data, encoding: .utf8) else {
-            return jsonResponse(["chapters": "", "error": "generation failed"])
+            return jsonResponse(["chapters": "", "error": notes.local ? LocalTextLLM.Failure.unavailable.rawValue : "generation failed"])
         }
         try? repo.setChapters(meetingId: id, chapters: json)
         FileLogger.log("chapters: generated \(chapters.count) chapters for \(id)")
@@ -1734,7 +1836,7 @@ enum Routes {
     /// Current format: dense bullets under every heading. The retired one
     /// (paragraph per section, bullets only in the closing action items)
     /// scores 1 section of 4 and is treated as stale.
-    private static func isStructuredMarkdown(_ s: String) -> Bool {
+    static func isStructuredMarkdown(_ s: String) -> Bool {
         // Prefix a newline when the text opens on a heading, so the FIRST
         // section survives the `dropFirst` that discards the pre-heading part.
         let text = s.hasPrefix("### ") ? "\n" + s : s
@@ -2325,6 +2427,7 @@ enum Routes {
                 return false
             }
             do {
+                try NetworkPolicy.require(.cloudMedia)
                 try FileManager.default.createDirectory(
                     at: localURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true)
@@ -2352,7 +2455,7 @@ enum Routes {
 
     // MARK: helpers
 
-    enum GatedOutcome<T> { case value(T?), tierGated }
+    enum GatedOutcome<T> { case value(T?), tierGated, failure(String) }
 
     final class BlockingBox<T>: @unchecked Sendable {
         let lock = NSLock()

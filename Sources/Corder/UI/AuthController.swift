@@ -106,6 +106,10 @@ final class AuthController {
     // MARK: - Google (loopback → in-app /auth/callback → signed-in notif)
 
     private func google(agreed: Bool) {
+        guard NetworkPolicy.allows(.account) else {
+            push(visible: true, error: "Turn off Local only in Settings to sign in.")
+            return
+        }
         guard agreed else {
             push(visible: true,error: "Please agree to the Terms and Privacy Policy first."); return
         }

@@ -131,6 +131,7 @@ enum GeminiTranscriber {
         return jwt.isEmpty ? directEndpoint : proxyEndpoint
     }
     static func jwtForProxy() async -> String {
+        guard NetworkPolicy.allows(.account) else { return "" }
         // Async accessor = auto-refresh of an expired token (see the same fix
         // in ShareService / WhisperTranscriber, 2026-09-08). Signed out → "".
         // A refresh token that is dead for good signs the account out
@@ -211,6 +212,7 @@ enum GeminiTranscriber {
                             mode: TranscribeMode = .diarize,
                             singlePass: Bool = false,
                             expectedSpeakers: Int? = nil) async throws -> [Turn] {
+        try NetworkPolicy.require(.cloudTranscription)
         // Signed-in users get cloud Gemini through the Worker proxy
         // (server-side Google key, JWT auth). Signed-out builds /
         // dev shells still need a local key in ~/.config/corder/gemini_key.
@@ -534,7 +536,7 @@ enum GeminiTranscriber {
         let startBody: [String: Any] = ["file": ["display_name": displayName]]
         startReq.httpBody = try JSONSerialization.data(withJSONObject: startBody)
 
-        let (startData, startResp) = try await URLSession.shared.data(for: startReq)
+        let (startData, startResp) = try await NetworkPolicy.data(for: startReq, channel: .cloudTranscription)
         try throwIfBilling(http: startResp, data: startData)
         guard let httpStart = startResp as? HTTPURLResponse,
               (200..<300).contains(httpStart.statusCode),
@@ -560,7 +562,7 @@ enum GeminiTranscriber {
         putReq.timeoutInterval = 600
         putReq.httpBody = bytes
 
-        let (putData, putResp) = try await URLSession.shared.data(for: putReq)
+        let (putData, putResp) = try await NetworkPolicy.data(for: putReq, channel: .cloudTranscription)
         try throwIfBilling(http: putResp, data: putData)
         guard let httpPut = putResp as? HTTPURLResponse,
               (200..<300).contains(httpPut.statusCode) else {
@@ -593,7 +595,7 @@ enum GeminiTranscriber {
             var req = URLRequest(url: statusURL)
             req.httpMethod = "GET"
             if let h = proxyAuth { req.setValue(h, forHTTPHeaderField: "Authorization") }
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await NetworkPolicy.data(for: req, channel: .cloudTranscription)
             try throwIfBilling(http: resp, data: data)
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let state = json["state"] as? String {
@@ -722,7 +724,7 @@ enum GeminiTranscriber {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await NetworkPolicy.data(for: req, channel: .cloudTranscription)
         try throwIfBilling(http: resp, data: data)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw GError.http((resp as? HTTPURLResponse)?.statusCode ?? 0,
@@ -874,7 +876,7 @@ enum GeminiTranscriber {
         if let h = await Self.proxyAuthHeader() {
             req.setValue(h, forHTTPHeaderField: "Authorization")
         }
-        _ = try? await URLSession.shared.data(for: req)
+        _ = try? await NetworkPolicy.data(for: req, channel: .cloudTranscription)
     }
 
     /// 402 / 429 / RESOURCE_EXHAUSTED / billing-related → surface as a typed

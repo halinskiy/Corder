@@ -433,6 +433,7 @@ enum LocalWhisperTranscriber {
     /// previous WhisperKit pipe and reloads. Progress is published to
     /// `currentProgress(variant)` so the React DownloadButton can poll.
     static func ensureModelReady(_ variant: Variant) async throws {
+        try NetworkPolicy.require(.modelDownload)
         guard isAvailable() else { throw LocalWhisperError.notAvailableOnIntel }
         try FileManager.default.createDirectory(at: AppPaths.modelsDir,
                                                 withIntermediateDirectories: true)
@@ -975,6 +976,7 @@ enum LocalWhisperTranscriber {
     /// budget keeps compiling in the background and the first transcribe
     /// falls back to GPU in the meantime, never a hang.
     static func downloadOnly(_ variant: Variant) async throws {
+        try NetworkPolicy.require(.modelDownload)
         guard isAvailable() else { throw LocalWhisperError.notAvailableOnIntel }
         try FileManager.default.createDirectory(at: AppPaths.modelsDir,
                                                 withIntermediateDirectories: true)

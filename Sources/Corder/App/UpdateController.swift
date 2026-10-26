@@ -63,6 +63,7 @@ final class UpdateController: NSObject {
     /// Hook a "Check for Updates…" menu item OR the React toolbar
     /// pill to this selector. Sparkle owns the rest of the UX.
     @objc func checkForUpdates(_ sender: Any?) {
+        if userDriver.installPendingNow() { return }
         updater.checkForUpdates()
     }
 

@@ -134,6 +134,12 @@ enum DTO {
         let capture_audio: Bool?
         let auto_transcribe: Bool?
         let auto_title: Bool?
+        let sync_transcripts: Bool?
+        let local_only: Bool?
+        let summary_provider: String?
+        let local_llm_endpoint: String?
+        let local_llm_model: String?
+        let local_llm_context_tokens: Int?
         /// Run `GeminiSummarizer` automatically once the transcript is
         /// ready, so the Summary tab is pre-populated on first open.
         let auto_summary: Bool?
@@ -143,8 +149,8 @@ enum DTO {
         /// Register Corder as a login item (launch on boot / login).
         /// Backed by `SMAppService.mainApp`.
         let launch_at_login: Bool?
-        /// Opt-in diagnostic telemetry, default off. When on, the
-        /// app ships diagnostic counts (no PII / no transcript) to
+        /// Pseudonymous diagnostic telemetry, default on. When on, the
+        /// app ships counts and an account hash or install ID to
         /// the maintainer's Worker once per 24h.
         let telemetry: Bool?
         /// Silent pre-roll: start capturing when a call is detected so

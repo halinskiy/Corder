@@ -71,7 +71,11 @@ actor SpeakerDiarizer {
             // Downloads (~130 MB) only on the very first run ever;
             // afterwards loads from ~/Library/Application Support cache
             // (Core ML compile + prewarm, seconds).
-            try await mgr.prepareModels()
+            if NetworkPolicy.allows(.auxiliaryModels) {
+                try await NetworkPolicy.withAuxiliaryModels { try await mgr.prepareModels() }
+            } else {
+                mgr.initialize(models: try CachedDiarizerModels.load())
+            }
             // Keep ONE warm manager: each holds its own copy of the Core ML
             // models, and over weeks of clarify-banner counts (auto, 2, 3,
             // 4…) they piled up in memory. A count change recompiles, seconds.
