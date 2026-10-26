@@ -15,28 +15,33 @@ enum NewsPoller {
     private static let kSeenKey = "Corder.news.seenIds"
     private static let kSeededKey = "Corder.news.seeded"
     /// Shared by native banners and the loopback frontend endpoint.
-    private static let interval: TimeInterval = 6 * 3600
     private static var cachedFeed: [[String: Any]] = []
-    private static var fetchedAt: Date = .distantPast
+    private static var schedule = NewsFetchSchedule()
+    private static var hasCachedFeed = false
     private static var inFlight: Task<[[String: Any]]?, Never>?
 
     static func feed() async -> [[String: Any]] {
         await feedIfAvailable() ?? []
     }
 
-    static func feedIfAvailable(load: @escaping () async -> [[String: Any]]? = loadFeed) async -> [[String: Any]]? {
+    static func feedIfAvailable(now: Date = Date(), load: @escaping () async -> [[String: Any]]? = loadFeed) async -> [[String: Any]]? {
         guard NetworkPolicy.allows(.news) else { return nil }
         if let inFlight {
             let items = await inFlight.value
             return NetworkPolicy.allows(.news) ? items : nil
         }
-        if Date().timeIntervalSince(fetchedAt) < interval { return cachedFeed }
+        if !schedule.isDue(at: now) { return hasCachedFeed ? cachedFeed : nil }
         let task = Task { await load() }
         inFlight = task
         let items = await task.value
         inFlight = nil
-        guard NetworkPolicy.allows(.news), let items else { return nil }
-        fetchedAt = Date()
+        guard NetworkPolicy.allows(.news) else { return nil }
+        guard let items else {
+            schedule.failed(at: now)
+            return nil
+        }
+        schedule.succeeded(at: now)
+        hasCachedFeed = true
         cachedFeed = items
         return cachedFeed
     }
@@ -105,6 +110,24 @@ enum NewsPoller {
             let cta = (dict["cta_url"] as? String).flatMap { URL(string: $0) }
             return NewsItem(id: id, title: title, body: body, ctaURL: cta)
         }
+    }
+}
+
+struct NewsFetchSchedule {
+    private var failures = 0
+    private var nextAttemptAt = Date.distantPast
+
+    func isDue(at now: Date) -> Bool { now >= nextAttemptAt }
+
+    mutating func failed(at now: Date) {
+        failures = min(failures + 1, 5)
+        let delay = min(30 * 60 * pow(2, Double(failures - 1)), 6 * 3600)
+        nextAttemptAt = now.addingTimeInterval(delay)
+    }
+
+    mutating func succeeded(at now: Date) {
+        failures = 0
+        nextAttemptAt = now.addingTimeInterval(6 * 3600)
     }
 }
 

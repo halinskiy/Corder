@@ -50,5 +50,9 @@ drop policy if exists shares_obj_owner_delete on storage.objects;
 create policy shares_obj_owner_delete on storage.objects
   for delete to authenticated
   using (bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text);
--- Public reads are served by the Worker via a signed URL (service role), so no
--- public select policy on the bucket.
+-- Storage removal also requires SELECT. Only the owner can read their objects;
+-- public reads still use Worker-issued signed URLs.
+drop policy if exists shares_obj_owner_select on storage.objects;
+create policy shares_obj_owner_select on storage.objects
+  for select to authenticated
+  using (bucket_id = 'shares' and (storage.foldername(name))[1] = auth.uid()::text);

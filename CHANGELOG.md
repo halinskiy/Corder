@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.99] - 2026-10-26
+
+### Fixed
+
+- Deleting a meeting now also deletes its copy in your account, even with Sync transcripts turned off. In Local only mode the deletion waits and runs when you turn Local only off.
+- If news can't be loaded, Corder waits longer between retries instead of trying every 30 minutes.
+
 ## [0.15.98] - 2026-10-26
 
 ### Fixed

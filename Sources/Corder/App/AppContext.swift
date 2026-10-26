@@ -231,6 +231,7 @@ enum AppSettings {
     static func setLocalOnly(_ value: Bool) {
         setFlag("Corder.set.localOnly", value)
         if value { NetworkPolicy.cancelCloudRequests() }
+        else { Task { @MainActor in await SupabaseSync.flushPendingDeletions() } }
     }
     static var summaryProvider: String { UserDefaults.standard.string(forKey: "Corder.set.summaryProvider") == "local" ? "local" : "cloud" }
     static var localLLMEndpoint: String { UserDefaults.standard.string(forKey: "Corder.set.localLLMEndpoint") ?? LocalTextLLM.defaultEndpoint }

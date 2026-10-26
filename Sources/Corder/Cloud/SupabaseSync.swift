@@ -165,17 +165,16 @@ enum SupabaseSync {
         }
     }
 
-    /// Drop a meeting + all its dependents (ON DELETE CASCADE
-    /// takes care of speakers/segments/summaries/recordings_meta).
+    private static let meetingDeletions = CloudMeetingDeletion(client: SupabaseClientHolder.shared)
+
+    /// Deletion is account traffic, independent of transcript sync. Local only
+    /// defers it in a persistent account-scoped queue instead of dropping it.
     static func deleteMeeting(id: String) {
-        push {
-            try NetworkPolicy.require(.transcriptSync)
-            try await SupabaseClientHolder.shared
-                .from("meetings")
-                .delete()
-                .eq("id", value: id)
-                .execute()
-        }
+        Task { await meetingDeletions.deleteMeeting(id: id) }
+    }
+
+    static func flushPendingDeletions() async {
+        await meetingDeletions.flush()
     }
 
     /// Replace the speakers list for a meeting. We delete-then-insert
@@ -710,6 +709,7 @@ enum SupabaseSync {
     /// rows from the cloud get empty paths (they live in Storage
     /// only, playback will hit the Storage signed-URL path).
     static func pullAll(repo: MeetingRepository) async {
+        await flushPendingDeletions()
         guard NetworkPolicy.allows(.transcriptSync) else { return }
         guard let uid = userId() else { return }
 
@@ -740,6 +740,7 @@ enum SupabaseSync {
                 .value
             FileLogger.log("SupabaseSync.pullAll: fetched \(rows.count) meetings from cloud")
             for r in rows {
+                guard !meetingDeletions.pendingIDs(userID: uid).contains(r.id) else { continue }
                 let existing = try? repo.meeting(id: r.id)
                 let startedMs = Int64((Self.isoFormatter.date(from: r.started_at)?.timeIntervalSince1970 ?? 0) * 1000)
                 let endedMs = r.ended_at.flatMap {

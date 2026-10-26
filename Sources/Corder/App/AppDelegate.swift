@@ -196,10 +196,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // recording transcribes immediately instead of waiting on a 800 MB pull.
         TranscriptionPipeline.shared.prewarm()
 
-        // Opt-in diagnostic telemetry: fires once per 24h when the
-        // user has flipped the toggle in Settings. Default off; no
-        // PII / no transcript content. See TelemetryService for
-        // exactly what gets shipped.
+        // Diagnostic telemetry is on by default, opt-out in Settings.
+        // Sends daily counts without meeting content, using a pseudonymous
+        // email hash or installation ID. See TelemetryService for the payload.
         TelemetryService.tickIfDue()
         Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
             Task { @MainActor in
@@ -338,6 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let name, !name.isEmpty { AppSettings.setUserName(name) }
             SupabaseTierSync.applyFromCurrentSession()
             AppSettings.setHasSignedInBefore(true)
+            await SupabaseSync.flushPendingDeletions()
             Task.detached {
                 await SupabaseSync.backfillIfNeeded(repo: AppContext.shared.repo)
             }
@@ -350,6 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Pro the moment they switch back to the app. Throttled inside
     /// `refreshTier`, so frequent focus toggles are cheap.
     func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in await SupabaseSync.flushPendingDeletions() }
         Task { @MainActor in SupabaseTierSync.refreshTier() }
         // Renew the calendar feed if its 1h access token has gone stale.
         Task { @MainActor in await GoogleCalendar.refreshIfStale() }

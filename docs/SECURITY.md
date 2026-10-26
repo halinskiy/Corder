@@ -46,9 +46,12 @@ providers; the Worker returns 403 for those paths from a non-admin
 token. So a normal user's audio can only ever reach Groq, and only on a
 paid tier.
 
-Auto-title / auto-summary / auto-chapters use Gemini 2.5 Flash through
-the same Worker proxy (`/transcribe/gemini-proxy/*`), again with the
-server-side key. These text-only notes flows are **free for all tiers
+Auto titles use Gemini through the Worker proxy
+(`/transcribe/gemini-proxy/*`) when enabled. Summaries and chapters can
+use that proxy or a user-configured local model served by LM Studio,
+Ollama or llama.cpp. Local notes work without an account, accept only
+loopback endpoints, reject redirects and never fall back to cloud.
+The cloud text-only notes flows are **free for all tiers
 by product decision** (the text-only paywall is intentionally NOT
 enforced); only audio/video transcription is gated.
 
@@ -316,10 +319,28 @@ maintainer's continuous health view.
 General offers signed-in users `Sync transcripts to your account` and `Auto titles`,
 both on by default. Sync controls meetings, speakers, segments and summaries,
 including backfill and pulls. Share links require sync. Turning sync off keeps
-account/tier requests and last_error updates available; it does not erase data
-already synced. Auto titles sends at most three 900-character transcript excerpts
+account/tier requests, last_error updates and meeting deletion available; it does
+not erase data already synced. That data stays until meeting or account deletion.
+Auto titles sends at most three 900-character transcript excerpts
 from the beginning, middle and end, separated by `[...]`. Off means no title
 request, including manual retitle and launch backfill. Imports retain filenames.
+
+Meeting deletion uses the account channel even with Sync transcripts off.
+`CloudMeetingDeletion` removes shared audio/video objects, explicit share rows,
+recording objects under the meeting prefix, then the meeting row. Foreign keys
+cascade to speakers, segments, summaries and recording metadata. Identifiers
+are saved in `Corder.pendingMeetingDeletions` in UserDefaults, scoped by account,
+before network work starts. Local only defers deletion; failures keep it queued.
+The queue drains when leaving Local only, restoring the same signed-in account,
+refocusing the app or pulling meetings. Pending deletions are excluded from pulls.
+Deploy `supabase/migrations/20261026_shares_owner_storage_select.sql` with this
+change: Supabase Storage removal needs SELECT as well as DELETE, restricted to
+the owner's `shares` prefix. This migration does not grant public read access.
+
+Audio remains local during local transcription. Cloud transcription sends audio
+to its provider through the Worker. Share uploads a compressed audio copy when
+available. The hidden legacy `Corder.set.cloudAudioBackup` preference, off by
+default, can also enable uploads to the `recordings` bucket while sync is on.
 
 Advanced > `Local only` defaults off. NetworkPolicy blocks cloud requests,
 including SDK auth refresh, telemetry, news, sync, sharing, calendar, reports and
@@ -330,7 +351,11 @@ models keep raw ASR timings. Enabling Local only cancels auxiliary model tasks,
 including their recovery requests. The cloud-only forced aligner cannot cold-load
 in this mode.
 The embedded frontend uses loopback endpoints for news and feedback, with CSP
-blocking direct external requests. News shares a six-hour fetch cache.
+blocking direct external requests. News is fetched from the Worker without an
+account too, outside Local only. Native banners and `/api/news` share a six-hour
+success cache and one retry schedule. Failures wait 30 minutes, 1 hour, 2 hours,
+4 hours, then 6 hours, capped there until success resets the schedule. The
+30-minute timer and frontend requests both respect that schedule.
 
 ## Bug reports (`/submit-logs`)
 
