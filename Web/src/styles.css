@@ -6139,44 +6139,123 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin-bottom: 8px;
 }
 
-/* Keep stack rows as siblings so the shared divider rules still apply. */
-.meeting-stack {
+/* The first two recording shells become the backplates. Their DOM identity stays
+   fixed throughout the transition, including direction changes. */
+.meeting-stack-wrap {
   position: relative;
   isolation: isolate;
+  margin-right: 9px;
+  overflow: hidden;
+  overflow: clip;
+  overflow-anchor: none;
+}
+.meeting-stack-header { position: relative; z-index: 2; }
+.meeting-stack {
+  position: relative;
+  margin-right: 0;
   background: var(--bg-elev);
 }
-.meeting-stack::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: inherit;
+.meeting-stack-recordings { position: relative; z-index: 1; }
+.meeting-stack-entry {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  transform-origin: center top;
+  transform: translateY(var(--stack-y)) scale(var(--stack-scale-x), var(--stack-scale-y));
+  opacity: 0;
   pointer-events: none;
 }
-.meeting-stack:has(.meeting-stack-layer) { margin-bottom: 7px; }
-.meeting-stack:has(.meeting-stack-layer-back) { margin-bottom: 14px; }
 .meeting-stack-layer {
-  position: absolute;
-  z-index: -2;
-  left: 8px;
-  right: 8px;
-  bottom: -7px;
-  height: 14px;
-  border: 1px solid var(--border);
-  border-radius: 0 0 6px 6px;
+  border-color: var(--border-strong);
   background: color-mix(in srgb, var(--bg-elev) 96%, var(--fg));
-  pointer-events: none;
+  opacity: 1;
 }
-.meeting-stack-layer-back {
-  left: 16px;
-  right: 16px;
-  bottom: -14px;
-  background: color-mix(in srgb, var(--bg-elev) 92%, var(--fg));
-}
-.meeting-stack-layer { border-color: var(--border-strong); }
+.meeting-stack-layer-back { background: color-mix(in srgb, var(--bg-elev) 92%, var(--fg)); }
 .dark .meeting-stack-layer { background: var(--border-strong); }
 .dark .meeting-stack-layer-back { background: var(--border); }
+.meeting-stack-entry-content { opacity: 0; }
+.meeting-stack-wrap[data-ready] .meeting-stack-entry {
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 200ms ease, background 320ms ease, border-color 320ms ease;
+}
+.meeting-stack-wrap[data-ready] .meeting-stack-entry-content {
+  transition: opacity 150ms ease;
+}
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-entry {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  background: var(--bg-elev);
+  border-color: transparent;
+  pointer-events: auto;
+  transition-duration: 440ms, 260ms, 440ms, 440ms;
+  transition-timing-function: cubic-bezier(0.34, 1.42, 0.5, 1);
+  transition-delay: var(--stack-delay);
+}
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-entry-content {
+  opacity: 1;
+  transition: opacity 260ms ease var(--stack-delay);
+}
+.meeting-stack-entry .meeting-item {
+  margin: 0;
+  padding: 8px 9px;
+  gap: 3px;
+}
+.meeting-stack-meeting .meeting-title { font-size: 13px; }
+.meeting-stack-meeting .meeting-meta { font-size: 12px; }
+.meeting-stack-meeting .meeting-preview { font-size: 13px; -webkit-line-clamp: 1; }
+.meeting-stack-footer { height: 32px; opacity: 0; transition: opacity 120ms ease; }
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-footer { opacity: 1; transition-delay: 140ms; }
+.meeting-stack-less {
+  display: block;
+  margin: 2px auto 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.meeting-stack-less:hover { color: var(--fg); background: var(--bg-hover); }
+.meeting-stack-chevron { flex-shrink: 0; color: var(--fg-muted); transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-chevron { transform: rotate(180deg); }
+.meeting-item + .meeting-stack-wrap,
+.meeting-stack-wrap + .meeting-stack-wrap,
+.meeting-stack-wrap + .meeting-item { margin-top: 4px; }
+.meeting-item + .meeting-stack-wrap .meeting-stack,
+.meeting-stack-wrap + .meeting-stack-wrap .meeting-stack,
+.meeting-stack-wrap + .meeting-item { padding-top: 15px; }
+.meeting-item + .meeting-stack-wrap .meeting-stack::before,
+.meeting-stack-wrap + .meeting-stack-wrap .meeting-stack::before,
+.meeting-stack-wrap + .meeting-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+.meeting-stack-wrap .meeting-stack.active::before,
+.meeting-stack-wrap .meeting-stack:hover::before,
+.meeting-item:is(.active, :hover) + .meeting-stack-wrap .meeting-stack::before,
+.meeting-stack-wrap:has(.meeting-stack:is(.active, :hover)) + .meeting-stack-wrap .meeting-stack::before,
+.meeting-stack-wrap:has(.meeting-stack:is(.active, :hover)) + .meeting-item::before,
+.meeting-stack-wrap + .meeting-item:is(.active, :hover)::before { background: transparent; }
+.meeting-stack-wrap + .sidebar-section-label {
+  margin-top: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.meeting-stack-meeting:focus-visible,
+.meeting-stack-less:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .meeting-stack-wrap .meeting-stack-entry,
+  .meeting-stack-wrap .meeting-stack-entry-content,
+  .meeting-stack-wrap .meeting-stack-footer,
+  .meeting-stack-wrap .meeting-stack-chevron { transition: none !important; }
+}
 .meeting-meta .meeting-stack-count {
   margin-left: auto;
   min-width: 22px;

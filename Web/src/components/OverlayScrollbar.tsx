@@ -88,10 +88,16 @@ export function OverlayScrollbar({
     measure();
     el.addEventListener("scroll", schedule, { passive: true });
     const ro = new ResizeObserver(schedule);
-    ro.observe(el);
+    const observeContent = () => {
+      ro.disconnect();
+      ro.observe(el);
+      // Stack height changes every frame without resizing the scroll container itself.
+      for (const child of el.children) ro.observe(child);
+    };
+    observeContent();
     // Content height can change without a resize (list filter, transcript
     // load, banner open), watch the subtree too.
-    const mo = new MutationObserver(schedule);
+    const mo = new MutationObserver(() => { observeContent(); schedule(); });
     mo.observe(el, { childList: true, subtree: true, characterData: true });
     window.addEventListener("resize", schedule);
     return () => {

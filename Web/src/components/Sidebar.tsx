@@ -1,6 +1,7 @@
 import React from "react";
-import { Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { MeetingSummary, MeetingStatus, retranscribe, retitle, pinMeeting, renameMeeting } from "../api";
+import { MeetingStack } from "./MeetingStack";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 import { formatDate, formatDuration, dateBucket, formatExactDate, formatShortDate } from "../format";
 import { StorageBanner } from "./StorageBanner";
@@ -79,6 +80,17 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
   const [editing, setEditing] = React.useState<{ id: string; value: string } | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
   const sidebarRef = React.useRef<HTMLElement>(null);
+  const [expandedKeys, setExpandedKeys] = React.useState<Set<string>>(() => new Set());
+  const headerNavigation = React.useRef<string | null>(null);
+  const activeMemberKey = meetingGroups.find(group => group.meetings.length > 1 && group.memberIds.has(activeId ?? ""))?.key;
+  React.useLayoutEffect(() => {
+    // Header navigation already chose its expansion state in the same event.
+    const fromHeader = activeId === null && headerNavigation.current === activeGroup;
+    headerNavigation.current = null;
+    if (fromHeader && activeGroup) return;
+    const key = activeMemberKey ?? activeGroup;
+    setExpandedKeys(new Set(key ? [key] : []));
+  }, [activeId, activeGroup, activeMemberKey]);
 
   // Multi-select: plain click → set of {id}, anchor = id. Cmd-click
   // toggles. Shift-click extends from anchor to the clicked row using
@@ -137,9 +149,22 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
     );
   }, [meetings, query, lang]);
 
+  const matchingIds = React.useMemo(() => new Set(filtered.map(m => m.id)), [filtered]);
+  const searchKeys = JSON.stringify(meetingGroups.filter(group => group.meetings.some(m => matchingIds.has(m.id)))
+    .map(group => group.key));
+  const wasSearching = React.useRef(false);
+  React.useLayoutEffect(() => {
+    const searching = !!query.trim();
+    if (searching || wasSearching.current) {
+      setExpandedKeys(new Set<string>(searching ? JSON.parse(searchKeys) : []));
+    }
+    wasSearching.current = searching;
+  }, [query, searchKeys]);
+
   const groups = React.useMemo(() => {
     const out: { label: string; items: SidebarEntry[] }[] = [];
-    const entries = sidebarEntries(filtered, query.trim() ? [] : meetingGroups);
+    const entries = sidebarEntries(meetings, meetingGroups).filter(entry => entry.kind === "meeting"
+      ? matchingIds.has(entry.meeting.id) : entry.group.meetings.some(m => matchingIds.has(m.id)));
     for (const entry of entries) {
       const meeting = entry.kind === "meeting" ? entry.meeting : entry.group.latest;
       const label = entry.kind === "meeting" && meeting.pinned
@@ -149,17 +174,18 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
       else out.push({ label, items: [entry] });
     }
     return out;
-  }, [filtered, meetingGroups, query, lang, t]);
+  }, [meetings, matchingIds, meetingGroups, lang, t]);
 
   // Flat list of meeting ids in the order they're VISIBLY rendered
   // (pinned group → date buckets). Shift-select uses this to fill the
   // contiguous range between anchor and clicked id.
   const visibleOrder = React.useMemo(
-    () => groups.flatMap((g) => g.items.flatMap((entry) => entry.kind === "meeting" ? [entry.meeting.id] : [])),
-    [groups]
+    () => groups.flatMap((g) => g.items.flatMap((entry) => entry.kind === "meeting" ? [entry.meeting.id]
+      : expandedKeys.has(entry.group.key) ? entry.group.meetings.filter(m => matchingIds.has(m.id)).map(m => m.id) : [])),
+    [groups, expandedKeys, matchingIds]
   );
 
-  const handleSelect = (e: React.MouseEvent, id: string) => {
+  const handleSelect = (e: React.MouseEvent | React.KeyboardEvent, id: string) => {
     if (e.shiftKey && anchorId && anchorId !== id) {
       const a = visibleOrder.indexOf(anchorId);
       const b = visibleOrder.indexOf(id);
@@ -206,6 +232,85 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
     // toast stack but matches what right-click → Archive on a single
     // row already does, just N times.
     for (const id of ids) onDeleted(id);
+  };
+
+  const renderMeeting = (m: MeetingSummary, compact = false) => {
+    const titled = m.title?.trim();
+    return (
+      <div
+        key={m.id}
+        role="button"
+        tabIndex={0}
+        data-meeting-id={m.id}
+        onKeyDown={(e) => {
+          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            handleSelect(e, m.id);
+          }
+        }}
+        className={"meeting-item" + (compact ? " meeting-stack-meeting" : "")
+          + ((m.id === activeId || selectedIds.has(m.id)) ? " active" : "")
+          + (m.status === "failed" ? " failed" : "")
+          + (m.pinned ? " pinned" : "")
+          + (m.viewed === false && m.status === "ready" ? " unseen" : "")
+          + (m.source ? " external" : "")}
+        title={formatExactDate(m.started_at)
+          + (m.source === "mcp" ? ` · ${t.sidebar_source_mcp ?? "Transcribed from a file by an AI assistant"}`
+            : m.source === "import" ? ` · ${t.sidebar_source_import ?? "Transcribed from a file"}` : "")}
+        onClick={(e) => handleSelect(e, m.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenu({ x: e.clientX, y: e.clientY, meetingId: m.id });
+        }}
+      >
+        <div className="meeting-row">
+          {editing?.id === m.id ? (
+            <input
+              className="meeting-title-edit"
+              autoFocus
+              value={editing.value}
+              placeholder={formatDate(m.started_at, lang)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setEditing({ id: m.id, value: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+                else if (e.key === "Escape") { e.preventDefault(); setEditing(null); }
+              }}
+              onBlur={commitRename}
+            />
+          ) : (
+            <div className="meeting-title">
+              {/* Inside an open stack the chat name is already the header. */}
+              {compact ? formatDate(m.started_at, lang) : (titled || formatDate(m.started_at, lang))}
+            </div>
+          )}
+          {m.id === playingId && <PlayingIcon />}
+        </div>
+        <div className="meeting-meta">
+          <span className={`status-dot ${m.status}`} />
+          {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
+          {!compact && <span className="meeting-date">{formatShortDate(m.started_at)}</span>}
+          {/* Drop the "transcribing" word from the meta, the
+              hollow status dot already tells the user there's
+              no transcript yet, and the literal word kept
+              reading as "work in progress" even after the
+              pipeline had already stopped (e.g. auto-transcribe
+              off, or a backend stall). recording / failed
+              still surface their label because those states
+              benefit from a name. */}
+          {m.status !== "ready" && m.status !== "transcribing" && (
+            <span>· {statusLabel(m.status, t)}</span>
+          )}
+          {m.speaker_count > 0 && (
+            <span className="meeting-people" title={t.participants(m.speaker_count)}>
+              <span className="meeting-people-count">{m.speaker_count}</span>
+              <UserFilledIcon />
+            </span>
+          )}
+        </div>
+        {m.preview && <div className="meeting-preview">{m.preview}</div>}
+      </div>
+    );
   };
 
   return (
@@ -274,117 +379,47 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
               if (entry.kind === "group") {
                 const group = entry.group;
                 const latest = group.latest;
+                const expanded = expandedKeys.has(group.key);
+                const toggle = () => {
+                  setSelectedIds(new Set());
+                  setAnchorId(null);
+                  setMenu(null);
+                  setExpandedKeys(new Set(expanded ? [] : [group.key]));
+                  headerNavigation.current = group.key;
+                  onSelectGroup(group.key);
+                };
                 return (
-                  <div
-                    key={`group:${group.key}`}
-                    className={"meeting-item meeting-stack external"
-                      + (activeGroup === group.key ? " active" : "")}
-                    role="button"
-                    tabIndex={0}
-                    title={group.key}
-                    onClick={() => {
-                      setSelectedIds(new Set());
-                      setAnchorId(null);
-                      setMenu(null);
-                      onSelectGroup(group.key);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedIds(new Set());
-                        setAnchorId(null);
-                        setMenu(null);
-                        onSelectGroup(group.key);
-                      }
-                    }}
-                    onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}
-                  >
-                    {group.meetings.length > 2 && <span className="meeting-stack-layer meeting-stack-layer-back" aria-hidden />}
-                    {group.meetings.length > 1 && <span className="meeting-stack-layer" aria-hidden />}
-                    <div className="meeting-row">
-                      <div className="meeting-title">{group.key}</div>
-                      {group.memberIds.has(playingId ?? "") && <PlayingIcon />}
-                    </div>
-                    <div className="meeting-meta">
-                      <span className={`status-dot ${latest.status}`} />
-                      <span>{formatDuration(group.durationMs, lang)}</span>
-                      <span className="meeting-date">{formatShortDate(latest.started_at)}</span>
-                      <span className={"meeting-stack-count" + (group.unseen ? " unseen" : "")}
-                        title={t.group_recordings(group.meetings.length)}>
-                        {group.meetings.length}
-                      </span>
-                    </div>
-                    {latest.preview && <div className="meeting-preview">{latest.preview}</div>}
-                  </div>
+                  <MeetingStack key={`group:${group.key}`} expanded={expanded}
+                    onCollapse={() => setExpandedKeys(new Set())} showLess={t.group_show_less}
+                    header={(
+                      <div className={"meeting-item meeting-stack external"
+                        + (activeGroup === group.key ? " active" : "")}
+                        role="button" tabIndex={0} title={group.key} aria-expanded={expanded}
+                        onClick={toggle}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+                        }}
+                        onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
+                        <div className="meeting-row">
+                          <div className="meeting-title">{group.key}</div>
+                          {group.memberIds.has(playingId ?? "") && <PlayingIcon />}
+                          <ChevronDown size={14} className="meeting-stack-chevron" aria-hidden />
+                        </div>
+                        <div className="meeting-meta">
+                          <span className={`status-dot ${latest.status}`} />
+                          <span>{formatDuration(group.durationMs, lang)}</span>
+                          <span className="meeting-date">{formatShortDate(latest.started_at)}</span>
+                          <span className={"meeting-stack-count" + (group.unseen ? " unseen" : "")}
+                            title={t.group_recordings(group.meetings.length)}>{group.meetings.length}</span>
+                        </div>
+                        {latest.preview && <div className="meeting-preview">{latest.preview}</div>}
+                      </div>
+                    )}>
+                    {group.meetings.filter(m => !query.trim() || matchingIds.has(m.id)).map(m => renderMeeting(m, true))}
+                  </MeetingStack>
                 );
               }
-              const m = entry.meeting;
-              const titled = m.title?.trim();
-              return (
-              <div
-                key={m.id}
-                className={"meeting-item"
-                  + ((m.id === activeId || selectedIds.has(m.id)) ? " active" : "")
-                  + (m.status === "failed" ? " failed" : "")
-                  + (m.pinned ? " pinned" : "")
-                  + (m.viewed === false && m.status === "ready" ? " unseen" : "")
-                  + (m.source ? " external" : "")}
-                title={formatExactDate(m.started_at)
-                  + (m.source === "mcp" ? ` · ${t.sidebar_source_mcp ?? "Transcribed from a file by an AI assistant"}`
-                    : m.source === "import" ? ` · ${t.sidebar_source_import ?? "Transcribed from a file"}` : "")}
-                onClick={(e) => handleSelect(e, m.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, meetingId: m.id });
-                }}
-              >
-                <div className="meeting-row">
-                  {editing?.id === m.id ? (
-                    <input
-                      className="meeting-title-edit"
-                      autoFocus
-                      value={editing.value}
-                      placeholder={formatDate(m.started_at, lang)}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setEditing({ id: m.id, value: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") { e.preventDefault(); commitRename(); }
-                        else if (e.key === "Escape") { e.preventDefault(); setEditing(null); }
-                      }}
-                      onBlur={commitRename}
-                    />
-                  ) : (
-                    <div className="meeting-title">
-                      {titled || formatDate(m.started_at, lang)}
-                    </div>
-                  )}
-                  {m.id === playingId && <PlayingIcon />}
-                </div>
-                <div className="meeting-meta">
-                  <span className={`status-dot ${m.status}`} />
-                  {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
-                  <span className="meeting-date">{formatShortDate(m.started_at)}</span>
-                  {/* Drop the "transcribing" word from the meta, the
-                      hollow status dot already tells the user there's
-                      no transcript yet, and the literal word kept
-                      reading as "work in progress" even after the
-                      pipeline had already stopped (e.g. auto-transcribe
-                      off, or a backend stall). recording / failed
-                      still surface their label because those states
-                      benefit from a name. */}
-                  {m.status !== "ready" && m.status !== "transcribing" && (
-                    <span>· {statusLabel(m.status, t)}</span>
-                  )}
-                  {m.speaker_count > 0 && (
-                    <span className="meeting-people" title={t.participants(m.speaker_count)}>
-                      <span className="meeting-people-count">{m.speaker_count}</span>
-                      <UserFilledIcon />
-                    </span>
-                  )}
-                </div>
-                {m.preview && <div className="meeting-preview">{m.preview}</div>}
-              </div>
-              );
+              return renderMeeting(entry.meeting);
             })}
           </React.Fragment>
         ))}

@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.104] - 2026-10-26
+
+### Changed
+
+- Stacks open and close in place with a smooth animation.
+
 ## [0.15.103] - 2026-10-26
 
 ### Changed

@@ -28,6 +28,7 @@ interface Strings {
   group_load_failed: string;
   group_empty_transcript: string;
   group_retry: string;
+  group_show_less: string;
   sidebar_search: string;
   sidebar_empty: string;
   sidebar_no_match: string;
@@ -491,6 +492,7 @@ const en: Strings = {
   group_load_failed: "Could not load transcript.",
   group_empty_transcript: "No transcript yet.",
   group_retry: "Try again",
+  group_show_less: "Show less",
   sidebar_search: "Search recordings…",
   sidebar_empty: "No recordings yet. Click Start in the menu bar.",
   sidebar_no_match: "No matches.",
