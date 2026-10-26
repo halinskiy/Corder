@@ -2508,7 +2508,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   /* The header gap (12px) alone: the same 12px as title to date
      (breadcrumb gap 8 + .breadcrumb-meta margin 4), Kostya 2026-10-26. */
   margin-right: 0;
-  /* Same 38px circle as avatar, archive and settings (Kostya 2026-10-26). */
+  /* Deliberately smaller than the 38px toolbar icons (→ 30px): a SOLID filled
+     green circle reads visually heavier than an outlined control, so a compact
+     diameter keeps it from dominating the header next to the title. */
+  width: 30px;
+  height: 30px;
   /* Match the audio play button EXACTLY (`.audio-btn-primary`): hardcoded
      #1E7A50 at rest, #186439 on hover, NOT var(--accent)/color-mix, so the
      two green circles read as the same button. */

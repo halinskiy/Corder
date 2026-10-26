@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.117] - 2026-10-26
+
+### Changed
+
+- The record button is back to its compact size.
+
 ## [0.15.116] - 2026-10-26
 
 ### Fixed
