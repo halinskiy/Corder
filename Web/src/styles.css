@@ -280,6 +280,9 @@ summary,
   margin: 0 4px;
   flex-shrink: 0;
 }
+/* Header only: 3 px more on the avatar side, its 3 px hover halo ate into
+   the gap and the avatar looked closer to the line than Archive. */
+.toolbar-sep.toolbar-sep-avatar { margin-right: 7px; }
 .avatar-btn {
   padding: 0;
   /* Slightly bigger glyph (36 vs 32), the header is min-height 64 px
@@ -2499,11 +2502,9 @@ body.resizing { cursor: col-resize; user-select: none; }
    icons), and only 4px before the title. Hover = darker shade, the same
    darken-toward-black the green play button uses. */
 .header-new-btn {
-  /* The header is a flex row with a global `gap: 12px`. A positive margin
-     ADDS to that (12 + 4 = 16px, too far from the title). We want ~8px, so a
-     NEGATIVE margin pulls the title back in: 12 + (-4) = 8px. Don't touch the
-     global gap, it spaces all the other toolbar controls. */
-  margin-right: -4px;
+  /* The header gap (12px) alone: the same 12px as title to date
+     (breadcrumb gap 8 + .breadcrumb-meta margin 4), Kostya 2026-10-26. */
+  margin-right: 0;
   /* Deliberately smaller than the 38px toolbar icons (→ 30px): a SOLID filled
      green circle reads visually heavier than an outlined control, so a compact
      diameter keeps it from dominating the header next to the title. */

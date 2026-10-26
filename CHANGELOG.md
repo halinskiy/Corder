@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.110] - 2026-10-26
+
+### Changed
+
+- Even spacing around the divider next to the avatar and between the record button and the title.
+
 ## [0.15.109] - 2026-10-26
 
 ### Changed

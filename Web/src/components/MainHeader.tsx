@@ -138,7 +138,7 @@ export function MainHeader({
             {archiveOpen ? <ArchiveFilled size={16} /> : <ArchiveIcon size={16} strokeWidth={2} />}
           </button>
         </Tooltip>
-        <span className="toolbar-sep" />
+        <span className="toolbar-sep toolbar-sep-avatar" />
         <ProfileMenu
           onToast={onToast}
           onOpenSettings={onOpenSettings}
