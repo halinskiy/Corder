@@ -6,7 +6,27 @@ import UserNotifications
 @preconcurrency import Supabase
 
 enum Routes {
+    /// True when an HTTP `Host` header names loopback: 127.0.0.1, localhost
+    /// or [::1], bare or followed by ":<port>". Same exact-match rule as the
+    /// CSRF Origin check, so `127.0.0.1.evil.com` is not loopback.
+    static func isLoopbackHost(_ host: String?) -> Bool {
+        guard let h = host?.lowercased(), !h.isEmpty else { return false }
+        return ["127.0.0.1", "localhost", "[::1]"].contains { h == $0 || h.hasPrefix($0 + ":") }
+    }
+
     static func register(server: HttpServer, repo: MeetingRepository) {
+        // DNS-rebinding guard, first in the chain, every method. A page on
+        // evil.example can re-point its own DNS at 127.0.0.1 after load; the
+        // browser then treats fetch('/api/meetings') as SAME-origin and lets
+        // the page read the response, so "no CORS headers" alone does not
+        // protect GETs. The Host header still names the attacker's domain,
+        // so serve only requests addressed to a loopback host.
+        server.middleware.append { req in
+            let host = req.headers["host"]
+            if isLoopbackHost(host) { return nil }
+            FileLogger.log("Routes: rejected Host=\(host ?? "-") \(req.method) \(req.path)")
+            return .raw(421, "Misdirected Request", nil, nil)
+        }
         // CSRF guard for the loopback API. The server binds 127.0.0.1 only,
         // but a malicious web page the user is browsing can still fire
         // "simple" cross-origin POSTs at http://127.0.0.1:<port>/api/... (the
@@ -17,7 +37,8 @@ enum Routes {
         // native clients send no Origin at all. So: reject any
         // state-changing request whose Origin is present AND not loopback.
         // GET/HEAD pass through: no route hands out a credential, and we send
-        // no CORS headers, so a cross-origin page cannot read a response.
+        // no CORS headers, so a cross-origin page cannot read a response
+        // (the rebinding case, where it can, is stopped by the Host guard).
         server.middleware.append { req in
             let method = req.method.uppercased()
             guard method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"

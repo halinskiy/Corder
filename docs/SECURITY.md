@@ -231,6 +231,19 @@ is matched exactly: `http://127.0.0.1` / `http://localhost` / `http://[::1]`
 followed by `:` or end-of-string, so an attacker-registrable
 `http://127.0.0.1.evil.com` is NOT treated as loopback.
 
+**DNS-rebinding guard (cross-site GET).** The CSRF guard lets GETs
+through because a cross-origin page cannot read the response. DNS
+rebinding breaks that: a page on `evil.example` re-points its DNS at
+`127.0.0.1`, and the browser then treats `/api/meetings`, transcripts,
+`/audio`, `/video` and `/bundle.zip` as same-origin and readable. Such
+a request still carries `Host: evil.example:<port>`, so the first
+`server.middleware` answers `421 Misdirected Request` to every method
+unless `Host` is exactly `127.0.0.1` / `localhost` / `[::1]`, bare or
+followed by `:<port>` (`Routes.isLoopbackHost`, tested in
+`LoopbackHostTests`). Check:
+`curl -i -H 'Host: evil.example' http://127.0.0.1:<port>/api/meetings`
+returns 421.
+
 **Path traversal (fixed).** `serveAsset` and `serveRoot` now
 `standardizedFileURL` the resolved target and require it to stay
 contained under the web / assets root (`target.path.hasPrefix(base.path + "/")`).

@@ -2,8 +2,9 @@ import Foundation
 import CryptoKit
 import IOKit
 
-/// Opt-in diagnostic telemetry. Default OFF, toggled on by the
-/// user in Settings ("Help improve Corder"). Once on, fires once
+/// Diagnostic telemetry. Default ON (opt-out since 0.14.38, see
+/// `AppSettings.telemetryEnabled`), toggled off by the user in
+/// Settings ("Help improve Corder"). While on, fires once
 /// per 24h from `tick()` (called on app launch and every hour
 /// while the app is alive). Payload is intentionally narrow:
 ///   • anonymous_id = SHA-256(email lowercased)
