@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.113] - 2026-10-26
+
+### Fixed
+
+- Stacks highlight on hover like any other recording.
+
 ## [0.15.112] - 2026-10-26
 
 ### Fixed
