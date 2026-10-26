@@ -81,25 +81,29 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
         pendingUserInitiatedCheck = true
-        // ALWAYS give visible feedback the instant the pill is clicked. The
-        // old no-op (just setting the flag) left the click silent whenever
-        // Sparkle already had a cached / downloaded update and didn't
-        // re-present it, the user just saw a pressed pill and nothing else.
-        // We push a "checking" modal here; Sparkle then transitions it to
-        // the real Install card (showUpdateFound) or "up to date"
-        // (showUpdateNotFound). `onPrimary` stays a no-op until a real
-        // update is reported (the Install button is disabled meanwhile).
         bridge.onDismiss = { cancellation() }
         bridge.onPrimary = { }
-        push(visible: true, phase: "available", primaryLabel: "Install",
-             primaryEnabled: false,
-             statusLine: "Checking for updates…",
-             showsProgress: false, progress: 0)
+        // A check usually answers well under a second, so flashing a
+        // placeholder card first and swapping it for the result looked
+        // broken. Show the result straight away; only a slow check gets a
+        // neutral "Checking" card (no Install button) after a beat.
+        checkingCard?.cancel()
+        checkingCard = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard let self, !Task.isCancelled, self.pendingUserInitiatedCheck else { return }
+            self.push(visible: true, phase: "available", primaryLabel: "",
+                      primaryEnabled: false, statusLine: nil,
+                      showsProgress: false, progress: 0,
+                      versionOverride: "Checking for updates")
+        }
     }
+
+    private var checkingCard: Task<Void, Never>?
 
     // MARK: - Update found
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state updateState: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        checkingCard?.cancel(); checkingCard = nil
         pendingUserInitiatedCheck = false
         lastVersion = appcastItem.displayVersionString
         lastReleaseNotes = htmlToPlain(appcastItem.itemDescription ?? "")
@@ -202,6 +206,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - No update found
 
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        checkingCard?.cancel(); checkingCard = nil
         _ = error
         guard pendingUserInitiatedCheck else { acknowledgement(); return }
         pendingUserInitiatedCheck = false
@@ -236,6 +241,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - Updater error
 
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        checkingCard?.cancel(); checkingCard = nil
         bridge.onPrimary = { [weak self] in
             acknowledgement()
             self?.hide()
@@ -387,7 +393,7 @@ final class CorderUpdateDriver: NSObject, SPUUserDriver {
 
     // MARK: - Dismiss / focus
 
-    func dismissUpdateInstallation() { hide() }
+    func dismissUpdateInstallation() { checkingCard?.cancel(); checkingCard = nil; hide() }
     func showUpdateInFocus() { /* WebView is already focused if Library is open */ }
 
     // MARK: - Helpers

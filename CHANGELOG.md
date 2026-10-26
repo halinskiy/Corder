@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.116] - 2026-10-26
+
+### Fixed
+
+- Check for updates shows the result right away, without a placeholder card first.
+
 ## [0.15.115] - 2026-10-26
 
 ### Fixed
