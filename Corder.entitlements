@@ -6,16 +6,12 @@
     <true/>
     <key>com.apple.security.device.camera</key>
     <false/>
-    <!-- WKWebView + hardened runtime: JavaScriptCore JIT needs these, or the
-         WebContent process runs but can't allocate JIT memory → JS never
-         executes → the Library window is BLANK WHITE on notarized builds while
-         it renders fine in a normal browser (verified 2026-07-18). The
-         self-signed dev build hid this because hardened runtime is AUTO-DISABLED
-         there. Do NOT drop these on a hardened build. -->
-    <key>com.apple.security.cs.allow-jit</key>
-    <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
+    <!-- allow-jit and allow-unsigned-executable-memory were removed in
+         0.15.97. JavaScriptCore JIT runs in the WebContent process under its
+         own entitlements; a notarized hardened build without them rendered
+         the Library normally (checked 2026-10-26). The blank window seen on
+         2026-07-18 had another cause. If it ever comes back, re-add only
+         allow-jit, it is narrower. -->
     <!-- Removed 2026-06-02 along with the move to Developer ID +
          universal-binary notarized builds. `Sparkle.framework` is now
          re-signed with our Team ID (PDB9JGGX74) during build, so
