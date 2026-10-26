@@ -24,6 +24,10 @@ interface Strings {
   breadcrumb_records: string;
   breadcrumb_dashboard: string;
 
+  group_recordings: (n: number) => string;
+  group_load_failed: string;
+  group_empty_transcript: string;
+  group_retry: string;
   sidebar_search: string;
   sidebar_empty: string;
   sidebar_no_match: string;
@@ -483,6 +487,10 @@ const en: Strings = {
   breadcrumb_records: "Recordings",
   breadcrumb_dashboard: "Welcome",
 
+  group_recordings: (n) => `${n} ${n === 1 ? "recording" : "recordings"}`,
+  group_load_failed: "Could not load transcript.",
+  group_empty_transcript: "No transcript yet.",
+  group_retry: "Try again",
   sidebar_search: "Search recordings…",
   sidebar_empty: "No recordings yet. Click Start in the menu bar.",
   sidebar_no_match: "No matches.",

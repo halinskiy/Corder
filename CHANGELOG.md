@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.103] - 2026-10-26
+
+### Changed
+
+- Imported recordings from the same chat are stacked into one card in the sidebar; opening it shows all their transcripts in one feed. Exact duplicate imports are shown once.
+
 ## [0.15.102] - 2026-10-26
 
 ### Changed

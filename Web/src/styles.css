@@ -6138,3 +6138,93 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--accent);
   margin-bottom: 8px;
 }
+
+/* Keep stack rows as siblings so the shared divider rules still apply. */
+.meeting-stack {
+  position: relative;
+  isolation: isolate;
+  background: var(--bg-elev);
+}
+.meeting-stack::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: inherit;
+  pointer-events: none;
+}
+.meeting-stack:has(.meeting-stack-layer) { margin-bottom: 7px; }
+.meeting-stack:has(.meeting-stack-layer-back) { margin-bottom: 14px; }
+.meeting-stack-layer {
+  position: absolute;
+  z-index: -2;
+  left: 8px;
+  right: 8px;
+  bottom: -7px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  background: color-mix(in srgb, var(--bg-elev) 96%, var(--fg));
+  pointer-events: none;
+}
+.meeting-stack-layer-back {
+  left: 16px;
+  right: 16px;
+  bottom: -14px;
+  background: color-mix(in srgb, var(--bg-elev) 92%, var(--fg));
+}
+.meeting-stack-layer { border-color: var(--border-strong); }
+.dark .meeting-stack-layer { background: var(--border-strong); }
+.dark .meeting-stack-layer-back { background: var(--border); }
+.meeting-meta .meeting-stack-count {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--fg-muted);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+.meeting-meta .meeting-stack-count.unseen {
+  background: var(--status-external);
+  border-color: var(--status-external);
+  color: var(--bg);
+}
+.dark .meeting-item.active .meeting-stack-count {
+  border-color: currentColor;
+  background: transparent;
+}
+.meeting-stack .meeting-meta .meeting-date { flex-shrink: 1; overflow: hidden; }
+.meeting-stack:focus-visible { outline: 2px solid var(--status-external); outline-offset: 2px; }
+.group-view .detail-tabs,
+.group-view .detail-body { grid-template-columns: minmax(0, 1fr); }
+.group-view .transcript-wrap { background: none; }
+.group-view .transcript { padding-top: 24px; }
+.group-view .group-heading h1 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.group-recording { flex-shrink: 0; }
+.group-recording > .segment-head { margin: 0 0 8px; }
+.group-recording-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.group-recording-link:hover { color: var(--accent); }
+.group-recording .segment-paragraph { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

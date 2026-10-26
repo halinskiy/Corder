@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { listMeetings, listArchive, MeetingSummary, ArchivedMeeting, RecordingState, getRecordingState, getSettings, archiveMeeting, restoreMeeting, startRecordingNow, stopRecordingNow, submitLogs } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { MeetingView } from "./components/MeetingView";
+import { GroupView } from "./components/GroupView";
+import { groupMeetings } from "./meetingGroups";
 import { ArchiveSidebar } from "./components/ArchiveSidebar";
 import { Dashboard } from "./components/Dashboard";
 import { UpdateModalHost } from "./components/UpdateModal";
@@ -105,6 +107,13 @@ function App() {
   // case and an empty-state in the latter.
   const [meetingsLoaded, setMeetingsLoaded] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [activeGroup, setActiveGroup] = React.useState<string | null>(null);
+  const activeGroupRef = React.useRef<string | null>(null);
+  const openMeeting = React.useCallback((id: string | null) => {
+    activeGroupRef.current = null;
+    setActiveGroup(null);
+    setActiveId(id);
+  }, []);
   // Lifted "which Settings slice is open", null = not in Settings.
   // Lives up here so the open Settings slice survives a Dashboard ↔ Meeting
   // render flip. NOTE: clicking a session in the sidebar now CLOSES Settings
@@ -242,7 +251,7 @@ function App() {
     const onStarted = () => {
       getRecordingState().then((s) => {
         if (s.active && s.meeting_id) {
-          setActiveId(s.meeting_id);
+          openMeeting(s.meeting_id);
           wasRecordingRef.current = true;
           refresh();
         }
@@ -259,7 +268,7 @@ function App() {
     const onOpen = (e: Event) => {
       const id = ((e as CustomEvent).detail as { id?: string } | null)?.id;
       if (!id) return;
-      setActiveId(id);
+      openMeeting(id);
       refresh();
     };
     window.addEventListener("corder-open-meeting", onOpen);
@@ -284,6 +293,9 @@ function App() {
       //     window always lands on a session, never the dashboard.
       const dropped = softDeletedRef.current;
       const visible = m.filter((x) => !dropped.has(x.id));
+      if (activeGroupRef.current && groupMeetings(visible).some(g => g.key === activeGroupRef.current)) return;
+      activeGroupRef.current = null;
+      setActiveGroup(null);
       setActiveId((cur) => {
         if (cur && visible.some((x) => x.id === cur)) return cur;
         if (visible.length === 0) return null; // empty library → start screen
@@ -313,7 +325,7 @@ function App() {
         // false→true edge = a recording just started (via the "+" button or
         // the menu bar). Land the user on that live session immediately.
         if (s.active && s.meeting_id && !wasRecordingRef.current) {
-          setActiveId(s.meeting_id);
+          openMeeting(s.meeting_id);
           refresh();                   // pull the new .recording row in so it sticks
         }
         wasRecordingRef.current = s.active;
@@ -513,6 +525,11 @@ function App() {
     [meetings, softDeleted]
   );
 
+  const meetingGroups = React.useMemo(() => groupMeetings(visibleMeetings), [visibleMeetings]);
+  const selectedGroup = meetingGroups.find(group => group.key === activeGroup);
+  const markGroupRead = React.useCallback((id: string) => {
+    setMeetings(prev => prev.map(m => m.id === id && m.viewed === false ? { ...m, viewed: true } : m));
+  }, []);
 
   /// Open a meeting AND immediately clear its "unseen" gold/green
   /// title, the backend stamps `viewed_at` inside `GET /api/meetings/:id`,
@@ -523,22 +540,22 @@ function App() {
     setMeetings((prev) =>
       prev.map((m) => (m.id === id && m.viewed === false ? { ...m, viewed: true } : m))
     );
-    setActiveId(id);
+    openMeeting(id);
     // Clicking ANY session (even the already-selected one) closes an open
     // Settings pane and returns to the transcript, Settings is a detour, not a
     // sticky mode. (This intentionally reverses the old "keep Settings open
     // across session clicks" behaviour.)
     setSettingsSection(null);
-  }, []);
+  }, [openMeeting]);
 
   // "Home" / landing target. The Dashboard start screen only exists when
   // the library is empty; otherwise Home opens the most recent meeting so
   // the dashboard is never shown once there are recordings.
   const goLanding = React.useCallback(() => {
     const visible = meetings.filter((m) => !softDeleted.has(m.id));
-    if (visible.length === 0) { setActiveId(null); return; }
-    setActiveId(visible.reduce((a, b) => (b.started_at > a.started_at ? b : a)).id);
-  }, [meetings, softDeleted]);
+    if (visible.length === 0) { openMeeting(null); return; }
+    openMeeting(visible.reduce((a, b) => (b.started_at > a.started_at ? b : a)).id);
+  }, [meetings, softDeleted, openMeeting]);
 
   const [sidebarW, setSidebarW] = React.useState(() =>
     clamp(readNum("corder.sidebarW", SIDEBAR_DEFAULT), SIDEBAR_MIN, SIDEBAR_MAX)
@@ -579,6 +596,14 @@ function App() {
           meetings={visibleMeetings}
           loaded={meetingsLoaded}
           activeId={activeId}
+          activeGroup={activeGroup}
+          meetingGroups={meetingGroups}
+          onSelectGroup={(key) => {
+            activeGroupRef.current = key;
+            setActiveGroup(key);
+            setActiveId(null);
+            setSettingsSection(null);
+          }}
           playingId={playingId}
           query={query}
           onQueryChange={setQuery}
@@ -649,6 +674,25 @@ function App() {
                     onSettingsOpenChange={() => {}}
                     signedIn={signedIn}
                   />
+                </>
+              )}
+              {selectedGroup && (
+                <>
+                  <MainHeader
+                    breadcrumb={<span className="breadcrumb-current">{selectedGroup.key}</span>}
+                    onOpenArchive={() => setArchiveOpen(v => !v)}
+                    archiveOpen={archiveOpen}
+                    archiveEmpty={archived.length === 0}
+                    onOpenSettings={() => {
+                      openMeeting(selectedGroup.latest.id);
+                      setOpenSettingsNonce(n => n + 1);
+                    }}
+                    onOpenDashboard={goLanding}
+                    onToast={showToast}
+                    t={t}
+                  />
+                  <GroupView key={selectedGroup.key} group={selectedGroup} onSelect={pickMeeting}
+                    onRead={markGroupRead} lang={lang} t={t} />
                 </>
               )}
               {lastSeen !== null && (

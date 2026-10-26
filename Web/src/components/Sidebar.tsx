@@ -5,6 +5,7 @@ import { OverlayScrollbar } from "./OverlayScrollbar";
 import { formatDate, formatDuration, dateBucket, formatExactDate, formatShortDate } from "../format";
 import { StorageBanner } from "./StorageBanner";
 import type { Lang, T } from "../i18n";
+import { sidebarEntries, type MeetingGroup, type SidebarEntry } from "../meetingGroups";
 
 function statusLabel(s: MeetingStatus, t: T): string {
   switch (s) {
@@ -41,6 +42,9 @@ interface Props {
   /// first response arrives.
   loaded: boolean;
   activeId: string | null;
+  activeGroup: string | null;
+  meetingGroups: MeetingGroup[];
+  onSelectGroup: (key: string) => void;
   /// Meeting whose audio is currently playing, gets a red play glyph
   /// next to its title so it's obvious where the sound comes from.
   playingId?: string | null;
@@ -70,7 +74,7 @@ interface Props {
 
 interface MenuState { x: number; y: number; meetingId: string }
 
-export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
+export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups, onSelectGroup, playingId, query, onQueryChange, onSelect, onDeleted, onRetranscribed, onChanged, onToast, t, lang }: Props) {
   const [menu, setMenu] = React.useState<MenuState | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; value: string } | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -96,7 +100,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
       setSelectedIds((cur) => (cur.size === 0 ? cur : new Set()));
       setAnchorId(null);
     }
-  }, [activeId]);
+  }, [activeId, activeGroup]);
 
   const commitRename = async () => {
     if (!editing) return;
@@ -126,6 +130,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
     if (!query.trim()) return meetings;
     const q = query.toLowerCase();
     return meetings.filter((m) =>
+      (m.title || "").toLowerCase().includes(q) ||
       (m.preview || "").toLowerCase().includes(q) ||
       (m.speaker_names || "").toLowerCase().includes(q) ||
       formatDate(m.started_at, lang).toLowerCase().includes(q)
@@ -133,29 +138,24 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
   }, [meetings, query, lang]);
 
   const groups = React.useMemo(() => {
-    const out: { label: string; items: MeetingSummary[] }[] = [];
-    // Pinned sessions float to their own group at the very top,
-    // regardless of date (server already orders them first).
-    const pinned = filtered.filter((m) => m.pinned);
-    if (pinned.length) out.push({ label: t.sidebar_pinned, items: pinned });
-    for (const m of filtered) {
-      if (m.pinned) continue;
-      const label = dateBucket(m.started_at, lang);
+    const out: { label: string; items: SidebarEntry[] }[] = [];
+    const entries = sidebarEntries(filtered, query.trim() ? [] : meetingGroups);
+    for (const entry of entries) {
+      const meeting = entry.kind === "meeting" ? entry.meeting : entry.group.latest;
+      const label = entry.kind === "meeting" && meeting.pinned
+        ? t.sidebar_pinned : dateBucket(meeting.started_at, lang);
       const last = out[out.length - 1];
-      if (last && last.label === label && last.label !== t.sidebar_pinned) {
-        last.items.push(m);
-      } else {
-        out.push({ label, items: [m] });
-      }
+      if (last && last.label === label) last.items.push(entry);
+      else out.push({ label, items: [entry] });
     }
     return out;
-  }, [filtered, lang, t]);
+  }, [filtered, meetingGroups, query, lang, t]);
 
   // Flat list of meeting ids in the order they're VISIBLY rendered
   // (pinned group → date buckets). Shift-select uses this to fill the
   // contiguous range between anchor and clicked id.
   const visibleOrder = React.useMemo(
-    () => groups.flatMap((g) => g.items.map((m) => m.id)),
+    () => groups.flatMap((g) => g.items.flatMap((entry) => entry.kind === "meeting" ? [entry.meeting.id] : [])),
     [groups]
   );
 
@@ -270,7 +270,55 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
         {groups.map((g) => (
           <React.Fragment key={g.label}>
             <div className="sidebar-section-label">{g.label}</div>
-            {g.items.map((m) => {
+            {g.items.map((entry) => {
+              if (entry.kind === "group") {
+                const group = entry.group;
+                const latest = group.latest;
+                return (
+                  <div
+                    key={`group:${group.key}`}
+                    className={"meeting-item meeting-stack external"
+                      + (activeGroup === group.key ? " active" : "")}
+                    role="button"
+                    tabIndex={0}
+                    title={group.key}
+                    onClick={() => {
+                      setSelectedIds(new Set());
+                      setAnchorId(null);
+                      setMenu(null);
+                      onSelectGroup(group.key);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedIds(new Set());
+                        setAnchorId(null);
+                        setMenu(null);
+                        onSelectGroup(group.key);
+                      }
+                    }}
+                    onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}
+                  >
+                    {group.meetings.length > 2 && <span className="meeting-stack-layer meeting-stack-layer-back" aria-hidden />}
+                    {group.meetings.length > 1 && <span className="meeting-stack-layer" aria-hidden />}
+                    <div className="meeting-row">
+                      <div className="meeting-title">{group.key}</div>
+                      {group.memberIds.has(playingId ?? "") && <PlayingIcon />}
+                    </div>
+                    <div className="meeting-meta">
+                      <span className={`status-dot ${latest.status}`} />
+                      <span>{formatDuration(group.durationMs, lang)}</span>
+                      <span className="meeting-date">{formatShortDate(latest.started_at)}</span>
+                      <span className={"meeting-stack-count" + (group.unseen ? " unseen" : "")}
+                        title={t.group_recordings(group.meetings.length)}>
+                        {group.meetings.length}
+                      </span>
+                    </div>
+                    {latest.preview && <div className="meeting-preview">{latest.preview}</div>}
+                  </div>
+                );
+              }
+              const m = entry.meeting;
               const titled = m.title?.trim();
               return (
               <div
