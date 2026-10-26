@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.109] - 2026-10-26
+
+### Changed
+
+- An open stack keeps its card pinned while you scroll its recordings; click it to close the stack.
+
 ## [0.15.108] - 2026-10-26
 
 ### Changed
