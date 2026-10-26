@@ -1518,7 +1518,7 @@ enum Routes {
             if let v = parsed.auto_transcribe  { AppSettings.setAutoTranscribe(v) }
             if let v = parsed.auto_title       { AppSettings.setAutoTitle(v) }
             if let v = parsed.sync_transcripts { AppSettings.setSyncTranscripts(v) }
-            if let v = parsed.local_only       { AppSettings.setLocalOnly(v) }
+            // Local only has no Settings switch for now (2026-10-26); ignore the field.
             if let v = parsed.summary_provider { AppSettings.setSummaryProvider(v) }
             if let v = parsed.local_llm_endpoint { AppSettings.setLocalLLMEndpoint(v) }
             if let v = parsed.local_llm_model { AppSettings.setLocalLLMModel(v) }

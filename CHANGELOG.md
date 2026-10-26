@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.106] - 2026-10-26
+
+### Changed
+
+- Removed the Local only switch.
+
 ## [0.15.105] - 2026-10-26
 
 ### Changed

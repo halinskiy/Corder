@@ -375,16 +375,6 @@ export function SettingsPane({
           />
         </SoloCard>
 
-        <SoloCard>
-          <Toggle
-            label={t.settings_local_only}
-            desc={t.settings_local_only_desc}
-            checked={s?.local_only ?? false}
-            disabled={!loaded}
-            onChange={(v) => patch({ local_only: v })}
-          />
-        </SoloCard>
-
         {/* "Never offer to record" (blacklist) list. The meeting_whitelist
             field stays in the backend, just not editable. */}
         <SoloCard>

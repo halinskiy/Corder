@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // flipped to opt-in in 0.15.18). Same idempotent migration shape.
         AppSettings.forceNotificationsOffOnceIfNeeded()
         AppSettings.migrateLegacyLocalVariantOnce()
+        // Local only lost its Settings switch (2026-10-26): nobody stays stuck offline.
+        if AppSettings.localOnly { AppSettings.setLocalOnly(false) }
         // Multi-account local layout: if there's still a legacy
         // flat `corder.db` at supportRoot AND we already know
         // which user owns this Mac (email persisted from previous
