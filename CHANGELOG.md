@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.112] - 2026-10-26
+
+### Fixed
+
+- Stacks are easier to see in the light theme.
+
 ## [0.15.111] - 2026-10-26
 
 ### Fixed

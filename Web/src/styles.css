@@ -6400,3 +6400,14 @@ body.resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-elev);
   box-shadow: 0 -4px 0 var(--bg-elev);
 }
+
+/* Light theme: the plates must sit a step DARKER than the sidebar
+   (#f7f7f6), the mirror of the dark theme where they are a step lighter.
+   With the shared hover/active tokens they vanished into the surface. */
+html:not(.dark) .meeting-stack-plate {
+  background: color-mix(in srgb, var(--border-strong) 60%, var(--border));
+  border-color: var(--border-strong);
+}
+html:not(.dark) .meeting-stack-plate-back {
+  background: var(--border);
+}
