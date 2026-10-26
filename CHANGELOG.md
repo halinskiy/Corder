@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.97] - 2026-10-26
+
+### Changed
+
+- Security: Corder runs with fewer system exceptions. Two code-execution permissions it no longer needs were removed.
+
 ## [0.15.96] - 2026-10-26
 
 ### Added
