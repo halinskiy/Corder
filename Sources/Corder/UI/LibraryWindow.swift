@@ -171,6 +171,26 @@ private final class HeaderDragView: NSView {
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    // Hover lives in the web view, but outside the interactive rects the
+    // overlay owns the pointer, so WebKit never saw the cursor leave a
+    // toolbar button: it kept the pointer cursor and the tooltip open.
+    // Forward every move over the overlay so mouseleave fires as usual.
+    private var moveTracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let moveTracking { removeTrackingArea(moveTracking) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        moveTracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) { webView?.mouseMoved(with: event) }
+    override func mouseEntered(with event: NSEvent) { webView?.mouseMoved(with: event) }
+    override func mouseExited(with event: NSEvent) { webView?.mouseMoved(with: event) }
+
     // We do our own tracking + performDrag so AppKit shouldn't also
     // treat this view as window-draggable background (would double-fire).
     override var mouseDownCanMoveWindow: Bool { false }

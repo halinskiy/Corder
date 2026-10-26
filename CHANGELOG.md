@@ -16,6 +16,16 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.115] - 2026-10-26
+
+### Fixed
+
+- Moving the pointer off a header button now clears its hover and tooltip.
+
+### Changed
+
+- The record button is the same size as the other header buttons.
+
 ## [0.15.114] - 2026-10-26
 
 ### Fixed
