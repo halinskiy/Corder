@@ -16,6 +16,14 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.105] - 2026-10-26
+
+### Changed
+
+- Stacks look like a card with two cards behind it.
+- Advanced settings open when signed out.
+- AI assistants is hidden for now.
+
 ## [0.15.104] - 2026-10-26
 
 ### Changed

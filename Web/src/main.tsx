@@ -426,11 +426,6 @@ function App() {
     } catch {}
   }, 5000);
 
-  // A guest must never sit on the (now-hidden) Advanced settings slice, if they
-  // were on it when signing out, snap back to General.
-  React.useEffect(() => {
-    if (!signedIn && settingsSection === "advanced") setSettingsSection("general");
-  }, [signedIn, settingsSection]);
 
   // Batched soft-archive: every meeting archived within a 5-second window
   // collects into ONE pending batch with ONE shared timer + ONE toast.

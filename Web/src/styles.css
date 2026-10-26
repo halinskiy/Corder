@@ -4244,6 +4244,9 @@ body.resizing { cursor: col-resize; user-select: none; }
    Only the empty case: with rows present the `.applist` sits between and the
    4px list-to-button gap above still applies. */
 .applist-block .settings-row-label + .applist-addbtn { margin-top: 10px; }
+/* Same gap for single-button blocks without a description (AI assistants,
+   Offline transcription): title, 10px, button, as in Never offer to record. */
+.hk-block > .settings-row-label + .clarify-btn { margin-top: 10px; }
 .applist-ico {
   width: 18px;
   height: 18px;
@@ -6307,3 +6310,78 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .group-recording-link:hover { color: var(--accent); }
 .group-recording .segment-paragraph { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Stack card, 1:1 with the approved mockup (2026-10-26): a bordered card with
+   two shorter card edges peeking 5 px and 10 px below it, no hairline dividers. */
+.meeting-stack-wrap { margin-top: 8px; margin-bottom: 8px; overflow: visible; }
+.meeting-item + .meeting-stack-wrap,
+.meeting-stack-wrap + .meeting-stack-wrap,
+.meeting-stack-wrap + .meeting-item { margin-top: 8px; }
+.meeting-item + .meeting-stack-wrap .meeting-stack,
+.meeting-stack-wrap + .meeting-stack-wrap .meeting-stack,
+.meeting-stack-wrap + .meeting-item { padding-top: 12px; }
+.meeting-item + .meeting-stack-wrap .meeting-stack::before,
+.meeting-stack-wrap + .meeting-stack-wrap .meeting-stack::before,
+.meeting-stack-wrap + .meeting-item::before { display: none; }
+.meeting-stack-wrap .meeting-stack {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  gap: 6px;
+}
+.meeting-stack-wrap .meeting-stack:hover { background: var(--bg-hover); }
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack:not(.active) {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+.meeting-stack-plate {
+  position: absolute;
+  z-index: -1;
+  left: 8px;
+  right: 8px;
+  bottom: -5px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-hover) 50%, var(--bg-active));
+  pointer-events: none;
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms ease;
+}
+.meeting-stack-plate-back {
+  z-index: -2;
+  left: 16px;
+  right: 16px;
+  bottom: -10px;
+  background: var(--bg-hover);
+}
+.meeting-stack-header { z-index: 2; isolation: isolate; }
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-plate {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+.meeting-stack .meeting-row .meeting-stack-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--fg-muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+.meeting-stack .meeting-row .meeting-stack-count.unseen {
+  background: var(--status-external);
+  border-color: var(--status-external);
+  color: #fff;
+}
+.meeting-stack.active .meeting-row .meeting-stack-count { border-color: currentColor; background: transparent; color: inherit; }
+.meeting-stack-entry { opacity: 0; }
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-recordings { padding-top: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .meeting-stack-plate { transition: none; }
+}

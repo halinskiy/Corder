@@ -344,7 +344,8 @@ export function SettingsPane({
 
         {/* AI assistants (MCP), same `.hk-block` shell as Recordings folder:
             label + a Copy button for the command. */}
-        {s?.mcp_command && (
+        {/* Admin-only for now (2026-10-26). */}
+        {s?.is_admin === true && s?.mcp_command && (
           <SoloCard>
             <div className="hk-block">
               <div className="settings-row-label">{t.settings_mcp_title ?? "AI assistants"}</div>

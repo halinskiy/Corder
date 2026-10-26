@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { MeetingSummary, MeetingStatus, retranscribe, retitle, pinMeeting, renameMeeting } from "../api";
 import { MeetingStack } from "./MeetingStack";
 import { OverlayScrollbar } from "./OverlayScrollbar";
@@ -403,14 +403,13 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
                         <div className="meeting-row">
                           <div className="meeting-title">{group.key}</div>
                           {group.memberIds.has(playingId ?? "") && <PlayingIcon />}
-                          <ChevronDown size={14} className="meeting-stack-chevron" aria-hidden />
+                          <span className={"meeting-stack-count" + (group.unseen ? " unseen" : "")}
+                            title={t.group_recordings(group.meetings.length)}>{group.meetings.length}</span>
                         </div>
                         <div className="meeting-meta">
                           <span className={`status-dot ${latest.status}`} />
                           <span>{formatDuration(group.durationMs, lang)}</span>
                           <span className="meeting-date">{formatShortDate(latest.started_at)}</span>
-                          <span className={"meeting-stack-count" + (group.unseen ? " unseen" : "")}
-                            title={t.group_recordings(group.meetings.length)}>{group.meetings.length}</span>
                         </div>
                         {latest.preview && <div className="meeting-preview">{latest.preview}</div>}
                       </div>

@@ -38,13 +38,11 @@ export function MeetingStack({ expanded, header, children, onCollapse, showLess 
     body.inert = !expanded;
     const measure = () => {
       const rows = Array.from(body.querySelectorAll<HTMLElement>(":scope > .meeting-stack-entry"));
-      rows.forEach((row, i) => {
-        const layer = Math.min(i, 1);
-        row.style.setProperty("--stack-y", `${-7 + layer * 7 - row.offsetTop}px`);
-        row.style.setProperty("--stack-scale-x", String(i < layerCount ? Math.max(0, (row.offsetWidth - 16 * (layer + 1)) / row.offsetWidth) : 0.96));
-        row.style.setProperty("--stack-scale-y", String(i < layerCount ? 14 / row.offsetHeight : 0.96));
+      rows.forEach((row) => {
+        // Collapsed rows sit under the header card, so they rise out of it.
+        row.style.setProperty("--stack-y", `${-row.offsetTop - row.offsetHeight / 2}px`);
       });
-      const height = head.offsetHeight + (expanded ? body.offsetHeight : layerCount * 7);
+      const height = head.offsetHeight + (expanded ? body.offsetHeight : layerCount * 5);
       // Read the presented height before cancelling so a reversal starts at its current frame.
       const from = root.getBoundingClientRect().height;
       const changed = root.style.height !== `${height}px` || expandedRef.current !== expanded;
@@ -76,12 +74,12 @@ export function MeetingStack({ expanded, header, children, onCollapse, showLess 
     <div className="meeting-stack-wrap" ref={rootRef} data-expanded={expanded}>
       <div className="meeting-stack-header" ref={headerRef}>
         {React.cloneElement(header, { "aria-controls": bodyId })}
+        {layerCount > 0 && <span className="meeting-stack-plate" aria-hidden />}
+        {layerCount > 1 && <span className="meeting-stack-plate meeting-stack-plate-back" aria-hidden />}
       </div>
       <div className="meeting-stack-recordings" id={bodyId} ref={bodyRef} aria-hidden={!expanded}>
         {children.map((child, i) => (
-          <div key={child.key} className={"meeting-stack-entry"
-            + (i < layerCount ? " meeting-stack-layer" : "")
-            + (i === 1 && layerCount > 1 ? " meeting-stack-layer-back" : "")}
+          <div key={child.key} className="meeting-stack-entry"
             style={{ "--stack-delay": `${Math.min(i, 6) * 35}ms`, zIndex: children.length - i } as React.CSSProperties}>
             <div className="meeting-stack-entry-content">{child}</div>
           </div>
