@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.100] - 2026-10-26
+
+### Changed
+
+- Shorter descriptions in Settings.
+
 ## [0.15.99] - 2026-10-26
 
 ### Fixed
