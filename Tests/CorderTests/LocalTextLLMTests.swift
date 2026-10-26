@@ -71,8 +71,9 @@ final class LocalTextLLMTests: XCTestCase {
         defaults.set(true, forKey: "Corder.set.localOnly")
         XCTAssertTrue(MeetingNotes.usesLocal(defaults: defaults))
         defaults.set(false, forKey: "Corder.set.localOnly")
+        // The Summaries picker is gone: a stored "local" no longer routes locally.
         defaults.set("local", forKey: "Corder.set.summaryProvider")
-        XCTAssertTrue(MeetingNotes.usesLocal(defaults: defaults))
+        XCTAssertFalse(MeetingNotes.usesLocal(defaults: defaults))
     }
 
     func testCloudDefaultDoesNotValidateOrUseLocalModelSettings() throws {
@@ -283,9 +284,9 @@ final class LocalTextLLMTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.set(base + "/v1", forKey: "Corder.set.localLLMEndpoint")
         defaults.set("qwen", forKey: "Corder.set.localLLMModel")
-        for localOnly in [true, false] {
+        for localOnly in [true] {
             defaults.set(localOnly, forKey: "Corder.set.localOnly")
-            defaults.set(localOnly ? "cloud" : "local", forKey: "Corder.set.summaryProvider")
+            defaults.set("cloud", forKey: "Corder.set.summaryProvider")
             let notes = try MeetingNotes(defaults: defaults)
             XCTAssertTrue(notes.local)
             XCTAssertTrue(notes.llm is LocalTextLLM)

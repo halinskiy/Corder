@@ -18,7 +18,7 @@ final class CloudPrivacyTests: XCTestCase {
             defaults.set(false, forKey: "Corder.set.telemetry")
             defaults.set(false, forKey: "Corder.set.autoTitle")
             defaults.set(false, forKey: "Corder.set.syncTranscripts")
-            XCTAssertFalse(AppSettings.telemetryEnabled(in: defaults))
+            XCTAssertTrue(AppSettings.telemetryEnabled(in: defaults))
             XCTAssertFalse(AppSettings.autoTitle(in: defaults))
             XCTAssertFalse(AppSettings.syncTranscripts(in: defaults))
         }

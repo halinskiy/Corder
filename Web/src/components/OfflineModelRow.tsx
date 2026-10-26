@@ -51,28 +51,19 @@ export function OfflineModelRow({ t }: { t: T }) {
     catch { setClicked(false); }
   }, [model, ready]);
 
+  // Once the model is on disk the row disappears, so a regular user has no
+  // obvious way to delete it by accident; it comes back if the model is gone.
+  if (ready) return null;
+
+  // Carries its own `.settings-rows` card so a hidden row leaves no empty card.
   return (
+    <div className="settings-rows">
     <div className="hk-block">
       <div className="settings-row-label">
         {t.settings_offline_model_label ?? "Offline transcription"}
       </div>
-      <div className="settings-row-desc">
-        {t.settings_offline_model_desc ??
-          "Corder can finish a transcript even if your internet drops."}
-      </div>
 
-      {ready ? (
-        // Done state: an inert outline button in the SAME shell as the "Add" /
-        // "Open" settings buttons (base `.clarify-btn`, no accent), greyed via
-        // `:disabled`. No checkmark, nothing left to do, per Kostya.
-        <button
-          type="button"
-          className="clarify-btn wl-download-btn"
-          disabled
-        >
-          {t.settings_offline_model_ready ?? "Ready for offline use"}
-        </button>
-      ) : downloading ? (
+      {downloading ? (
         (() => {
           const pct = Math.max(0, Math.min(100, Math.round((progress ?? 0) * 100)));
           const label = preparing
@@ -114,6 +105,7 @@ export function OfflineModelRow({ t }: { t: T }) {
           </span>
         </button>
       )}
+    </div>
     </div>
   );
 }

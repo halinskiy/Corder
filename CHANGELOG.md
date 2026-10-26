@@ -16,6 +16,15 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.102] - 2026-10-26
+
+### Changed
+
+- The sidebar shows each recording's date next to its length.
+- Offline transcription shows only a download button and hides once the model is on this Mac.
+- AI assistants keeps just the Copy command button.
+- Removed the Summaries and diagnostics switches from Settings.
+
 ## [0.15.101] - 2026-10-26
 
 ### Changed

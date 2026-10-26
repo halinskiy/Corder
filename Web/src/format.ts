@@ -76,6 +76,12 @@ export function formatExactDate(ms: number): string {
   return `${LONG_D_EN[d.getDay()]}, ${d.getDate()} ${LONG_M_EN[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/// Sidebar meta date: dd.mm.yy.
+export function formatShortDate(ms: number): string {
+  const d = new Date(ms);
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${pad(d.getFullYear() % 100)}`;
+}
+
 export function dateBucket(ms: number, _lang: Lang = "en"): string {
   const d = new Date(ms);
   const now = new Date();

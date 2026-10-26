@@ -2,7 +2,7 @@ import React from "react";
 import { Search } from "lucide-react";
 import { MeetingSummary, MeetingStatus, retranscribe, retitle, pinMeeting, renameMeeting } from "../api";
 import { OverlayScrollbar } from "./OverlayScrollbar";
-import { formatDate, formatDuration, dateBucket, formatExactDate } from "../format";
+import { formatDate, formatDuration, dateBucket, formatExactDate, formatShortDate } from "../format";
 import { StorageBanner } from "./StorageBanner";
 import type { Lang, T } from "../i18n";
 
@@ -315,6 +315,7 @@ export function Sidebar({ meetings, loaded, activeId, playingId, query, onQueryC
                 <div className="meeting-meta">
                   <span className={`status-dot ${m.status}`} />
                   {m.duration_ms ? <span>{formatDuration(m.duration_ms, lang)}</span> : null}
+                  <span className="meeting-date">{formatShortDate(m.started_at)}</span>
                   {/* Drop the "transcribing" word from the meta, the
                       hollow status dot already tells the user there's
                       no transcript yet, and the literal word kept

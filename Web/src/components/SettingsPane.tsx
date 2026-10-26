@@ -11,7 +11,6 @@ import { type T } from "../i18n";
 import { copyText } from "../clipboard";
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import { WhisperPrefetchPill } from "./WhisperPrefetchPill";
-import { SummariesSettingsRow } from "./SummariesSettingsRow";
 import { OfflineModelRow } from "./OfflineModelRow";
 import { useTheme } from "../theme";
 
@@ -243,9 +242,6 @@ export function SettingsPane({
       </div>
 
       <div style={{ display: section === "advanced" ? "contents" : "none" }}>
-        <SoloCard>
-          <SummariesSettingsRow s={s} patch={patch} t={t} />
-        </SoloCard>
         {/* Transcription model picker, ADMIN-ONLY. Normal users have no
             model choice (the hard provider lock pins them to Groq cloud +
             on-device), so the whole block is hidden for non-admins; only
@@ -261,13 +257,10 @@ export function SettingsPane({
         )}
 
         {/* Offline safety-net model, PAID-ONLY (Pro / Max). Free users already
-            run on-device by default, so the concept doesn't apply to them.
-            Opt-in download of the on-device model so a mid-call connection drop
-            still finishes the transcript. */}
+            run on-device by default. The row hides itself once the model is on
+            disk and comes back only if it is deleted. */}
         {(s?.tier === "pro" || s?.tier === "max") && (
-          <SoloCard>
-            <OfflineModelRow t={t} />
-          </SoloCard>
+          <OfflineModelRow t={t} />
         )}
 
         {/* Microphone picker. "System default" stays the first option (the
@@ -350,13 +343,11 @@ export function SettingsPane({
         </SoloCard>
 
         {/* AI assistants (MCP), same `.hk-block` shell as Recordings folder:
-            label + desc + the command + a Copy button. */}
+            label + a Copy button for the command. */}
         {s?.mcp_command && (
           <SoloCard>
             <div className="hk-block">
               <div className="settings-row-label">{t.settings_mcp_title ?? "AI assistants"}</div>
-              <div className="settings-row-desc">{t.settings_mcp_desc}</div>
-              <code className="mcp-command">{s.mcp_command}</code>
               <button
                 type="button"
                 className="clarify-btn settings-open-btn"
@@ -390,16 +381,6 @@ export function SettingsPane({
             checked={s?.local_only ?? false}
             disabled={!loaded}
             onChange={(v) => patch({ local_only: v })}
-          />
-        </SoloCard>
-
-        <SoloCard>
-          <Toggle
-            label={t.settings_telemetry_title ?? "Help improve Corder"}
-            desc={t.settings_telemetry_desc}
-            checked={on("telemetry")}
-            disabled={!loaded}
-            onChange={(v) => patch({ telemetry: v })}
           />
         </SoloCard>
 

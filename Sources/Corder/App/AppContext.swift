@@ -246,12 +246,10 @@ enum AppSettings {
     static func setLocalLLMContextTokens(_ value: Int) { UserDefaults.standard.set(value, forKey: "Corder.set.localLLMContextTokens") }
     static var autoSummary: Bool           { flag(kAutoSummary) }
     static var autoChapters: Bool          { flag(kAutoChapters) }
-    /// Pseudonymous diagnostics, ON by default and optional in Settings.
-    /// Account email hash or random install ID, aggregate counts, no meeting content.
-    static var telemetryEnabled: Bool { telemetryEnabled(in: .standard) }
-    static func telemetryEnabled(in defaults: UserDefaults) -> Bool {
-        defaults.object(forKey: kTelemetry) as? Bool ?? true
-    }
+    /// Diagnostics are always on (product decision 2026-10-26, no Settings
+    /// switch). A stored false from the old toggle is ignored.
+    static var telemetryEnabled: Bool { true }
+    static func telemetryEnabled(in defaults: UserDefaults) -> Bool { true }
     /// Silent pre-roll: start capturing the instant a call is detected so
     /// that accepting the "record this call?" offer keeps the audio/video
     /// from the very start. Default ON for everyone (Костя 2026-06-23): the

@@ -86,7 +86,8 @@ struct MeetingNotes: Sendable {
     }
 
     static func usesLocal(defaults: UserDefaults = .standard) -> Bool {
-        AppSettings.localOnly(in: defaults) || defaults.string(forKey: "Corder.set.summaryProvider") == "local"
+        // No Summaries picker in Settings (2026-10-26): cloud unless Local only.
+        AppSettings.localOnly(in: defaults)
     }
 
     static func languageInstruction(_ languageISO: String?) -> String {

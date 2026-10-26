@@ -50,10 +50,6 @@ interface Strings {
   settings_auto_chapters_desc?: string;
   settings_sync_transcripts: string;
   settings_sync_transcripts_desc: string;
-  settings_summaries: string;
-  settings_summaries_desc: string;
-  settings_summaries_cloud: string;
-  settings_summaries_local: string;
   settings_local_llm_endpoint: string;
   settings_local_llm_model: string;
   settings_local_llm_auto: string;
@@ -71,8 +67,6 @@ interface Strings {
   local_llm_request_failed: string;
   settings_local_only: string;
   settings_local_only_desc: string;
-  settings_telemetry_title?: string;
-  settings_telemetry_desc: string;
   tab_settings: string;
   tab_general_settings?: string;
   tab_advanced_settings?: string;
@@ -226,11 +220,9 @@ interface Strings {
   settings_model_label?: string;
   settings_model_desc?: string;
   settings_offline_model_label?: string;
-  settings_offline_model_desc?: string;
   settings_offline_model_download?: string;
   settings_offline_model_downloading?: string;
   settings_offline_model_preparing?: string;
-  settings_offline_model_ready?: string;
   btn_dismiss?: string;
   btn_collapse?: string;
   news_eyebrow?: string;
@@ -519,10 +511,6 @@ const en: Strings = {
   settings_auto_chapters_desc: "Split a finished transcript.",
   settings_sync_transcripts: "Sync transcripts to your account",
   settings_sync_transcripts_desc: "Keep transcripts in your account.",
-  settings_summaries: "Summaries",
-  settings_summaries_desc: "Generate summaries in the cloud or with a local model.",
-  settings_summaries_cloud: "Cloud",
-  settings_summaries_local: "Local model",
   settings_local_llm_endpoint: "Server address",
   settings_local_llm_model: "Model",
   settings_local_llm_auto: "First loaded model",
@@ -540,8 +528,6 @@ const en: Strings = {
   local_llm_request_failed: "The local server rejected the request.",
   settings_local_only: "Local only",
   settings_local_only_desc: "Keep everything on this Mac.",
-  settings_telemetry_title: "Help improve Corder",
-  settings_telemetry_desc: "Send diagnostic counts once a day.",
   tab_settings: "Settings",
   tab_general_settings: "General",
   tab_advanced_settings: "Advanced",
@@ -679,11 +665,9 @@ const en: Strings = {
   settings_model_label: "Transcription model",
   settings_model_desc: "Which model the next recording is transcribed with.",
   settings_offline_model_label: "Offline transcription",
-  settings_offline_model_desc: "Corder can finish a transcript even if your internet drops.",
   settings_offline_model_download: "Download model",
   settings_offline_model_downloading: "Downloading model",
   settings_offline_model_preparing: "Preparing model",
-  settings_offline_model_ready: "Ready for offline use",
   btn_dismiss: "Dismiss",
   news_eyebrow: "New",
   settings_tier_upgrade_label: "Upgrade",
