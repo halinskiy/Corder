@@ -109,6 +109,9 @@
 /* Unseen-title accent green also collapses on the green fill, fall
    back to plain white so the bold weight stays visible. */
 .dark .meeting-item.unseen.active .meeting-title { color: #fff; }
+/* The separator dot between length and date is --fg-dim, invisible on the
+   blue or green selected fill: white like the rest of the meta line. */
+.dark .meeting-item.active .meeting-date::before { color: #fff; }
 /* A session transcribed from a file (dropped, or from an AI assistant):
    the selected fill is blue instead of green, matching its blue dot. */
 .dark .meeting-item.external.active {

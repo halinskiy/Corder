@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.111] - 2026-10-26
+
+### Fixed
+
+- The dot between length and date is white on a selected recording.
+
 ## [0.15.110] - 2026-10-26
 
 ### Changed
