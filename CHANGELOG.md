@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.108] - 2026-10-26
+
+### Changed
+
+- An open stack lists its recordings like the rest of the sidebar.
+- No line under stacks.
+
 ## [0.15.107] - 2026-10-26
 
 ### Changed

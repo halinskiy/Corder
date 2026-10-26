@@ -46,7 +46,17 @@ export function MeetingStack({ expanded, header, children, onCollapse, showLess 
       // Read the presented height before cancelling so a reversal starts at its current frame.
       const from = root.getBoundingClientRect().height;
       const changed = root.style.height !== `${height}px` || expandedRef.current !== expanded;
+      const justCollapsed = expandedRef.current && !expanded;
       expandedRef.current = expanded;
+      // Collapsing from the sticky header deep in a long stack: bring the
+      // stack's top back into view so the list doesn't jump past it.
+      if (justCollapsed) {
+        const list = root.closest(".sidebar-list");
+        if (list && root.getBoundingClientRect().top < list.getBoundingClientRect().top) {
+          list.scrollTo({ top: list.scrollTop + root.getBoundingClientRect().top - list.getBoundingClientRect().top - 8,
+            behavior: reducedMotion ? "auto" : "smooth" });
+        }
+      }
       if (reducedMotion) animationRef.current?.cancel();
       if (!changed) return;
       animationRef.current?.cancel();
@@ -85,7 +95,7 @@ export function MeetingStack({ expanded, header, children, onCollapse, showLess 
           </div>
         ))}
         <div className="meeting-stack-footer">
-          <button className="meeting-stack-less" onClick={onCollapse}>{showLess}</button>
+          <button type="button" className="clarify-btn bigbtn-full" onClick={onCollapse}>{showLess}</button>
         </div>
       </div>
     </div>

@@ -6199,29 +6199,30 @@ body.resizing { cursor: col-resize; user-select: none; }
   opacity: 1;
   transition: opacity 260ms ease var(--stack-delay);
 }
-.meeting-stack-entry .meeting-item {
-  margin: 0;
-  padding: 8px 9px;
-  gap: 3px;
+/* Rows of an open stack are ordinary sidebar rows: same padding, type and
+   hairline between them as the rest of the list. */
+.meeting-stack-entry .meeting-item { margin: 0; }
+.meeting-stack-entry + .meeting-stack-entry .meeting-item {
+  position: relative;
+  margin-top: 4px;
+  padding-top: 15px;
 }
-.meeting-stack-meeting .meeting-title { font-size: 13px; }
-.meeting-stack-meeting .meeting-meta { font-size: 12px; }
-.meeting-stack-meeting .meeting-preview { font-size: 13px; -webkit-line-clamp: 1; }
-.meeting-stack-footer { height: 32px; opacity: 0; transition: opacity 120ms ease; }
-.meeting-stack-wrap[data-expanded="true"] .meeting-stack-footer { opacity: 1; transition-delay: 140ms; }
-.meeting-stack-less {
-  display: block;
-  margin: 2px auto 0;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--fg-muted);
+.meeting-stack-entry + .meeting-stack-entry .meeting-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+.meeting-stack-entry + .meeting-stack-entry .meeting-item:is(.active, :hover)::before,
+.meeting-stack-entry:has(.meeting-item:is(.active, :hover)) + .meeting-stack-entry .meeting-item::before {
   background: transparent;
-  cursor: pointer;
 }
-.meeting-stack-less:hover { color: var(--fg); background: var(--bg-hover); }
+.meeting-stack-footer { padding: 8px 0 4px; opacity: 0; transition: opacity 120ms ease; }
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-footer { opacity: 1; transition-delay: 140ms; }
 .meeting-stack-chevron { flex-shrink: 0; color: var(--fg-muted); transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .meeting-stack-wrap[data-expanded="true"] .meeting-stack-chevron { transform: rotate(180deg); }
 .meeting-item + .meeting-stack-wrap,
@@ -6246,13 +6247,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .meeting-stack-wrap:has(.meeting-stack:is(.active, :hover)) + .meeting-stack-wrap .meeting-stack::before,
 .meeting-stack-wrap:has(.meeting-stack:is(.active, :hover)) + .meeting-item::before,
 .meeting-stack-wrap + .meeting-item:is(.active, :hover)::before { background: transparent; }
+/* No line under a stack: the card edges already end it. */
 .meeting-stack-wrap + .sidebar-section-label {
   margin-top: 12px;
   padding-top: 18px;
-  border-top: 1px solid var(--border);
 }
-.meeting-stack-meeting:focus-visible,
-.meeting-stack-less:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.meeting-stack-meeting:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) {
   .meeting-stack-wrap .meeting-stack-entry,
   .meeting-stack-wrap .meeting-stack-entry-content,
@@ -6384,4 +6384,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 .meeting-stack-wrap[data-expanded="true"] .meeting-stack-recordings { padding-top: 4px; }
 @media (prefers-reduced-motion: reduce) {
   .meeting-stack-plate { transition: none; }
+}
+
+/* An open stack keeps its header card pinned at the top of the list while
+   its recordings scroll; clicking it collapses the stack like Show less.
+   Sticky is bounded by the stack, so the header leaves with its group. */
+.meeting-stack-wrap[data-expanded="true"] .meeting-stack-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-elev);
+  box-shadow: 0 -4px 0 var(--bg-elev);
 }
