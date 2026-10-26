@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.98] - 2026-10-26
+
+### Fixed
+
+- The Update available button no longer wraps onto two lines next to a long meeting title. The title shortens instead.
+
 ## [0.15.97] - 2026-10-26
 
 ### Changed
