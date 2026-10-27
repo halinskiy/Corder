@@ -46,8 +46,7 @@ final class UpdateController: NSObject {
         } catch {
             FileLogger.log("UpdateController: SPUUpdater.start failed: \(error.localizedDescription)")
         }
-        // Honour the user's "Automatic updates" preference (opt-in, default
-        // off). When on, Sparkle silently downloads a found update and the
+        // Honour the user's "Automatic updates" preference (default on). When on, Sparkle silently downloads a found update and the
         // driver defers the install to the next quit (see CorderUpdateDriver).
         updater.automaticallyDownloadsUpdates = AppSettings.autoUpdate
         // Sparkle's scheduled check fires only after the configured

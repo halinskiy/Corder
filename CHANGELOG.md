@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.118] - 2026-10-27
+
+### Changed
+
+- Automatic updates are on by default, so Corder stays current without a click. If you turned them off, they stay off.
+
 ## [0.15.117] - 2026-10-26
 
 ### Changed

@@ -259,12 +259,14 @@ enum AppSettings {
     static var prerollEnabled: Bool {
         UserDefaults.standard.object(forKey: kPrerollEnabled) as? Bool ?? true
     }
-    /// Automatic updates (opt-in, default OFF). When ON, Sparkle silently
-    /// downloads a found update in the background and installs it on the NEXT
-    /// quit (no pill click, no modal, no mid-session relaunch). Independent of
-    /// the CRITICAL-update force, which auto-installs regardless of this flag.
+    /// Automatic updates (default ON since 0.15.118, an explicit OFF is kept).
+    /// When ON, Sparkle silently downloads a found update in the background and
+    /// installs it at a quiet moment or on the next quit (no pill click, no
+    /// modal, no mid-session relaunch). Opt-in left almost everyone months
+    /// behind (telemetry 2026-10-27: 12 active Macs still on 0.15.79).
+    /// Independent of the CRITICAL-update force.
     static var autoUpdate: Bool {
-        UserDefaults.standard.object(forKey: kAutoUpdate) as? Bool ?? false
+        UserDefaults.standard.object(forKey: kAutoUpdate) as? Bool ?? true
     }
     static var meetingWhitelist: [String]  { list(kWhitelist) }
     static var meetingBlacklist: [String]  { list(kBlacklist) }
