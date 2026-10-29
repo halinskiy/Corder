@@ -244,9 +244,20 @@ final class SystemAudioTap {
 
         // 2. Tap description: everything EXCEPT us, stereo, left
         //    unmuted so the user keeps hearing the call.
+        // Per-app mixers (Mixo) tap the call app and play it again, so a
+        // global tap hears the call twice ~50 ms apart: the far end came out
+        // doubled in every recording made with Mixo running (2026-10-29).
+        // The call app's own audio still reaches us, a process tap sees it
+        // even when the mixer mutes it for the speakers.
+        let rerouters = Self.rerouterProcessObjects()
+        if !rerouters.isEmpty {
+            FileLogger.log("SystemAudioTap: excluding \(rerouters.count) audio re-router process(es) (Mixo)")
+        }
         let desc: CATapDescription
         if ourObject != AudioObjectID(kAudioObjectUnknown) {
-            desc = CATapDescription(stereoGlobalTapButExcludeProcesses: [ourObject])
+            desc = CATapDescription(stereoGlobalTapButExcludeProcesses: [ourObject] + rerouters)
+        } else if !rerouters.isEmpty {
+            desc = CATapDescription(stereoGlobalTapButExcludeProcesses: rerouters)
         } else {
             // Couldn't resolve our object, fall back to a full global
             // mixdown. Worst case we also record our own blip sounds,
@@ -408,6 +419,31 @@ final class SystemAudioTap {
             }
         }
         return false
+    }
+
+    /// Bundle id prefixes of apps that re-play other apps' audio.
+    private static let rerouterBundlePrefixes = ["com.halinskiy.mixo"]
+
+    private static func rerouterProcessObjects() -> [AudioObjectID] {
+        guard #available(macOS 14.4, *) else { return [] }
+        var listAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject),
+                &listAddr, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var procs = [AudioObjectID](repeating: AudioObjectID(kAudioObjectUnknown),
+                                    count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &listAddr, 0, nil, &size, &procs) == noErr else { return [] }
+        return procs.filter { proc in
+            guard let bundle = try? stringProperty(proc, kAudioProcessPropertyBundleID, { TapError.tapUID($0) })
+            else { return false }
+            return rerouterBundlePrefixes.contains { bundle.hasPrefix($0) }
+        }
     }
 
     private static func processObject(forPID pid: pid_t) -> AudioObjectID {

@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.119] - 2026-10-29
+
+### Fixed
+
+- The other side of a call is no longer recorded twice when an app like Mixo replays call audio.
+
 ## [0.15.118] - 2026-10-27
 
 ### Changed
