@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.122] - 2026-11-04
+
+### Fixed
+
+- Only the open session is highlighted in the sidebar when a new recording opens.
+
 ## [0.15.121] - 2026-11-04
 
 ### Fixed

@@ -111,8 +111,17 @@ export function Sidebar({ meetings, loaded, activeId, activeGroup, meetingGroups
     if (activeId === null) {
       setSelectedIds((cur) => (cur.size === 0 ? cur : new Set()));
       setAnchorId(null);
+      return;
     }
+    // A session opened from outside the list (a new recording, a
+    // notification, the header) must not leave the previously clicked row
+    // lit too: two rows looked selected at once. A Cmd/Shift selection
+    // that already contains the open session is kept as is.
+    setSelectedIds((cur) => (cur.has(activeId) ? cur : new Set([activeId])));
+    setAnchorId((cur) => (selectedIdsRef.current.has(activeId) ? cur : activeId));
   }, [activeId, activeGroup]);
+  const selectedIdsRef = React.useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
 
   const commitRename = async () => {
     if (!editing) return;
