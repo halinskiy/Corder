@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.120] - 2026-11-04
+
+### Fixed
+
+- A muted microphone no longer turns into stray English words like "going".
+- One person's speech is no longer split between two speakers mid-sentence.
+
 ## [0.15.119] - 2026-10-29
 
 ### Fixed

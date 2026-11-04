@@ -747,10 +747,12 @@ final class TranscriptionPipeline {
                         if let name = meetingName, let iso = meetingLang {
                             rawUserTurns = await rescueDriftedTrack(
                                 turns: rawUserTurns, tally: micTally, meetingName: name,
-                                forcedISO: iso, wavURL: micTranscribeURL, meetingId: meetingId)
+                                forcedISO: iso, wavURL: micTranscribeURL, meetingId: meetingId,
+                                siblingWeight: sysTally.snapshot().counts.values.reduce(0, +))
                             rawOtherTurns = await rescueDriftedTrack(
                                 turns: rawOtherTurns, tally: sysTally, meetingName: name,
-                                forcedISO: iso, wavURL: systemURL, meetingId: meetingId)
+                                forcedISO: iso, wavURL: systemURL, meetingId: meetingId,
+                                siblingWeight: micTally.snapshot().counts.values.reduce(0, +))
                         }
                     }
                     // Fill voiced-but-untranscribed holes BEFORE polish so
@@ -2124,13 +2126,23 @@ final class TranscriptionPipeline {
         meetingName: String,
         forcedISO: String,
         wavURL: URL,
-        meetingId: String) async -> [GeminiTranscriber.Turn] {
+        meetingId: String,
+        siblingWeight: Int = 0) async -> [GeminiTranscriber.Turn] {
         guard !turns.isEmpty else { return turns }
         let snapshot = tally.snapshot()
         // The track's own dominant must BE the meeting language (else it is
         // genuinely another language, don't clobber it) AND it must carry
         // some minority weight in a different language (the drift to fix).
-        guard snapshot.dominantName == meetingName else { return turns }
+        // Exception: a near-silent track. A muted BT mic on a 58 min Russian
+        // call came back 15 English vs 4 Russian turns ("I'm going to go to
+        // the next video" in fragments) against 760 Russian on the far end.
+        // A track under 10% of its sibling's weight is mostly noise Whisper
+        // auto-detected as English, not a speaker of another language, so it
+        // is forced to the meeting language too (on noise the forced pass
+        // yields the Russian credits the hallucination filter drops).
+        let ownWeight = snapshot.counts.values.reduce(0, +)
+        let nearSilent = siblingWeight > 0 && ownWeight * 10 < siblingWeight
+        guard snapshot.dominantName == meetingName || nearSilent else { return turns }
         let hasDrift = snapshot.counts.contains { $0.key != meetingName && $0.value > 0 }
         guard hasDrift else { return turns }
         let drifted = snapshot.counts.filter { $0.key != meetingName }
@@ -2144,6 +2156,12 @@ final class TranscriptionPipeline {
         } catch {
             FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass threw: \(error)")
             forced = nil
+        }
+        // A near-silent track whose forced pass is EMPTY (everything was a
+        // filtered hallucination) really is silent: drop the noise turns.
+        if nearSilent, let forced, forced.isEmpty {
+            FileLogger.log("transcribe(): \(wavURL.lastPathComponent) near-silent track, forced re-pass empty, dropping \(turns.count) noise turns")
+            return []
         }
         guard let forced, !forced.isEmpty else {
             FileLogger.log("transcribe(): \(wavURL.lastPathComponent) forced re-pass empty/failed, keeping original")
@@ -2816,7 +2834,8 @@ final class TranscriptionPipeline {
         // to the dominance gate as "silent"; overlap attribution keeps every
         // one at the moment it was spoken.
         if currentProvider != .gemini {
-            let result = Self.attributeByOverlap(asr: rawTurns, diar: diarSegs)
+            let result = Self.mergeSentenceSplitSpeakers(
+                Self.attributeByOverlap(asr: rawTurns, diar: diarSegs))
             let timed = rawTurns.filter { $0.hasWordTiming }.count
             FileLogger.log("applyTiming: \(wavURL.lastPathComponent), \(rawTurns.count) turns (\(timed) word-timed) ATTRIBUTED BY OVERLAP across \(diarSpeakers) speakers → \(result.count) turns, Whisper timing kept")
             // Legacy cached turns without words still carry coarse segment
@@ -3070,6 +3089,56 @@ final class TranscriptionPipeline {
     /// jitter, not a one-word interjection, and is absorbed. A turn without
     /// words is labelled by overlap of its whole span, nearest span within
     /// 2 s, else the previous turn's speaker. Pure value-in/value-out.
+    /// Merge diarizer clusters that are really ONE person. Forced to N
+    /// speakers on a far-end track where a few people barely talk, FluidAudio
+    /// splits the dominant speaker into two clusters instead, and overlap
+    /// attribution then cuts that person's sentences in half mid-word:
+    /// "вы хотите сделать платформу, | которую NVIDIA сама захочет купить".
+    /// Measured on a 58 min 5-person call: one cluster pair switched 44 times,
+    /// 27 of them with no pause and no sentence end before the switch (61%).
+    /// Real speaker changes almost always land on a sentence end: on four
+    /// other multi-speaker calls that ratio was 0 to 25% for every pair.
+    /// A pair at or above 40% (and at least 5 such cuts) is merged, the
+    /// smaller cluster into the larger, repeated until no pair qualifies.
+    static func mergeSentenceSplitSpeakers(_ turns: [GeminiTranscriber.Turn]) -> [GeminiTranscriber.Turn] {
+        var labels = turns.map(\.speakerLabel)
+        let enders: Set<Character> = [".", "?", "!", "…"]
+        var merges: [String] = []
+        while Set(labels).count > 1 {
+            var talk: [String: Int64] = [:]
+            for (i, t) in turns.enumerated() { talk[labels[i], default: 0] += max(0, t.endMs - t.startMs) }
+            var switches: [String: Int] = [:], glued: [String: Int] = [:]
+            func key(_ a: String, _ b: String) -> String { a < b ? "\(a)\u{1}\(b)" : "\(b)\u{1}\(a)" }
+            for i in 1..<max(1, turns.count) where labels[i] != labels[i - 1] {
+                let k = key(labels[i - 1], labels[i])
+                switches[k, default: 0] += 1
+                let prev = turns[i - 1].text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if turns[i].startMs - turns[i - 1].endMs < 400, let last = prev.last, !enders.contains(last) {
+                    glued[k, default: 0] += 1
+                }
+            }
+            let worst = glued.filter { k, g in
+                g >= 5 && Double(g) >= 0.4 * Double(switches[k] ?? 1)
+            }.max { a, b in
+                Double(a.value) / Double(switches[a.key] ?? 1) < Double(b.value) / Double(switches[b.key] ?? 1)
+            }
+            guard let pair = worst?.key else { break }
+            let parts = pair.split(separator: "\u{1}").map(String.init)
+            guard parts.count == 2 else { break }
+            let (keep, drop) = (talk[parts[0], default: 0] >= talk[parts[1], default: 0])
+                ? (parts[0], parts[1]) : (parts[1], parts[0])
+            merges.append("\(drop)→\(keep) (\(glued[pair] ?? 0)/\(switches[pair] ?? 0) mid-sentence)")
+            labels = labels.map { $0 == drop ? keep : $0 }
+        }
+        guard !merges.isEmpty else { return turns }
+        FileLogger.log("mergeSentenceSplitSpeakers: \(merges.joined(separator: ", "))")
+        return turns.enumerated().map { i, t in
+            t.speakerLabel == labels[i] ? t
+                : GeminiTranscriber.Turn(speakerLabel: labels[i], startMs: t.startMs, endMs: t.endMs,
+                                         text: t.text, words: t.words)
+        }
+    }
+
     static func attributeByOverlap(asr rawAsr: [GeminiTranscriber.Turn],
                                    diar: [DiarizedSegment]) -> [GeminiTranscriber.Turn] {
         // One Whisper segment can span two speech islands of the VAD
