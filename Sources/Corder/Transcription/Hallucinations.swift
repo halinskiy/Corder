@@ -69,6 +69,15 @@ enum Hallucinations {
         "subtitles by",
         "transcribed by",
         "please subscribe",
+        // Russian sound-caption tags Whisper writes over noise on a muted
+        // mic ("ДИНАМИЧНАЯ МУЗЫКА" on a 58 min call, 0.15.120 re-run).
+        "динамичная музыка",
+        "спокойная музыка",
+        "веселая музыка",
+        "весёлая музыка",
+        "тревожная музыка",
+        "грустная музыка",
+        "музыкальная заставка",
         "редактор субтитров",
         "субтитри",
         "дякую за перегляд",

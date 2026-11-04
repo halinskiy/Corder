@@ -16,6 +16,12 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.121] - 2026-11-04
+
+### Fixed
+
+- Sound captions like "ДИНАМИЧНАЯ МУЗЫКА" no longer appear on a quiet microphone.
+
 ## [0.15.120] - 2026-11-04
 
 ### Fixed
