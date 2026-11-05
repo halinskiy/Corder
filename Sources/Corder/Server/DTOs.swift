@@ -43,6 +43,8 @@ enum DTO {
         /// can carry a 0/nil duration yet still have real audio on disk, and the
         /// old gate greyed the control out on a perfectly playable recording.
         let has_audio: Bool
+        /// A trim kept the originals aside; the player offers to restore them.
+        let trimmed: Bool
         /// JSON string with `[{start_ms, title}]` for the Chapters tab.
         /// Returned as-is from the DB column; frontend parses it.
         let chapters: String?

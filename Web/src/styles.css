@@ -3757,6 +3757,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .audio-scrub:hover .audio-scrub-fill,
 .audio-scrub.dragging .audio-scrub-fill { height: 14px; }
+/* "Restore full recording" under the player after a trim. */
+.trim-restore { display: flex; margin: 4px 20px 12px; }
+.trim-restore .clarify-btn { flex: 1; }
 /* Trim mode: the range to keep, outlined over the track so the playhead fill
    stays readable underneath. */
 .audio-scrub-range {

@@ -273,6 +273,9 @@ interface Strings {
   trim_hint?: string;
   trim_btn?: string;
   trim_done?: string;
+  trim_hint_end?: string;
+  trim_restore?: string;
+  trim_restored?: string;
   ghost_video_title?: string;
   ghost_video_sub?: string;
   ghost_video_cta?: string;
@@ -735,7 +738,10 @@ const en: Strings = {
   clip_hint_pick_end: "Now click the line where the clip ends.",
   clip_share_btn: "Share clip",
   trim_enter: "Trim recording",
-  trim_hint: "Drag on the timeline to pick the part to keep.",
+  trim_hint: "Click the timeline where the part to keep starts.",
+  trim_hint_end: "Now click where it ends.",
+  trim_restore: "Restore full recording",
+  trim_restored: "Full recording restored.",
   trim_btn: "Trim and transcribe",
   trim_done: "Trimmed to {d}. Transcribing.",
   profile_title: "Profile",

@@ -56,6 +56,8 @@ export interface MeetingDetail {
   /// True when a playable audio file exists on disk (mix, mic, or archived).
   /// The player's Play button gates on this, not on duration_ms.
   has_audio?: boolean;
+  /// A trim kept the original recording; it can be restored.
+  trimmed?: boolean;
   /// JSON-encoded `[{start_ms, title}]`, Chapters tab. May be
   /// absent on rows that haven't been auto-chaptered yet.
   chapters?: string | null;
@@ -284,6 +286,12 @@ export async function trimRecording(id: string, startMs: number, endMs: number):
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ start_ms: Math.round(startMs), end_ms: Math.round(endMs) }),
   });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/// Undo a trim: the original recording comes back, the trimmed transcript goes.
+export async function untrimRecording(id: string): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/untrim`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 

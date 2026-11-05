@@ -8,8 +8,58 @@ import Foundation
 ///
 /// Every track is cut by the same range, so mic / system / video stay aligned
 /// (they all start at the same capture instant).
+///
+/// NEVER destructive: the first trim moves the original files into
+/// `.untrimmed/` (a same-volume rename, instant) and `restore` puts them back.
+/// 0.15.123 deleted the rest outright and a misplaced range cost a user the
+/// whole meeting it was meant to keep.
 enum RecordingTrimmer {
-    enum TrimError: Error { case badRange, noAudio }
+    enum TrimError: Error { case badRange, noAudio, noBackup }
+
+    struct Original: Codable { var startedAt: Int64; var durationMs: Int64?; var endedAt: Int64? }
+
+    static func backupDir(_ dir: URL) -> URL { dir.appendingPathComponent(".untrimmed", isDirectory: true) }
+    static func hasBackup(_ dir: URL) -> Bool {
+        FileManager.default.fileExists(atPath: backupDir(dir).appendingPathComponent("original.json").path)
+    }
+
+    /// Moves the originals aside (once; a second trim keeps the first originals)
+    /// and records the row's original timing so `restore` can put it back.
+    static func backUpOriginals(dir: URL, original: Original) throws {
+        let fm = FileManager.default
+        let bak = backupDir(dir)
+        guard !hasBackup(dir) else {
+            // Re-trim: work from copies of the current (already trimmed) files.
+            return
+        }
+        try fm.createDirectory(at: bak, withIntermediateDirectories: true)
+        for name in audioFiles + ["video.mov"] {
+            let src = dir.appendingPathComponent(name)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = bak.appendingPathComponent(name)
+            try? fm.removeItem(at: dst)
+            try fm.moveItem(at: src, to: dst)
+            try fm.copyItem(at: dst, to: src)   // APFS clone: instant, no extra space
+        }
+        try JSONEncoder().encode(original).write(to: bak.appendingPathComponent("original.json"))
+    }
+
+    /// Puts the untouched originals back and returns the row's original timing.
+    static func restore(dir: URL) throws -> Original {
+        let fm = FileManager.default
+        let bak = backupDir(dir)
+        guard let data = try? Data(contentsOf: bak.appendingPathComponent("original.json")),
+              let original = try? JSONDecoder().decode(Original.self, from: data) else { throw TrimError.noBackup }
+        for name in audioFiles + ["video.mov"] {
+            let src = bak.appendingPathComponent(name)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = dir.appendingPathComponent(name)
+            try? fm.removeItem(at: dst)
+            try fm.moveItem(at: src, to: dst)
+        }
+        try? fm.removeItem(at: bak)
+        return original
+    }
 
     static let audioFiles = ["mic.wav", "system.wav", "system_sck.wav", "audio.wav"]
 

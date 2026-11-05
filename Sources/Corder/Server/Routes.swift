@@ -126,6 +126,9 @@ enum Routes {
         server.post["/api/meetings/:id/trim"] = { req in
             trimRecording(id: req.params[":id"] ?? "", body: Data(req.body), repo: repo)
         }
+        server.post["/api/meetings/:id/untrim"] = { req in
+            untrimRecording(id: req.params[":id"] ?? "", repo: repo)
+        }
         server.post["/api/meetings/:id/cancel-transcription"] = { req in
             cancelTranscription(id: req.params[":id"] ?? "", repo: repo)
         }
@@ -780,6 +783,7 @@ enum Routes {
                 expected_other_speakers: m.expectedOtherSpeakers,
                 has_video: hasVideo,
                 has_audio: hasAudio,
+                trimmed: RecordingTrimmer.hasBackup(URL(fileURLWithPath: m.audioPath).deletingLastPathComponent()),
                 chapters: m.chapters,
                 transcribing_started_at: m.transcribingStartedAt,
                 transcribe_progress: m.status == .transcribing
@@ -1649,9 +1653,9 @@ enum Routes {
         return jsonResponse(currentSettings())
     }
 
-    /// Cuts an un-transcribed recording down to `[start_ms, end_ms)` on disk,
-    /// then transcribes what is left. Destructive by product decision: the
-    /// rest of the audio and video is deleted.
+    /// Cuts an un-transcribed recording down to `[start_ms, end_ms)`, then
+    /// transcribes what is left. The originals are kept in `.untrimmed/` and
+    /// `/untrim` restores them (see RecordingTrimmer).
     private static func trimRecording(id: String, body: Data, repo: MeetingRepository) -> HttpResponse {
         guard !id.isEmpty, var m = try? repo.meeting(id: id) else { return .notFound }
         guard m.status == .failed || m.status == .ready,
@@ -1665,6 +1669,7 @@ enum Routes {
             return .badRequest(.text("bad range"))
         }
         let dir = URL(fileURLWithPath: m.audioPath).deletingLastPathComponent()
+        let original = RecordingTrimmer.Original(startedAt: m.startedAt, durationMs: m.durationMs, endedAt: m.endedAt)
         FileLogger.log("trim: \(id) \(Int(startMs))..\(Int(endMs)) ms in \(dir.lastPathComponent)")
         m.status = .transcribing
         m.transcribingStartedAt = nil
@@ -1674,7 +1679,8 @@ enum Routes {
             TranscriptionPipeline.shared.cancelIfRunning(meetingId: id)
             do {
                 let ms = try await Task.detached(priority: .userInitiated) {
-                    try await RecordingTrimmer.trim(dir: dir, startSec: startMs / 1000, endSec: endMs / 1000)
+                    try RecordingTrimmer.backUpOriginals(dir: dir, original: original)
+                    return try await RecordingTrimmer.trim(dir: dir, startSec: startMs / 1000, endSec: endMs / 1000)
                 }.value
                 if var row = try? repo.meeting(id: id) {
                     row.durationMs = ms
@@ -1691,6 +1697,35 @@ enum Routes {
             }
         }
         return .ok(.text("queued"))
+    }
+
+    /// Undo a trim: the original files, length and start time come back and
+    /// the transcript of the trimmed part is dropped.
+    private static func untrimRecording(id: String, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty, let m = try? repo.meeting(id: id) else { return .notFound }
+        guard m.status != .transcribing, m.status != .recording else {
+            return .badRequest(.text("busy"))
+        }
+        let dir = URL(fileURLWithPath: m.audioPath).deletingLastPathComponent()
+        do {
+            let o = try RecordingTrimmer.restore(dir: dir)
+            if var row = try? repo.meeting(id: id) {
+                row.startedAt = o.startedAt
+                row.durationMs = o.durationMs
+                row.endedAt = o.endedAt
+                row.status = .failed
+                row.summary = nil
+                row.chapters = nil
+                try? repo.updateMeeting(row)
+            }
+            try? repo.clearTranscript(meetingId: id)
+            try? repo.setRawTurnsCache(meetingId: id, geminiRawTurns: nil, audioHash: nil)
+            FileLogger.log("untrim: \(id) restored \(o.durationMs ?? 0) ms")
+            return .ok(.text("restored"))
+        } catch {
+            FileLogger.log("untrim: \(id) failed: \(error)")
+            return .badRequest(.text("no original"))
+        }
     }
 
     private static func retranscribe(id: String, repo: MeetingRepository) -> HttpResponse {

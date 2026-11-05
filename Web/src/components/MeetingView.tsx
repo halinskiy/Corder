@@ -1,7 +1,7 @@
 import { useWindowActive } from "../activity";
 import React from "react";
 import { ArrowLeft, Users, Search, X, Scissors } from "lucide-react";
-import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting, trimRecording } from "../api";
+import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting, trimRecording, untrimRecording } from "../api";
 import { ShareModal } from "./ShareModal";
 import { Tooltip } from "./Tooltip";
 import { CopyIconButton } from "./CopyIconButton";
@@ -493,6 +493,13 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
       .catch(() => onToast(t.transcribe_failed_short ?? "Transcription failed.", "error"));
   };
 
+  const doUntrim = () => {
+    if (!detail) return;
+    untrimRecording(detail.id)
+      .then(() => { onToast(t.trim_restored ?? "Full recording restored.", "success"); load(); })
+      .catch(() => onToast(t.transcribe_failed_short ?? "Transcription failed.", "error"));
+  };
+
   const toggleClip = () => {
     setClipMode((on) => {
       if (on) { setClipSel(null); setTrimRange(null); }   // leaving the mode clears any selection
@@ -736,7 +743,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
                     <span>{t.trim_btn ?? "Trim and transcribe"} · {formatClock(trimRange!.a * 1000)}–{formatClock(trimRange!.b * 1000)}</span>
                   </button>
                 ) : (
-                  <div className="clip-hint">{t.trim_hint ?? "Drag on the timeline to pick the part to keep."}</div>
+                  <div className="clip-hint">{trimRange ? (t.trim_hint_end ?? "Now click where it ends.") : (t.trim_hint ?? "Click the timeline where the part to keep starts.")}</div>
                 )}
               </div>
             )}
@@ -795,6 +802,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               clipActive={clipMode}
               trimRange={trimRange}
               onTrimRange={untranscribed ? setTrimRange : undefined}
+              onUntrim={detail?.trimmed && detail.status !== "transcribing" ? doUntrim : undefined}
               t={t}
             />
           </div>

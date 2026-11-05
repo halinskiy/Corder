@@ -28,11 +28,13 @@ interface Props {
   /// Trim mode (un-transcribed session): the range is dragged on the scrubber.
   trimRange?: { a: number; b: number } | null;
   onTrimRange?: (r: { a: number; b: number }) => void;
+  /// Shown after a trim: brings the original recording back.
+  onUntrim?: () => void;
   t: T;
   lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, onShare, onClip, clipActive, trimRange, onTrimRange, t, lang = "en" }: Props) {
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, onShare, onClip, clipActive, trimRange, onTrimRange, onUntrim, t, lang = "en" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   // Whether macOS Screen Recording is granted. When it isn't, video capture is
@@ -105,6 +107,13 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
         onTrimRange={onTrimRange}
         t={t}
       />
+      {onUntrim && (
+        <div className="trim-restore">
+          <button type="button" className="clarify-btn" onClick={onUntrim}>
+            {t.trim_restore ?? "Restore full recording"}
+          </button>
+        </div>
+      )}
       <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
     </div>
   );

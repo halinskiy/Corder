@@ -110,14 +110,26 @@ export function AudioCard({
     try { a.currentTime = ratio * duration; } catch { /* not seekable yet */ }
   };
   const trimming = clipActive && !!onTrimRange;
+  // Two clicks (start, then end) or one drag. `trimPending` = the start is
+  // placed and the next click sets the end.
   const trimAnchor = React.useRef(0);
+  const trimPending = React.useRef(false);
+  const trimDragged = React.useRef(false);
+  React.useEffect(() => { if (!trimming) trimPending.current = false; }, [trimming]);
   const onScrubDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!duration) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const r = scrubRatio(e);
     if (trimming) {
-      trimAnchor.current = r * duration;
-      onTrimRange!({ a: r * duration, b: r * duration });
+      const x = r * duration;
+      trimDragged.current = false;
+      if (trimPending.current) {
+        const a = trimAnchor.current;
+        onTrimRange!({ a: Math.min(a, x), b: Math.max(a, x) });
+      } else {
+        trimAnchor.current = x;
+        onTrimRange!({ a: x, b: x });
+      }
     }
     setDrag(r);
     seekTo(r);
@@ -131,6 +143,7 @@ export function AudioCard({
       seekTo(r);
       if (trimming) {
         const x = r * duration, a = trimAnchor.current;
+        if (Math.abs(x - a) > duration * 0.003) trimDragged.current = true;
         onTrimRange!({ a: Math.min(a, x), b: Math.max(a, x) });
       }
     }
@@ -140,6 +153,11 @@ export function AudioCard({
     if (drag !== null) {
       seekTo(scrubRatio(e));
       setDrag(null);
+      if (trimming) {
+        // A plain click on a fresh range waits for the end click; a drag or
+        // the end click completes the range.
+        trimPending.current = !trimPending.current && !trimDragged.current;
+      }
     }
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* never captured */ }
   };

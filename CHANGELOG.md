@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.126] - 2026-11-05
+
+### Fixed
+
+- Trimming no longer deletes anything: the full recording is kept and Restore full recording brings it back.
+- Pick the part to keep with two clicks on the timeline, start then end (dragging still works).
+
 ## [0.15.125] - 2026-11-05
 
 ### Fixed
