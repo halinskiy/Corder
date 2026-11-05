@@ -90,10 +90,10 @@ fi
 SIGN_IDENTITY="${CORDER_SIGN_IDENTITY:-ScreenOCR Dev}"
 # Pin the keychain the identity is taken from. Another project's build
 # keychain earlier in the search list may hold a copy of the same Developer ID
-# and codesign would then prompt for that keychain's password, e.g.
-# CORDER_SIGN_KEYCHAIN=~/Library/Keychains/login.keychain-db
-KEYCHAIN_OPT=()
-[ -n "${CORDER_SIGN_KEYCHAIN:-}" ] && KEYCHAIN_OPT=(--keychain "$CORDER_SIGN_KEYCHAIN")
+# and codesign would then prompt for that keychain's password (a password the
+# owner does not have). Default to the login keychain; override with
+# CORDER_SIGN_KEYCHAIN.
+KEYCHAIN_OPT=(--keychain "${CORDER_SIGN_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}")
 ENTITLEMENTS="$ROOT/Corder.entitlements"
 # Notarization requires a secure timestamp on every signature. A
 # self-signed cert can't timestamp (no trusted TSA chain) and doesn't
