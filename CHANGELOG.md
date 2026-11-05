@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.125] - 2026-11-05
+
+### Fixed
+
+- After a trim the player shows the new, shorter recording right away, with a confirmation.
+- The player timeline no longer shifts under the cursor once playback passes one hour.
+
 ## [0.15.124] - 2026-11-05
 
 ### Fixed
