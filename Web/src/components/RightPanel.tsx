@@ -486,7 +486,7 @@ function ScreenVideo({
       >
         <video
           ref={videoRef}
-          src={videoSrc(detail.id)}
+          src={videoSrc(detail.id) + `?d=${detail.duration_ms ?? 0}`}
           muted
           playsInline
           preload="metadata"
@@ -575,7 +575,7 @@ function ScreenVideo({
           <div className="video-fs-inner" ref={fsInnerRef}>
             <video
               ref={fsVideoRef}
-              src={videoSrc(detail.id)}
+              src={videoSrc(detail.id) + `?d=${detail.duration_ms ?? 0}`}
               muted
               playsInline
               preload="auto"

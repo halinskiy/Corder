@@ -481,8 +481,15 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     const id = detail.id;
     setClipMode(false);
     setTrimRange(null);
+    const keptMs = (trimRange.b - trimRange.a) * 1000;
     trimRecording(id, trimRange.a * 1000, trimRange.b * 1000)
-      .then(() => load())
+      .then(() => {
+        onToast((t.trim_done ?? "Trimmed to {d}. Transcribing.").replace("{d}", formatClock(keptMs)), "success");
+        load();
+        // The cut runs in the background (a few seconds on hours of audio);
+        // reload once it has landed so the player picks up the new length.
+        window.setTimeout(() => load(), 4000);
+      })
       .catch(() => onToast(t.transcribe_failed_short ?? "Transcription failed.", "error"));
   };
 

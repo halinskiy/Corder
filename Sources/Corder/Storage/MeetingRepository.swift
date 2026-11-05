@@ -587,6 +587,17 @@ struct MeetingRepository {
         }
     }
 
+    /// A user-cancelled run must not come back on its own at the next launch
+    /// (a 5-hour recording the user stopped restarted and froze the window).
+    /// Exhausting the counter keeps it out of `failedRetriableMeetingIds`;
+    /// a manual Re-transcribe still works and a success resets it.
+    func excludeFromAutoRetry(meetingId: String) throws {
+        try dbq.write { db in
+            try db.execute(sql: "UPDATE meetings SET transcribe_attempts = 1000 WHERE id = ?",
+                           arguments: [meetingId])
+        }
+    }
+
     /// Clear the attempt counter, called on a successful transcribe so a
     /// row that later fails gets its full retry budget again.
     func resetTranscribeAttempts(meetingId: String) throws {

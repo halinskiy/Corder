@@ -16,6 +16,13 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.124] - 2026-11-05
+
+### Fixed
+
+- The window no longer freezes while a long recording is prepared for transcription.
+- A transcription you cancelled is not restarted on its own at the next launch.
+
 ## [0.15.123] - 2026-11-05
 
 ### Added

@@ -3701,6 +3701,8 @@ body.resizing { cursor: col-resize; user-select: none; }
   opacity: 1;
 }
 .audio-time {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   color: var(--fg-muted);

@@ -51,7 +51,7 @@ export function AudioCard({
     if (a) {
       try { a.pause(); a.currentTime = 0; } catch { /* not seekable yet */ }
     }
-  }, [detail.id]);
+  }, [detail.id, detail.duration_ms]);
 
   // Retry timer for a reload that never reaches `canplay` (a starved
   // request, a dead keep-alive socket). One extra load() 5s later turns a
@@ -169,7 +169,9 @@ export function AudioCard({
   // Tying the src to `has_audio` flips it the instant the mix becomes available,
   // which reloads the element onto the real, complete file. The share page
   // passes its own signed `audioUrl` (never mid-processing), so it's untouched.
-  const resolvedSrc = audioUrl ?? (audioSrc(detail.id) + (detail.has_audio ? "?ready=1" : ""));
+  // The duration is in the key too: a trim rewrites the file under the same
+  // URL, and without a new src the player kept the old 5-hour audio.
+  const resolvedSrc = audioUrl ?? (audioSrc(detail.id) + (detail.has_audio ? `?ready=1&d=${detail.duration_ms ?? 0}` : ""));
 
   return (
     <>
@@ -182,7 +184,7 @@ export function AudioCard({
           {playing ? <PauseSmall /> : <PlaySmall />}
         </button>
         <div className="audio-time">
-          {fmtTime(time)} / {fmtTime(duration)}
+          {fmtTime(time, duration >= 3600)} / {fmtTime(duration)}
         </div>
         <div
           className={"audio-scrub" + (drag !== null ? " dragging" : "")}
@@ -268,13 +270,16 @@ function PauseSmall() {
   );
 }
 
-function fmtTime(sec: number): string {
+/// `withHours` pads the hour field (0:52:40) so the label keeps one width for
+/// the whole of a 1 h+ recording; a label that grew from 52:40 to 1:08:13
+/// shrank the scrubber under the cursor and the playhead jumped.
+function fmtTime(sec: number, withHours = false): string {
   if (!isFinite(sec) || sec < 0) sec = 0;
   const total = Math.floor(sec);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  return h > 0
+  return h > 0 || withHours
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
 }

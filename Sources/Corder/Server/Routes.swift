@@ -1901,6 +1901,7 @@ enum Routes {
     private static func cancelTranscription(id: String, repo: MeetingRepository) -> HttpResponse {
         guard !id.isEmpty else { return .badRequest(.text("missing meeting id")) }
         FileLogger.log("cancelTranscription: \(id)")
+        try? repo.excludeFromAutoRetry(meetingId: id)
         Task { @MainActor in
             TranscriptionPipeline.shared.cancel(meetingId: id)
         }

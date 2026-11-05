@@ -300,7 +300,13 @@ enum WhisperTranscriber {
         // VAD pre-pass. Same trade-off as Gemini: skip the upload entirely
         // if there's less than half a second of speech; otherwise compress
         // only when the savings clear the 10 % floor.
-        let segments = VoiceActivityDetector.detect(audioURL: audioURL)
+        // The audio passes below are whole-file reads/writes (tens of seconds
+        // on a multi-hour recording). This enum is @MainActor, so they run
+        // detached, or the Library window freezes for the whole prep.
+        let segments = await Task.detached(priority: .userInitiated) {
+            VoiceActivityDetector.detect(audioURL: audioURL)
+        }.value
+        try Task.checkCancellation()
         let speechMs = segments.map { VoiceActivityDetector.totalSpeechMs($0) } ?? durationMs
 
         if let segs = segments, segs.isEmpty || speechMs < vadEmptyFloorMs {
@@ -326,8 +332,11 @@ enum WhisperTranscriber {
             do {
                 // A short pause between islands keeps Whisper's sentence
                 // boundaries intact (see concatenateSpeech).
-                let proj = try VoiceActivityDetector.concatenateSpeech(
-                    audioURL: audioURL, segments: segs, outURL: concat, gapMs: vadJoinGapMs)
+                let gap = vadJoinGapMs
+                let proj = try await Task.detached(priority: .userInitiated) {
+                    try VoiceActivityDetector.concatenateSpeech(
+                        audioURL: audioURL, segments: segs, outURL: concat, gapMs: gap)
+                }.value
                 workURL = concat
                 projection = proj
                 FileLogger.log(String(format: "WhisperTranscriber: VAD compressed %ds → %ds (%.0f%% saved, %d segments, %dms joins)",
@@ -343,8 +352,12 @@ enum WhisperTranscriber {
         // work file if the conversion fails, so a conversion bug can only
         // ever cost quality, never the transcript.
         let uploadURL = tmpDir.appendingPathComponent("upload.wav")
+        try Task.checkCancellation()
         do {
-            let gainDb = try AudioMixer.prepareASRUpload(sourceURL: workURL, outURL: uploadURL)
+            let src = workURL
+            let gainDb = try await Task.detached(priority: .userInitiated) {
+                try AudioMixer.prepareASRUpload(sourceURL: src, outURL: uploadURL)
+            }.value
             let mb = Double((try? FileManager.default.attributesOfItem(atPath: uploadURL.path)[.size] as? NSNumber)?.int64Value ?? 0) / (1024 * 1024)
             FileLogger.log(String(format: "WhisperTranscriber: upload prepared 16k mono int16, %.1f MB, gain %+.1f dB", mb, gainDb))
             workURL = uploadURL
@@ -457,8 +470,11 @@ enum WhisperTranscriber {
         defer { try? FileManager.default.removeItem(at: chunkDir) }
 
         let chunks: [(url: URL, offsetMs: Int64)]
+        try Task.checkCancellation()
         do {
-            chunks = try sliceWav(audioURL: audioURL, into: chunkDir, chunkSeconds: perChunkSec)
+            chunks = try await Task.detached(priority: .userInitiated) {
+                try sliceWav(audioURL: audioURL, into: chunkDir, chunkSeconds: perChunkSec)
+            }.value
         } catch {
             throw WhisperError.splitFailed(String(describing: error))
         }
@@ -1029,7 +1045,7 @@ enum WhisperTranscriber {
     /// around it on BOTH sides (no overlap between chunks). On a
     /// VAD-concatenated file the inserted joins are exact silence, so the
     /// cut lands between utterances.
-    private static func sliceWav(audioURL: URL, into dir: URL, chunkSeconds: Double) throws -> [(url: URL, offsetMs: Int64)] {
+    nonisolated private static func sliceWav(audioURL: URL, into dir: URL, chunkSeconds: Double) throws -> [(url: URL, offsetMs: Int64)] {
         let inFile = try AVAudioFile(forReading: audioURL)
         let format = inFile.processingFormat
         let totalFrames = inFile.length
@@ -1081,7 +1097,7 @@ enum WhisperTranscriber {
     /// whole file in memory), all channels averaged. Leaves the file's
     /// read position at 0. Empty on any read failure, which makes the
     /// slicer fall back to plain budget cuts.
-    private static func quietnessProfile(file: AVAudioFile, hopFrames: Int) -> [Float] {
+    nonisolated private static func quietnessProfile(file: AVAudioFile, hopFrames: Int) -> [Float] {
         let format = file.processingFormat
         let block: AVAudioFrameCount = 1 << 16
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: block) else { return [] }

@@ -272,6 +272,7 @@ interface Strings {
   trim_enter?: string;
   trim_hint?: string;
   trim_btn?: string;
+  trim_done?: string;
   ghost_video_title?: string;
   ghost_video_sub?: string;
   ghost_video_cta?: string;
@@ -736,6 +737,7 @@ const en: Strings = {
   trim_enter: "Trim recording",
   trim_hint: "Drag on the timeline to pick the part to keep.",
   trim_btn: "Trim and transcribe",
+  trim_done: "Trimmed to {d}. Transcribing.",
   profile_title: "Profile",
   profile_name: "Kostiantyn Halynskyi",
   profile_sub: "id #012103",
