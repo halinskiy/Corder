@@ -123,6 +123,9 @@ enum Routes {
         server.post["/api/meetings/:id/retranscribe"] = { req in
             retranscribe(id: req.params[":id"] ?? "", repo: repo)
         }
+        server.post["/api/meetings/:id/trim"] = { req in
+            trimRecording(id: req.params[":id"] ?? "", body: Data(req.body), repo: repo)
+        }
         server.post["/api/meetings/:id/cancel-transcription"] = { req in
             cancelTranscription(id: req.params[":id"] ?? "", repo: repo)
         }
@@ -1644,6 +1647,50 @@ enum Routes {
             }
         }
         return jsonResponse(currentSettings())
+    }
+
+    /// Cuts an un-transcribed recording down to `[start_ms, end_ms)` on disk,
+    /// then transcribes what is left. Destructive by product decision: the
+    /// rest of the audio and video is deleted.
+    private static func trimRecording(id: String, body: Data, repo: MeetingRepository) -> HttpResponse {
+        guard !id.isEmpty, var m = try? repo.meeting(id: id) else { return .notFound }
+        guard m.status == .failed || m.status == .ready,
+              ((try? repo.segments(forMeeting: id)) ?? []).isEmpty else {
+            return .badRequest(.text("only an un-transcribed session can be trimmed"))
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let startMs = (obj["start_ms"] as? NSNumber)?.doubleValue,
+              let endMs = (obj["end_ms"] as? NSNumber)?.doubleValue,
+              startMs >= 0, endMs - startMs >= 1000 else {
+            return .badRequest(.text("bad range"))
+        }
+        let dir = URL(fileURLWithPath: m.audioPath).deletingLastPathComponent()
+        FileLogger.log("trim: \(id) \(Int(startMs))..\(Int(endMs)) ms in \(dir.lastPathComponent)")
+        m.status = .transcribing
+        m.transcribingStartedAt = nil
+        try? repo.updateMeeting(m)
+        TranscriptionErrors.clear(meetingId: id)
+        Task { @MainActor in
+            TranscriptionPipeline.shared.cancelIfRunning(meetingId: id)
+            do {
+                let ms = try await Task.detached(priority: .userInitiated) {
+                    try await RecordingTrimmer.trim(dir: dir, startSec: startMs / 1000, endSec: endMs / 1000)
+                }.value
+                if var row = try? repo.meeting(id: id) {
+                    row.durationMs = ms
+                    row.startedAt += Int64(startMs)
+                    if let ended = row.endedAt { row.endedAt = min(ended, row.startedAt + ms) }
+                    try? repo.updateMeeting(row)
+                }
+                try? repo.setRawTurnsCache(meetingId: id, geminiRawTurns: nil, audioHash: nil)
+                FileLogger.log("trim: \(id) done, \(ms) ms kept, transcribing")
+                TranscriptionPipeline.shared.enqueue(meetingId: id, forceFresh: true)
+            } catch {
+                FileLogger.log("trim: \(id) failed: \(error)")
+                try? repo.setStatus(meetingId: id, status: .failed)
+            }
+        }
+        return .ok(.text("queued"))
     }
 
     private static func retranscribe(id: String, repo: MeetingRepository) -> HttpResponse {

@@ -16,6 +16,17 @@ behaviour, not internal refactors.
 
 ### Fixed
 
+## [0.15.123] - 2026-11-05
+
+### Added
+
+- Trim a recording that has not been transcribed yet: press the scissors, drag the part to keep on the timeline, and only that part is kept and transcribed.
+
+### Fixed
+
+- A cancelled or failed transcription no longer sends a "Transcript ready" notification.
+- The fullscreen video timeline shows before the transcript is ready.
+
 ## [0.15.122] - 2026-11-04
 
 ### Fixed

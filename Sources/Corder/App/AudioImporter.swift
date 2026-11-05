@@ -182,7 +182,8 @@ enum AudioImporter {
                 try? repo.setTitle(meetingId: id, title: name)
                 RecordingDirNaming.renameToTitled(repo: repo, meetingId: id)
             }
-            if interactive, AppSettings.notificationsEnabled {
+            if interactive, AppSettings.notificationsEnabled,
+               (try? repo.meeting(id: id))??.status == .ready {
                 NotificationsService.post(
                     title: L.notif("notif_ready_title"),
                     body: L.notif("notif_ready_body"))

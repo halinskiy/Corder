@@ -276,6 +276,17 @@ export async function listArchive(): Promise<ArchivedMeeting[]> {
   return (j.items ?? []) as ArchivedMeeting[];
 }
 
+/// Cuts an un-transcribed session down to one range (deletes the rest on
+/// disk), then transcribes it.
+export async function trimRecording(id: string, startMs: number, endMs: number): Promise<void> {
+  const r = await fetch(`/api/meetings/${id}/trim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_ms: Math.round(startMs), end_ms: Math.round(endMs) }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 export async function retranscribe(id: string): Promise<void> {
   const r = await fetch(`/api/meetings/${id}/retranscribe`, { method: "POST" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

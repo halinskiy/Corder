@@ -13,7 +13,7 @@ import type { T } from "../i18n";
 /// share page, which hides the Share + clip actions — a viewer cannot re-share
 /// or clip someone else's meeting).
 export function AudioCard({
-  detail, audioRef, onTimeUpdate, onShare, onClip, clipActive = false, audioUrl, t,
+  detail, audioRef, onTimeUpdate, onShare, onClip, clipActive = false, trimRange, onTrimRange, audioUrl, t,
 }: {
   detail: MeetingDetail;
   audioRef: React.RefObject<HTMLAudioElement>;
@@ -26,6 +26,10 @@ export function AudioCard({
   /// Reflects whether clip mode is currently on, so the Scissors button lights
   /// up active the same way the transcript toolbar buttons do.
   clipActive?: boolean;
+  /// Trim mode: when `onTrimRange` is set (and clip mode is on), a drag on the
+  /// scrubber picks the range to keep instead of only seeking.
+  trimRange?: { a: number; b: number } | null;
+  onTrimRange?: (r: { a: number; b: number }) => void;
   /// Defaults to the app's local `/api/meetings/:id/audio` route.
   audioUrl?: string;
   t: T;
@@ -105,10 +109,16 @@ export function AudioCard({
     const a = audioRef.current; if (!a) return;
     try { a.currentTime = ratio * duration; } catch { /* not seekable yet */ }
   };
+  const trimming = clipActive && !!onTrimRange;
+  const trimAnchor = React.useRef(0);
   const onScrubDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!duration) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const r = scrubRatio(e);
+    if (trimming) {
+      trimAnchor.current = r * duration;
+      onTrimRange!({ a: r * duration, b: r * duration });
+    }
     setDrag(r);
     seekTo(r);
     setHover({ pct: r * 100, time: r * duration });
@@ -119,6 +129,10 @@ export function AudioCard({
     if (drag !== null) {
       setDrag(r);
       seekTo(r);
+      if (trimming) {
+        const x = r * duration, a = trimAnchor.current;
+        onTrimRange!({ a: Math.min(a, x), b: Math.max(a, x) });
+      }
     }
     setHover({ pct: r * 100, time: r * duration });
   };
@@ -177,6 +191,12 @@ export function AudioCard({
           onPointerUp={onScrubUp}
           onPointerLeave={() => { if (drag === null) setHover(null); }}
         >
+          {trimming && trimRange && duration > 0 && (
+            <div
+              className="audio-scrub-range"
+              style={{ left: `${(trimRange.a / duration) * 100}%`, width: `${((trimRange.b - trimRange.a) / duration) * 100}%` }}
+            />
+          )}
           <div className="audio-scrub-fill" style={{ width: `${cursorPct}%` }} />
           <div className="audio-scrub-thumb" style={{ left: `${cursorPct}%` }} />
           {hover && (
@@ -203,8 +223,8 @@ export function AudioCard({
           <button
             className={"toolbar-icon-btn audio-clip-btn" + (clipActive ? " active" : "")}
             onClick={onClip}
-            title={clipActive ? (t.clip_exit ?? "Cancel clip") : (t.clip_enter ?? "Share a clip")}
-            aria-label={clipActive ? (t.clip_exit ?? "Cancel clip") : (t.clip_enter ?? "Share a clip")}
+            title={clipActive ? (t.clip_exit ?? "Cancel clip") : onTrimRange ? (t.trim_enter ?? "Trim recording") : (t.clip_enter ?? "Share a clip")}
+            aria-label={clipActive ? (t.clip_exit ?? "Cancel clip") : onTrimRange ? (t.trim_enter ?? "Trim recording") : (t.clip_enter ?? "Share a clip")}
           >
             <Scissors size={16} strokeWidth={2} />
           </button>

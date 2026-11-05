@@ -18,17 +18,21 @@ interface Props {
   currentTimeSec: number;
   onSeek: (sec: number) => void;
   /// Opens the (lifted) share modal for the WHOLE meeting.
-  onShare: () => void;
+  /// Absent on an un-transcribed session (nothing to share yet).
+  onShare?: () => void;
   /// Toggles clip-select mode; `clipActive` reflects whether it's on. The
   /// Scissors button lives in the audio card (next to Share); the range is
   /// then picked in the transcript.
   onClip: () => void;
   clipActive: boolean;
+  /// Trim mode (un-transcribed session): the range is dragged on the scrubber.
+  trimRange?: { a: number; b: number } | null;
+  onTrimRange?: (r: { a: number; b: number }) => void;
   t: T;
   lang?: Lang;
 }
 
-export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, onShare, onClip, clipActive, t, lang = "en" }: Props) {
+export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onSeek, onShare, onClip, clipActive, trimRange, onTrimRange, t, lang = "en" }: Props) {
   const audioRef = videoRef as unknown as React.RefObject<HTMLAudioElement>;
   const screenVideoRef = React.useRef<HTMLVideoElement | null>(null);
   // Whether macOS Screen Recording is granted. When it isn't, video capture is
@@ -97,6 +101,8 @@ export function RightPanel({ detail, videoRef, onTimeUpdate, currentTimeSec, onS
         onShare={onShare}
         onClip={onClip}
         clipActive={clipActive}
+        trimRange={trimRange}
+        onTrimRange={onTrimRange}
         t={t}
       />
       <SpeakerTimeline detail={detail} currentTimeSec={currentTimeSec} onSeek={onSeek} t={t} lang={lang} />
@@ -652,7 +658,10 @@ function FsScrubber({
   const barRef = React.useRef<HTMLDivElement | null>(null);
   const dragging = React.useRef(false);
 
-  if (totalMs <= 0 || detail.segments.length === 0) return null;
+  // No transcript yet (still transcribing, or a silent session) must not
+  // hide the bar: seeking the video needs only the duration, the speaker
+  // blocks are a bonus on top.
+  if (totalMs <= 0) return null;
 
   const seekTo = (clientX: number) => {
     const el = barRef.current;

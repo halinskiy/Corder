@@ -1,7 +1,7 @@
 import { useWindowActive } from "../activity";
 import React from "react";
 import { ArrowLeft, Users, Search, X, Scissors } from "lucide-react";
-import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting } from "../api";
+import { MeetingDetail, RecordingState, getMeeting, getTranscriptText, getLastError, renameMeeting, trimRecording } from "../api";
 import { ShareModal } from "./ShareModal";
 import { Tooltip } from "./Tooltip";
 import { CopyIconButton } from "./CopyIconButton";
@@ -191,6 +191,10 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // the second (end). `bId === null` means the start is placed and we're
   // waiting for the end click. A third click starts a fresh range.
   const [clipSel, setClipSel] = React.useState<{ aId: number; bId: number | null } | null>(null);
+  // Trim range (seconds) for an un-transcribed session: the same scissors
+  // button, but the range is dragged on the player timeline and Trim cuts the
+  // recording down to it on disk before transcribing.
+  const [trimRange, setTrimRange] = React.useState<{ a: number; b: number } | null>(null);
   // One lifted share modal for BOTH the full-meeting share (from the audio
   // card) and a clip share (from the scissors flow), so there's a single
   // modal instance and one dismissal path. null = closed; `{}` = whole
@@ -259,6 +263,7 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
     setTitleEdit(null);
     setClipMode(false);
     setClipSel(null);
+    setTrimRange(null);
     load();
   }, [load]);
   // Hide the skeleton as soon as the first detail arrives. After
@@ -465,9 +470,25 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
   // Transcript copy lives in the CopyIconButton in the toolbar below
   // (fetch + clipboard + green-check feedback + toast).
 
+  // Nothing to share before a transcript exists; the scissors trim instead.
+  const untranscribed = !!detail
+    && (detail.status === "failed" || detail.status === "ready")
+    && detail.segments.length === 0
+    && !!detail.has_audio;
+  const trimOk = !!trimRange && trimRange.b - trimRange.a >= 1;
+  const doTrim = () => {
+    if (!detail || !trimRange || !trimOk) return;
+    const id = detail.id;
+    setClipMode(false);
+    setTrimRange(null);
+    trimRecording(id, trimRange.a * 1000, trimRange.b * 1000)
+      .then(() => load())
+      .catch(() => onToast(t.transcribe_failed_short ?? "Transcription failed.", "error"));
+  };
+
   const toggleClip = () => {
     setClipMode((on) => {
-      if (on) setClipSel(null);   // leaving the mode clears any selection
+      if (on) { setClipSel(null); setTrimRange(null); }   // leaving the mode clears any selection
       return !on;
     });
   };
@@ -700,7 +721,19 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               onToast={onToast}
               t={t}
             />
-            {clipMode && (
+            {clipMode && untranscribed && (
+              <div className="clip-bar">
+                {trimOk ? (
+                  <button type="button" className="clarify-btn accent clip-share-btn" onClick={doTrim}>
+                    <Scissors size={15} strokeWidth={2} />
+                    <span>{t.trim_btn ?? "Trim and transcribe"} · {formatClock(trimRange!.a * 1000)}–{formatClock(trimRange!.b * 1000)}</span>
+                  </button>
+                ) : (
+                  <div className="clip-hint">{t.trim_hint ?? "Drag on the timeline to pick the part to keep."}</div>
+                )}
+              </div>
+            )}
+            {clipMode && !untranscribed && (
               <div className="clip-bar">
                 {clipRange ? (
                   <button
@@ -750,9 +783,11 @@ export function MeetingView({ meetingId, initialTitle, initialStartedAt, onDelet
               onTimeUpdate={setCurrentTime}
               currentTimeSec={currentTime}
               onSeek={onSeek}
-              onShare={() => setShare({})}
+              onShare={untranscribed ? undefined : () => setShare({})}
               onClip={toggleClip}
               clipActive={clipMode}
+              trimRange={trimRange}
+              onTrimRange={untranscribed ? setTrimRange : undefined}
               t={t}
             />
           </div>

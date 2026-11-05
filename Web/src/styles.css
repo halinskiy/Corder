@@ -3755,6 +3755,19 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .audio-scrub:hover .audio-scrub-fill,
 .audio-scrub.dragging .audio-scrub-fill { height: 14px; }
+/* Trim mode: the range to keep, outlined over the track so the playhead fill
+   stays readable underneath. */
+.audio-scrub-range {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 22px;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
 /* Position knob: hidden at rest, pops on hover, rides the fill edge.
    White ring separates it from the fill on both themes. */
 .audio-scrub-thumb {

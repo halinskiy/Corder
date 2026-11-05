@@ -269,6 +269,9 @@ interface Strings {
   clip_hint?: string;
   clip_hint_pick_end?: string;
   clip_share_btn?: string;
+  trim_enter?: string;
+  trim_hint?: string;
+  trim_btn?: string;
   ghost_video_title?: string;
   ghost_video_sub?: string;
   ghost_video_cta?: string;
@@ -730,6 +733,9 @@ const en: Strings = {
   clip_hint: "Click a line to start the clip.",
   clip_hint_pick_end: "Now click the line where the clip ends.",
   clip_share_btn: "Share clip",
+  trim_enter: "Trim recording",
+  trim_hint: "Drag on the timeline to pick the part to keep.",
+  trim_btn: "Trim and transcribe",
   profile_title: "Profile",
   profile_name: "Kostiantyn Halynskyi",
   profile_sub: "id #012103",

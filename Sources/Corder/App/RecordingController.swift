@@ -520,7 +520,10 @@ final class RecordingController {
         FileLogger.log("stopRecording: scheduling transcription for \(id)")
         Task { @MainActor in
             await TranscriptionPipeline.shared.enqueue(meetingId: id).value
-            if AppSettings.notificationsEnabled {
+            // Only a finished transcript is "ready": a cancelled or failed run
+            // also returns here and used to post the same notification.
+            if AppSettings.notificationsEnabled,
+               (try? AppContext.shared.repo.meeting(id: id))??.status == .ready {
                 NotificationsService.post(
                     title: L.notif("notif_ready_title"),
                     body: L.notif("notif_ready_body"))
